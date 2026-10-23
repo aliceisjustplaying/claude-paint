@@ -178,11 +178,11 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 			: code !== 0 || !reply ? `the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}` : undefined;
 		if (failure) throw new Error(failure);
 		const notes = `${HEADER[occasion]}\n\n${reply}\n`;
+		rmSync(notePath(studio, VISIT_FAILED, "ask_critic"), { force: true });
 		publishNotes(studio, "critic", "ask_critic", [
 			{ path: join(studio, CRITIQUE), slot: "current", text: notes },
 			{ path: join(critic.dir, `${started}-${occasion}.md`), root: critic.dir, slot: `${started}-${occasion}.md`, text: notes, independent: true },
 		], signal);
-		rmSync(notePath(studio, VISIT_FAILED, "ask_critic"), { force: true });
 		appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: exit ${code}, ${out.trim().length} characters\n${err}`);
 		return notes;
 	} catch (error) {

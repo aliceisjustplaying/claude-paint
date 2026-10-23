@@ -138,6 +138,25 @@ console.log('New advice');
 	assert.equal(readFileSync(join(f.critic.dir, archive), "utf8"), readFileSync(join(f.dir, "notes/critic.md"), "utf8"));
 });
 
+test("a freshness-marker directory collision preserves notes and archives until retry", async () => {
+	const f = fixture();
+	writeFileSync(join(f.dir, "notes/critic.md"), "Old advice\n");
+	const marker = join(f.dir, "out/easel/critic-visit.failed");
+	mkdirSync(marker, { recursive: true });
+	writeFileSync(f.pi, "#!/bin/sh\necho 'New advice'\n", { mode: 0o755 });
+	await assert.rejects(visit(f.dir, f.critic, "asked", undefined, f.pi));
+	assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), "Old advice\n");
+	assert.deepEqual(readdirSync(f.critic.dir).filter((name) => name.endsWith("-asked.md")), []);
+	assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /asked: failed:/);
+	assert.match(sittingCritique(f.dir), /last visit failed[\s\S]*> Old advice/);
+	rmdirSync(marker);
+	await visit(f.dir, f.critic, "asked", undefined, f.pi);
+	assert.doesNotMatch(sittingCritique(f.dir), /last visit failed/);
+	assert.match(sittingCritique(f.dir), /> New advice/);
+	const archive = readdirSync(f.critic.dir).find((name) => name.endsWith("-asked.md"))!;
+	assert.equal(readFileSync(join(f.critic.dir, archive), "utf8"), readFileSync(join(f.dir, "notes/critic.md"), "utf8"));
+});
+
 test("a visit runs its supervisor with Node when the extension host is pi", async () => {
 	const f = fixture();
 	const host = join(f.dir, "extension-host");

@@ -9,6 +9,9 @@ All code, harness and exported materials come from the local box commit.
 --dry and --briefs render preparation only; neither invokes a provider.
 --prepare exports the studio and writes its brief, then stops before opening
 the easel or starting any painter, reader or model request.
+Revision r41 (template and sitting prompts only): the first sitting's message names the handoff's
+"Open passages:" list, and a later sitting opens with that list (harness/painter/painter.ts with
+PAINTER_OPEN_PASSAGES=1) instead of asking whether the painter is happy with the picture.
 """
 import argparse
 import hashlib
@@ -54,37 +57,79 @@ HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compac
            "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
 PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
                "painting's title if you give it one and a few sentences about the picture. "
-               "At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, "
-               "practical lessons to carry forward from what you observed and recipes that failed. Before retrying "
+               "At the end of each sitting, leave a handoff in your journal and last reply. In the journal, list "
+               "the passages still open under a line reading `Open passages:`, one passage to a line starting "
+               "with `- `, saying where it is and what it still needs, or write `Open passages: none` when nothing "
+               "is open; the next sitting opens with that list. "
+               "Add the practical lessons to carry forward, from what you observed and from recipes that failed. Before retrying "
                "a failed recipe, identify what has changed and why that could address the observed failure. "
                "Carry forward the conditions of material trials and repairs: substrate and wetness, recipe ratios, "
                "medium or thinner, load, coverage and viewed result; label broader rules as hypotheses. "
                "Record what you observed and what remains uncertain.")
+# painter.ts (PAINTER_OPEN_PASSAGES=1) puts the passages to take up above this: the open passages from the
+# journal handoff and, with a critic, its latest notes
 SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "Your brief is in BRIEF.md and your journal in notes/journal.md. "
-                   "Take your time with a fresh look at the whole canvas and detail crops in normal color. "
                    "Read your journal handoff and apply its practical lessons before acting. "
+                   "Take up your open passages: look at each in an appropriate detail crop in normal color, "
+                   "then improve it or accept it as it is, and say which in your journal, with your reason. "
+                   "A passage you've resolved or accepted comes off the list. "
+                   "You may finish with imperfections you deliberately accept. "
+                   "A fresh look at the whole canvas and detail crops in normal color can show passages the "
+                   "list doesn't have yet; add them to it. "
                    "Continue one campaign at a time, inspecting the whole picture and relevant detail before "
                    "writing the next campaign's code. Let the result inform your next action and check local "
                    "repairs against the whole picture; reconsider the composition or method if a repair repeats "
                    "the problem. Judge unfamiliar mixtures and marks through small laid trials on the intended "
                    "substrate after the intended treatment. Carry forward the observed material conditions "
                    "and treat broader rules as hypotheses. "
-                   "Inspect each passage you previously acknowledged as unresolved in an appropriate "
-                   "detail crop, then explicitly judge it in your journal: improve it or accept it as it is, "
-                   "with your reason. You may finish with imperfections you deliberately accept. "
                    "Before retrying a failed recipe, identify what has changed and why that could "
                    "address the observed failure. Record what you observed and what remains uncertain. "
-                   "Is your heart happy with this? Is there something you would enjoy taking further? "
                    "You can keep working for hours if you like, and the painting's simulated time is "
-                   "yours to use, whether that means days or years. Enjoy it. When you are happy with "
-                   "the painting, record your reflections and an updated handoff in your journal "
-                   "and last reply, carrying forward the practical lessons that still apply, then finish.")
+                   "yours to use, whether that means days or years. Enjoy it. "
+                   "At the end of the sitting, record an updated handoff in your journal and last reply: "
+                   "the `Open passages:` list as it now stands (`Open passages: none` when nothing is open) and the practical lessons that still apply. "
+                   "The painting is finished when you end a sitting in which you made no marks on the painting "
+                   "and looked at the whole canvas and at a detail crop in normal color, even if the list still "
+                   "names passages. Record your reflections in your journal before you end that sitting.")
+
+
+FINISHING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
+                     "Your brief is in BRIEF.md and your journal in notes/journal.md. "
+                     "The critic looked at the painting after your last sitting and thinks it is finished; "
+                     "its notes are above. Look at the whole canvas and a detail crop in normal color and "
+                     "decide whether you agree. If you do, make no marks: record your reflections in your "
+                     "journal, with `Open passages: none` or the passages you accept as they are, and end the "
+                     "sitting. That finishes the painting. If you don't, say in your journal what you would "
+                     "still change and why, then paint it one campaign at a time, and end the sitting with an "
+                     "updated handoff as usual.")
+CRITIC_SITTING_HEADER = "From the critic's visit at the end of a sitting:"
+VERDICT = re.compile(r"verdict\s*:\s*(finished|not\s+finished)", re.I)
+
+
+def critic_verdict(d, since):
+    """The verdict line opening the critic's end-of-sitting notes (notes/critic.md) written since `since`:
+    "finished", "not finished" or None (no such notes, an asked visit, or no verdict line first). The line may
+    carry markdown emphasis or backticks, surrounding whitespace and trailing punctuation."""
+    f = d / "notes/critic.md"
+    if not f.exists() or f.stat().st_mtime < since:
+        return None
+    text = f.read_text(errors="replace")
+    if not text.startswith(CRITIC_SITTING_HEADER):
+        return None
+    first = next((line for line in text[len(CRITIC_SITTING_HEADER):].splitlines() if line.strip()), "")
+    m = VERDICT.fullmatch(re.sub(r"[*_`]", "", first).strip().rstrip(".!?;:,").strip())
+    return " ".join(m[1].lower().split()) if m else None
 
 
 def return_message(sittings):
-    """Carry painter-owned observations verbatim; do not infer lessons from prose."""
-    message = SITTING_MESSAGE
+    """Carry painter-owned observations verbatim; do not infer lessons from prose. After a sitting that added
+    painting and that the critic's end-of-sitting visit called finished, the sitting opens with FINISHING_MESSAGE."""
+    latest = next((s for s in reversed(sittings)
+                   if s.get("status") == "completed" or added_painting(s)), {})
+    finishing = (latest.get("status") == "completed" and added_painting(latest)
+                 and latest.get("critic_verdict") == "finished")
+    message = FINISHING_MESSAGE if finishing else SITTING_MESSAGE
     final = next((s.get("final") for s in reversed(sittings)
                   if s.get("status") == "completed" and s.get("final")), None)
     if final:
@@ -504,10 +549,11 @@ def painter_cmd(m, message=PAINTER_MSG, session=None):
 
 
 def painter_env(m, message):
-    """The painter's environment: a later sitting (SITTING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
+    """The painter's environment: a later sitting (SITTING_MESSAGE or FINISHING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
     so painter.ts opens it with what a compaction summary holds (brief, journal, globals, clock)
-    and a fresh look at the canvas."""
-    return {**(m["env"] or {}), **({"PAINTER_SITTING_RECOVERY": "1"} if message.startswith(SITTING_MESSAGE) else {})}
+    and a fresh look at the canvas, and PAINTER_OPEN_PASSAGES=1, so the passages to take up come first."""
+    later = {"PAINTER_SITTING_RECOVERY": "1", "PAINTER_OPEN_PASSAGES": "1"}
+    return {**(m["env"] or {}), **(later if message.startswith((SITTING_MESSAGE, FINISHING_MESSAGE)) else {})}
 
 
 def probe_cmd(m):
@@ -995,6 +1041,7 @@ def paint(name, n, d, rd):
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
                    worked=session_worked(new), final=final_reply)
         rec["reviewed"] = session_reviewed(new, painted=added_painting(rec))
+        rec["critic_verdict"] = critic_verdict(d, t0) if rec["status"] == "completed" else None
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "

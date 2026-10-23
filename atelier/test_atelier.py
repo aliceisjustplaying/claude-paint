@@ -106,7 +106,7 @@ def test_briefs_are_the_texts_as_section_5_renders_them(tmp_path, monkeypatch):
 
 def test_the_house_runner_is_r40s():
     source = (Path(__file__).with_name("house") / "r21_chains.py").read_bytes()
-    assert hashlib.sha256(source).hexdigest() == "97601bca73b998fdbd70e5c6334ef3585b5d37cc7fccda8a286ec2b66de820f1"
+    assert hashlib.sha256(source).hexdigest() == "2c9206f526bac611c33c36df885782bf5a5f5e18a0d0eb5401231a9e1119d07a"
 
 
 def test_the_studios_come_from_studios_json():
@@ -279,7 +279,7 @@ def test_run_configures_the_house_loop_with_the_atelier_texts(world, monkeypatch
     assert house.painter_cmd(model, house.PAINTER_MSG)[-1] == A.text("launch_message.md")
     later = house.return_message([{"status": "completed", "final": "my reply"}])
     assert later == A.text("sitting_message.md") + "\n\nYour previous sitting's reply:\nmy reply"
-    assert house.painter_env(model, later) == {"PAINTER_SITTING_RECOVERY": "1"}
+    assert house.painter_env(model, later) == {"PAINTER_SITTING_RECOVERY": "1", "PAINTER_OPEN_PASSAGES": "1"}
     assert house.RUN == work / "run"
 
 

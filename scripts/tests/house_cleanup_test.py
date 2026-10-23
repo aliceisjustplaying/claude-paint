@@ -70,6 +70,74 @@ class HouseCleanupTests(unittest.TestCase):
                 self.assertEqual([json.loads(line) for line in self.events.read_text().splitlines()],
                                  [["ps", "-Ao", "pid=,command="], ["kill", "424242"]])
 
+    def test_house_and_r41_fixture_have_the_same_runner(self):
+        self.assertEqual(RUNNERS[0].read_bytes(), RUNNERS[1].read_bytes())
+
+    def test_finishing_requires_the_latest_completed_sitting_to_paint_and_be_called_finished(self):
+        for path in self.runners:
+            if path == RUNNERS[-1]:
+                continue
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                painted = dict(sitting=1, status="completed", effects_before=1, effects_after=2,
+                               critic_verdict="finished", final="The light holds.")
+                finishing = runner.FINISHING_MESSAGE + "\n\nYour previous sitting's reply:\nThe light holds."
+                self.assertEqual(runner.return_message([painted]), finishing)
+                self.assertEqual(runner.return_message([painted, dict(status="crashed")]), finishing)
+                self.assertEqual(runner.next_step([painted]), ("new", 2))
+                for changed in (dict(critic_verdict="not finished"), dict(critic_verdict=None),
+                                dict(effects_after=1)):
+                    ordinary = dict(painted, **changed)
+                    self.assertTrue(runner.return_message([ordinary]).startswith(runner.SITTING_MESSAGE))
+                    self.assertTrue(runner.return_message([painted, ordinary]).startswith(runner.SITTING_MESSAGE))
+                self.assertEqual(runner.return_message([]), runner.SITTING_MESSAGE)
+                model = dict(env={"CUSTOM": "kept"})
+                for message in (runner.SITTING_MESSAGE, finishing):
+                    self.assertEqual(runner.painter_env(model, message),
+                                     dict(CUSTOM="kept", PAINTER_SITTING_RECOVERY="1", PAINTER_OPEN_PASSAGES="1"))
+                self.assertEqual(runner.painter_env(model, runner.PAINTER_MSG), dict(CUSTOM="kept"))
+
+    def test_painting_after_a_finished_verdict_invalidates_it_even_when_the_sitting_crashes(self):
+        for path in self.runners:
+            if path == RUNNERS[-1]:
+                continue
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                painted = dict(sitting=1, status="completed", effects_before=1, effects_after=2,
+                               critic_verdict="finished", final="The light holds.")
+                for counts in (dict(effects_before=2, effects_after=3),
+                               dict(effects_before=None, effects_after=None, chunks_before=2, chunks_after=3),
+                               dict(painting_before=2, painting_after=3)):
+                    crashed = dict(sitting=2, status="crashed", **counts)
+                    history = [painted, crashed, dict(sitting=3, status="crashed")]
+                    self.assertEqual(runner.next_step(history), ("new", 4))
+                    self.assertEqual(runner.return_message(history),
+                                     runner.SITTING_MESSAGE + "\n\nYour previous sitting's reply:\nThe light holds.")
+                    fresh = dict(painted, sitting=4, effects_before=3, effects_after=4)
+                    self.assertTrue(runner.return_message([*history, fresh]).startswith(runner.FINISHING_MESSAGE))
+
+    def test_critic_verdict_requires_fresh_end_of_sitting_notes_with_a_verdict_first(self):
+        notes = self.studio / "notes/critic.md"
+        notes.parent.mkdir(parents=True)
+        for path in self.runners:
+            if path == RUNNERS[-1]:
+                continue
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                notes.unlink(missing_ok=True)
+                self.assertIsNone(runner.critic_verdict(self.studio, 100))
+                for line, expected in (("Verdict: finished", "finished"),
+                                       (" **VERDICT: NOT   FINISHED**. ", "not finished"),
+                                       ("`Verdict: finished`!", "finished"),
+                                       ("The light holds.\nVerdict: finished", None),
+                                       ("Verdict: finished eventually", None)):
+                    notes.write_text(runner.CRITIC_SITTING_HEADER + "\n\n" + line)
+                    os.utime(notes, (200, 200))
+                    self.assertEqual(runner.critic_verdict(self.studio, 200), expected)
+                    self.assertIsNone(runner.critic_verdict(self.studio, 201))
+                notes.write_text("From the critic's visit you asked for:\n\nVerdict: finished")
+                self.assertIsNone(runner.critic_verdict(self.studio, 0))
+
     def test_round29_close_failure_keeps_server_and_retries_only_finalization(self):
         for i, path in enumerate(self.runners):
             with self.subTest(runner=str(path)):

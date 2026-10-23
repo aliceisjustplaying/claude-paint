@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+mod support;
 
 const CHUNKS: [&str; 12] = [
     r#"canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{"lead white",6},{"raw umber",1}}, um=50, apply="roller"}}}"#,
@@ -172,6 +173,7 @@ impl Drop for Studio {
             let _ = child.kill();
             let _ = child.wait();
         }
+        support::stop_servers(&self.root);
     }
 }
 

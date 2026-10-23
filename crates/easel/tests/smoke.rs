@@ -9,6 +9,7 @@ use std::process::{Command, Output};
 
 #[path = "../../paint/tests/support/image_tolerance.rs"]
 mod image_tolerance;
+mod support;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_TARGET_TMPDIR")).join("easel-smoke")
@@ -34,7 +35,7 @@ fn fails(args: &[&str]) -> String {
 struct Closing;
 impl Drop for Closing {
     fn drop(&mut self) {
-        let _ = easel(&["-s", "sketch-smoke", "close"]);
+        support::stop_servers(&root());
     }
 }
 

@@ -10,6 +10,10 @@ use support::sock_of;
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("il-{}", std::process::id()))
 }
+/// Stops the session's server however the test ends.
+fn closing(name: &str) -> support::Closing {
+    support::Closing(root().join("out/easel").join(name))
+}
 fn cmd(args: &[&str]) -> Output {
     cmd_in(&root(), args)
 }
@@ -36,6 +40,7 @@ fn status_with_timeout(name: &str) -> std::io::Result<String> {
 }
 #[test]
 fn live_resolution_is_fixed() {
+    let _closing = closing("s");
     let o = cmd(&["open", "s", "--width", "80"]);
     assert!(!o.status.success(), "live width override accepted");
     assert!(ok(&["open", "s"]).contains("2400px"));
@@ -44,6 +49,7 @@ fn live_resolution_is_fixed() {
 
 #[test]
 fn edited_or_truncated_logs_cannot_reopen() {
+    let _closing = closing("reopen");
     ok(&["open", "reopen"]);
     ok(&["-s", "reopen", "do", "x = 1"]);
     ok(&["-s", "reopen", "close"]);
@@ -96,6 +102,7 @@ fn open_waits_for_previous_lock_holder_despite_stale_fatal() {
 #[test]
 fn replay_failure_is_fatal() {
     let name = "bad-replay";
+    let _closing = closing(name);
     let dir = root().join("out/easel").join(name);
     std::fs::create_dir_all(&dir).unwrap();
     let logs = root().join("paintings/lua");
@@ -119,6 +126,7 @@ fn replay_failure_is_fatal() {
 // says both, so the chunk isn't sent again.
 #[test]
 fn a_failed_look_after_a_chunk_still_reports_the_chunk() {
+    let _closing = closing("looked");
     ok(&["open", "looked"]);
     let out = ok(&["-s", "looked", "do", "x = 1", "--look"]);
     ok(&["-s", "looked", "close"]);
@@ -130,13 +138,7 @@ fn an_implicit_scratch_reset_survives_a_failed_chunk() {
     // its own studio: the log directory is made read-only below
     let studio = root().join("scratch-notice");
     let (cmd, ok) = (|args: &[&str]| cmd_in(&studio, args), |args: &[&str]| ok_in(&studio, args));
-    struct Closing(PathBuf);
-    impl Drop for Closing {
-        fn drop(&mut self) {
-            let _ = cmd_in(&self.0, &["-s", "scratch-notice", "close"]);
-        }
-    }
-    let _closing = Closing(studio.clone());
+    let _closing = support::Closing(studio.join("out/easel/scratch-notice"));
     ok(&["open", "scratch-notice"]);
     ok(&["-s", "scratch-notice", "do", "canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{\"lead white\",5},{\"yellow ochre\",1}}, um=80, apply=\"knife\"}}}"]);
     ok(&["-s", "scratch-notice", "do", "local old_swatch=1", "--scratch"]);
@@ -227,6 +229,7 @@ fn an_interrupted_note_leaves_the_journal_whole() {
     let before = format!("{}\n", "x".repeat(200 * 512 - 8));
     std::fs::write(&journal, &before).unwrap();
     let easel = |args: &[&str]| Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env_remove("EASEL_WIDTH").env("EASEL_ROOT", &studio).env("EASEL_SESSION", "s").output().unwrap();
+    let _closing = support::Closing(studio.join("out/easel/s"));
     let mut server = Command::new("sh").args(["-c", "ulimit -f 200 && exec \"$0\" serve s", env!("CARGO_BIN_EXE_easel")]).env("EASEL_ROOT", &studio).env_remove("EASEL_WIDTH").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().unwrap();
     while !easel(&["status"]).status.success() {
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -243,6 +246,7 @@ fn an_interrupted_note_leaves_the_journal_whole() {
 fn notes_from_two_sessions_at_once_are_all_kept() {
     let studio = root().join("note-race");
     let easel = |args: &[&str]| ok_in(&studio, args);
+    let _closing = ["left", "right"].map(|name| support::Closing(studio.join("out/easel").join(name)));
     for name in ["left", "right"] {
         easel(&["open", name]);
     }
@@ -269,6 +273,7 @@ fn notes_from_two_sessions_at_once_are_all_kept() {
 
 #[test]
 fn journal_uses_the_selected_painting_clock() {
+    let _closing = closing("journal");
     ok(&["open", "journal"]);
     let result = cmd(&["-s", "journal", "note", "painting clock"]);
     ok(&["-s", "journal", "close"]);
@@ -284,6 +289,7 @@ fn journal_uses_the_selected_painting_clock() {
 fn a_running_session_refuses_every_request_while_its_log_is_edited() {
     let s = ["-s", "gate"];
     let with = |a: &[&'static str]| [&s[..], a].concat();
+    let _closing = closing("gate");
     ok(&["open", "gate"]);
     ok(&with(&["do", "x = 1"]));
     let log = root().join("paintings/lua/gate.lua");
@@ -409,15 +415,9 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
 fn a_look_never_overwrites_an_earlier_observation() {
     let s = ["-s", "gaps"];
     let with = |a: &[&'static str]| [&s[..], a].concat();
-    ok(&["open", "gaps"]);
     // a failing assertion must not leave the server running
-    struct Closing;
-    impl Drop for Closing {
-        fn drop(&mut self) {
-            let _ = cmd(&["-s", "gaps", "close"]);
-        }
-    }
-    let _closing = Closing;
+    let _closing = closing("gaps");
+    ok(&["open", "gaps"]);
     ok(&with(&["do", r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=80, apply="knife"}}}"#]));
     let dir = root().join("out/easel/gaps");
     for n in 1..=2 {
@@ -499,6 +499,7 @@ fn serve_waits_for_a_closing_servers_lock() {
         }
     }
     let name = "serve-handoff";
+    let _closing = closing(name);
     ok(&["open", name]);
     ok(&["-s", name, "do", "x = 1"]);
     ok(&["-s", name, "close"]);

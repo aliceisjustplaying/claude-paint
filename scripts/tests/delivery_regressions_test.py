@@ -48,8 +48,8 @@ class DeliveryRegressions(unittest.TestCase):
     def studio(self):
         studio = Path(self.env["EASEL_ROOT"])
         studio.mkdir()
-        self.run_ok([self.easel, "open", "painting"])
         self.addCleanup(subprocess.run, [str(self.easel), "close"], env=self.env, capture_output=True, timeout=30)
+        self.run_ok([self.easel, "open", "painting"])
         self.run_ok([self.easel, "do", 'canvas{size=300,aspect=5,linen={16,14},seed=3,ground={{pile={{"lead white",6},{"raw umber",1}},um=50,apply="roller"}}}'])
         self.run_ok([self.easel, "do", 'p=pile{{"lead white",6},{"cobalt blue",1}}; b=brush("filbert",1); b:load(p,0.8); b:stroke({{100,20},{150,30}})'])
         self.run_ok([self.easel, "save"])

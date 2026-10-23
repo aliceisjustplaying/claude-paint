@@ -30,7 +30,7 @@ fn fails(args: &[&str]) -> String {
 struct Closing(&'static str);
 impl Drop for Closing {
     fn drop(&mut self) {
-        let _ = cmd(&["-s", self.0, "close"]);
+        support::stop_server(&root().join("out/easel").join(self.0));
     }
 }
 
@@ -250,6 +250,7 @@ fn a_reopen_answers_status_with_its_replay_and_requests_wait_for_it() {
     }
     let s = "reopen";
     let with = |a: &[&'static str]| [&["-s", s][..], a].concat();
+    let _closing = Closing(s);
     ok(&["open", s]);
     for _ in 0..3 {
         ok(&with(&["do", "local sum = 0; for i = 1, 150000000 do sum = sum + i end; assert(sum > 0)"]));

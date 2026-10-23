@@ -196,7 +196,7 @@ impl Latent {
     }
 
     pub(crate) fn blend_parts(&mut self, other: &Self, weight: f32) {
-        self.layers.clear();
+        self.layers = Vec::new();
         if self.parts.is_empty() && other.parts.is_empty() { return; }
         self.scale_parts(1.0 - weight);
         self.add_parts(other, weight);

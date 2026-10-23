@@ -959,7 +959,7 @@ impl Surf {
             if !self.layers || (*self.lat.add(i)).layers.is_empty() { return None; }
             let (_, top) = (*self.lat.add(i)).split_top(*self.vol.add(i), *self.hide.add(i), v, self.drain);
             let (_, mut lat, _) = Latent::from_layers(top);
-            lat.layers.clear();
+            lat.layers = Vec::new();
             Some(lat)
         }
     }
@@ -988,7 +988,7 @@ impl Surf {
             if self.layers && !(*self.lat.add(i)).layers.is_empty() {
                 let (below, top) = (*self.lat.add(i)).split_top(*vol, *self.hide.add(i), v, self.drain);
                 let (_, mut picked, got) = Latent::from_layers(top);
-                picked.layers.clear();
+                picked.layers = Vec::new();
                 let (left, lat, hide) = Latent::from_layers(below);
                 *vol = left;
                 *self.lat.add(i) = lat;
@@ -3397,6 +3397,23 @@ mod skim_pigments {
         for (q, (a, b)) in before.into_iter().zip(inventory(&c)).enumerate() {
             assert!((a - b).abs() < 2e-7, "component {q}: {a} -> {b}");
         }
+    }
+
+    #[test]
+    fn mixed_skims_let_go_of_their_layers() {
+        let mut c = Canvas::new(2, 1.0, [0.3; 3]).with_engine(9);
+        let paints = [Paint::body([0.01; 3]), Paint::body([1.0; 3]), Paint::body([0.5, 0.2, 0.1])];
+        c.wet.vol[0] = 1.0;
+        c.wet.lat[0] = paints[0].latent();
+        c.wet.hide[0] = paints[0].prop();
+        let sf = c.surf();
+        for paint in &paints {
+            unsafe { sf.lay_layers(0, 0.25, &paint.latent(), paint.prop(), 0.0, SKIM_COATS) };
+        }
+        assert!(c.wet.lat[0].layers.len() > 1);
+        unsafe { sf.add(0, 0.25, &paints[1].latent(), paints[1].prop(), 0.0) };
+        assert!(c.wet.lat[0].layers.is_empty());
+        assert_eq!(c.wet.lat[0].layers.capacity(), 0, "a mixed pixel still holds its buried layers' memory");
     }
 
     #[test]

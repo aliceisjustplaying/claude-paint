@@ -1030,12 +1030,12 @@ impl Palette {
     /// tube's masstone, scattering in oil and refractive index.
     pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
         if self.engine >= crate::PIGMENT_MIXER {
-            let pigment = |i: usize| crate::mixer::tube(self.tubes[i].name).map_or_else(
+            let pigment = |i: usize| crate::mixer::tube9(self.tubes[i].name).map_or_else(
                 || crate::spectral::SpectralPigment::masstone(self.tubes[i].color, self.scat[i]),
-                |lat| crate::mixer::pigment(&lat).scaled(crate::COAT_UM / 100.0),
+                |lat| crate::mixer::pigment9(&lat).scaled(crate::COAT_UM / 100.0),
             );
             let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(
-                || crate::mixer::pigment(&crate::mixer::tube("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0),
+                || crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0),
                 |i| pigment(i).s,
             );
             let list: Vec<_> = parts.iter().map(|&(i, f)| {

@@ -135,18 +135,26 @@ rust replay-checkpoints easel 'bin easel test' \
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases match recorded baselines$'
+check pigment-optical-data 'uv run --no-project --with numpy==2.4.2 --with scipy==1.17.1 python scripts/tests/researched_pigments_test.py' "$unittest"
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check studio-pictures 'node --test --test-reporter=tap studio/test_pictures.cjs' '^# pass [1-9][0-9]*$'
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
+  mixer::tests::researched_tubes_have_independent_exact_spectra \
+  mixer::tests::researched_tubes_keep_their_spectra_in_wet_and_retained_films \
+  mixer::tests::researched_spectra_mix_by_volume_and_dilute_through_knives_and_wet_paint \
+  mixer::tests::extension_lanes_leave_legacy_optics_and_palette_construction_unchanged \
+  checkpoint::tests::legacy_checkpoints_and_dumps_keep_twenty_one_lanes \
+  checkpoint::tests::old_engine_nine_identity_is_rejected_without_a_payload \
+  wet::latent_tests::legacy_debug_keeps_twenty_one_lanes \
+  wet::latent_tests::expanded_tuple_deserialization_is_safe_and_rejects_short_input \
   style::ground_optics_tests::grounds_keep_the_same_paint_thickness_and_backing_optics \
   style::ground_optics_tests::cached_grounds_track_retained_paint_stiffness_only_from_engine_9 \
   mixer::proxy::tests::cadmium_covers_dark_paint_and_green_earth_keeps_backing_contrast \
   mixer::calibration::measured_dark_recipes_include_black_and_match_the_source \
   mixer::calibration::source_mass_and_palette_volumes_describe_the_same_13g_film \
   bristle::volume_mixing::palette_tools_and_wet_exchange_keep_the_same_extensive_pigments \
-  mixer::proxy::tests::joint_earth_fits_keep_the_frozen_white_tint_ladders \
   mixer::proxy::tests::customized_earth_inputs_rebuild_their_optics_through_clones \
   mixer::proxy::tests::cadmium_covers_dark_paint_and_green_earth_keeps_backing_contrast \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \

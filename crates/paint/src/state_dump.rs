@@ -62,6 +62,8 @@ impl Canvas {
         let px = |k: usize| vec![h, w, k];
         let wt = &self.wet;
         let ck = &wt.clock;
+        let width = if self.engine >= crate::PIGMENT_MIXER { LAT } else { crate::mixer::LEGACY_LATENT_SIZE };
+        let identity = if self.spectral_films() { crate::mixer::film_identity() } else if self.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() };
         let mut v = vec![
             Field { name: "frame", shape: vec![10], values: Values::U64([f.w, f.h, f.x0, f.y0, f.full_w, f.full_h, self.keep.0, self.keep.1, self.keep.2, self.keep.3].map(|x| x as u64).to_vec()) },
             Field { name: "scale", shape: vec![1], values: Values::F32(vec![f.scale]) },
@@ -77,13 +79,13 @@ impl Canvas {
             Field { name: "linen_seed", shape: vec![1], values: Values::U64(vec![self.linen.map_or(0, |l| l.seed)]) },
             Field { name: "surf_gen", shape: vec![1], values: Values::U64(vec![self.surf_gen]) },
             Field { name: "engine", shape: vec![1], values: Values::U32(vec![self.engine]) },
-            Field { name: "mixer.identity", shape: vec![1], values: Values::U64(vec![crate::mixer::identity()]) },
+            Field { name: "mixer.identity", shape: vec![1], values: Values::U64(vec![identity]) },
             Field { name: "ground_um", shape: vec![1], values: Values::F32(vec![self.ground_um]) },
             Field { name: "color", shape: px(3), values: Values::F32(self.px.iter().flat_map(|p| *p).collect()) },
             Field { name: "height", shape: px(1), values: Values::F32(self.height.clone()) },
             Field { name: "film", shape: px(1), values: Values::F32(self.film.clone()) },
             Field { name: "wet.vol", shape: px(1), values: Values::F32(wt.vol.clone()) },
-            Field { name: "wet.lat", shape: px(LAT), values: Values::F32(wt.lat.iter().flat_map(|l| l.color).collect()) },
+            Field { name: "wet.lat", shape: px(width), values: Values::F32(wt.lat.iter().flat_map(|l| l.color[..width].iter().copied()).collect()) },
             // Keep the legacy hiding/stiffness/drying field byte-compatible.
             // Engine 4's additional properties have their own fields below.
             Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()) },

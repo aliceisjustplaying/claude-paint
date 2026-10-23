@@ -377,8 +377,15 @@ fn append_note(clock: f64, text: &str) -> Result<String, String> {
     let p = journal_path();
     let dir = p.parent().unwrap();
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    // the whole journal with the entry is written beside it and renamed over the file it is
-    // (through a revision's link): an interrupted note leaves the journal as it was
+    // every session notes into the one journal: its lock is held from the read to the
+    // rename, so a note never replaces an entry another session has just written
+    let lock = root().join("out/easel/journal.lock");
+    std::fs::create_dir_all(lock.parent().unwrap()).map_err(|e| e.to_string())?;
+    let held = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&lock).map_err(|e| format!("{}: {e}", lock.display()))?;
+    held.lock().map_err(|e| format!("{}: {e}", lock.display()))?;
+    // the whole journal with the entry is written beside it, in this writer's own file, and
+    // renamed over the file it is (through a revision's link): an interrupted note leaves
+    // the journal as it was
     let real = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
     let mut journal = match std::fs::read(&real) {
         Ok(b) => b,
@@ -390,13 +397,14 @@ fn append_note(clock: f64, text: &str) -> Result<String, String> {
         journal.push(b'\n');
     }
     journal.extend_from_slice(journal_entry(clock, text).as_bytes());
-    let pending = dir.join(".journal.pending");
-    let mut f = std::fs::File::create(&pending).map_err(|e| format!("{}: {e}", pending.display()))?;
+    use std::os::unix::fs::PermissionsExt;
+    let mut pending = tempfile::Builder::new().prefix(".journal.pending-").permissions(std::fs::Permissions::from_mode(0o666)).tempfile_in(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let staged = pending.path().to_path_buf();
     if let Ok(m) = std::fs::metadata(&real) {
-        f.set_permissions(m.permissions()).map_err(|e| format!("{}: {e}", pending.display()))?;
+        pending.as_file().set_permissions(m.permissions()).map_err(|e| format!("{}: {e}", staged.display()))?;
     }
-    f.write_all(&journal).and_then(|_| f.sync_all()).map_err(|e| format!("{}: {e}", pending.display()))?;
-    std::fs::rename(&pending, &real).map_err(|e| format!("{}: {e}", p.display()))?;
+    pending.write_all(&journal).and_then(|_| pending.as_file().sync_all()).map_err(|e| format!("{}: {e}", staged.display()))?;
+    pending.persist(&real).map_err(|e| format!("{}: {}", p.display(), e.error))?;
     std::fs::File::open(real.parent().unwrap_or(dir)).and_then(|d| d.sync_all()).map_err(|e| e.to_string())?;
     Ok(format!("noted in {}\n", p.display()))
 }

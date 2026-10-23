@@ -37,7 +37,7 @@ test("the critic reads the journal, the note to it and the easel's looks, nothin
 
 test("a visit's message says what there is to read and where the notes go", () => {
 	const s = studio();
-	assert.match(visitMessage(s, "sitting"), /just ended a sitting[\s\S]*The painter hasn't left you a note\.[\s\S]*next sitting opens with it/);
+	assert.match(visitMessage(s, "sitting"), /just ended a sitting[\s\S]*The painter hasn't left you a note\.[\s\S]*the painter gets it at the start of its next sitting/);
 	writeFileSync(join(s, "notes/to_critic.md"), "the sky?\n");
 	assert.match(visitMessage(s, "asked"), /asked you to visit[\s\S]*its note to you, notes\/to_critic\.md\.[\s\S]*as soon as you finish/);
 	const args = criticArgs(s, { args: ["--model", "m"], dir: "/c" }, "asked", "/c/sessions/v", "/h");
@@ -47,20 +47,21 @@ test("a visit's message says what there is to read and where the notes go", () =
 
 test("a visit's message quotes the painter's open passages and asks which the critic would take up first", () => {
 	const s = studio();
-	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter, as one painter talking to another, whether the picture is finished\. Open your notes with one line that reads `Verdict: finished` or `Verdict: not finished`\.[\s\S]*Say which passage, if any, you would take up first, whether or not it is on the painter's list\./);
+	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter, as one painter talking to another, whether the picture is finished\. Open your notes with one line that reads `Verdict: finished` or `Verdict: not finished`\.[\s\S]*Say what you would take up first: a passage on the painter's list, one off it or something across the whole picture\./);
 	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n- day 2, 18:00: handoff\n  Open passages:\n  - the far shore: flat\n");
 	assert.match(visitMessage(s, "asked"), /Its latest list, quoted as the painter wrote it:\n\n> Open passages:\n> - the far shore: flat\n\nThen tell the painter/);
 });
 
 test("a later sitting's passages to take up: the open passages, then the critic's last visit under its own heading", () => {
 	const s = studio();
-	assert.equal(passagesToTakeUp(s, true), "## Passages to take up\n\nYour journal has no `Open passages:` list yet. Any passages your last handoff left open are in your journal, quoted below under \"Your journal\".");
+	assert.equal(passagesToTakeUp(s, true), "## Passages you left open\n\nYour journal has no `Open passages:` list yet. Any passages your last handoff left open are in your journal, quoted below under \"Your journal\".");
 	writeFileSync(join(s, "notes/journal.md"), "- day 2, 18:00: Open passages:\n  - the far shore: flat\n");
 	writeFileSync(join(s, "notes/critic.md"), "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
-	assert.equal(passagesToTakeUp(s, false), "## Passages to take up\n\nYour open passages, from your journal handoff (notes/journal.md), quoted as you wrote them:\n\n> Open passages:\n> - the far shore: flat");
+	assert.equal(passagesToTakeUp(s, false), "## Passages you left open\n\nYour open passages, from your journal handoff (notes/journal.md), quoted as you wrote them. They are what you noted last time, not the order of work: weigh each against the picture as a whole.\n\n> Open passages:\n> - the far shore: flat");
 	assert.equal(passagesToTakeUp(s, true), passagesToTakeUp(s, false) +
 		"\n\n## The critic's last visit\n\nThe critic's notes from its last visit (notes/critic.md), quoted as the critic wrote them. They are its view of the picture, not your list. " +
 		"Weigh each point against what you see, take up the ones that would make the picture better, and say in your journal which you leave and why. " +
+		"A point isn't first just because it is named: it competes with whatever would do most for the picture now. " +
 		"It doesn't see your code, masks or mixtures, so a method it suggests is one way to try, at the passage's real scale. " +
 		"When it says the picture is finished and you agree, end this sitting without marks.\n\n> From the critic's visit at the end of a sitting:\n>\n> Lift the sky.");
 });
@@ -123,6 +124,6 @@ test("the critic visits at the end of a sitting, and the next sitting opens with
 	sitting("You're back at the easel.", { PAINTER_SITTING_RECOVERY: "1", PAINTER_OPEN_PASSAGES: "1" });
 	const [opened] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
 	const text = opened.find((m) => m.role === "user")!.text;
-	assert.match(text, /^## Passages to take up\n\nYour open passages[^\n]*\n\n> Open passages:\n> - the far shore: flat\n\n## The critic's last visit\n\nThe critic's notes from its last visit[^\n]*\n\n> From the critic's visit at the end of a sitting:\n>\n> done\n\nYou're back at the easel\.\n\n## BRIEF\.md/);
+	assert.match(text, /^You're back at the easel\.\n\n## Passages you left open\n\nYour open passages[^\n]*\n\n> Open passages:\n> - the far shore: flat\n\n## The critic's last visit\n\nThe critic's notes from its last visit[^\n]*\n\n> From the critic's visit at the end of a sitting:\n>\n> done\n\n## BRIEF\.md/);
 	assert.doesNotMatch(text, /## The critic's notes/);
 });

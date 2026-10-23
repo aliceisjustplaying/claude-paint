@@ -71,8 +71,9 @@ does; this says how to use them. What you paint is yours to choose.
 ## Lay-in: lean, quick, thin
 
 - Thin the paint with turpentine (`pile{..., turps=0.6}`) for the first
-  drawing and masses: it flows, covers fast and leaves a thin film that
-  dries before the next sitting.
+  drawing and masses: it flows, covers fast and leaves a thin film. It
+  dries on the painting's clock, not between sittings: `wait` before you
+  paint over it if you want it set.
 - **Fat over lean.** Each layer should be at least as oily as the one under
   it: lay-in lean (turpentine, blotted), body as from the tube, glazes rich
   (medium). Lean over fat dries matte and patchy over a still-soft layer.

@@ -647,7 +647,7 @@ impl Canvas {
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_out_solvent();
         }
-        if self.engine >= 9 {
+        if self.engine >= 9 && self.wet.dirty.is_some() {
             let n = self.f.w * self.f.h;
             if self.wet.clock.px.len() != n {
                 self.wet.clock.px = vec![Px::FRESH; n];

@@ -172,9 +172,22 @@ def export(studio, easel, profile, name, destination, live=False):
             subprocess.run(command, cwd=studio, env=env, check=True)
         info = encode_clip(clip_frames(process, gallery, plain, profile), clip, work)
         destination.mkdir(parents=True, exist_ok=True)
-        for filename in names:
-            with (work / filename).open("rb") as source, (destination / filename).open("xb") as output:
-                shutil.copyfileobj(source, output)
+        published = []
+        try:
+            for filename in names:
+                path = destination / filename
+                with (work / filename).open("rb") as source, path.open("xb") as output:
+                    published.append((path, os.fstat(output.fileno())))
+                    shutil.copyfileobj(source, output)
+        except BaseException:
+            for path, owned in reversed(published):
+                try:
+                    current = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if (current.st_dev, current.st_ino) == (owned.st_dev, owned.st_ino):
+                    path.unlink()
+            raise
     return info
 
 

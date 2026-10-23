@@ -45,6 +45,9 @@ import sys
 root = Path(os.environ["EASEL_ROOT"])
 if sys.argv[1] == "save":
     shutil.copyfile(os.environ["ACTUAL_PNG"], sys.argv[2])
+elif sys.argv[1] == "run":
+    shutil.copyfile(os.environ["ACTUAL_PNG"], sys.argv[sys.argv.index("--out") + 1])
+    Path(sys.argv[sys.argv.index("--checkpoint-out") + 1]).write_bytes(b"replayed checkpoint")
 elif sys.argv[1] == "close":
     output = root / "out/easel/painting"
     (output / "live.ckpt").write_bytes(b"replayed checkpoint")

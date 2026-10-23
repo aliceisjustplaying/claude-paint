@@ -119,6 +119,9 @@ except (OSError, RuntimeError) as error:
     sys.exit(f"replay_clip: {error}")
 PY
 
+work=$(mktemp -d)
+receipt=""
+trap 'rm -rf "$work"; [ -z "$receipt" ] || rm -f "$receipt"' EXIT
 if [ "$reuse" = 0 ]; then
   [ -n "$easel" ] || easel=$("$(dirname "$0")/replay_easel" --no-build)
   [ -x "$easel" ] || { echo "replay_clip: no easel at $easel (cargo build --release -p easel)" >&2; exit 1; }
@@ -130,34 +133,36 @@ if [ "$reuse" = 0 ]; then
   fi
   [ -f "$dir.replay.ckpt" ] || { rm -rf "$dir"; : > "$dir.log"; }
   t0=$(date +%s)
-  "$easel" run "$log" "${lightargs[@]}" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" --replay-checkpoint "$dir.replay.ckpt" >/dev/null 2>>"$dir.log" \
+  "$easel" run "$log" "${lightargs[@]}" --out "$work/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" --replay-checkpoint "$dir.replay.ckpt" >/dev/null 2>>"$dir.log" \
     || { tail -20 "$dir.log" >&2; exit 1; }
   rm -f "$dir.replay.ckpt"
   grep -E '^(frames|wrote)' "$dir.log" >&2
   echo "replay took $(( $(date +%s) - t0 )) s" >&2
 fi
 [ -f "$dir/frames.tsv" ] || { echo "replay_clip: no $dir/frames.tsv" >&2; exit 1; }
+dir=$(cd "$dir" && pwd)
 
 # the concat list: each distinct moment (frames at the same hand time: the
 # last one, as it is after any wait) held for its share of the clip: the
 # hand time to the next moment, measured on the curve hand_time^pace, scaled
 # so the clip runs --length (holds capped at --max-hold, the rest stretched
 # to make up for them)
-list=$dir/concat.txt
+list=$work/concat.txt
 # the time the painting is paced into: --length less the opening on the finished painting
 plength=$(awk -v l="$length" -v f="$finalfirst" 'BEGIN { printf "%.5f", l - f }')
 if [ "$pace" = dynamic ]; then
   command -v uv >/dev/null || { echo "replay_clip: --pace dynamic needs uv" >&2; exit 1; }
   uv run -q --script "$(dirname "$0")/replay_pace.py" "$dir" --length "$plength" --max-hold "$maxhold" --hold "$hold" \
     --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" \
-    --before "$finalfirst" "${painted[@]}" --eval
+    --before "$finalfirst" "${painted[@]}" --out "$list" --eval
 else
-# entries are file names: ffmpeg reads them relative to the list, which is in $dir
-awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '
+# entries use absolute paths because the list is outside $dir
+REPLAY_FRAMES_DIR="$dir" awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '
+  BEGIN { dir = ENVIRON["REPLAY_FRAMES_DIR"] }
   # a name in quotes in the list: each quote in it closes, escapes and reopens
   function esc(s,  r, i) { r = ""; while ((i = index(s, q)) > 0) { r = r substr(s, 1, i - 1) q "\\" q q; s = substr(s, i + 1) } return r s }
   NR == 1 { next }
-  { if (n > 0 && $2 + 0 == h[n]) { f[n] = $1 } else { n++; f[n] = $1; h[n] = $2 + 0 } }
+  { name = $1 ~ /^\// ? $1 : dir "/" $1; if (n > 0 && $2 + 0 == h[n]) { f[n] = name } else { n++; f[n] = name; h[n] = $2 + 0 } }
   END {
     if (length_ <= hold) { print "replay_clip: --length must exceed the " hold " s final hold" > "/dev/stderr"; exit 1 }
     for (i = 1; i < n; i++) w[i] = h[i + 1] ^ pace - h[i] ^ pace
@@ -202,6 +207,7 @@ fi
 if awk -v f="$finalfirst" 'BEGIN { exit !(f > 0) }'; then
   # the finished painting first (the last frame, as the final hold shows it)
   last=$(tail -1 "$dir/frames.tsv" | cut -f1) q="'"
+  [[ $last = /* ]] || last=$dir/$last
   { printf "file '%s'\nduration %.5f\n" "${last//$q/$q\\$q$q}" "$finalfirst"; cat "$list"; } > "$list.tmp" && mv "$list.tmp" "$list"
 fi
 
@@ -213,14 +219,17 @@ ffprobe -v error -show_entries format=duration,size:stream=width,height,nb_frame
 got=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
 awk -v g="$got" -v l="$length" -v fps="$fps" 'BEGIN { d = g - l; exit !(d * d <= (1 / fps + 1e-6) ^ 2) }' \
   || { echo "replay_clip: $out runs $got s, not the $length s asked for" >&2; exit 1; }
+receipt=$(mktemp "$dir/.concat.XXXXXX")
+cp "$list" "$receipt"
+uv run --no-project python -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$receipt" "$dir/concat.txt"
 
 if [ -n "$sheet" ]; then
   dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
-  rm -rf "$dir/sheet"; mkdir -p "$dir/sheet"
+  mkdir -p "$work/sheet"
   for i in $(seq 0 11); do
     t=$(awk -v d="$dur" -v i="$i" 'BEGIN { printf "%.2f", i * (d - 0.2) / 11 }')
-    ffmpeg -loglevel error -y -ss "$t" -i "$out" -frames:v 1 -vf scale=400:-2 "$dir/sheet/$(printf %02d "$i").png"
+    ffmpeg -loglevel error -y -ss "$t" -i "$out" -frames:v 1 -vf scale=400:-2 "$work/sheet/$(printf %02d "$i").png"
   done
-  ffmpeg -loglevel error -y -framerate 1 -i "$dir/sheet/%02d.png" -vf "tile=4x3:padding=4:color=white" -frames:v 1 -q:v 3 "$sheet"
+  ffmpeg -loglevel error -y -framerate 1 -i "$work/sheet/%02d.png" -vf "tile=4x3:padding=4:color=white" -frames:v 1 -q:v 3 "$sheet"
   echo "sheet: $sheet" >&2
 fi

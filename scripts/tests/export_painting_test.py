@@ -323,6 +323,45 @@ class CheckpointTests(unittest.TestCase):
                     if not late:
                         run.assert_not_called()
 
+    def test_failed_publication_removes_partial_writes_but_not_replacements(self):
+        for failed in range(3):
+            for replaced in (False, True):
+                with self.subTest(failed=failed, replaced=replaced):
+                    out = self.out / str(failed) / str(replaced)
+                    gallery = out / "test-gallery.png"
+                    outside = self.root / f"outside-{failed}-{replaced}"
+                    outside.write_bytes(b"independent file")
+                    writes = []
+
+                    def render(command, **kwargs):
+                        Path(command[3]).write_bytes(b"PNG fixture")
+                        return subprocess.CompletedProcess(command, 0)
+
+                    def encode(sequence, path, work):
+                        path.write_bytes(b"clip fixture")
+                        return {"verified": True}
+
+                    def copy(source, output):
+                        writes.append(output.name)
+                        output.write(b"partial publication")
+                        if len(writes) == failed + 1:
+                            if replaced:
+                                gallery.rename(out / "retained-original")
+                                gallery.symlink_to(outside)
+                            raise OSError("publication write failed")
+
+                    with patch.object(exporter.subprocess, "run", side_effect=render), \
+                         patch.object(exporter, "encode_clip", side_effect=encode), \
+                         patch.object(exporter.shutil, "copyfileobj", side_effect=copy), \
+                         patch.object(exporter.shutil, "which", return_value="fixture"):
+                        with self.assertRaisesRegex(OSError, "publication write failed"):
+                            exporter.export(self.studio, self.easel, "friedrich", "test", out)
+                    self.assertEqual(outside.read_bytes(), b"independent file")
+                    self.assertEqual(sorted(p.name for p in out.iterdir()),
+                                     ["retained-original", gallery.name] if replaced else [])
+                    if replaced:
+                        self.assertTrue(gallery.is_symlink())
+
 
 if __name__ == "__main__":
     unittest.main()

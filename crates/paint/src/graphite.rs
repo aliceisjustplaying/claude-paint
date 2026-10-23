@@ -200,7 +200,9 @@ impl Cell {
         let w = old + added;
         if w > 0.0 || self.optics.is_none() {
             let w = if self.optics.is_some() { w } else { w.max(1e-6) };
-            self.r = [0, 1, 2].map(|k| ((old * self.r[k] + added * color[k]) / w).clamp(0.0, 1.0));
+            for (channel, incoming) in self.r.iter_mut().zip(color) {
+                *channel = ((old * *channel + added * incoming) / w).clamp(0.0, 1.0);
+            }
         }
         self.lift = (self.a * (1.0 - q) * self.lift + q * 0.55) / (self.a * (1.0 - q) + q).max(1e-6);
         self.a = a1;

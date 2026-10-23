@@ -222,6 +222,24 @@ async function ready(page, which, light) {
         show(events.length - 1);
       });
       assert.equal(await page.locator('#img').getAttribute('data-picture'), '0');
+      await page.evaluate(() => {
+        Object.assign(events[events.length - 1], { display_pending:false, display_failed:true });
+        pictures();
+      });
+      await page.waitForFunction(() => document.getElementById('img').dataset.picture === '4');
+      await ready(page, 'img', 'color');
+      assert.match(await page.locator('#cap').textContent(), /Gallery light unavailable, shown in Color/);
+      await selectLight('relief'); await ready(page, 'img', 'color');
+      assert.match(await page.locator('#cap').textContent(), /Relief unavailable, shown in Color/);
+      await selectLight('color'); await ready(page, 'img', 'color');
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
+      await selectLight('gallery');
+      await page.goto(url('normal')); await ready(page, 'img', 'gallery');
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'image', img:4, look:'', display_pending:true });
+        show(events.length - 1);
+      });
+      assert.equal(await page.locator('#img').getAttribute('data-picture'), '0');
       assert.match(await page.locator('#cap').textContent(), /Gallery light/);
       await selectLight('color'); await ready(page, 'img', 'color');
       await page.waitForFunction(() => document.getElementById('img').dataset.picture === '4');

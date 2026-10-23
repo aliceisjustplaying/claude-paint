@@ -318,6 +318,9 @@ impl Canvas {
             return self.height.clone();
         }
         let Bands { r1, .. } = Bands::at(self.px_mm());
+        if self.engine >= 9 {
+            return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
+        }
         let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
         (0..w * h)
             .into_par_iter()
@@ -440,7 +443,17 @@ impl Canvas {
                 *o = liq[i];
             }
         });
-        conserve_total(liq, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
+        let mut local_transport = Vec::new();
+        let transport = if self.engine >= 9 && bridge { Some(transport.unwrap_or(&mut local_transport)) } else { transport };
+        if self.engine >= 9 && bridge {
+            let ceiling = s.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            out.par_iter_mut().enumerate().for_each(|(i, o)| {
+                let base = old[i] + under.map_or(0.0, |p| p[i]);
+                *o = o.clamp(0.0, (ceiling - base).max(0.0));
+            });
+        } else {
+            conserve_total(liq, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
+        }
         if let Some(transport) = transport {
             let target = out;
             out = liq.to_vec();
@@ -489,7 +502,7 @@ impl Canvas {
         // what it covers, so the fine relief fades from its surface over
         // some tens of µm of paint. Only the surface: the film's thickness
         // (and so its color) is as leveled above.
-        if bridge {
+        if bridge && self.engine < 9 {
             box_blur_into(old, rw, rh, r1, mid);
             box_blur_into(mid, rw, rh, r1, fine);
             for y in 0..rh {

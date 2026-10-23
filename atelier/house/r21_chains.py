@@ -23,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from painting_chunks import count_painting_chunks
+from painting_chunks import count_painting_effects
 from defaults_used import defaults_used
 from log_copy import copy_logs
 from copied_shapes import copied_shapes
@@ -525,15 +525,20 @@ def count_chunks(d):
 
 
 def count_painting(d):
-    """Chunks of the log that put marks on the canvas (see painting_chunks.py)."""
-    f = d / "paintings/lua/painting.lua"
-    return count_painting_chunks(f.read_text(errors="replace")) if f.exists() else 0
+    """Accepted mark-making effects, or None when the engine evidence is unavailable."""
+    return count_painting_effects(d)
 
 
 def added_painting(s):
-    """Whether a sitting added painting chunks (chunk counts for records without painting counts)."""
-    before, after = (("painting_before", "painting_after") if s.get("painting_after") is not None
-                     else ("chunks_before", "chunks_after"))
+    """Whether a sitting painted; unavailable engine evidence falls back to accepted chunks."""
+    if ("effects_before" in s or "effects_after" in s
+            or (s.get("chunks_before") is not None and s.get("chunks_after") is not None)):
+        before, after = (("effects_before", "effects_after")
+                         if s.get("effects_before") is not None and s.get("effects_after") is not None
+                         else ("chunks_before", "chunks_after"))
+    else:
+        before, after = (("painting_before", "painting_after") if s.get("painting_after") is not None
+                         else ("chunks_before", "chunks_after"))
     return s.get(after) is not None and s.get(before) is not None and s[after] > s[before]
 
 
@@ -541,16 +546,16 @@ def next_step(sittings, max_crashes=MAX_CRASHES):
     """What the painter does next: ("new", k) a fresh sitting numbered k, ("continue", k) the
     session of sitting k, cut off by a usage limit, carries on, or (None, why) the painter is done.
 
-    sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
+    sittings: the records so far, in order ({'sitting', 'effects_before', 'effects_after',
     'chunks_before', 'chunks_after', 'status', 'worked'}); a continued sitting's later parts
-    repeat its number and carry its painting_before, so a record's counts cover the whole sitting.
+    repeat its number and carry its effects_before, so a record's counts cover the whole sitting.
     The painter finishes after a sitting it ended itself (status 'completed') that added no painting
-    chunks and reviewed whole and detail views. There is no sitting-count cap.
+    effects and reviewed whole and detail views. There is no sitting-count cap.
     Sittings cut off by a usage limit ('limited') or the runner stopping ('interrupted') count for
     nothing; if the painter had worked in one (a reply that wasn't an error: 'worked'), its session
     carries on (a limited one once the limit lifts); otherwise a fresh sitting follows. After
     max_crashes crashes the painter stops (not finished).
-    A record without painting counts (from an older runner) is judged by its chunk counts.
+    Older records keep their original painting or chunk counts.
     """
     if not sittings:
         return ("new", 1)
@@ -832,12 +837,37 @@ def save_sittings(rd, n, sittings):
     tmp.replace(f)
 
 
+def write_outcome(rd, n, outcome):
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=rd, prefix=f".p{n}_outcome.", suffix=".tmp", delete=False) as f:
+            pending = Path(f.name)
+            json.dump(outcome, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(pending, rd / f"p{n}_outcome.json")
+        directory = os.open(rd, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
+
+
 def close_easel(d):
-    """End the painter's easel session cleanly if one is still up (the log stays), then stop leftovers."""
-    if (d / "bin/easel").exists():
-        subprocess.run(["timeout", "60", str(d / "bin/easel"), "close"], cwd=d,
-                       stdin=subprocess.DEVNULL, capture_output=True)
+    """Return the close error, leaving a failed session alive for finalization retry."""
+    try:
+        result = subprocess.run([str(d / "bin/easel"), "close"], cwd=d,
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"easel close failed: {error}"
+    if result.returncode:
+        return f"easel close exited {result.returncode}: {result.stderr.strip() or result.stdout.strip()}"
     stop_leftovers(d)
+    return None
 
 
 def open_easel(d, tag):
@@ -855,16 +885,44 @@ def open_easel(d, tag):
 
 
 def paint(name, n, d, rd):
-    """Run the painter's sittings until next_step says stop; resumable from p<n>_sittings.json."""
+    """Run the painter's sittings until next_step says stop; resumable from p<n>_sittings.json.
+    Legacy finished markers use the outcome file's mtime when no finish timestamp was recorded.
+    """
     m = LANES[name]["model"]
     tag = f"{name}{n}"
     sittings = load_sittings(rd, n)
+    outcome_path = rd / f"p{n}_outcome.json"
+    previous = json.loads(outcome_path.read_text()) if outcome_path.exists() else {}
+    if previous.get("status") == "finished":
+        reply = Path(sittings[-1]["final_file"]).read_bytes()
+        final_path = rd / f"p{n}_final.txt"
+        if not final_path.exists() or final_path.read_bytes() != reply:
+            pending = None
+            try:
+                with tempfile.NamedTemporaryFile(dir=rd, prefix=f".p{n}_final.", suffix=".tmp", delete=False) as final:
+                    pending = Path(final.name)
+                    final.write(reply)
+                    final.flush()
+                    os.fsync(final.fileno())
+                os.replace(pending, final_path)
+                directory = os.open(rd, os.O_RDONLY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+            finally:
+                if pending is not None:
+                    pending.unlink(missing_ok=True)
+        if not (rd / f"p{n}.painted").exists():
+            finished_at = previous.get("finished_at") or outcome_path.stat().st_mtime
+            (rd / f"p{n}.painted").write_text(f"{finished_at} {len(sittings)} record(s): {previous['reason']}\n")
+        return sittings
     for s in sittings:
         if s.get("status") == "running":      # the runner stopped during this sitting
             t0 = time.mktime(time.strptime(s["start"], "%Y-%m-%d %H:%M:%S")) - 5
             files = s.get("sessions") or sorted((f for f in session_dir(d).glob("*.jsonl") if f.stat().st_mtime >= t0),
                                                 key=lambda f: f.stat().st_mtime)[-1:]
-            s.update(status="interrupted", chunks_after=count_chunks(d), painting_after=count_painting(d),
+            s.update(status="interrupted", chunks_after=count_chunks(d), effects_after=count_painting(d),
                      end=time.strftime("%F %T"), sessions=[str(f) for f in files], worked=session_worked(files))
             log(f"{tag}: sitting {s['sitting']} was interrupted (the runner stopped); "
                 + ("it carries on in its session" if s["worked"] else "it will be taken again"))
@@ -898,26 +956,26 @@ def paint(name, n, d, rd):
             log(f"{tag}: painter stops (the easel didn't open); rerun to retry")
             return None
         before = count_chunks(d)
-        painting_before = count_painting(d)
+        effects_before = count_painting(d)
         cont = sittings[-1] if step == "continue" else None
         if cont:
             # the same sitting carries on in its session: its counts start where the sitting started
             part = cont.get("part", 1) + 1
             msg, session = CONTINUE_MESSAGE, cont["sessions"][-1]
-            first = dict(chunks_before=cont["chunks_before"], painting_before=cont["painting_before"])
+            first = dict(chunks_before=cont["chunks_before"], effects_before=cont.get("effects_before"))
         else:
             part, session = 1, None
             msg = PAINTER_MSG if before == 0 else return_message(sittings)
-            first = dict(chunks_before=before, painting_before=painting_before)
+            first = dict(chunks_before=before, effects_before=effects_before)
         stem = f"p{n}_s{k}" + (f"_part{part}" if part > 1 else "")
         known = set(session_dir(d).glob("*.jsonl"))
         rec = dict(sitting=k, part=part, status="running", start=time.strftime("%F %T"), end=None,
-                   chunks_after=None, painting_after=None, **first,
+                   chunks_after=None, effects_after=None, **first,
                    message=msg, sessions=[], exit=None, final_file=str(rd / f"{stem}_final.txt"), final=None)
         sittings.append(rec)
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k}{f' continues (part {part}, in its session)' if cont else ''} ({m['name']}, painter harness, "
-            f"{before} chunks on the easel, {painting_before} painting)")
+            f"{before} chunks on the easel, {effects_before} painting)")
         t0 = time.time()
         rc = run(painter_cmd(m, msg, session), d, rd / f"{stem}_final.txt", rd / f"{stem}_err.txt", env=painter_env(m, msg))
         stop_leftovers(d, keep_server=True)
@@ -933,14 +991,14 @@ def paint(name, n, d, rd):
         # the painter's reply: from the session (authoritative) when the sitting ended cleanly, else stdout
         final_reply = (session_reply(new) if not (crashed or limited) else None) or stdout_reply
         rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
-                   chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
+                   chunks_after=count_chunks(d), effects_after=count_painting(d), exit=rc,
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
                    worked=session_worked(new), final=final_reply)
         rec["reviewed"] = session_reviewed(new, painted=added_painting(rec))
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
-            f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
+            f"(painting {rec['effects_before']} -> {rec['effects_after']}), {len(new)} session file(s)")
         if not crashed and not added_painting(rec) and not rec["reviewed"]:
             log(f"{tag}: completion not established: missing successful whole-canvas or detail review")
         if limited:
@@ -954,14 +1012,28 @@ def paint(name, n, d, rd):
                 log(f"{tag}: sitting {k} crashed ({gist(why)}); crash {crashes} of at most {MAX_CRASHES}, "
                     f"not a judgment: another sitting in {wait:.0f} s")
                 time.sleep(wait)
-    close_easel(d)
+    painter_finished = not why_done.startswith("NOT FINISHED")
+    finished_at = (previous.get("finished_at") or time.time()) if painter_finished else None
+    outcome = dict(status="finalization_failed" if painter_finished else "crash_limit_reached",
+                   reason=why_done, error="final save pending", finished_at=finished_at)
+    if painter_finished:
+        write_outcome(rd, n, outcome)
+    error = close_easel(d)
+    if error and previous.get("status") == "finalization_failed" and (
+            "no painting open" in error or "no easel session" in error):
+        error = close_easel(d) if open_easel(d, tag) else "easel reopen failed during finalization"
+    outcome.update(status=("finalization_failed" if error else "finished") if painter_finished else "crash_limit_reached", error=error)
+    if outcome["status"] != "finished":
+        write_outcome(rd, n, outcome)
+    if error:
+        log(f"{tag}: FINALIZATION FAILED: {error}; the easel was not stopped")
     shutil.copy(sittings[-1]["final_file"], rd / f"p{n}_final.txt")
-    outcome = "finished" if not why_done.startswith("NOT FINISHED") else "crash_limit_reached"
-    (rd / f"p{n}_outcome.json").write_text(json.dumps(
-        {"status": outcome, "reason": why_done}, indent=2) + "\n")
-    if outcome != "finished":
+    with (rd / f"p{n}_final.txt").open("rb") as final:
+        os.fsync(final.fileno())
+    if outcome["status"] != "finished":
         return None
-    (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} record(s): {why_done}\n")
+    write_outcome(rd, n, outcome)
+    (rd / f"p{n}.painted").write_text(f"{finished_at} {len(sittings)} record(s): {why_done}\n")
     return sittings
 
 

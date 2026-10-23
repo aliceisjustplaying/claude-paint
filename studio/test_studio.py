@@ -393,6 +393,41 @@ def test_background_companions_update_without_new_log_bytes(home, server):
     assert again["updates"] == []
 
 
+@pytest.mark.parametrize("already_failed", [False, True])
+def test_failed_background_companions_publish_a_terminal_update(home, server, already_failed):
+    _, studio, log = home
+    colour = png_of("red")
+    path = "out/easel/painting/new.png"
+    marker = studio / "out/easel/painting/.display/new.png"
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b"failed\n" if already_failed else b"pending\n")
+    rows = look("new", colour).splitlines()
+    response = json.loads(rows[1])
+    response["message"]["content"].insert(0, {"type": "text", "text": path})
+    log.write_text(start(str(studio)) + look("old", png_of("blue")) + rows[0] + "\n" + line(response))
+    initial = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    index = next(i for i, event in enumerate(initial["events"]) if event.get("img") == 1)
+    if already_failed:
+        event = initial["events"][index]
+    else:
+        assert initial["events"][index]["display_pending"] is True
+        marker.write_bytes(b"failed\n")
+        updated = json.loads(server(f"/api/events?p={PAINTER}&since={initial['total']}&epoch={initial['epoch']}&u={initial['nupdates']}")[1])
+        assert updated["events"] == []
+        assert [i for i, _ in updated["updates"]] == [index]
+        event = updated["updates"][0][1]
+        initial = updated
+    assert event["display_pending"] is False
+    assert event["display_failed"] is True
+    assert S.glance([str(log)])["look"] == 1
+    assert not any(event.get(light) for light in S.DISPLAY_LIGHTS)
+    again = json.loads(server(f"/api/events?p={PAINTER}&since={initial['total']}&epoch={initial['epoch']}&u={initial['nupdates']}")[1])
+    assert again["updates"] == []
+    assert server(f"/img?p={PAINTER}&i=1") == (200, colour)
+    for light in S.DISPLAY_LIGHTS:
+        assert server(f"/img?p={PAINTER}&i=1&{light}=1")[0] == 404
+
+
 @pytest.mark.parametrize("light", S.DISPLAY_LIGHTS)
 def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server, light):
     import base64
@@ -810,6 +845,45 @@ def looks_at_once(*calls):
 
 def say(text):
     return line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+
+
+@pytest.mark.parametrize("suffix,said", [
+    ("", True),
+    (say(" "), True),
+    (result("l1", "ok"), True),
+    (line({"type": "compaction", "summary": "old notes"}), True),
+    (line({"type": "thinking_level_change", "thinkingLevel": "high"}), True),
+    (line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "text", "text": "Words"}, {"type": "thinking", "thinking": "Next"}]}}), False),
+    (line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "text", "text": "Words"}, {"type": "toolCall", "id": "c2", "name": "status"}]}}), False),
+    (call("c2", "canvas{}") + say("Words"), True),
+    (look("l2", b"picture"), False),
+    (line({"type": "message", "message": {"role": "user", "content": "Continue"}}), False),
+    (line({"type": "model_change", "modelId": "gpt-6.1-sol"}), False),
+    (line({"type": "compaction", "summary": "## The canvas clock\n\n- Latest painting time the easel printed: day 1, 10:00\n"}), False),
+])
+def test_local_picker_speech_flag_tracks_the_last_emitted_event(home, server, monkeypatch, suffix, said):
+    import time
+    _, studio, log = home
+    monkeypatch.setattr(S, "lanes", dict)
+    old = time.time() - 300
+    timestamp = S.datetime.fromtimestamp(old).astimezone().isoformat()
+    log.write_text((start(str(studio)) + look("l1", png_of("blue")) + say("**Blue Pond**\n\nDone.")).replace(
+        "2026-09-29T10:00:00.000Z", timestamp))
+    os.utime(log, (old, old))
+    first, = json.loads(server("/api/sessions")[1])
+    assert first["outcome"] is None
+    assert first["mtime"] == pytest.approx(old)
+    assert first.get("said") is True
+    with log.open("a") as fh:
+        fh.write(suffix)
+    log.with_name("2026-09-30T10-00-00-000Z_s2.jsonl").touch()
+    session, = json.loads(server("/api/sessions")[1])
+    assert session["said"] is said
+    assert str(log) not in S._cache
+    events = S.stream("p:" + PAINTER, [str(log)])["events"]
+    assert session["said"] == (events[-1]["kind"] == "say")
 
 
 def test_a_held_knife_is_never_the_picker_fallback(home):

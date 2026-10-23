@@ -56,6 +56,7 @@ use std::time::{Duration, Instant};
 /// its arenas (2 GiB of free, unreturnable heap by the 30th chunk of a
 /// 2400 px engine-9 painting). mimalloc keeps such allocations in size
 /// classes and gives freed pages back to the system.
+#[cfg(feature = "mimalloc")]
 #[global_allocator]
 static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

@@ -1,9 +1,86 @@
 # Independent pigment mixing (engine 9)
 
 All engine numbers use the independent mixer and new easel paintings record
-engine 9. Main is a reference only, never a coefficient or fitting input.
+engine 9. Legacy tables remain frozen for older replays. The engine-9 fit
+uses the unchanged Revigo measurements and the physical prior described below.
 
-## Round 5: finite measured films and constant paint weights
+## Engine 9: physical volumes and dark mixtures
+
+Engine 9 uses `calibrated.bin`: additive K/S per 100 µm of paint volume,
+with measured tube weights exactly one. Optical strength is carried in
+the coefficients rather than normalized fitted recipe weights. The
+original `measured.bin`, its metadata and inverse stay unchanged for
+engines 8 and earlier. Engine 9 rebuilds RGB residuals against its own
+decoder; the inverse is not regenerated.
+
+Source fractions are masses of finished paints. Fitting and scoring both
+convert them using `v_i = (m_i/rho_i)/sum(m_j/rho_j)`, then add physical
+coefficients as `K=sum(v_i K_i)` and `S=sum(v_i S_i)`. The runtime accepts
+volumes, so it does not apply another density multiplier. Every wet-paint
+density is an **estimate**, not a Revigo density measurement. Table 5
+supplies eight measured average oil mass fractions; other oil fractions
+and lake/wax substrate densities are labeled estimates. Component-density
+sources and the additive-volume model are in
+[`pigment-density9.md`](pigment-density9.md) and
+`scripts/pigment_densities.json`. Air, contraction and drying shrinkage are
+not measured. This fixes unit consistency within a documented model, not
+the missing physical density evidence.
+
+The bounded fitter takes ten coordinate passes, at most 120 evaluations
+per paint, followed by one sparse joint solve, at most 100 evaluations.
+It uses color residuals over fixed 07A white and raw reflectance residuals
+over both measured backings. A fixed log-K/S prior, initialized from the
+legacy coefficients scaled by mass weight and relative density, never
+resets. A wavelength second-difference penalty prevents isolated spectral
+spikes. The three audited dark cases have twice the color-residual weight.
+No revised12 spectrum enters the objective.
+
+All 27 black-containing source mixtures are fitted, including the 18
+previously omitted non-primary dark mixtures and trace-black/lead-white
+08B. There is no independent dark holdout. The 65 fitted rows and revised12
+are disjoint. Four historically selection-touched rows and unused pure
+Prussian 13A remain separate. The round-6 declaration records adaptive
+model selection after the audit; these are not newly blind results.
+
+The compiled decoder gives these OKLab distances and agrees with the
+packed-table oracle across all 82 rows within 1.69e-7 OKLab. The dark-case
+regression also checks actual 100 µm `Paint::over` films, and the density
+regression checks the equivalent mass/volume descriptions of 13G.
+
+| source row | status | before | calibrated |
+|---|---|---:|---:|
+| 11E ultramarine/black | fitted | 0.100332 | 0.000973 |
+| 10D emerald/black | fitted | 0.076014 | 0.019594 |
+| 04E carmine/black | fitted | 0.063038 | 0.003621 |
+| revised12 mean | held out of fitting | 0.023212 | 0.024218 |
+| revised12 worst | held out of fitting | 0.041499 | 0.049032 (04C) |
+
+The worst-case tradeoff stays visible: 04C gets worse rather than being
+moved into fitting. Fixed-prior and smoothness alternatives were checked
+without fitting revised12. The smoother physical-volume model improves
+the audited dark cases but does not reproduce every source ladder exactly.
+No threshold is relaxed.
+
+```sh
+uv run --script scripts/calibrate_pigments9.py
+cargo build --release --locked -p paint --example mixpairs
+uv run --script scripts/pigment_strength_fit.py target/release/examples/mixpairs --measured
+uv run --script scripts/pigment_mixer_score.py --engine9 target/release/examples/mixpairs \
+  --strengths scripts/pigment_strengths.json --out score9.md --csv score9.csv --json score9.json
+```
+
+The scorer reports all 82 modeled source rows with fitted, heldout,
+selection-touched or unused status, plus complete black, old17 and
+revised12 groups. `--before` accepts the audit's all-row CSV to include
+before colors and errors. [`pigment-calibration9.csv`](pigment-calibration9.csv)
+records all 82 rows, both fit statuses and before/after colors and errors.
+`--python-only` labels a coefficient-oracle
+check, not runtime validation. Alternate-oil 07B and 14F have no modeled
+identity and are excluded. Raw measurements stay unchanged. The historical
+score remains available without `--engine9` using its historical strength
+file. The rest of this note records that historical round-5 model.
+
+## Historical round 5: finite measured films and constant paint weights
 
 The fifteen measured catalog tubes retain their own wavelength-dependent
 K and S. The other 39 still enter through their catalog RGB and five-primary

@@ -5,7 +5,7 @@
 """Calibrate tinting strengths to the measured Revigo paint mixtures, through the engine's own tables.
 
 The default mode preserves the historical RGB calibration described below. With --measured, this script only
-exports the generator's finite-film constants and committed round-5 split; it does not perform another fit.
+exports round 6's engine-9 physical-volume coefficients' unit strengths and split; it does not perform another fit.
 
 The split, fixed before any fit (written here, reproduced by `split_for_strengths`):
   fit set:  for every measured paint that is not one of the mixer's primaries, the zinc-white tint whose paint share is
@@ -181,19 +181,24 @@ def main():
     print("fit set:", " ".join(f"{p}={sid}" for p, sid in sorted(fit.items())))
     print("old round-3 test set:" if args.measured else "test set:", " ".join(test))
     if args.measured:
-        measured = json.loads((ROOT / "crates/paint/src/mixer/measured.json").read_text())
+        measured = json.loads((ROOT / "crates/paint/src/mixer/calibrated.json").read_text())
         assert measured["old_test_set"] == test
-        assert not set(measured["test_set"]) & set(sum(measured["samples_used"].values(), []))
-        print("revised round-5 test:", " ".join(measured["test_set"]))
+        assert not set(measured["test_set"]) & set(measured["joint_fit_samples"])
+        print("revised-12 test:", " ".join(measured["test_set"]))
         print("added fit samples:", " ".join(sorted(sum(measured["additional_fit_samples"].values(), []))))
+        print("added black-mixture fit samples (not held out):", " ".join(measured["dark_fit_samples"]))
         print("selection-touched, reported apart:", " ".join(measured["selection_touched"]))
         Path(args.out).write_text(json.dumps({
-            "encoding": "measured-ks",
-            "calibration": "Finite 100 um film over the fixed 07A white field; K/S and constant linear weights from the committed round-5 fit split",
+            "encoding": "volume-ks",
+            "calibration": measured["method"],
             "fit_set": {p: fit[p] for p in sorted(fit)},
             "old_test_set": test,
             "test_set": measured["test_set"],
             "additional_fit_samples": measured["additional_fit_samples"],
+            "dark_fit_samples": measured["dark_fit_samples"],
+            "joint_fit_samples": measured["joint_fit_samples"],
+            "paint_densities": measured["paint_densities"],
+            "density_status": measured["density_status"],
             "pure_samples_reported_apart": measured["pure_samples_reported_apart"],
             "selection_touched": measured["selection_touched"],
             "paint_strengths": measured["linear_weights"],

@@ -113,9 +113,12 @@ fn engine_switches_keep_the_universal_pigment_representation() {
     let c = painted(5);
     let latent = floats(&c, "wet.lat");
     let colors = c.seen();
+    let older = painted(5).with_engine(8);
+    assert_eq!(floats(&older, "wet.lat"), latent);
+    assert_eq!(older.seen(), colors);
     let switched = c.with_engine(PIGMENT_MIXER);
     assert_eq!(floats(&switched, "wet.lat"), latent);
-    assert_eq!(switched.seen(), colors);
+    assert_eq!(switched.seen(), painted(PIGMENT_MIXER).seen());
     assert_eq!(&save(&switched)[..8], b"PAINTC19");
 }
 

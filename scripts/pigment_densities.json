@@ -1,0 +1,30 @@
+{
+  "units": "g/cm3",
+  "model": "Estimated wet paint density: 1 / (oil_mass_fraction / oil_density + (1 - oil_mass_fraction) / pigment_density). Additive component volumes, no air or contraction. None is a measured Revigo wet-paint density.",
+  "oil_densities": {
+    "poppyseed": {"value": 0.925, "status": "estimate within sourced 0.924-0.926 range", "source": "https://cameo.mfa.org/wiki/Poppy_seed_oil"},
+    "linseed": {"value": 0.93, "status": "estimate within sourced 0.921-0.936 range", "source": "https://cameo.mfa.org/wiki/Linseed_oil"}
+  },
+  "table5": "https://www.nature.com/articles/s40494-018-0181-6/tables/5",
+  "estimated_oil_rule": "For paints absent from Table 5, oil_mass_fraction = 1.45 * catalog oil absorption / (100 + 1.45 * catalog oil absorption), except wax lakes use Eosin's 0.37 as a proxy. These are estimates, not Revigo measurements. Catalog absorption sources: notes/research/pigment_oil.md.",
+  "paints": {
+    "CobaltBlue": {"pigment_density": 3.83, "source": "https://cameo.mfa.org/wiki/Cobalt_blue", "oil": "poppyseed", "oil_mass_fraction": 0.51, "oil_status": "measured Table 5 average"},
+    "ChromeYellowOtero": {"pigment_density": 6.1, "source": "https://cameo.mfa.org/wiki/Chrome_yellow", "pigment_status": "estimate for lead chromate/sulfate reconstruction within chromate range", "oil": "poppyseed", "oil_absorption_estimate": 24},
+    "Eosin": {"pigment_density": 2.0, "source": "notes/research/pigment_oil.md", "pigment_status": "estimate for lake substrate; no measured reconstruction density", "oil": "linseed", "oil_mass_fraction": 0.37, "oil_status": "measured Table 5 average"},
+    "BoneBlack": {"pigment_density": 2.29, "source": "https://cameo.mfa.org/wiki/Bone_black", "pigment_status": "Gettens/Stout solid density cited by CAMEO, not its 0.7-0.8 bulk powder density", "oil": "linseed", "oil_mass_fraction": 0.48, "oil_status": "measured Table 5 average"},
+    "ZincWhite": {"pigment_density": 5.6, "source": "https://cameo.mfa.org/wiki/Zinc_white", "pigment_status": "estimate within sourced 5.47-5.65 range", "oil": "poppyseed", "oil_mass_fraction": 0.37, "oil_status": "measured Table 5 average"},
+    "BariumSulphate": {"pigment_density": 4.36, "source": "https://cameo.mfa.org/wiki/Barium_sulfate", "oil": "poppyseed", "oil_mass_fraction": 0.28, "oil_status": "measured Table 5 average"},
+    "CalciumCarbonate": {"pigment_density": 2.7, "source": "https://cameo.mfa.org/wiki/Calcium_carbonate", "oil": "poppyseed", "oil_mass_fraction": 0.28, "oil_status": "measured Table 5 average"},
+    "ChromeYellow": {"pigment_density": 5.96, "source": "https://cameo.mfa.org/wiki/Chrome_yellow", "oil": "poppyseed", "oil_absorption_estimate": 20},
+    "Cochineal": {"pigment_density": 2.0, "source": "notes/research/pigment_oil.md", "pigment_status": "estimate for alumina lake; no measured reconstruction density", "oil": "linseed", "oil_absorption_estimate": 70},
+    "EmeraldGreen": {"pigment_density": 3.27, "source": "https://cameo.mfa.org/wiki/Emerald_green", "oil": "poppyseed", "oil_absorption_estimate": 13},
+    "Eosin1Wax": {"pigment_density": 2.0, "source": "notes/research/pigment_oil.md", "pigment_status": "estimate; Eosin lake proxy, unknown wax/substrate volume", "oil": "linseed", "oil_mass_fraction": 0.37, "oil_status": "estimate from Eosin Table 5, not a wax-lake measurement"},
+    "Eosin2PbWax": {"pigment_density": 2.0, "source": "notes/research/pigment_oil.md", "pigment_status": "estimate; Eosin lake proxy, unknown lead/wax/substrate volume", "oil": "linseed", "oil_mass_fraction": 0.37, "oil_status": "estimate from Eosin Table 5, not a lead/wax-lake measurement"},
+    "LeadWhite": {"pigment_density": 6.7, "source": "https://cameo.mfa.org/wiki/Lead_white", "oil": "poppyseed", "oil_absorption_estimate": 10},
+    "Minium": {"pigment_density": 8.8, "source": "notes/research/pigment_oil.md", "pigment_status": "catalog density proxy, not a measurement of the Revigo pigment", "oil": "poppyseed", "oil_absorption_estimate": 9},
+    "PrussianBlue": {"pigment_density": 1.83, "source": "https://cameo.mfa.org/wiki/Prussian_blue", "oil": "poppyseed", "oil_mass_fraction": 0.56, "oil_status": "measured Table 5 average"},
+    "UltramarineBlue": {"pigment_density": 2.35, "source": "notes/research/pigment_oil.md", "pigment_status": "catalog density proxy, not a measurement of the Revigo pigment", "oil": "poppyseed", "oil_mass_fraction": 0.41, "oil_status": "measured Table 5 average"},
+    "Vermillion": {"pigment_density": 8.09, "source": "https://cameo.mfa.org/wiki/Vermilion", "oil": "linseed", "oil_absorption_estimate": 10},
+    "ViridianGreen": {"pigment_density": 3.32, "source": "https://cameo.mfa.org/wiki/Viridian", "oil": "poppyseed", "oil_absorption_estimate": 80}
+  }
+}

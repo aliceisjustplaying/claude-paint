@@ -531,6 +531,9 @@ def prune(out, before):
             os.rmdir(d); d = os.path.dirname(d)
     with open(os.path.join(out, MARKER), "w") as fh:
         fh.write("".join(r + "\n" for r in now))
+    for path in WRITTEN | {os.path.join(out, MARKER)}:
+        if os.path.isfile(path):
+            os.chmod(path, 0o644)
     return stale
 
 

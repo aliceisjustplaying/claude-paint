@@ -183,7 +183,7 @@ impl Style {
     fn prepare_cached_on(&self, c: Canvas, seed: u64, cache: Option<(&std::path::Path, &str)>) -> Canvas {
         use sha2::{Digest, Sha256};
         let c = c
-            .with_engine(self.palette.engine)
+            .with_engine(self.palette.engine).with_material_revision(self.palette.material_revision)
             .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
@@ -197,6 +197,7 @@ impl Style {
             }
             key.update(seed.to_le_bytes());
             key.update(c.engine.to_le_bytes());
+            if c.material_revision != 0 { key.update(c.material_revision.to_le_bytes()); }
             key.update(c.engine.min(3).to_le_bytes());
             if c.adaptive_sweep {
                 key.update(b"adaptive-sweep");
@@ -272,7 +273,7 @@ impl Style {
     /// any) laid on it. Never from the ground cache (`prepare_cached`),
     /// whose key describes a linen support: a sheet is laid afresh.
     pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
-        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
+        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_material_revision(self.palette.material_revision).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
         self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
     }
 

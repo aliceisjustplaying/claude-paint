@@ -26,6 +26,7 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+pub const MATERIAL_MARK: &str = "--@ material";
 /// A log's head line: its knife's paint laid on wet paint stays on top of it
 /// (`paint::Canvas::with_knife_skim`). Every new painting has it.
 pub const KNIFE_SKIM_MARK: &str = "--@ knife-skim";
@@ -638,6 +639,10 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        let revision = self.st.borrow().tubes.material_revision;
+        if revision != 0 {
+            let _ = writeln!(s, "{MATERIAL_MARK} {revision}");
         }
         if self.st.borrow().tubes.quarter_tiles {
             let _ = writeln!(s, "{TILES_MARK} quarter");
@@ -1322,6 +1327,24 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
     Ok(found.unwrap_or(1))
 }
 
+pub fn logged_material_revision(text: &str) -> Result<u32, String> {
+    let mut found = None;
+    for line in text.lines().map(str::trim).take_while(|line| !line.starts_with(MARK)) {
+        if let Some(rest) = line.strip_prefix(MATERIAL_MARK) {
+            let revision = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok());
+            if found.is_some() || !matches!(revision, Some(0 | 1)) {
+                return Err(format!("invalid material revision: {line:?}"));
+            }
+            found = revision;
+        }
+    }
+    let revision = found.unwrap_or(0);
+    if revision != 0 && logged_engine(text)? < 9 {
+        return Err("invalid material revision for this engine".into());
+    }
+    Ok(revision)
+}
+
 /// The width a session file names in its head (its `WIDTH_MARK` line before
 /// the first chunk): `LEGACY_WIDTH` if it names none.
 pub fn logged_width(text: &str) -> Result<usize, String> {
@@ -1441,6 +1464,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::PIGMENT_MIXER;
+        b.material_revision = 1;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
         b.reload_finite = true;
@@ -1496,6 +1520,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let mut b = find_box(name)?;
     b.engine = engine;
+    b.material_revision = logged_material_revision(text)?;
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.knife_skim = knife_skim;

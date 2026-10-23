@@ -177,20 +177,24 @@ impl Backing {
         let mean_s = p.s.iter().sum::<f32>() / crate::spectral::N as f32;
         let x = (coats / cover).min(1e4) * scatter / mean_s.max(1e-12);
         let mut transmission = [0.0; crate::spectral::N];
-        for w in 0..crate::spectral::N {
+        let reflectance = std::array::from_fn(|w| {
             let sub = inside(self.reflectance[w]);
             let (r, t) = crate::pigment::layer1(p.k[w], p.s[w], x);
             transmission[w] = t * t;
-            let reflectance = outside(r + t * t * sub / (1.0 - r * sub).max(1e-6));
-            self.reflectance[w] += cover * (reflectance - self.reflectance[w]);
-        }
+            outside(r + t * t * sub / (1.0 - r * sub).max(1e-6))
+        });
         let transmitted = crate::spectral::to_rgb(&transmission);
-        for k in 0..3 {
-            let opacity = cover * (1.0 - transmitted[k]).clamp(0.0, 1.0);
-            self.residual[k] += opacity * (lat[PIGMENTS + k] - self.residual[k]);
+        let residual: Rgb = std::array::from_fn(|k| {
+            self.residual[k] + (1.0 - transmitted[k]).clamp(0.0, 1.0) * (lat[PIGMENTS + k] - self.residual[k])
+        });
+        let rgb = crate::spectral::to_rgb(&reflectance);
+        self.color = std::array::from_fn(|k| self.color[k] + ((rgb[k] + residual[k]).clamp(0.0, 1.0) - self.color[k]) * cover);
+        for w in 0..crate::spectral::N {
+            self.reflectance[w] = if cover == 1.0 { reflectance[w] } else { self.reflectance[w] + cover * (reflectance[w] - self.reflectance[w]) };
         }
-        let rgb = crate::spectral::to_rgb(&self.reflectance);
-        self.color = std::array::from_fn(|k| (rgb[k] + self.residual[k]).clamp(0.0, 1.0));
+        for k in 0..3 {
+            self.residual[k] = if cover == 1.0 { residual[k] } else { self.residual[k] + cover * (residual[k] - self.residual[k]) };
+        }
         self
     }
 
@@ -214,8 +218,7 @@ impl Backing {
             for k in 0..3 {
                 over.residual[k] = self.residual[k] + cover * (over.residual[k] - self.residual[k]);
             }
-            let rgb = crate::spectral::to_rgb(&over.reflectance);
-            over.color = std::array::from_fn(|k| (rgb[k] + over.residual[k]).clamp(0.0, 1.0));
+            over.color = std::array::from_fn(|k| self.color[k] + (over.color[k] - self.color[k]) * cover);
         }
         over
     }

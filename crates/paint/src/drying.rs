@@ -403,7 +403,7 @@ impl Canvas {
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
         if self.material.is_some() {
-            self.advance_material_clock(self.clock() * 60.0 + dt as f64 * 60.0).expect("material clock advance");
+            self.try_wait(minutes).expect("material clock advance");
             return;
         }
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
@@ -412,6 +412,15 @@ impl Canvas {
         }
         self.age(dt);
         self.wet.clock.now += dt as f64;
+    }
+
+    pub fn try_wait(&mut self, minutes: f32) -> Result<(), crate::oil::store::MaterialError> {
+        if self.material.is_none() { self.wait(minutes); return Ok(()); }
+        let dt = minutes.max(0.0);
+        if !dt.is_finite() { return Err(crate::oil::store::MaterialError::Invalid("nonfinite material wait")); }
+        if dt == 0.0 { return Ok(()); }
+        self.material_store().unwrap().check_clock_advance()?;
+        self.advance_material_clock(self.clock() * 60.0 + dt as f64 * 60.0)
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,

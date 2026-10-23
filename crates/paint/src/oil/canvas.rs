@@ -13,6 +13,14 @@ impl Canvas {
         if !self.material_drawing_needed() {
             return work(self);
         }
+        assert!(
+            self.material_store()
+                .unwrap()
+                .tiles
+                .iter()
+                .all(|tile| tile.coatings.is_empty()),
+            "unsupported material operation: drawing contact with an inert coating"
+        );
         let projected_height = self.wet_surface();
         let baseline = projected_height.clone();
         let color: Vec<_> = (0..self.f.w * self.f.h)
@@ -61,6 +69,10 @@ impl Canvas {
             .read_column(i)
             .expect("material pixel");
         column.state.film
+            + column
+                .inert_coatings()
+                .map(|coating| coating.thickness_um / crate::COAT_UM)
+                .sum::<f32>()
             + column
                 .cells
                 .iter()
@@ -261,7 +273,27 @@ impl Canvas {
             overlay(&mut backing, drawing);
             drawn = true;
         }
-        for (packet, &coverage) in column.packets.iter().zip(column.coverage) {
+        let mut coatings = column.inert_coatings().peekable();
+        for packet_index in 0..=column.packets.len() {
+            while coatings
+                .peek()
+                .is_some_and(|coating| coating.before_packet as usize == packet_index)
+            {
+                let coating = coatings.next().unwrap();
+                backing = super::inert::over(backing, coating);
+                film += coating.thickness_um / crate::COAT_UM;
+                if let Some(drawing) =
+                    drawing.filter(|drawing| !drawn && drawing.film <= film + 1e-4)
+                {
+                    overlay(&mut backing, drawing);
+                    drawn = true;
+                }
+            }
+            if packet_index == column.packets.len() {
+                break;
+            }
+            let packet = &column.packets[packet_index];
+            let coverage = column.coverage[packet_index];
             let under = backing;
             let a = (packet.first_cell - column.first_cell) as usize;
             for cell in &column.cells[a..a + packet.cell_count as usize] {
@@ -303,24 +335,38 @@ impl Canvas {
     }
 
     pub(crate) fn material_seen(&self) -> Vec<Rgb> {
-        (0..self.f.w * self.f.h)
-            .map(|i| {
-                if let Some(color) = self.sheet_seen(i) {
-                    return color;
-                }
-                let column = self
-                    .material_store()
-                    .unwrap()
-                    .read_column(i)
-                    .expect("material pixel");
-                let gloss = if column.cells.is_empty() {
-                    column.state.gloss
-                } else {
-                    1.0
-                };
-                crate::canvas::haze(self.material_look_px(i), gloss)
-            })
-            .collect()
+        let mut color: Vec<_> = (0..self.f.w * self.f.h)
+            .map(|i| self.material_look_px(i))
+            .collect();
+        if let Some([strength, gloss]) = self.material_relief {
+            super::presentation::light(
+                &mut color,
+                &self.wet_surface(),
+                self.f.w,
+                self.f.h,
+                self.px_mm(),
+                strength,
+                gloss,
+            );
+        }
+        for (i, color) in color.iter_mut().enumerate() {
+            if let Some(sheet) = self.sheet_seen(i) {
+                *color = sheet;
+                continue;
+            }
+            let column = self
+                .material_store()
+                .unwrap()
+                .read_column(i)
+                .expect("material pixel");
+            let gloss = if column.cells.is_empty() {
+                column.state.gloss
+            } else {
+                1.0
+            };
+            *color = crate::canvas::haze(*color, gloss);
+        }
+        color
     }
 
     pub(crate) fn material_under(&self, x: f32, y: f32, r: f32) -> Rgb {
@@ -362,14 +408,23 @@ impl Canvas {
             .expect("material backend")
             .read_column(i)
             .expect("material pixel");
+        if column
+            .inert_coatings()
+            .last()
+            .is_some_and(|coating| coating.before_packet as usize == column.packets.len())
+        {
+            return 0.0;
+        }
         let Some(top) = column.cells.last() else {
             return 0.0;
         };
         let limit =
             super::recipes::observations_for(&column.formulations[top.recipe as usize].kinetics())
                 .set_to_touch_network as f32;
-        column
-            .cells
+        let first_cell = column.inert_coatings().last().map_or(0, |coating| {
+            (column.packets[coating.before_packet as usize].first_cell - column.first_cell) as usize
+        });
+        column.cells[first_cell..]
             .iter()
             .rev()
             .take_while(|cell| cell.network <= limit)

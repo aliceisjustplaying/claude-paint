@@ -98,7 +98,7 @@ pub fn read<R: EffectValue>(tag: &str, f: impl FnOnce() -> mlua::Result<R>) -> m
 
 fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
     if matches!(kind, Verb::Query | Verb::Wait) {
-        flush(st, true);
+        flush(st, true)?;
     }
     if matches!(kind, Verb::Marks | Verb::Pass) && !DRY.with(|d| d.get()) && st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
         return Err(mlua::Error::runtime("a sheet of paper lies on the picture: only pastel, the finger, a dry brush (b:dust), a puff (blow), a tap (tap), the eraser and fixative are modeled with one down; lift it first (lift_sheet())"));
@@ -113,8 +113,8 @@ fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result
         r
     };
     match kind {
-        Verb::Marks => flush(st, false),
-        Verb::Pass | Verb::Wait => flush(st, true),
+        Verb::Marks => flush(st, false)?,
+        Verb::Pass | Verb::Wait => flush(st, true)?,
         Verb::Query => {}
     }
     if let Some(c) = st.borrow().canvas.as_ref() {
@@ -131,19 +131,21 @@ fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result
 /// already put all but its last slice on the clock as it went (the engine's
 /// `set_hand_time`); this puts the rest. (The chunk's end calls it; verbs
 /// go through `verb`.)
-pub(crate) fn flush(st: &S, force: bool) {
-    let _ = crate::replay_checkpoint::effect(st, if force { "flush" } else { "grain" }, || { flush_inner(st, force); Ok(()) });
+pub(crate) fn flush(st: &S, force: bool) -> mlua::Result<()> {
+    crate::replay_checkpoint::effect(st, if force { "flush" } else { "grain" }, || flush_inner(st, force))
 }
 
-fn flush_inner(st: &S, force: bool) {
+fn flush_inner(st: &S, force: bool) -> mlua::Result<()> {
     let mut g = st.borrow_mut();
     let s = &mut *g;
-    let Some(c) = s.canvas.as_mut() else { return };
+    let Some(c) = s.canvas.as_mut() else { return Ok(()) };
     if !force && c.hand_owed_secs() / 60.0 < GRAIN_MIN {
-        return;
+        return Ok(());
     }
+    if c.hand_owed_secs() > 0.0 { if let Some(store) = c.material_store() { store.check_clock_advance().map_err(mlua::Error::external)?; } }
     c.clock_hand_min();
     s.clock = c.clock() - s.clock0;
+    Ok(())
 }
 
 /// Hand time on: the paint ages while the hand works. The engine's opt-in

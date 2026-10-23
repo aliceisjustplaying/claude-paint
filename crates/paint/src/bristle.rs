@@ -3092,6 +3092,7 @@ impl Canvas {
             return;
         }
         self.assert_thinner_supported(k.solvent > 0.0, "Canvas::knife");
+        let physical_contact = self.material_revision == 1 && self.native_exchange.is_some();
         k.spectral_films = self.spectral_films();
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
@@ -3175,7 +3176,13 @@ impl Canvas {
             }
             // the steel flexes over broad relief and bridges fine hollows: the
             // blade rests on the highest point within FLEX_MM along it
-            let hs: Vec<f32> = blade.iter().map(|b| unsafe { *height.add(b.0) }).collect();
+            let hs: Vec<f32> = blade.iter().map(|b| {
+                if physical_contact {
+                    crate::oil::knife_contact::support_height(self, b.0).expect("knife support")
+                } else {
+                    unsafe { *height.add(b.0) }
+                }
+            }).collect();
             let reach = ((FLEX_MM / (s_mm * 0.7)).ceil() as usize).max(1);
             let rest: Vec<f32> = (0..hs.len()).map(|q| hs[q.saturating_sub(reach)..(q + reach + 1).min(hs.len())].iter().cloned().fold(f32::MIN, f32::max)).collect();
             for (bi, &(i, u, (x, y))) in blade.iter().enumerate() {
@@ -3193,35 +3200,61 @@ impl Canvas {
                 unsafe {
                     let v = *sf.vol.add(i);
                     let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / crate::surface::COAT_UM };
-                    let top = *height.add(i) + (v + sol) * crate::surface::COAT_UM;
-                    let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
-                    if top > plane && v > 1e-6 {
+                    let top = if physical_contact {
+                        crate::oil::knife_contact::top_height(self, i).expect("knife contact height")
+                    } else { *height.add(i) + (v + sol) * crate::surface::COAT_UM };
+                    let fl = if physical_contact || sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
+                    if top > plane && (v > 1e-6 || physical_contact) {
                         // cut off what stands above the blade (setting paint resists)
-                        let cut = ((top - plane) / crate::surface::COAT_UM).min(v + sol) * fl;
-                        let ex = cut * v / (v + sol);
-                        let ex_solvent = cut * sol / (v + sol);
-                        if ex <= 1e-7 {
-                            continue;
-                        }
-                        let l = sf.pickup_lat(i, ex).unwrap_or_else(|| (*sf.lat.add(i)).clone());
-                        let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
-                        let hd = sf.take(i, ex);
-                        if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }
+                        let (ex, ex_solvent, l, hd, cure) = if physical_contact {
+                            let travel_m = arc[arc.len() - 1] as f64 / n as f64 * s_mm as f64 * 1e-3
+                                * if t == 0 || t == n { 0.5 } else { 1.0 };
+                            let contact = crate::oil::knife_contact::blade_contact(
+                                pr, travel_m, (top - plane) as f64 * 1e-6);
+                            let Some(cut) = crate::oil::knife_contact::cut(self, i, contact)
+                                .expect("knife mechanical admission") else { continue; };
+                            (cut.volume_coats, cut.solvent_coats, cut.latent, cut.properties, cut.cure)
+                        } else {
+                            let cut = ((top - plane) / crate::surface::COAT_UM).min(v + sol) * fl;
+                            let ex = cut * v / (v + sol);
+                            let ex_solvent = cut * sol / (v + sol);
+                            if ex <= 1e-7 { continue; }
+                            let l = sf.pickup_lat(i, ex).unwrap_or_else(|| (*sf.lat.add(i)).clone());
+                            let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
+                            let hd = sf.take(i, ex);
+                            if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }
+                            (ex, ex_solvent, l, hd, cure)
+                        };
                         // pressed out past the blade's end into a ridge (off
                         // the canvas's edge there is nowhere to press it: it
                         // stays on the blade)
                         let o = half * u.signum() * 0.2 + 1.5 * u.signum();
                         let ridge = if u.abs() > 0.85 { pix(x + e.0 * o, y + e.1 * o) } else { None };
                         if let Some(jx) = ridge {
-                            sf.add(jx, ex, &l, hd, cure);
-                            if !sf.solv.is_null() { *sf.solv.add(jx) += ex_solvent * crate::surface::COAT_UM; }
-                            *sf.cover.add(jx) = 1.0;
+                            if physical_contact {
+                                crate::oil::knife_contact::append(self, jx, &l, ex, ex_solvent)
+                                    .expect("knife ridge material transfer");
+                            } else {
+                                sf.add(jx, ex, &l, hd, cure);
+                                if !sf.solv.is_null() { *sf.solv.add(jx) += ex_solvent * crate::surface::COAT_UM; }
+                                *sf.cover.add(jx) = 1.0;
+                            }
                             grow(&mut bounds, (x + e.0 * o) as usize, (y + e.1 * o) as usize, (x + e.0 * o) as usize + 1, (y + e.1 * o) as usize + 1);
                         } else {
                             let tv = ex * px_area;
                             k.solvent += ex_solvent * px_area;
                             k.cure = mix_cure(k.cure, k.vol, cure, tv);
+                            let material = if physical_contact {
+                                let mut material = k.lat.material.as_ref().map_or_else(Default::default,
+                                    |m| m.scaled(k.vol as f64));
+                                if let Some(incoming) = &l.material { material.append(incoming, tv as f64); }
+                                Some(material)
+                            } else { None };
                             crate::wet::mix_into(&mut k.vol, &mut k.lat, &mut k.hide, tv, &l, hd);
+                            if let Some(mut material) = material {
+                                material.scale(if k.vol > 0.0 { 1.0 / k.vol as f64 } else { 0.0 });
+                                k.lat.material = (k.vol > 0.0).then_some(material);
+                            }
                         }
                     } else if lay
                         && top < plane
@@ -3255,9 +3288,14 @@ impl Canvas {
                         let give = want.min(liquid / px_area * 0.25);
                         let phi = k.solvent / liquid;
                         if give > 1e-7 {
-                            knife_add(&sf, i, give * (1.0 - phi), k, skim);
-                            if !sf.solv.is_null() { *sf.solv.add(i) += give * phi * crate::surface::COAT_UM; }
-                            *sf.cover.add(i) = 1.0;
+                            if physical_contact {
+                                crate::oil::knife_contact::append(self, i, &k.lat, give * (1.0 - phi), give * phi)
+                                    .expect("knife laid material transfer");
+                            } else {
+                                knife_add(&sf, i, give * (1.0 - phi), k, skim);
+                                if !sf.solv.is_null() { *sf.solv.add(i) += give * phi * crate::surface::COAT_UM; }
+                                *sf.cover.add(i) = 1.0;
+                            }
                             k.vol = (k.vol - give * (1.0 - phi) * px_area).max(0.0);
                             k.solvent = (k.solvent - give * phi * px_area).max(0.0);
                         }
@@ -3295,9 +3333,14 @@ impl Canvas {
                     let v = leave * wgt / tw / px_area;
                     // SAFETY: as above
                     unsafe {
-                        knife_add(&sf, i, v * (1.0 - phi), k, skim);
-                        if !sf.solv.is_null() { *sf.solv.add(i) += v * phi * crate::surface::COAT_UM; }
-                        *sf.cover.add(i) = 1.0;
+                        if physical_contact {
+                            crate::oil::knife_contact::append(self, i, &k.lat, v * (1.0 - phi), v * phi)
+                                .expect("knife lifted material transfer");
+                        } else {
+                            knife_add(&sf, i, v * (1.0 - phi), k, skim);
+                            if !sf.solv.is_null() { *sf.solv.add(i) += v * phi * crate::surface::COAT_UM; }
+                            *sf.cover.add(i) = 1.0;
+                        }
                         *sf.stroke.add(i) = id;
                     }
                     grow(&mut bounds, x as usize, y as usize, x as usize + 1, y as usize + 1);

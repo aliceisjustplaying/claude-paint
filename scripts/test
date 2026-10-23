@@ -112,12 +112,25 @@ rust material-canvas paint 'lib paint test' \
   oil::tests::removing_only_binder_preserves_pigment_optical_depth \
   oil::tests::checkpoint_budget_counts_current_and_pending_stores_together
 rust material-identity easel 'bin easel test' session::tests::material_identity_is_explicit_and_legacy_logs_stay_legacy
+rust material-inert paint 'lib paint test' \
+  oil::inert::tests::inert_glaze_preserves_exact_coefficients_geometry_and_buried_history \
+  oil::inert::tests::inert_coating_stays_below_later_cover_deposits \
+  oil::inert::tests::inert_checkpoint_roundtrip_and_aggregate_bounds_include_sparse_entries \
+  oil::inert::tests::inert_coated_contact_transport_and_clock_fail_without_mutating_history \
+  oil::inert::tests::preexisting_hand_time_is_settled_before_the_inert_coating_is_appended
+rust material-relief paint 'lib paint test' \
+  oil::presentation::tests::material_relief_matches_the_lighting_operator_and_roundtrips_without_recoloring_paint \
+  oil::presentation::tests::arbitrary_material_rgb_edits_are_rejected_before_the_closure_runs
+rust material-finishing easel 'bin easel test' finish::tests::material_varnish_settles_prior_and_application_hand_time_before_sealing
 rust material-native paint 'lib paint test' \
   oil::native::tests::native_brush_commits_fragments_and_releases_dense_material \
   oil::native::tests::native_work_does_not_expose_a_slow_base_through_a_set_cover \
   oil::native::tests::oversized_native_contact_and_rag_leave_only_authoritative_columns \
   oil::native::tests::a_failed_native_kernel_restores_the_retained_interval \
   oil::native::tests::native_projection_is_footprint_bounded_and_preserves_untouched_packets
+rust material-knife paint 'lib paint test' \
+  oil::native::knife_tests::admitted_native_knife_take_maps_the_window_and_cannot_restore_removed_history \
+  oil::native::knife_tests::failed_native_knife_take_restores_the_retained_base_and_history
 rust material-tools easel 'bin easel test' replay_checkpoint::tests::material_tool_envelope_preserves_recipes_histories_and_binder_fractions
 rust painting-store easel 'bin easel test' \
   painting_store::tests::chunk_counter_exceeds_one_gib_without_state_allocation \

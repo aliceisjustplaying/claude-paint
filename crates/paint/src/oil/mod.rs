@@ -3,8 +3,11 @@ pub mod checkpoint;
 pub mod chemistry;
 pub mod constitutive;
 pub mod depth;
+pub mod inert;
+pub(crate) mod presentation;
 pub mod exchange;
 pub mod knife;
+pub(crate) mod knife_contact;
 pub mod mixture;
 pub(crate) mod native;
 pub mod recipes;
@@ -86,6 +89,7 @@ fn advance_store(
     seconds: f64,
     scratch: &mut Scratch,
 ) -> Result<(), MaterialError> {
+    store.check_clock_advance()?;
     let air = store.environment.oxygen_activity;
     for tile in 0..store.tile_count() {
         if store.tiles[tile]
@@ -111,6 +115,7 @@ fn advance_store(
 
 pub(crate) fn stage(column: &store::ColumnRef<'_>) -> crate::drying::Stage {
     use crate::drying::Stage;
+    if column.inert_coatings().last().is_some_and(|coating| coating.before_packet as usize == column.packets.len()) { return Stage::Dry; }
     let model = column
         .cells
         .last()
@@ -119,7 +124,8 @@ pub(crate) fn stage(column: &store::ColumnRef<'_>) -> crate::drying::Stage {
         })
         .unwrap_or_default();
     let mut cells = Vec::with_capacity(column.cells.len());
-    for (packet, &coverage) in column.packets.iter().zip(column.coverage) {
+    let first_packet = column.inert_coatings().last().map_or(0, |coating| coating.before_packet as usize);
+    for (packet, &coverage) in column.packets[first_packet..].iter().zip(&column.coverage[first_packet..]) {
         let a = (packet.first_cell - column.first_cell) as usize;
         for cell in &column.cells[a..a + packet.cell_count as usize] {
             let mut cell = *cell;

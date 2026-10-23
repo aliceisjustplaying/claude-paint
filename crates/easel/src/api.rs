@@ -2492,7 +2492,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 return err(format!("wait({minutes}): want minutes from 0 to {MAX_WAIT_MIN} (10 years); days are fine: wait(3 * 24 * 60)"));
             }
             time::verb(&st1, Verb::Wait, |s| {
-                s.canvas.as_mut().ok_or_else(no_canvas)?.wait(minutes as f32);
+                s.canvas.as_mut().ok_or_else(no_canvas)?.try_wait(minutes as f32).map_err(mlua::Error::external)?;
                 Ok(())
             })?;
             Ok(time::time_of_day(st1.borrow().clock))

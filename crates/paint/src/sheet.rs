@@ -348,7 +348,7 @@ impl Canvas {
     #[inline]
     pub(crate) fn surface_point(&self, i: usize) -> (f32, f32, f32) {
         let height = if self.material_exchange_needed() && !self.drawing_projection {
-            self.material_store().unwrap().sample(i).unwrap().height_um
+            self.material_store().unwrap().surface_height(i).unwrap()
         } else { self.height[i] };
         match &self.sheet {
             Some(s) if s.over[i] => (height + s.caliper_um, s.micro_um, self.give_mpa_per_um(i)),

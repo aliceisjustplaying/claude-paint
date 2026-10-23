@@ -221,6 +221,14 @@ mod tests {
         }
         conserved(expected, values(mixed.inventory()));
         let mut stressed = fresh.clone();
+        for _ in 0..32 {
+            let (_, mut skim) = mixed.split_top_with_geometry(1e-20, 50.0);
+            skim.scale(mixed.volume() / skim.volume());
+            mixed.blend(&skim, 0.5);
+            assert_eq!(mixed.fragments.len(), 1);
+            assert_eq!(mixed.fragments[0].reference_area, 1.0);
+        }
+        conserved(expected, values(mixed.inventory()));
         stressed.fragments[0].history.tension_n_m[0] = 1.0;
         mixed.mix_in(&stressed, 1.0);
         assert_eq!(mixed.fragments.len(), 2);
@@ -570,7 +578,7 @@ impl MaterialPayload {
                     && proportional(last.binder, fragment.binder)
                     && proportional(last.solvent, fragment.solvent)
                 {
-                    last.reference_area += fragment.reference_area;
+                    last.reference_area = 1.0;
                     last.volume += fragment.volume;
                     last.pigment += fragment.pigment;
                     last.binder += fragment.binder;
@@ -647,7 +655,7 @@ impl MaterialPayload {
                     existing.binder,
                     fragment.binder,
                 );
-                existing.reference_area += fragment.reference_area;
+                existing.reference_area = 1.0;
                 existing.volume += fragment.volume;
                 existing.pigment += fragment.pigment;
                 existing.binder += fragment.binder;

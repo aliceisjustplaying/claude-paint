@@ -503,7 +503,7 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
         time::verb(&st1, Verb::Wait, |s| {
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
             c.dry();
-            c.glaze(&pig, m.as_deref(), th);
+            c.try_glaze(&pig, m.as_deref(), th).map_err(mlua::Error::external)?;
             Ok(())
         })?;
         st1.borrow_mut().mark_effects += 1;
@@ -520,7 +520,7 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
     })?)?;
     let st1 = st.clone();
     g.set("clock", lua.create_function(move |_, ()| {
-        time::flush(&st1, true);
+        time::flush(&st1, true)?;
         Ok(st1.borrow().clock)
     })?)?;
     // rest(hours = 16): away from the easel; the next mark starts a new
@@ -534,7 +534,7 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
             return err("rest(hours): want 0 to a year of hours (default: overnight, 16)");
         }
         time::verb(&st1, Verb::Wait, |s| {
-            s.canvas.as_mut().ok_or_else(no_canvas)?.wait((h * 60.0) as f32);
+            s.canvas.as_mut().ok_or_else(no_canvas)?.try_wait((h * 60.0) as f32).map_err(mlua::Error::external)?;
             Ok(())
         })?;
         let tally = time::read("rest_tally", || Ok(st1.borrow().canvas.as_ref().ok_or_else(no_canvas)?.tally()))?;
@@ -546,7 +546,7 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
     })?)?;
     let (st1, si) = (st.clone(), sitting);
     g.set("timesheet", lua.create_function(move |lua, ()| {
-        time::flush(&st1, true);
+        time::flush(&st1, true)?;
         let (sh, tally) = time::read("timesheet", || {
             let s = st1.borrow();
             let c = s.canvas.as_ref().ok_or_else(no_canvas)?;

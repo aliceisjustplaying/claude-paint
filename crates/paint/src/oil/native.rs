@@ -248,6 +248,57 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod knife_tests {
+    use super::*;
+
+    fn canvas() -> Canvas {
+        let mut canvas = Canvas::new_window_with_material(32, 1.0, [0.8; 3], None, 9, 1).with_size_mm(50.0);
+        canvas.edit_material(|store| store.deposit(16 * 32 + 16, super::super::store::tests::paint(100.0 * store.pixel_area(), 1, 1.0), DepositMode::Cover)).unwrap();
+        canvas
+    }
+
+    fn bytes(canvas: &Canvas) -> Vec<u8> {
+        let mut bytes = Vec::new(); canvas.material_store().unwrap().write_to(&mut bytes).unwrap(); bytes
+    }
+
+    #[test]
+    fn admitted_native_knife_take_maps_the_window_and_cannot_restore_removed_history() {
+        let mut canvas = canvas();
+        let pixel = 16 * 32 + 16;
+        let before = canvas.material_store().unwrap().surface_height(pixel).unwrap();
+        let coverage = canvas.material_store().unwrap().read_column(pixel).unwrap().coverage[0];
+        canvas.with_native_material_in(Some((14, 14, 18, 18)), |canvas| {
+            let local = (16 - canvas.f.y0) * canvas.f.w + 16 - canvas.f.x0;
+            assert_eq!(canvas.native_material_pixel(local).unwrap(), pixel);
+            assert!(canvas.native_material_pixel(canvas.f.w * canvas.f.h).is_err());
+            let removed = canvas.native_knife_take(local, 12.0).unwrap();
+            let inventory = removed.inventory();
+            assert!((inventory.pigment + inventory.binder - 12.0).abs() < 1e-4);
+            assert!((canvas.height[local] - (before - 12.0 / coverage)).abs() < 1e-4);
+            assert_eq!(canvas.wet.material_changed[local], 1);
+        });
+        assert!((canvas.material_store().unwrap().sample(pixel).unwrap().inventory_um - 88.0).abs() < 1e-4);
+        assert!(canvas.wet.vol.is_empty() && canvas.native_exchange.is_none());
+    }
+
+    #[test]
+    fn failed_native_knife_take_restores_the_retained_base_and_history() {
+        let mut canvas = canvas();
+        let before = bytes(&canvas);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            canvas.with_native_material_in(Some((14, 14, 18, 18)), |canvas| {
+                let local = (16 - canvas.f.y0) * canvas.f.w + 16 - canvas.f.x0;
+                canvas.native_knife_take(local, 12.0).unwrap();
+                panic!("failed admitted knife kernel");
+            });
+        }));
+        assert!(result.is_err());
+        assert_eq!(bytes(&canvas), before);
+        assert!(canvas.wet.vol.is_empty() && canvas.native_exchange.is_none());
+    }
+}
+
 fn payload(transfer: MaterialTransfer, area: f64) -> MaterialPayload {
     let mut fragments = Vec::new();
     for packet in transfer.fragments {
@@ -338,6 +389,33 @@ fn transfer(payload: MaterialPayload, area: f64) -> Result<MaterialTransfer, Mat
 }
 
 impl Canvas {
+    pub(crate) fn native_material_pixel(&self, local: usize) -> Result<usize, MaterialError> {
+        let exchange = self.native_exchange.as_ref().ok_or(MaterialError::Invalid("no active native material exchange"))?;
+        if local >= self.f.w * self.f.h { return Err(MaterialError::OutOfBounds); }
+        Ok((exchange.rect.1 + local / self.f.w) * exchange.frame.w + exchange.rect.0 + local % self.f.w)
+    }
+
+    pub(crate) fn native_knife_take(&mut self, local: usize, amount_um: f32) -> Result<MaterialPayload, MaterialError> {
+        let pixel = self.native_material_pixel(local)?;
+        if !amount_um.is_finite() || amount_um < 0.0 { return Err(MaterialError::Invalid("invalid admitted knife removal")); }
+        if amount_um == 0.0 { return Ok(MaterialPayload::default()); }
+        let material = self.material.as_mut().ok_or(MaterialError::Invalid("missing material backend"))?;
+        if material.store.read_column(pixel)?.inert_coatings().next().is_some() { return Err(MaterialError::Unsupported("coherent knife contact with an inert coating")); }
+        let area = material.store.pixel_area();
+        let removed = material.store.take_top(pixel, TakeRequest { amount_um, mode: RemovalMode::Coherent })?;
+        let height = material.store.surface_height(pixel)?;
+        let removed = payload(removed, area);
+        if removed.fragments.is_empty() { return Ok(removed); }
+        self.height[local] = height;
+        self.px[local] = self.material_look_px(pixel);
+        self.film[local] = self.material_film_at(pixel);
+        self.wet.material_changed[local] = 1;
+        self.surf_gen = self.surf_gen.wrapping_add(1);
+        self.base = None;
+        self.e7_contact = Default::default();
+        Ok(removed)
+    }
+
     pub(crate) fn material_rect(
         &self,
         points: &[(f32, f32)],
@@ -491,6 +569,9 @@ impl Canvas {
         let height = rect.3 - rect.1;
         let n = width * height;
         let source = |i: usize| (rect.1 + i / width) * original.w + rect.0 + i % width;
+        for i in 0..n {
+            if material.store.read_column(source(i))?.inert_coatings().next().is_some() { return Err(MaterialError::Unsupported("native contact with an inert coating")); }
+        }
         let mut wet = Wet::new(n);
         wet.current = self.wet.current;
         wet.clock.now = self.clock();

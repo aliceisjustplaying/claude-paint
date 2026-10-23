@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use super::chemistry::{Cell, Kinetics};
 use super::store::{
-    ClockState, Column, Environment, FilmStore, Formulation, Packet, PixelState, Tile,
-    kinetics_values, validate_view,
+    ClockState, Column, Environment, FilmStore, Formulation, InertCoating, Packet, PixelState,
+    SparseCoating, Tile, kinetics_values, validate_view,
 };
 use crate::wet::{LAT, Latent};
 
 const MAGIC: &[u8; 8] = b"OILCOL02";
+const COATED_MAGIC: &[u8; 8] = b"OILCOL03";
 const HEADER_BYTES: u64 = 136;
 const TILE_BYTES: u64 = 88;
 const PIXEL_BYTES: u64 = 236;
@@ -29,6 +30,7 @@ pub struct StoreCounts {
     pub packets: u64,
     pub formulations: u64,
     pub parts: u64,
+    pub coatings: u64,
     pub raw_bytes: u64,
 }
 
@@ -48,14 +50,16 @@ fn native(n: u64) -> io::Result<usize> {
 }
 
 fn raw_size(pixels: u64, c: StoreCounts) -> io::Result<u64> {
-    let mut result = HEADER_BYTES;
+    let coated = c.coatings > 0;
+    let mut result = HEADER_BYTES + if coated { 8 } else { 0 };
     for (n, stride) in [
-        (c.tiles, TILE_BYTES),
+        (c.tiles, TILE_BYTES + if coated { 8 } else { 0 }),
         (pixels, PIXEL_BYTES),
         (c.cells, 32),
         (c.packets, 44),
         (c.formulations, RECIPE_BYTES),
         (c.parts, 12),
+        (c.coatings, 44),
     ] {
         result = add(result, mul(n, stride)?)?;
     }
@@ -83,6 +87,7 @@ pub fn resident_size(pixels: u64, c: StoreCounts) -> io::Result<u64> {
             (size_of::<Formulation>() + 4 * size_of::<usize>()) as u64,
         ),
         (c.parts, size_of::<(usize, f32)>() as u64),
+        (c.coatings, 2 * size_of::<SparseCoating>() as u64),
     ] {
         result = add(result, mul(n, stride)?)?;
     }
@@ -100,7 +105,9 @@ fn reserve<T>(n: u64) -> io::Result<Vec<T>> {
 fn formulation_cmp(a: &Formulation, b: &Formulation) -> Ordering {
     for (x, y) in a.binders().into_iter().zip(b.binders()) {
         let order = x.total_cmp(&y);
-        if order != Ordering::Equal { return order; }
+        if order != Ordering::Equal {
+            return order;
+        }
     }
     for (x, y) in a
         .latent()
@@ -198,7 +205,9 @@ fn put_formulation(w: &mut impl Write, f: &Formulation) -> io::Result<()> {
     for v in [k.binder_code, k.drier_code, k.provenance_code, k.revision] {
         put_u32(w, v)?;
     }
-    for v in f.binders() { put_f64(w, v)?; }
+    for v in f.binders() {
+        put_f64(w, v)?;
+    }
     put_u64(w, f.latent().parts.len() as u64)?;
     for (id, amount) in &f.latent().parts {
         put_u64(w, *id as u64)?;
@@ -214,10 +223,9 @@ impl FilmStore {
             ..StoreCounts::default()
         };
         for t in &self.tiles {
-            for col in &t.columns {
-                c.cells = add(c.cells, col.cell_count as u64)?;
-                c.packets = add(c.packets, col.packet_count as u64)?;
-            }
+            c.coatings = add(c.coatings, t.coatings.len() as u64)?;
+            c.cells = add(c.cells, t.live_cells as u64)?;
+            c.packets = add(c.packets, t.live_packets as u64)?;
             c.formulations = add(c.formulations, t.formulations.len() as u64)?;
             for f in &t.formulations {
                 c.parts = add(c.parts, f.latent().parts.len() as u64)?;
@@ -232,7 +240,8 @@ impl FilmStore {
             return Err(invalid("invalid store metadata"));
         }
         let counts = self.checkpoint_counts()?;
-        w.write_all(MAGIC)?;
+        let coated = counts.coatings > 0;
+        w.write_all(if coated { COATED_MAGIC } else { MAGIC })?;
         put_u32(w, self.width)?;
         put_u32(w, self.height)?;
         put_f64(w, self.pixel_area)?;
@@ -250,10 +259,13 @@ impl FilmStore {
             counts.packets,
             counts.formulations,
             counts.parts,
-            counts.raw_bytes,
         ] {
             put_u64(w, v)?;
         }
+        if coated {
+            put_u64(w, counts.coatings)?;
+        }
+        put_u64(w, counts.raw_bytes)?;
         for (id, t) in self.tiles.iter().enumerate() {
             if !t.clock.valid() {
                 return Err(invalid("invalid tile clock"));
@@ -261,10 +273,13 @@ impl FilmStore {
             put_u64(w, id as u64)?;
             put_u32(w, t.width)?;
             put_u32(w, t.height)?;
-            let nc = t.columns.iter().map(|c| c.cell_count as u64).sum::<u64>();
-            let np = t.columns.iter().map(|c| c.packet_count as u64).sum::<u64>();
+            let nc = t.live_cells as u64;
+            let np = t.live_packets as u64;
             for v in [nc, np, t.formulations.len() as u64] {
                 put_u64(w, v)?;
+            }
+            if coated {
+                put_u64(w, t.coatings.len() as u64)?;
             }
             put_clock(w, t.clock)?;
             put_u64(w, t.generation)?;
@@ -328,6 +343,25 @@ impl FilmStore {
                 }
                 offset += column.cells.len() as u32;
             }
+            for (index, entry) in t.coatings.iter().enumerate() {
+                if entry.pixel as usize >= t.columns.len()
+                    || index > 0 && t.coatings[index - 1].pixel > entry.pixel
+                {
+                    return Err(invalid("invalid sparse coating column"));
+                }
+                put_u32(w, entry.pixel)?;
+                put_u32(w, 1)?;
+                put_u32(w, entry.coating.before_packet)?;
+                for value in entry
+                    .coating
+                    .k
+                    .iter()
+                    .chain(&entry.coating.s)
+                    .chain([&entry.coating.optical_coats, &entry.coating.thickness_um])
+                {
+                    put_f32(w, *value)?;
+                }
+            }
         }
         Ok(())
     }
@@ -338,9 +372,11 @@ impl FilmStore {
             remaining: budget.max_raw_bytes,
             consumed: 0,
         };
-        if r.bytes::<8>()? != *MAGIC {
-            return Err(invalid("unknown material schema"));
-        }
+        let coated = match &r.bytes::<8>()? {
+            MAGIC => false,
+            COATED_MAGIC => true,
+            _ => return Err(invalid("unknown material schema")),
+        };
         let width = r.u32()?;
         let height = r.u32()?;
         let pixel_area = r.f64()?;
@@ -365,6 +401,7 @@ impl FilmStore {
             packets: r.u64()?,
             formulations: r.u64()?,
             parts: r.u64()?,
+            coatings: if coated { r.u64()? } else { 0 },
             raw_bytes: r.u64()?,
         };
         let pixels = mul(width as u64, height as u64)?;
@@ -375,6 +412,7 @@ impl FilmStore {
             || declared.raw_bytes > budget.max_raw_bytes
             || resident_size(pixels, declared)? > budget.max_resident_bytes
             || declared.packets > declared.cells
+            || coated && declared.coatings == 0
         {
             return Err(invalid("material aggregate budget or counts invalid"));
         }
@@ -402,12 +440,15 @@ impl FilmStore {
             let nc = r.u64()?;
             let np = r.u64()?;
             let nr = r.u64()?;
+            let ni = if coated { r.u64()? } else { 0 };
             actual.cells = add(actual.cells, nc)?;
             actual.packets = add(actual.packets, np)?;
             actual.formulations = add(actual.formulations, nr)?;
+            actual.coatings = add(actual.coatings, ni)?;
             if actual.cells > declared.cells
                 || actual.packets > declared.packets
                 || actual.formulations > declared.formulations
+                || actual.coatings > declared.coatings
                 || nc > u32::MAX as u64
                 || np > u32::MAX as u64
                 || nr > u32::MAX as u64
@@ -480,6 +521,25 @@ impl FilmStore {
                 });
                 coverage.push(r.f32()?);
             }
+            let mut coatings: Vec<SparseCoating> = reserve(ni)?;
+            for _ in 0..ni {
+                let pixel = r.u32()?;
+                if pixel as u64 >= count || coatings.last().is_some_and(|entry| entry.pixel > pixel)
+                {
+                    return Err(invalid("invalid sparse coating column"));
+                }
+                if r.u32()? != 1 {
+                    return Err(invalid("unknown inert coating tag"));
+                }
+                let coating = InertCoating {
+                    before_packet: r.u32()?,
+                    k: [r.f32()?, r.f32()?, r.f32()?],
+                    s: [r.f32()?, r.f32()?, r.f32()?],
+                    optical_coats: r.f32()?,
+                    thickness_um: r.f32()?,
+                };
+                coatings.push(SparseCoating { pixel, coating });
+            }
             let tile = Tile {
                 width: tw,
                 height: th,
@@ -487,6 +547,9 @@ impl FilmStore {
                 cells,
                 packets,
                 coverage,
+                live_cells: native(nc)?,
+                live_packets: native(np)?,
+                coatings,
                 formulations,
                 states,
                 clock,
@@ -657,7 +720,9 @@ impl<R: Read> Decoder<'_, R> {
             revision: self.u32()?,
         };
         let mut binders = [0.0; 5];
-        for v in &mut binders { *v = self.f64()?; }
+        for v in &mut binders {
+            *v = self.f64()?;
+        }
         if binders.iter().any(|v| *v < 0.0) || (binders.iter().sum::<f64>() - 1.0).abs() > 1e-12 {
             return Err(invalid("noncanonical binder fractions"));
         }
@@ -677,7 +742,8 @@ impl<R: Read> Decoder<'_, R> {
         }
         let mut latent = Latent::from_color(color);
         latent.parts = parts;
-        Formulation::new_with_binders(latent, prop, k, binders).map_err(|_| invalid("invalid formulation parameters"))
+        Formulation::new_with_binders(latent, prop, k, binders)
+            .map_err(|_| invalid("invalid formulation parameters"))
     }
 }
 

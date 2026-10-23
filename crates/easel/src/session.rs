@@ -553,7 +553,7 @@ impl Session {
                 return Err(mlua::Error::runtime("the chunk ended with a sheet laid on the picture: lift it (lift_sheet()) in the chunk that laid it"));
             }
             // the hand time the chunk spent goes on the clock before it ends
-            crate::time::flush(&self.st, true);
+            crate::time::flush(&self.st, true)?;
             crate::replay_checkpoint::check()?;
             self.next_globals(n as usize)
         }));

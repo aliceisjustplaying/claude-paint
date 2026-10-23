@@ -2209,7 +2209,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
     image::save_buffer(out, &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--replay-checkpoint replay.ckpt [--require-replay-checkpoint] [--until-chunk N] [--for-minutes M]] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--replay-checkpoint replay.ckpt [--require-replay-checkpoint] [--checkpoint-at N,M,...] [--until-chunk N] [--for-minutes M]] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
@@ -2332,7 +2332,7 @@ fn run(args: &[String]) -> Result<(), String> {
         match args[i].as_str() {
             #[cfg(feature = "state-store")]
             "--state-store" | "--state-budget-mib" if i + 1 < args.len() => i += 2,
-            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--replay-checkpoint" | "--until-chunk" | "--for-minutes" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--replay-checkpoint" | "--checkpoint-at" | "--until-chunk" | "--for-minutes" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" | "--require-replay-checkpoint" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }

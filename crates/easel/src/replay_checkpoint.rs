@@ -495,6 +495,9 @@ impl Live {
 
 pub struct Batch {
     checkpoint: Option<PathBuf>,
+    /// The chunks after which the checkpoint is written (`--checkpoint-at`;
+    /// none: after every chunk).
+    at: Option<Vec<usize>>,
     progress: PathBuf,
     identity: Option<Identity>,
     pub done: usize,
@@ -520,9 +523,11 @@ impl Batch {
         let minutes = crate::flag(args, "--for-minutes").map(|v| v.parse::<f64>().map_err(|_| "--for-minutes needs a positive duration".to_string())).transpose()?;
         if minutes.is_some_and(|m| !m.is_finite() || m <= 0.0) { return Err("--for-minutes needs a positive finite duration".into()); }
         if checkpoint.is_none() && (until < chunks.len() || minutes.is_some()) { return Err("batch limits require --replay-checkpoint".into()); }
+        let at = crate::flag(args, "--checkpoint-at").map(|v| v.split(',').map(|n| n.trim().parse::<usize>().ok().filter(|n| (1..=chunks.len()).contains(n)).ok_or_else(|| format!("--checkpoint-at needs chunk numbers in 1..={}, comma-separated", chunks.len()))).collect::<Result<Vec<_>, _>>()).transpose()?;
+        if at.is_some() && checkpoint.is_none() { return Err("--checkpoint-at requires --replay-checkpoint".into()); }
         let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
         let identity = (checkpoint.is_some() || crate::flag(args, "--frames-every").is_some()).then(|| Identity::new(source, width)).transpose()?;
-        let mut batch = Self { checkpoint, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
+        let mut batch = Self { checkpoint, at, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
         if let Some(path) = batch.checkpoint.as_ref().filter(|p| required || p.exists()) {
             let (mut saved, canvas, elapsed_secs) = load(path)?;
             if saved.done == 0 || saved.done > chunks.len() || saved.done > until || !elapsed_secs.is_finite() || elapsed_secs < 0.0 {
@@ -561,7 +566,9 @@ impl Batch {
 
     pub fn completed(&mut self, s: &Session, done: usize) -> Result<bool, String> {
         self.done = done;
-        if let Some(path) = &self.checkpoint {
+        if let Some(path) = &self.checkpoint
+            && self.at.as_ref().is_none_or(|at| at.contains(&done))
+        {
             write_checkpoint(path, s, self.identity.as_ref().unwrap(), done, &self.digests, self.elapsed())?;
         }
         let stop = done >= self.until || self.minutes.is_some_and(|m| self.started.elapsed().as_secs_f64() >= m * 60.0);
@@ -916,6 +923,37 @@ print(counter,rand(),drying(300,300))
         }
         assert_eq!(read()["status"], "paused");
         assert!(read()["current_chunk"].is_null());
+    }
+
+    /// `--checkpoint-at` writes the replay checkpoint only after the chunks
+    /// it names (a benchmark replay whose checkpoint is the size of the
+    /// painting), the progress still at every chunk.
+    #[test]
+    fn checkpoint_at_writes_only_after_the_named_chunks() {
+        let dir = Temp::new();
+        let chunks = crate::session::parse_program(SOURCE);
+        let mut s = session();
+        let mut args = args(&dir.0, 3);
+        args.extend(["--checkpoint-at".into(), "2".into()]);
+        let mut batch = Batch::open(&args, SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+        let (checkpoint, progress) = (dir.0.join("replay.ckpt"), dir.0.join("replay.replay-progress.json"));
+        batch.begin().unwrap();
+        for (i, chunk) in chunks.iter().take(3).enumerate() {
+            batch.begin_chunk(i + 1).unwrap();
+            s.run(chunk).unwrap();
+            batch.completed(&s, i + 1).unwrap();
+            assert_eq!(checkpoint.exists(), i + 1 >= 2, "chunk {}", i + 1);
+            assert_eq!(serde_json::from_slice::<serde_json::Value>(&std::fs::read(&progress).unwrap()).unwrap()["chunks_done"], i + 1);
+        }
+        assert_eq!(load(&checkpoint).unwrap().0.done, 2);
+        for bad in ["0", "9", "two", "2,"] {
+            let mut args = self::args(&dir.0, 3);
+            args.extend(["--checkpoint-at".into(), bad.into()]);
+            let e = Batch::open(&args, SOURCE, 64, &mut session(), &chunks, &dir.0.join("out.png")).err().unwrap();
+            assert!(e.contains("--checkpoint-at"), "{bad}: {e}");
+        }
+        let e = Batch::open(&["--checkpoint-at".into(), "2".into()], SOURCE, 64, &mut session(), &chunks, &dir.0.join("out.png")).err().unwrap();
+        assert!(e.contains("requires --replay-checkpoint"), "{e}");
     }
 
     #[test]

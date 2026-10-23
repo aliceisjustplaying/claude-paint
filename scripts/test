@@ -143,6 +143,9 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   style::ground_optics_tests::grounds_keep_the_same_paint_thickness_and_backing_optics \
   style::ground_optics_tests::cached_grounds_track_retained_paint_stiffness_only_from_engine_9 \
   bristle::volume_mixing::palette_tools_and_wet_exchange_keep_the_same_extensive_pigments \
+  mixer::proxy::tests::joint_earth_fits_keep_the_frozen_white_tint_ladders \
+  mixer::proxy::tests::customized_earth_inputs_rebuild_their_optics_through_clones \
+  mixer::proxy::tests::cadmium_covers_dark_paint_and_green_earth_keeps_backing_contrast \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
   mixer::tests::splitting_measured_films_preserves_the_backing_spectrum \

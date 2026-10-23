@@ -2831,7 +2831,7 @@ mod volume_mixing {
         palette.engine = 9;
         palette.glaze_film = true;
         palette.carried_paint = true;
-        for (a, b, medium) in [("green earth", "magenta", 0.0), ("Prussian blue", "lead white", 0.9)] {
+        for (a, b, medium) in [("green earth", "magenta", 0.0), ("Prussian blue", "lead white", 0.9), ("yellow ochre", "lead white", 0.8), ("raw umber", "lead white", 0.0)] {
             let a = palette.tubes.iter().position(|t| t.name == a).unwrap();
             let b = palette.tubes.iter().position(|t| t.name == b).unwrap();
             let pa = palette.pile(vec![(a, 1.0)]).paint(medium);

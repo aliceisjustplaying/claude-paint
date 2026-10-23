@@ -53,16 +53,21 @@ fn public_palette_engine_changes_and_clones_keep_the_universal_cache() {
         let mut expected = [0.0; mixer::LATENT_SIZE];
         let mut total = 0.0;
         for &(i, fraction) in &parts {
-            let strength = if engine >= PIGMENT_MIXER { mixer::tube_strength9(p.tubes[i].name).unwrap_or(p.tubes[i].strength) } else { p.tubes[i].strength };
+            let tube = &p.tubes[i];
+            let strength = if engine >= PIGMENT_MIXER { mixer::tube_strength9(tube.name).unwrap_or(tube.strength) } else { tube.strength };
             let weight = fraction * strength;
-            let latent = mixer::tube(p.tubes[i].name).unwrap_or_else(|| if engine >= PIGMENT_MIXER { mixer::encode9(&p.tubes[i].color) } else { mixer::encode(&p.tubes[i].color) });
+            let latent = (if engine >= PIGMENT_MIXER { mixer::tube9(tube.name) } else { mixer::tube(tube.name) }).unwrap_or_else(|| {
+                if engine >= PIGMENT_MIXER { mixer::encode_tube9(&tube.color, tube.hiding) } else { mixer::encode(&tube.color) }
+            });
             for k in 0..mixer::LATENT_SIZE { expected[k] += latent[k] * weight; }
             total += weight;
         }
-        if engine < PIGMENT_MIXER {
+        let expected = if engine >= PIGMENT_MIXER {
+            mixer::decode9(&expected)
+        } else {
             for value in &mut expected { *value /= total; }
-        }
-        let expected = if engine >= PIGMENT_MIXER { mixer::decode9(&expected) } else { mixer::decode(&expected) };
+            mixer::decode(&expected)
+        };
         assert_eq!(p.pile(parts.clone()).color, expected);
         assert_eq!(p.clone().pile(parts.clone()).color, expected);
     }

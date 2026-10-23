@@ -349,15 +349,15 @@ inferred in §6, these catalog tubes are the nearest candidates [CODE].
 
 | Inferred hue family | Candidate tubes (proposed) |
 |---|---|
-| Snow, mist and sky lights | lead white, zinc white, with touches of cerulean blue, cobalt blue or yellow ochre |
+| Snow, mist and sky lights | lead white, zinc white, with touches of cerulean blue or yellow ochre, or the least trace of cobalt blue |
 | Night blues | ultramarine blue, cobalt blue, Prussian blue |
-| Turquoise night sky (*Desert of Souls*) | cerulean blue or Prussian blue with viridian and white |
+| Turquoise night sky (*Desert of Souls*) | cerulean blue with viridian and white (Prussian blue turns it a deep blue) |
 | Violets and violet mist | cobalt violet; ultramarine blue with rose madder or permanent alizarin |
 | Saturated reds (cloaks, *Fenris*) | cadmium red, vermilion, Chinese vermilion; permanent alizarin or rose madder for glazes |
 | Golds, brass, lamplight | Naples yellow, yellow ochre, cadmium yellow, deep cadmium, Mars yellow |
 | Rock, earth and warm darks | yellow ochre, raw sienna, burnt sienna, red earth, raw umber, Mars brown |
 | Olive and greenish darks | green earth, viridian, raw umber, bone black |
-| Darkest darks | bone black, vine black; burnt sienna with ultramarine blue |
+| Darkest darks | bone black, vine black; burnt sienna with a little ultramarine blue |
 
 ## At this easel
 

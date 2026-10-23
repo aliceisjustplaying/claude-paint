@@ -67,8 +67,10 @@ does; this says how to use them. What you paint is yours to choose.
   thick paint stays open and glossy on top, and coarse pigments sink
   further than fine ones. Choose before you start: it is the
   canvas's character.
-- A **toned ground** (a little ochre, umber or black in the white) sets the
-  middle value from the first stroke; a white ground keeps everything high
+- A **toned ground** (a little ochre or umber in the white, or a trace of
+  black: one part black in a hundred already makes a light gray, one in
+  twenty a middle one) sets the middle value from the first stroke; a
+  white ground keeps everything high
   in key and lets thin paint glow.
 
 ## Lay-in: lean, quick, thin
@@ -150,7 +152,8 @@ does; this says how to use them. What you paint is yours to choose.
   each heap thick and thinned over black: a chalky mix, a violet "gray", a
   glaze that stains or one that hides show there, before they cost a passage.
 - **Steer a mix by eye**: `p:add{}` a touch at a time, looking between
-  additions.
+  additions. Tubes differ in strength by more than ten times: the strongest
+  tint white at a part in five hundred, the earths at a part in twenty.
 - **Matching a passage** for a repair: start from its recipe in the log and
   lay a trial beside it. The layers since may have shifted the passage, so
   judge the laid trial in a detail crop.
@@ -230,12 +233,13 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Glazing and scumbling (over dry paint)
 
-- **Glaze**: a transparent paint (lakes, viridian, ultramarine, a little of
-  anything) with plenty of medium (0.7 to 0.85), `hand="glaze"`, over a dry
-  passage. It deepens and saturates and lets the light underneath through;
-  it rescues a chalky passage. Over impasto it pools in the valleys and
-  thins on the ridges, which then shine through. Too much pigment, or any
-  white, lays an opaque veil: try it small first. A glaze over the whole
+- **Glaze**: a transparent paint with plenty of medium (0.7 to 0.85, up to
+  0.95 for the strongest tubes), `hand="glaze"`, over a dry passage. It
+  deepens and saturates and lets the light underneath through; it rescues
+  a chalky passage. Over impasto it pools in the valleys and thins on the
+  ridges, which then shine through. A strong tube lays a dark, nearly
+  opaque film even with that much medium, and a pile that is mostly white
+  lays a pale veil: try it small first. A glaze over the whole
   picture to pull it together has failed more often than it has worked.
 - **Scumble**: light paint dragged thin over a dry darker passage, broken
   by the surface. A light load and

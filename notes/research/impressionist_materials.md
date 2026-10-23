@@ -108,7 +108,8 @@ Strontium, barium and zinc yellow take their color from the measured
 color of reconstructed pigments and their tinting strength from values
 measured in test paints, relative to lead chromate [OTE]; the darkening
 for oil is this easel's adjustment, not a sourced value. The numbers of
-carmine lake, yellow lake and vine black are estimates.
+yellow lake and vine black are estimates; carmine lake's color and mixing
+are measured.
 
 ## 10. At this easel
 

@@ -145,6 +145,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   checkpoint::tests::a_different_mixer_identity_is_refused_before_reading_latents \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
+  bristle::skim_pigments::skimming_preserves_each_pigment_and_reveals_the_buried_paint \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \
   bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure \
   thinner::tests::the_sparse_flow_set_moves_only_the_liquid_above_packed_paint \

@@ -112,6 +112,31 @@ impl Canvas {
             v.push(Field { name: "wet.parts.tubes", shape: vec![tubes.len()], values: Values::U64(tubes) });
             v.push(Field { name: "wet.parts.amounts", shape: vec![amounts.len()], values: Values::F32(amounts) });
         }
+        if wt.lat.iter().any(|l| !l.layers.is_empty()) {
+            let mut offsets = vec![0u64];
+            let mut values = Vec::new();
+            let mut parts = vec![0u64];
+            let mut tubes = Vec::new();
+            let mut amounts = Vec::new();
+            for pixel in &wt.lat {
+                for layer in &pixel.layers {
+                    values.push(layer.share);
+                    values.extend(layer.lat.color);
+                    values.extend(layer.hide);
+                    for &(i, amount) in &layer.lat.parts {
+                        tubes.push(i as u64);
+                        amounts.push(amount);
+                    }
+                    parts.push(tubes.len() as u64);
+                }
+                offsets.push((parts.len() - 1) as u64);
+            }
+            v.push(Field { name: "wet.layers.offsets", shape: vec![offsets.len()], values: Values::U64(offsets) });
+            v.push(Field { name: "wet.layers.paint", shape: vec![parts.len() - 1, 1 + LAT + 10], values: Values::F32(values) });
+            v.push(Field { name: "wet.layers.parts.offsets", shape: vec![parts.len()], values: Values::U64(parts) });
+            v.push(Field { name: "wet.layers.parts.tubes", shape: vec![tubes.len()], values: Values::U64(tubes) });
+            v.push(Field { name: "wet.layers.parts.amounts", shape: vec![amounts.len()], values: Values::F32(amounts) });
+        }
         // per-pixel drying state: empty (shape [0]) until the first wait
         let n = if ck.px.is_empty() { None } else { Some(px(1)) };
         type Get = fn(&crate::drying::Px) -> f32;

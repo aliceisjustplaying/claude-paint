@@ -25,6 +25,7 @@ pub(crate) struct Film {
     /// pigment packs (`bristle::ground_drain`) instead of drawing oil from
     /// the paint just laid (`bristle::ground_draw`).
     drain: bool,
+    surf: Surf,
 }
 
 /// Paint ready to lay: the source's color and properties with the solvent
@@ -68,7 +69,7 @@ fn lerp4(p: [f32; 4], q: [f32; 4], a: f32) -> [f32; 4] {
 impl Film {
     /// The film of `sf`'s buffers, taken once per exchange call.
     pub(crate) fn of(sf: &Surf) -> Film {
-        Film { vol: sf.vol, lat: sf.lat, hide: sf.hide, dry: if sf.cure_now { sf.dry } else { std::ptr::null_mut() }, absorb: sf.absorb, drain: sf.drain }
+        Film { vol: sf.vol, lat: sf.lat, hide: sf.hide, dry: if sf.cure_now { sf.dry } else { std::ptr::null_mut() }, absorb: sf.absorb, drain: sf.drain, surf: *sf }
     }
 
     /// `add`, for paint a brush lays from its load (`Surf::lay`): with
@@ -85,6 +86,10 @@ impl Film {
         unsafe {
             if skim <= 0.0 {
                 return self.add(i, v, p);
+            }
+            if self.surf.layers && *self.vol.add(i) > skim {
+                let hide = [p.hide[0][0], p.hide[0][1], p.hide[0][2], p.hide[0][3], p.hide[1][1], p.hide[1][2], p.hide[1][3], p.hide[2][1], p.hide[2][2], p.hide[2][3]];
+                return self.surf.lay_layers(i, v * p.keep, p.parts, hide, p.cure, skim);
             }
             let buried = (*self.vol.add(i) - skim).max(0.0);
             let below = (self.drain && buried > 0.0).then(|| skim_top(&mut *self.hide.add(i), *self.vol.add(i), buried));

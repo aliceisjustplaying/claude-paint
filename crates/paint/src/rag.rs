@@ -43,6 +43,7 @@ use crate::rng::{Rng, hash2};
 use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::tally::{Tally, pace as hand};
+use crate::wet::Latent;
 
 /// Hand time of a rag. [E]: estimates.
 pub mod pace {
@@ -640,9 +641,15 @@ impl Canvas {
                 if take > 0.0 {
                     // (the drain switch: the rag lifts from the top down,
                     // `bristle::take_from`)
-                    let h = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
+                    let layers = if self.engine >= crate::PIGMENT_MIXER && !self.wet.lat[i].layers.is_empty() {
+                        let (below, top) = self.wet.lat[i].split_top(self.wet.vol[i], self.wet.hide[i], take);
+                        Some((Latent::from_layers(below), Latent::from_layers(top)))
+                    } else { None };
+                    let h = if let Some((_, (_, _, h))) = &layers {
+                        if self.drain { crate::bristle::fluid_of(*h) } else { *h }
+                    } else if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
                     if pooled {
-                        let l = &self.wet.lat[i];
+                        let l = layers.as_ref().map_or(&self.wet.lat[i], |(_, (_, lat, _))| lat);
                         got.lat.add_parts(l, take);
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
@@ -658,6 +665,11 @@ impl Canvas {
                         got.vol += take;
                     }
                     let ts = self.rag_take(i, take);
+                    if let Some(((volume, lat, hide), _)) = layers {
+                        self.wet.vol[i] = volume;
+                        self.wet.lat[i] = lat;
+                        self.wet.hide[i] = hide;
+                    }
                     got.solv += ts * COAT_UM;
                     row_s += ts;
                     row += take;

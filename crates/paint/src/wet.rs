@@ -32,6 +32,16 @@ pub const LAT: usize = crate::mixer::LATENT_SIZE;
 pub struct Latent {
     pub color: [f32; LAT],
     pub parts: Vec<(usize, f32)>,
+    #[cfg_attr(feature = "replay-effects", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub(crate) layers: Vec<Layer>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) struct Layer {
+    pub(crate) share: f32,
+    pub(crate) lat: Latent,
+    pub(crate) hide: Prop,
 }
 
 impl std::fmt::Debug for Latent {
@@ -50,7 +60,53 @@ impl std::ops::DerefMut for Latent {
 }
 
 impl Latent {
-    pub fn from_color(color: [f32; LAT]) -> Self { Self { color, parts: Vec::new() } }
+    pub fn from_color(color: [f32; LAT]) -> Self { Self { color, parts: Vec::new(), layers: Vec::new() } }
+
+    pub(crate) fn layers(&self, volume: f32, hide: Prop) -> Vec<Layer> {
+        if self.layers.is_empty() {
+            return vec![Layer { share: volume, lat: self.clone(), hide }];
+        }
+        let scatter: f32 = self.layers.iter().map(|l| l.share * l.hide[0]).sum();
+        let scale = if scatter > 0.0 { hide[0] / scatter } else { 1.0 };
+        self.layers.iter().cloned().map(|mut l| {
+            l.share *= volume;
+            l.hide[0] *= scale;
+            l
+        }).collect()
+    }
+
+    pub(crate) fn from_layers(mut layers: Vec<Layer>) -> (f32, Self, Prop) {
+        layers.retain(|l| l.share > 0.0);
+        let (mut volume, mut lat, mut hide) = (0.0, Self::default(), [0.0; 10]);
+        for layer in &layers {
+            mix_into(&mut volume, &mut lat, &mut hide, layer.share, &layer.lat, layer.hide);
+        }
+        if layers.len() > 1 {
+            for layer in &mut layers { layer.share /= volume; }
+            lat.layers = layers;
+        }
+        (volume, lat, hide)
+    }
+
+    pub(crate) fn split_top(&self, volume: f32, hide: Prop, take: f32) -> (Vec<Layer>, Vec<Layer>) {
+        let mut below = self.layers(volume, hide);
+        let mut top = Vec::new();
+        let mut left = take.min(volume).max(0.0);
+        while left > 0.0 {
+            let Some(mut layer) = below.pop() else { break };
+            let amount = left.min(layer.share);
+            left -= amount;
+            if amount < layer.share {
+                let mut rest = layer.clone();
+                rest.share -= amount;
+                below.push(rest);
+            }
+            layer.share = amount;
+            top.push(layer);
+        }
+        top.reverse();
+        (below, top)
+    }
 
     pub(crate) fn add_parts(&mut self, other: &Self, weight: f32) {
         for &(i, f) in &other.parts {
@@ -66,6 +122,7 @@ impl Latent {
     }
 
     pub(crate) fn blend_parts(&mut self, other: &Self, weight: f32) {
+        self.layers.clear();
         if self.parts.is_empty() && other.parts.is_empty() { return; }
         self.scale_parts(1.0 - weight);
         self.add_parts(other, weight);
@@ -212,7 +269,7 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone() }
+        Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone(), layers: Vec::new() }
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -349,14 +406,23 @@ pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rg
 }
 
 pub(crate) fn over_latent(lat: &Latent, scatter: f32, under: Rgb, coats: f32, cover: f32, spectral: bool) -> Rgb {
-    if !spectral {
+    if !spectral && lat.layers.is_empty() {
         return over_share(Pigment::masstone(crate::mixer::decode(lat), scatter), under, coats, cover);
     }
     if cover.is_nan() || cover <= 0.0 {
         return under;
     }
     let cover = cover.min(1.0);
-    let over = crate::mixer::over(lat, scatter, under, (coats / cover).min(1e4));
+    let over = if lat.layers.is_empty() {
+        crate::mixer::over(lat, scatter, under, (coats / cover).min(1e4))
+    } else {
+        let mean: f32 = lat.layers.iter().map(|l| l.share * l.hide[0]).sum();
+        let scale = if mean > 0.0 { scatter / mean } else { 1.0 };
+        lat.layers.iter().fold(under, |rgb, l| {
+            let thickness = (coats * l.share / cover).min(1e4);
+            if spectral { crate::mixer::over(&l.lat, l.hide[0] * scale, rgb, thickness) } else { Pigment::masstone(crate::mixer::decode(&l.lat), l.hide[0] * scale).over(rgb, thickness) }
+        })
+    };
     std::array::from_fn(|k| under[k] + (over[k] - under[k]) * cover)
 }
 

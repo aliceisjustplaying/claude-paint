@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["pillow"]
 # ///
+import argparse
 import fcntl
 import importlib.util
 import json
@@ -12,6 +13,10 @@ import re
 import subprocess
 import sys
 import tempfile
+
+parser = argparse.ArgumentParser(allow_abbrev=False)
+parser.add_argument("--check", action="store_true")
+args = parser.parse_args()
 
 HERE = Path(__file__).resolve().parent
 CONFIG = json.loads((HERE / "run-config.json").read_text())
@@ -65,7 +70,7 @@ R.run = run
 assert subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "HEAD"]).decode().strip() == R.BRANCH, "prepared source revision changed"
 assert (STUDIO / "bin/box").read_text().strip() == "friedrich"
 assert R.brief("friedrich", STUDIO, reference=False).replace("~/src/a/" + STUDIO.name, str(STUDIO)) == (STUDIO / "BRIEF.md").read_text(), "prepared brief changed"
-if "--check" in sys.argv:
+if args.check:
     m = R.LANES["OPUS"]["model"]
     print(json.dumps({**CONFIG, "model": m, "chunks": R.count_chunks(STUDIO), "painting": R.count_painting(STUDIO), "first_sitting_cmd": R.painter_cmd(m), "first_sitting_env": R.painter_env(m, R.PAINTER_MSG), "later_sitting_env": R.painter_env(m, R.SITTING_MESSAGE), "max_crashes": R.MAX_CRASHES, "limit_probe_s": R.LIMIT_PROBE_S, "limit_give_up_h": R.LIMIT_GIVE_UP_H}, indent=2))
     raise SystemExit(0)

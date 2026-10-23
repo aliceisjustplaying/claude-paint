@@ -563,8 +563,8 @@ def session_worked(files):
     return False
 
 
-def session_reviewed(files):
-    """A normal whole-canvas look and detail crop delivered after the latest successful paint call.
+def session_reviewed(files, painted=True):
+    """A normal whole-canvas look and detail crop of the painting, after any changes.
 
     Count returned images, not requested views, palette charts or the recovery snapshot.
     Missing or unreadable evidence cannot establish completion.
@@ -585,9 +585,11 @@ def session_reviewed(files):
                                 calls[c.get("id")] = c
                     if m.get("role") != "toolResult" or m.get("isError") is not False:
                         continue
-                    if m.get("toolName") == "paint":
-                        whole = detail = False
                     call = calls.pop(m.get("toolCallId"), {})
+                    if (call.get("arguments") or {}).get("scratch"):
+                        continue
+                    if m.get("toolName") == "paint" and painted:
+                        whole = detail = False
                     if call.get("name") != "look" or not any(c.get("type") == "image" for c in content):
                         continue
                     args = call.get("arguments") or {}
@@ -940,7 +942,8 @@ def paint(name, n, d, rd):
         rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
                    chunks_after=count_chunks(d), effects_after=count_painting(d), exit=rc,
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
-                   worked=session_worked(new), reviewed=session_reviewed(new), final=final_reply)
+                   worked=session_worked(new), final=final_reply)
+        rec["reviewed"] = session_reviewed(new, painted=added_painting(rec))
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "

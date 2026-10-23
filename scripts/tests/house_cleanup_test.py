@@ -460,6 +460,67 @@ class HouseCleanupTests(unittest.TestCase):
                                            mark_effects=counts)))
         return runner.count_painting(self.studio)
 
+    def review_session(self, actions):
+        session = self.root / "review.jsonl"
+        messages = []
+        for i, (name, args) in enumerate(actions):
+            messages.extend([
+                dict(role="assistant", content=[dict(type="toolCall", id=str(i), name=name, arguments=args)]),
+                dict(role="toolResult", toolCallId=str(i), toolName=name, isError=False,
+                     content=[dict(type="image", data="fixture", mimeType="image/png")] if name == "look"
+                     else [dict(type="text", text="0")]),
+            ])
+        session.write_text("\n".join(json.dumps(dict(message=m)) for m in messages))
+        return session
+
+    def test_scratch_views_do_not_establish_painting_review(self):
+        for path in self.runners:
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                session = self.review_session([
+                    ("look", {"scratch": True}),
+                    ("look", {"scratch": True, "crop": "0,0,100,100"}),
+                ])
+                sitting = dict(sitting=2, status="completed", effects_before=1, effects_after=1,
+                               chunks_before=2, chunks_after=2, reviewed=runner.session_reviewed([session]))
+                self.assertFalse(sitting["reviewed"])
+                self.assertEqual(runner.next_step([sitting]), ("new", 3))
+
+    def test_query_after_review_finishes_without_another_sitting(self):
+        for i, path in enumerate(self.runners):
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                rd = self.root / f"query-{i}"
+                rd.mkdir()
+                chunks = ['canvas{}', 'b=brush("round",4)']
+                self.effects(runner, chunks, [1, 0])
+                session = self.root / "review.jsonl"
+                session.unlink(missing_ok=True)
+
+                def painter(cmd, cwd, out, err, env=None):
+                    self.assertFalse(session.exists(), "query-only review launched another sitting")
+                    self.review_session([
+                        ("look", {}), ("look", {"crop": "0,0,100,100"}),
+                        ("paint", {"code": "print(clock())"}),
+                    ])
+                    self.effects(runner, chunks + ['print(clock())'], [1, 0, 0])
+                    out.write_text("Finished")
+                    err.write_text("")
+                    return 0
+
+                with patch.object(runner, "log"), \
+                     patch.object(runner, "LANES", {"OPUS": {"model": runner.OPUS}}), \
+                     patch.object(runner, "open_easel", return_value=True), \
+                     patch.object(runner, "close_easel", return_value=None), \
+                     patch.object(runner, "stop_leftovers"), \
+                     patch.object(runner, "session_dir", return_value=self.root), \
+                     patch.object(runner, "run", side_effect=painter):
+                    sittings = runner.paint("OPUS", 1, self.studio, rd)
+                self.assertEqual(len(sittings), 1)
+                self.assertTrue(sittings[0]["reviewed"])
+                self.assertFalse(runner.added_painting(sittings[0]))
+                self.assertEqual(json.loads((rd / "p1_outcome.json").read_text())["status"], "finished")
+
     def test_unavailable_effects_fall_back_to_chunks_not_classified_painting(self):
         for path in self.runners:
             for invalid in ("missing", "stale"):

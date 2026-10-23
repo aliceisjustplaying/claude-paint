@@ -214,6 +214,7 @@ impl Style {
                     if let Some(paint) = &g.paint {
                         key.update([paint.spectral_films as u8]);
                         key.update(paint.scatter.to_bits().to_le_bytes());
+                        key.update(paint.stiff.to_bits().to_le_bytes());
                         for f in paint.latent().color {
                             key.update(f.to_bits().to_le_bytes());
                         }
@@ -317,6 +318,48 @@ impl Style {
 #[cfg(test)]
 mod ground_optics_tests {
     use super::*;
+
+    #[test]
+    fn cached_grounds_track_retained_paint_stiffness_only_from_engine_9() {
+        let directory = std::env::temp_dir().join(format!("paint-ground-stiffness-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let mut palette = Palette::new("ground stiffness", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        let i = palette.tubes.iter().position(|t| t.name == "lead white").unwrap();
+        let pile = palette.pile(vec![(i, 1.0)]);
+        let paint = pile.paint(0.0);
+        assert!(paint.spectral_films);
+        for engine in [9, 1, 2, 3, 4, 5, 7, 8] {
+            for (kind, apply) in [("knife", Apply::Knife { texture: 0.8 }), ("roller", Apply::Roller)] {
+                let cache = directory.join(format!("{engine}-{kind}"));
+                let mut style = Style::oil_with(palette.clone());
+                style.palette.engine = engine;
+                style.width_mm = 3.0;
+                style.ground = vec![
+                    Ground { color: pile.color, hiding: pile.hiding, paint: Some(paint.clone().with_stiff(0.0)), stiff: pile.stiff, um: 80.0, apply, absorbent: 0.0 },
+                    Ground { color: pile.color, hiding: pile.hiding, paint: None, stiff: pile.stiff, um: 5.0, apply: Apply::Brush, absorbent: 0.0 },
+                ];
+                let soft = style.prepare_cached(8, 1.0, 7, &cache, "test");
+                assert_eq!(std::fs::read_dir(cache.join("test")).unwrap().count(), 1);
+                let hit = style.prepare_cached(8, 1.0, 7, &cache, "test");
+                assert_eq!(hit.surface_um(), soft.surface_um());
+                assert_eq!(hit.pixels(), soft.pixels());
+                style.ground[0].paint = Some(paint.clone().with_stiff(1.0));
+                let fresh = style.prepare(8, 1.0, 7);
+                if engine >= crate::PIGMENT_MIXER {
+                    assert_ne!(fresh.surface_um(), soft.surface_um(), "{engine} {kind}: stiffness must change the relief");
+                } else {
+                    assert_eq!(fresh.surface_um(), soft.surface_um());
+                    assert_eq!(fresh.pixels(), soft.pixels());
+                }
+                let cached = style.prepare_cached(8, 1.0, 7, &cache, "test");
+                assert_eq!(cached.surface_um(), fresh.surface_um(), "{engine} {kind}: cached relief must match fresh preparation");
+                assert_eq!(cached.pixels(), fresh.pixels());
+                assert_eq!(std::fs::read_dir(cache.join("test")).unwrap().count(), if engine >= crate::PIGMENT_MIXER { 2 } else { 1 });
+            }
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn grounds_keep_the_same_paint_thickness_and_backing_optics() {

@@ -32,17 +32,17 @@ pub(crate) struct Film {
 /// and with the drain switch broken up and fluid (`bristle::fluid_of`), as
 /// `Surf::add` lays it.
 #[derive(Clone)]
-pub(crate) struct Paint7 {
-    parts: Latent,
+pub(crate) struct Paint7<'a> {
+    parts: &'a Latent,
     hide: [[f32; 4]; 3],
     /// Share of the laid volume left once the solvent is gone.
     keep: f32,
     cure: f32,
 }
 
-impl Paint7 {
+impl<'a> Paint7<'a> {
     #[inline(always)]
-    pub(crate) fn new(lean: bool, drain: bool, lat: &Latent, hide: Prop, cure: f32) -> Paint7 {
+    pub(crate) fn new(lean: bool, drain: bool, lat: &'a Latent, hide: Prop, cure: f32) -> Paint7<'a> {
         let (keep, hide) = if lean && hide[3] > 0.0 {
             let mut h = hide;
             h[3] = 0.0;
@@ -52,7 +52,7 @@ impl Paint7 {
         };
         let hide = if drain { fluid_of(hide) } else { hide };
         Paint7 {
-            parts: lat.clone(),
+            parts: lat,
             hide: [[hide[0], hide[1], hide[2], hide[3]], [hide[3], hide[4], hide[5], hide[6]], [hide[6], hide[7], hide[8], hide[9]]],
             keep,
             cure,
@@ -119,7 +119,7 @@ impl Film {
             for k in 0..crate::wet::LAT {
                 l[k] += (p.parts[k] - l[k]) * a;
             }
-            (*self.lat.add(i)).blend_parts(&p.parts, a);
+            (*self.lat.add(i)).blend_parts(p.parts, a);
             let h = self.hide.add(i).cast::<f32>();
             let (h0, h1, h2) = (h.cast::<[f32; 4]>().read_unaligned(), h.add(3).cast::<[f32; 4]>().read_unaligned(), h.add(6).cast::<[f32; 4]>().read_unaligned());
             h.cast::<[f32; 4]>().write_unaligned(lerp4(h0, p.hide[0], a));

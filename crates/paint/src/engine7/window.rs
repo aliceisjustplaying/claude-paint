@@ -96,7 +96,11 @@ impl Window {
         let c = (y - r.1) * (r.2 - r.0) + (x - r.0);
         if self.stamp[c] != self.generation {
             self.stamp[c] = self.generation;
-            self.cells[c] = Acc { parts: Default::default(), j, k: k(), a: [0.0; PACK] };
+            let cell = &mut self.cells[c];
+            cell.parts.parts.clear();
+            cell.j = j;
+            cell.k = k();
+            cell.a.fill(0.0);
             self.used.push(c as u32);
         }
         &mut self.cells[c]

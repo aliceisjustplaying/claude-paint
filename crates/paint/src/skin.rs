@@ -288,6 +288,10 @@ const FOLD_REACH: f32 = 2.5;
 const FOLD_RUN: f32 = 0.5;
 /// How far a running fold turns toward the way the ridges run, per cell.
 const FOLD_STEER: f32 = 0.5;
+/// How much of the strain the skin beside a train held flat (its compression
+/// up to its onset) the train takes up: past localization the flat skin
+/// beside a fold unloads into it (Pocivavsek et al. 2008). By eye.
+const FOLD_UNLOAD: f32 = 0.25;
 /// Of the pattern's `SETTLE` steps, how many it takes around its folds.
 const FOLD_SETTLE: usize = 8;
 /// How wide a fold is, in wavelengths: the skin it gathers its slopes into.
@@ -597,18 +601,20 @@ fn patches(marks: &[bool], tw: usize, th: usize, m: usize) -> Vec<(usize, usize,
 fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize), sigma: &[f32], scale: f32, tmp: &mut Vec<f32>, out: &mut Vec<f32>) {
     // (a run of pixels at once: each the sum of `tap(j)` at its place,
     // weighed by e^(−j²/2s²) with its own s, the weights by their ratios
-    // e^(−(2j+1)/2s²), over three of the widest s in the run)
-    fn run<'a>(o: &mut [f32], sigma: &[f32], scale: f32, tap: impl Fn(isize) -> &'a [f32]) {
+    // e^(−(2j+1)/2s²), over three of the widest s. A wide Gaussian is
+    // sampled every `k` pixels, two thirds of the narrowest s: it weighs a
+    // field as smooth as the band's the same, in fewer taps)
+    fn run<'a>(o: &mut [f32], sigma: &[f32], scale: f32, k: isize, taps: isize, tap: impl Fn(isize) -> &'a [f32]) {
         let n = o.len();
         let (mut norm, mut wt, mut step, mut aa) = (vec![1.0f32; n], vec![1.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
         for i in 0..n {
-            let s = scale * sigma[i];
+            let s = scale * sigma[i] / k as f32;
             step[i] = (-0.5 / (s * s)).exp();
             aa[i] = step[i] * step[i];
         }
         o.copy_from_slice(&tap(0)[..n]);
-        for j in 1..=(3.0 * scale * sigma.iter().fold(0.0f32, |m, s| m.max(*s))).ceil() as isize {
-            let (p, m) = (&tap(j)[..n], &tap(-j)[..n]);
+        for j in 1..=taps {
+            let (p, m) = (&tap(j * k)[..n], &tap(-j * k)[..n]);
             for i in 0..n {
                 wt[i] *= step[i];
                 step[i] *= aa[i];
@@ -619,7 +625,10 @@ fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize),
         o.iter_mut().zip(&norm).for_each(|(v, n)| *v /= n);
     }
     let (x0, y0, x1, y1) = bx;
-    let reach = (3.0 * scale * sigma.iter().fold(0.0f32, |m, s| m.max(*s))).ceil() as usize;
+    let (least, most) = sigma.iter().fold((f32::MAX, 0.0f32), |(a, b), s| (a.min(*s), b.max(*s)));
+    let k = ((scale * least / 1.5).floor() as isize).max(1);
+    let taps = (3.0 * scale * most / k as f32).ceil() as isize;
+    let reach = (taps * k) as usize;
     tmp.resize(w * h, 0.0);
     out.resize(w * h, 0.0);
     let (t0, t1) = (y0.saturating_sub(reach), (y1 + reach).min(h));
@@ -627,12 +636,12 @@ fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize),
         let y = t0 + j;
         let s = &src[y * w..(y + 1) * w];
         let held: Vec<f32> = (x0 as isize - reach as isize..(x1 + reach) as isize).map(|x| s[x.clamp(0, w as isize - 1) as usize]).collect();
-        run(&mut row[x0..x1], &sigma[y * w + x0..y * w + x1], scale, |i| &held[(reach as isize + i) as usize..]);
+        run(&mut row[x0..x1], &sigma[y * w + x0..y * w + x1], scale, k, taps, |i| &held[(reach as isize + i) as usize..]);
     });
     let tmp = &*tmp;
     out[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
         let y = y0 + j;
-        run(&mut row[x0..x1], &sigma[y * w + x0..y * w + x1], scale, |i| &tmp[(y as isize + i).clamp(0, h as isize - 1) as usize * w + x0..]);
+        run(&mut row[x0..x1], &sigma[y * w + x0..y * w + x1], scale, k, taps, |i| &tmp[(y as isize + i).clamp(0, h as isize - 1) as usize * w + x0..]);
     });
 }
 
@@ -789,7 +798,10 @@ impl Canvas {
         let dx_um = self.px_mm() * 1e3;
         let soft: Vec<usize> = (0..bw * bh).filter(|&k| site[k].at != NONE).collect();
         let padded = |k: usize| (bx.1 + k / bw - pb.1) * pw + bx.0 + k % bw - pb.0;
-        let mut scratch = take(24);
+        // (the sites along a row of the padded box, from its column `sx`)
+        let sx = bx.0 - pb.0;
+        let row_of = |y: usize| (y + pb.1).checked_sub(bx.1).filter(|j| *j < bh).map(|j| &site[j * bw..(j + 1) * bw]);
+        let mut scratch = take(25);
         let mut buffers = scratch.drain(..);
         let mut buffer = |n: usize| {
             let mut b = buffers.next().unwrap();
@@ -806,6 +818,7 @@ impl Canvas {
         let mut wf = buffer(pw * ph);
         let mut need = buffer(pw * ph);
         let mut press = buffer(pw * ph);
+        let mut held = buffer(pw * ph);
         let mut skin = buffer(pw * ph);
         let mut msq = buffer(pw * ph);
         let mm = self.px_mm();
@@ -884,21 +897,26 @@ impl Canvas {
             // each pixel asks at this band its share of what it asks for;
             // one short of its threshold holds at every band
             let gain = band_gain(r);
-            for &k in &soft {
-                let (s, p) = (site[k], padded(k));
-                let share = s.share(band);
-                let ask = if share > 0.0 {
-                    let slope = (far[p] / gain).powi(2) + wrinkled[p].max(0.0);
-                    msq[p] += share * slope;
-                    let hold = if slope > 0.0 { s.hold.min(s.yielded / slope.sqrt()) } else { s.hold };
-                    press[p] = if s.cap > 0.0 && s.bend + hold > 0.0 { s.nf / (s.bend + hold) } else { 0.0 };
-                    if s.cap > 0.0 { s.ask(slope.sqrt()) } else { 0.0 }
-                } else {
-                    press[p] = 0.0;
-                    s.delta
-                };
-                need[p] = if ask > 0.0 { share * ask } else { ask };
-            }
+            need.par_chunks_mut(pw).zip(press.par_chunks_mut(pw)).zip(held.par_chunks_mut(pw)).zip(msq.par_chunks_mut(pw)).enumerate().for_each(|(y, (((need, press), held), msq))| {
+                let Some(row) = row_of(y) else { return };
+                for (i, s) in row.iter().enumerate().filter(|(_, s)| s.at != NONE) {
+                    let (x, p) = (sx + i, y * pw + sx + i);
+                    let share = s.share(band);
+                    let ask = if share > 0.0 {
+                        let slope = (far[p] / gain).powi(2) + wrinkled[p].max(0.0);
+                        msq[x] += share * slope;
+                        let hold = if slope > 0.0 { s.hold.min(s.yielded / slope.sqrt()) } else { s.hold };
+                        press[x] = if s.cap > 0.0 && s.bend + hold > 0.0 { s.nf / (s.bend + hold) } else { 0.0 };
+                        held[x] = if s.cap > 0.0 { share * 2.0 * s.nf.min(s.bend + hold).max(0.0) / s.c } else { 0.0 };
+                        if s.cap > 0.0 { s.ask(slope.sqrt()) } else { 0.0 }
+                    } else {
+                        press[x] = 0.0;
+                        held[x] = 0.0;
+                        s.delta
+                    };
+                    need[x] = if ask > 0.0 { share * ask } else { ask };
+                }
+            });
             // the imperfection the wrinkle grows from: the relief and the
             // roughness every surface has (`SEED_UM`, `DOMAIN_UM`), which
             // seeds where the ridges start and which way they run but is
@@ -947,11 +965,11 @@ impl Canvas {
             // (over the pixels drawn at this band, and as far around them
             // as their windows reach)
             let reach = 4 * r + 2 + (6.0 * sigma * (1.0 + 1.0 / r as f32)).ceil() as usize;
-            let sb = soft.iter().filter(|&&k| site[k].share(band) > 0.0).fold((pw, ph, 0, 0), |b, &k| {
+            let sb = soft.par_iter().filter(|&&k| site[k].share(band) > 0.0).map(|&k| {
                 let p = padded(k);
                 let (x, y) = (p % pw, p / pw);
-                (b.0.min(x.saturating_sub(reach)), b.1.min(y.saturating_sub(reach)), b.2.max((x + reach + 1).min(pw)), b.3.max((y + reach + 1).min(ph)))
-            });
+                (x.saturating_sub(reach), y.saturating_sub(reach), (x + reach + 1).min(pw), (y + reach + 1).min(ph))
+            }).reduce(|| (pw, ph, 0, 0), |a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)));
             let within = |k: usize| (sb.0..sb.2).contains(&(k % pw)) && (sb.1..sb.3).contains(&(k / pw));
             // (each place settles at its own wavelength, between the band's
             // neighbors': a skin's wavelength changes from place to place
@@ -959,14 +977,13 @@ impl Canvas {
             // with it. The wavelengths of the pixels drawn at the band, over
             // two of its wavelengths around)
             let (mut lam, mut has) = (vec![0.0f32; pw * ph], vec![0.0f32; pw * ph]);
-            for &k in &soft {
-                let s = site[k];
-                if s.share(band) > 0.0 {
-                    let p = padded(k);
-                    lam[p] = s.lam;
-                    has[p] = 1.0;
+            lam.par_chunks_mut(pw).zip(has.par_chunks_mut(pw)).enumerate().for_each(|(y, (lam, has))| {
+                let Some(row) = row_of(y) else { return };
+                for (i, s) in row.iter().enumerate().filter(|(_, s)| s.at != NONE && s.share(band) > 0.0) {
+                    lam[sx + i] = s.lam;
+                    has[sx + i] = 1.0;
                 }
-            }
+            });
             let (mut sig, mut weight) = (Vec::new(), Vec::new());
             blur2(&lam, 2 * r, &mut sig);
             blur2(&has, 2 * r, &mut weight);
@@ -1081,6 +1098,7 @@ impl Canvas {
                     (-th.sin(), th.cos())
                 };
                 let mut left = n0.clone();
+                let mut slack = down(&held);
                 let mut dep = vec![0.0f32; cw * ch];
                 let mut owner = vec![0u32; cw * ch];
                 let (mut near_fold, mut way) = (vec![f32::INFINITY; cw * ch], vec![0.0f32; cw * ch]);
@@ -1155,7 +1173,7 @@ impl Canvas {
                 // the skin is most compressed, if it is past wrinkling there,
                 // heading along it)
                 let flank = |path: &[(f32, f32)], side: f32, up: f32, owner: &[u32], near_fold: &[f32], pressed: &[f32]| {
-                    let mut found: Option<((f32, f32), (f32, f32), f32)> = None;
+                    let (mut found, mut most) = (None, 0.0f32);
                     for i in (0..path.len()).step_by(((0.5 * BAND_LAMBDA) as usize).max(1)) {
                         let (a, b) = (path[i.saturating_sub(1)], path[(i + 1).min(path.len() - 1)]);
                         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
@@ -1166,11 +1184,11 @@ impl Canvas {
                         if cm[j] == 0.0 || owner[j] != 0 || near_fold[j] < 0.5 * BAND_LAMBDA || pressed[j] < 1.0 {
                             continue;
                         }
-                        if found.is_none_or(|f| pressed[j] > f.2) {
-                            found = Some(((qx, qy), (tx, ty), pressed[j]));
+                        if found.is_none() || pressed[j] > most {
+                            (found, most) = (Some(((qx, qy), (tx, ty))), pressed[j]);
                         }
                     }
-                    found.map(|(q, t, _)| (q, t))
+                    found
                 };
                 // the distance of each place near a path from it (`mark` the
                 // places reached for `id`, `best` their squared distance)
@@ -1274,7 +1292,9 @@ impl Canvas {
                         let off = relief(best[i].sqrt());
                         let take = left[i] * off;
                         left[i] -= take;
-                        released += take;
+                        let give = slack[i] * off * FOLD_UNLOAD;
+                        slack[i] -= give;
+                        released += take + give;
                         pressed[i] *= 1.0 - off;
                     }
                     if !foot.is_empty() {
@@ -1357,13 +1377,13 @@ impl Canvas {
             blur2(&skin, rb, &mut s1);
             blur2(&skin, 2 * rb, &mut s2);
             let lift: Vec<f32> = (0..pw * ph).into_par_iter().map(|k| if s1[k] > 1e-6 && s2[k] > 1e-6 { a1[k] / s1[k] - a2[k] / s2[k] } else { 0.0 }).collect();
-            let (sum, count) = (sb.1..sb.3).flat_map(|y| (sb.0..sb.2).map(move |x| y * pw + x)).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0usize), |(s, c), k| (s + (lift[k] as f64).powi(2), c + 1));
+            let (sum, count) = (sb.1..sb.3).into_par_iter().map(|y| (sb.0..sb.2).map(|x| y * pw + x).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0usize), |(s, c), k| (s + (lift[k] as f64).powi(2), c + 1))).collect::<Vec<_>>().into_iter().fold((0.0f64, 0usize), |(s, c), (a, b)| (s + a, c + b));
             let spread = if count > 0 { (sum / count as f64).sqrt() as f32 } else { 0.0 };
             // (a ridge's axis has no sign: each place moves across its
             // ridges the same way round as the band's ridges lie on the
             // whole, or a ridge would tear wherever its axis turns past
             // the grid's)
-            let whole = (sb.1..sb.3).flat_map(|y| (sb.0..sb.2).map(move |x| y * pw + x)).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0.0f64, 0.0f64), |(a, b, c), k| (a + near[k] as f64, b + far[k] as f64, c + rho[k] as f64));
+            let whole = (sb.1..sb.3).into_par_iter().map(|y| (sb.0..sb.2).map(|x| y * pw + x).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0.0f64, 0.0f64), |(a, b, c), k| (a + near[k] as f64, b + far[k] as f64, c + rho[k] as f64))).collect::<Vec<_>>().into_iter().fold((0.0f64, 0.0f64, 0.0f64), |(a, b, c), (x, y, z)| (a + x, b + y, c + z));
             let th0 = (0.5 * (2.0 * whole.2).atan2(whole.0 - whole.1)) as f32;
             let settled = shape.clone();
             shape.par_chunks_mut(pw).enumerate().take(sb.3).skip(sb.1).for_each(|(y, row)| {
@@ -1415,11 +1435,14 @@ impl Canvas {
             dot.par_iter_mut().zip(&shape).zip(&inner).for_each(|((d, v), m)| *d = m * v * v);
             blur2(&dot, 2 * r, &mut rms);
             over(&mut rms, &mi);
-            for &k in &soft {
-                let p = padded(k);
-                let at = site[k].gives * rms[p].max(0.0).sqrt();
-                shape[p] = shape[p].signum() * (shape[p].abs() - at).max(0.0);
-            }
+            shape.par_chunks_mut(pw).enumerate().for_each(|(y, shape)| {
+                let Some(row) = row_of(y) else { return };
+                for (i, s) in row.iter().enumerate().filter(|(_, s)| s.at != NONE) {
+                    let x = sx + i;
+                    let at = s.gives * rms[y * pw + x].max(0.0).sqrt();
+                    shape[x] = shape[x].signum() * (shape[x].abs() - at).max(0.0);
+                }
+            });
             rms_slope(&shape, &mut px, &mut py, &mut dot, &mut rms, &mut blur2, fold, &mut wrinkled);
             // a wrinkle is a wavelength's worth of skin acting together:
             // what the skin asks for, averaged over one (the cured paint
@@ -1441,17 +1464,17 @@ impl Canvas {
             // the pattern is bounded by `TALL` of it, so the wall of a
             // stroke at the skin's edge is not a wrinkle's worth of relief
             let cap = TALL * BAND_LAMBDA * r as f32 * dx_um * std::f32::consts::FRAC_1_SQRT_2 / std::f32::consts::PI;
-            for &k in &soft {
+            let drawn: Vec<(usize, f32, bool, f32, f32, f32)> = soft.par_iter().filter_map(|&k| {
                 let s = site[k];
                 if s.share(band) == 0.0 {
-                    continue;
+                    return None;
                 }
                 let p = padded(k);
                 let delta = dot[p];
                 let asked = need[p];
                 let relieved = asked > 0.0 && mr[p] > 0.0;
                 if delta <= 0.0 && !relieved {
-                    continue;
+                    return None;
                 }
                 // slopes add: (ρ + a)² − ρ² = Δ for the amount a of the
                 // unit-slope shape that brings the mean square slope up by
@@ -1466,11 +1489,16 @@ impl Canvas {
                 let a = if delta > 0.0 && far[p] > 0.0 { (rho * rho + delta).sqrt() - rho } else { 0.0 };
                 // (of the slopes asked for, the share the paste gave way to)
                 let gave = if far[p] > 0.0 { (rms[p] / far[p]).min(1.0).powi(2) } else { 0.0 };
+                let (rise, more) = if a != 0.0 { (a * (shape[p] / far[p]).clamp(-cap, cap), gave * delta) } else { (0.0, 0.0) };
+                Some((k, a, relieved, gave * asked, rise, more))
+            }).collect();
+            for (k, a, relieved, asked, rise, more) in drawn {
+                let p = padded(k);
                 if a != 0.0 {
-                    dw[p] += a * (shape[p] / far[p]).clamp(-cap, cap);
-                    msq[p] += gave * delta;
+                    dw[p] += rise;
+                    msq[p] += more;
                 }
-                took.push((k, a, relieved, gave * asked));
+                took.push((k, a, relieved, asked));
             }
         }
         for &k in &soft {
@@ -1537,7 +1565,7 @@ impl Canvas {
             self.surf_gen += 1;
             self.base = None;
         }
-        give(vec![z, wf, need, press, skin, msq, inner, wx, wy, dw, tmp, mr, m2r, mi, near, far, rho, wrinkled, zr, px, py, dot, shape, rms]);
+        give(vec![z, wf, need, press, held, skin, msq, inner, wx, wy, dw, tmp, mr, m2r, mi, near, far, rho, wrinkled, zr, px, py, dot, shape, rms]);
     }
 
     /// The box (buffer pixels, end-exclusive) of the pixels holding packets.

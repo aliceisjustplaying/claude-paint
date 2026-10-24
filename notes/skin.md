@@ -61,7 +61,11 @@ The physics and its sources are in the module doc of `skin.rs`. In short:
   settle, leaning along the marks the skin cured over. The settling uses
   Gaussians, which favor no direction (two boxes favor the grid's two,
   and a labyrinth settled through them comes out a maze of right
-  angles), on a grid as coarse as the band allows. The skin is
+  angles), on a grid as coarse as the band allows. Each place settles
+  at its own wavelength, not its band's, so the spacing of the ridges
+  follows the skin's thickness and its paste from place to place
+  (settled at the band's alone, a slab whose wavelength varies by half
+  either way came out ridged at one spacing throughout). The skin is
   compressed the same every way, and a ripple relieves it only across
   itself, so a skin rippled across a knife's drag is still compressed
   along it, and its ridges bend, as a herringbone's do (Chen and

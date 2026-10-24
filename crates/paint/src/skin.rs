@@ -459,31 +459,49 @@ fn band_gain(r: usize) -> f32 {
     (twice(2 * r + 1) - twice(4 * r + 1)).max(0.05)
 }
 
-/// `src` (`w` × `h`) blurred by a Gaussian of `sigma` px, rows then
+/// `src` (`w` × `h`) blurred by a Gaussian of `scale` × `sigma` px,
+/// `sigma` each pixel's own (it weighs its neighbors by it), rows then
 /// columns, the edges held, over the box `bx` of `out` (the rest of it
 /// left as it was).
-fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize), sigma: f32, tmp: &mut Vec<f32>, out: &mut Vec<f32>) {
+fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize), sigma: &[f32], scale: f32, tmp: &mut Vec<f32>, out: &mut Vec<f32>) {
+    // (a run of pixels at once: each the sum of `tap(j)` at its place,
+    // weighed by e^(−j²/2s²) with its own s, the weights by their ratios
+    // e^(−(2j+1)/2s²), over three of the widest s in the run)
+    fn run<'a>(o: &mut [f32], sigma: &[f32], scale: f32, tap: impl Fn(isize) -> &'a [f32]) {
+        let n = o.len();
+        let (mut norm, mut wt, mut step, mut aa) = (vec![1.0f32; n], vec![1.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
+        for i in 0..n {
+            let s = scale * sigma[i];
+            step[i] = (-0.5 / (s * s)).exp();
+            aa[i] = step[i] * step[i];
+        }
+        o.copy_from_slice(&tap(0)[..n]);
+        for j in 1..=(3.0 * scale * sigma.iter().fold(0.0f32, |m, s| m.max(*s))).ceil() as isize {
+            let (p, m) = (&tap(j)[..n], &tap(-j)[..n]);
+            for i in 0..n {
+                wt[i] *= step[i];
+                step[i] *= aa[i];
+                o[i] += wt[i] * (p[i] + m[i]);
+                norm[i] += 2.0 * wt[i];
+            }
+        }
+        o.iter_mut().zip(&norm).for_each(|(v, n)| *v /= n);
+    }
     let (x0, y0, x1, y1) = bx;
-    let r = (3.0 * sigma).ceil() as usize;
-    let mut k: Vec<f32> = (0..=2 * r).map(|i| (-((i as f32 - r as f32) / sigma).powi(2) / 2.0).exp()).collect();
-    let sum: f32 = k.iter().sum();
-    k.iter_mut().for_each(|v| *v /= sum);
+    let reach = (3.0 * scale * sigma.iter().fold(0.0f32, |m, s| m.max(*s))).ceil() as usize;
     tmp.resize(w * h, 0.0);
     out.resize(w * h, 0.0);
-    let (t0, t1) = (y0.saturating_sub(r), (y1 + r).min(h));
+    let (t0, t1) = (y0.saturating_sub(reach), (y1 + reach).min(h));
     tmp[t0 * w..t1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
-        let s = &src[(t0 + j) * w..(t0 + j + 1) * w];
-        for (x, o) in row.iter_mut().enumerate().take(x1).skip(x0) {
-            *o = k.iter().enumerate().map(|(i, kv)| kv * s[(x + i).saturating_sub(r).min(w - 1)]).sum();
-        }
+        let y = t0 + j;
+        let s = &src[y * w..(y + 1) * w];
+        let held: Vec<f32> = (x0 as isize - reach as isize..(x1 + reach) as isize).map(|x| s[x.clamp(0, w as isize - 1) as usize]).collect();
+        run(&mut row[x0..x1], &sigma[y * w + x0..y * w + x1], scale, |i| &held[(reach as isize + i) as usize..]);
     });
+    let tmp = &*tmp;
     out[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
-        let row = &mut row[x0..x1];
-        row.fill(0.0);
-        for (i, kv) in k.iter().enumerate() {
-            let t = &tmp[(y0 + j + i).saturating_sub(r).min(h - 1) * w..][x0..x1];
-            row.iter_mut().zip(t).for_each(|(o, v)| *o += kv * v);
-        }
+        let y = y0 + j;
+        run(&mut row[x0..x1], &sigma[y * w + x0..y * w + x1], scale, |i| &tmp[(y as isize + i).clamp(0, h as isize - 1) as usize * w + x0..]);
     });
 }
 
@@ -737,22 +755,40 @@ impl Canvas {
             // (a bump has Gaussian curvature; a ripple only bends about a
             // line), so each place keeps the one way its shape is
             // strongest in: the shape settles as under an effective
-            // Swift–Hohenberg equation (Stoop et al. 2015), its band kept
-            // and its height saturating (a difference of
+            // Swift–Hohenberg equation (Stoop et al. 2015), its wavelength
+            // kept and its height saturating (a difference of
             // Gaussians at σ and 2σ peaks at a wavelength of 2πσ / 0.961;
             // Gaussians, unlike boxes, favor no direction)
             let sigma = BAND_LAMBDA * r as f32 * 0.961 / std::f32::consts::TAU;
             // (over the pixels drawn at this band, and as far around them
             // as their windows reach)
-            let reach = 4 * r + 2 + (6.0 * sigma).ceil() as usize;
+            let reach = 4 * r + 2 + (6.0 * sigma * (1.0 + 1.0 / r as f32)).ceil() as usize;
             let sb = soft.iter().filter(|&&k| site[k].share(band) > 0.0).fold((pw, ph, 0, 0), |b, &k| {
                 let p = padded(k);
                 let (x, y) = (p % pw, p / pw);
                 (b.0.min(x.saturating_sub(reach)), b.1.min(y.saturating_sub(reach)), b.2.max((x + reach + 1).min(pw)), b.3.max((y + reach + 1).min(ph)))
             });
             let within = |k: usize| (sb.0..sb.2).contains(&(k % pw)) && (sb.1..sb.3).contains(&(k / pw));
-            gauss_into(&skin, pw, ph, sb, sigma, &mut px, &mut zr);
-            gauss_into(&skin, pw, ph, sb, 2.0 * sigma, &mut px, &mut wrinkled);
+            // (each place settles at its own wavelength, between the band's
+            // neighbors': a skin's wavelength changes from place to place
+            // with its thickness and its paste, and the spacing of its ridges
+            // with it. The wavelengths of the pixels drawn at the band, over
+            // two of its wavelengths around)
+            let (mut lam, mut has) = (vec![0.0f32; pw * ph], vec![0.0f32; pw * ph]);
+            for &k in &soft {
+                let s = site[k];
+                if s.share(band) > 0.0 {
+                    let p = padded(k);
+                    lam[p] = s.band as f32 * (1.0 + 1.0 / s.band as f32).powf(s.mix);
+                    has[p] = 1.0;
+                }
+            }
+            let (mut sig, mut weight) = (Vec::new(), Vec::new());
+            blur2(&lam, 2 * r, &mut sig);
+            blur2(&has, 2 * r, &mut weight);
+            sig.par_iter_mut().zip(&weight).for_each(|(l, n)| *l = BAND_LAMBDA * 0.961 / std::f32::consts::TAU * if *n > 1e-6 { *l / n } else { r as f32 });
+            gauss_into(&skin, pw, ph, sb, &sig, 1.0, &mut px, &mut zr);
+            gauss_into(&skin, pw, ph, sb, &sig, 2.0, &mut px, &mut wrinkled);
             // (a band's pattern is the finest band's r times over: it
             // settles on a grid r times coarser, where it is the finest
             // band's, and is drawn back up)
@@ -771,14 +807,14 @@ impl Canvas {
             };
             let cm = down(&skin);
             let mut cv = down(&shape);
-            let (cs, cb) = (sigma / r as f32, (0, 0, cw, ch));
+            let (cs, cb): (Vec<f32>, _) = (down(&sig).into_iter().map(|s| s / r as f32).collect(), (0, 0, cw, ch));
             let (mut ct, mut c1, mut c2, mut cn, mut cf, mut cr, mut cmr) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
-            gauss_into(&cm, cw, ch, cb, cs, &mut ct, &mut c1);
-            gauss_into(&cm, cw, ch, cb, 2.0 * cs, &mut ct, &mut c2);
+            gauss_into(&cm, cw, ch, cb, &cs, 1.0, &mut ct, &mut c1);
+            gauss_into(&cm, cw, ch, cb, &cs, 2.0, &mut ct, &mut c2);
             box2(&cm, &mut cmr, &mut ct);
             for _ in 0..SETTLE {
-                gauss_into(&cv, cw, ch, cb, cs, &mut ct, &mut cn);
-                gauss_into(&cv, cw, ch, cb, 2.0 * cs, &mut ct, &mut cf);
+                gauss_into(&cv, cw, ch, cb, &cs, 1.0, &mut ct, &mut cn);
+                gauss_into(&cv, cw, ch, cb, &cs, 2.0, &mut ct, &mut cf);
                 cn.par_iter_mut().zip(&cf).zip(&c1).zip(&c2).for_each(|(((n, f), a), b)| *n = if *a > 1e-6 && *b > 1e-6 { *n / a - f / b } else { 0.0 });
                 cf.par_iter_mut().zip(&cn).zip(&cm).for_each(|((d, n), m)| *d = m * n * n);
                 box2(&cf, &mut cr, &mut ct);
@@ -850,10 +886,10 @@ impl Canvas {
                     *v = skin[k] * (top + (bottom - top) * ty);
                 }
             });
-            // and is drawn at its band alone: the saturated ridges' edges
-            // are finer than the finest bands' pixels can hold
-            gauss_into(&shape, pw, ph, sb, sigma, &mut px, &mut near);
-            gauss_into(&shape, pw, ph, sb, 2.0 * sigma, &mut px, &mut far);
+            // and is drawn at its own wavelengths alone: the saturated
+            // ridges' edges are finer than the finest bands' pixels can hold
+            gauss_into(&shape, pw, ph, sb, &sig, 1.0, &mut px, &mut near);
+            gauss_into(&shape, pw, ph, sb, &sig, 2.0, &mut px, &mut far);
             shape.par_iter_mut().zip(&near).zip(&far).zip(&zr).zip(&wrinkled).zip(&skin).enumerate().for_each(|(k, (((((v, n), f), m1), m2), s))| {
                 if within(k) {
                     *v = if *m1 > 1e-6 && *m2 > 1e-6 { s * (n / m1 - f / m2) } else { 0.0 };

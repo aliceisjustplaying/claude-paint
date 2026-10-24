@@ -227,6 +227,11 @@ const BANDS: [u8; 8] = [1, 2, 3, 4, 6, 8, 12, 16];
 /// that creeps costs a pass over its packets, not the blurs, and a wait
 /// of months draws its wrinkles in a handful of passes.
 const GROW: f32 = 0.1;
+/// Every so many ticks a pass draws whatever the skin asks for, however
+/// little: growth short of `GROW` waits for a tick that has that much,
+/// and a skin that never asks for that much again would keep it until its
+/// bulk cures through. Once a day.
+const DRAW_ALL: u64 = 4;
 /// Roughness every surface has, µm, at the wrinkle's own wavelength and an
 /// octave each side (dust, pigment lumps, a knife's chatter), so a skin
 /// cured over a level film still has imperfections to buckle from, and a
@@ -264,10 +269,10 @@ const FINEST: f32 = 4.0;
 /// every scale), so some ridges take the compression and the ground between
 /// them stays flat. By eye.
 const FOLD_SPREAD: f32 = 1.2;
-const FOLD_LAMBDAS: f32 = 8.0;
+const FOLD_LAMBDAS: f32 = 12.0;
 /// How far along a ridge its height is shared, wavelengths each way: a fold
 /// runs as long as this before it may stand lower. By eye.
-const ALONG: f32 = 3.0;
+const ALONG: f32 = 4.0;
 /// How tall a fold may stand, as a multiple of the amplitude of a sinusoid
 /// of the same root mean square slope: a fold gathers its slopes into a
 /// ridge taller than a ripple's (the cap is there so the wall of a stroke at
@@ -282,7 +287,7 @@ const FOLD_SEED: u64 = 0xf01d_5eed;
 /// longer its ridges grow and the more they follow the marks it cured
 /// over. By eye.
 const SETTLE: usize = 24;
-const SETTLE_GAIN: f32 = 3.0;
+const SETTLE_GAIN: f32 = 4.0;
 /// The flow index n of the paste under a skin: a pigment paste thins as
 /// it flows (Herschel–Bulkley, stress τ_y + K γ̇ⁿ with n under 1; pastes
 /// and paints run 0.3–0.8). Estimate.
@@ -1459,7 +1464,8 @@ impl Canvas {
         // through, or bare, asking nothing: the skin over a soft spot
         // smaller than a wavelength is held by the cured paint around it.
         // The pass runs when that average is GROW² of slope or more.
-        if site.iter().any(|s| s.at != NONE && (s.delta >= GROW * GROW || s.measure || s.runs)) {
+        let least = if (now / TICK_MIN).round() as u64 % DRAW_ALL == 0 { f32::MIN_POSITIVE } else { GROW * GROW };
+        if site.iter().any(|s| s.at != NONE && (s.delta >= least || s.measure || s.runs)) {
             let pad = 2 * BAND_MAX;
             let pb = (bx.0.saturating_sub(pad), bx.1.saturating_sub(pad), (bx.2 + pad).min(w), (bx.3 + pad).min(self.f.h));
             let (pw, ph) = (pb.2 - pb.0, pb.3 - pb.1);
@@ -1492,7 +1498,7 @@ impl Canvas {
             // itself: the averages are taken around those alone)
             let mut hot = vec![false; tw * th];
             for (k, s) in site.iter().enumerate() {
-                if s.at != NONE && (s.delta >= GROW * GROW || s.runs) {
+                if s.at != NONE && (s.delta >= least || s.runs) {
                     hot[k / bw / TILE * tw + k % bw / TILE] = true;
                 }
             }
@@ -1509,7 +1515,7 @@ impl Canvas {
                             let s = &site[(sy0 + y) * bw + sx0 + x];
                             if s.at != NONE && s.share(band) > 0.0 {
                                 let a = avg[y * sw + x];
-                                if a >= GROW * GROW || (s.runs && a > 0.0) {
+                                if a >= least || (s.runs && a > 0.0) {
                                     asks[(sy0 + y) / TILE * tw + (sx0 + x) / TILE] = 2;
                                 }
                             }

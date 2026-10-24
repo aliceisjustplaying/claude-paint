@@ -216,6 +216,10 @@ const BAND_LAMBDA: f32 = 5.3;
 /// The widest band, px (a wavelength of 85 px: 25 mm at the native
 /// picture; skins on soft bulk don't get there).
 const BAND_MAX: usize = 16;
+/// The bands a wrinkle is drawn at (blur radius, px): each one up to four,
+/// then two to an octave. A wavelength between two is drawn at both, by its
+/// logarithm (`Site::mix`).
+const BANDS: [u8; 8] = [1, 2, 3, 4, 6, 8, 12, 16];
 /// The least growth of a wrinkle's rms slope, were it starting from
 /// level, that is drawn in one tick (6°, some 35 µm of amplitude at a
 /// 2 mm wavelength); slower growth is saved up for a tick that has this
@@ -235,7 +239,14 @@ const SEED_UM: f32 = 1.0;
 /// two meet (as a zinc drawdown's do, Gnemmi). By eye: as strong as a
 /// knife's marks, so the patches' headings show through them.
 const DOMAIN_UM: f32 = 25.0;
-const DOMAIN_LAMBDAS: f32 = 8.0;
+const DOMAIN_LAMBDAS: f32 = 10.0;
+/// How far a patch's ripples are pushed about, in wavelengths, by a smooth
+/// field over `WARP_LAMBDAS`: its ridges bend and their spacing wanders
+/// (no skin buckles as evenly as a sinusoid), and how unevenly they stand,
+/// the standard deviation of their height over the same. By eye.
+const WARP: f32 = 0.6;
+const WARP_LAMBDAS: f32 = 3.0;
+const RIDGE_SPREAD: f32 = 0.5;
 /// How much a skin's wavelength strays from place to place beyond what its
 /// thickness and its paste make of it: the standard deviation of its
 /// logarithm, over patches of `JITTER_MM` (a film is never as even as its
@@ -251,13 +262,16 @@ const FINEST: f32 = 4.0;
 /// `FOLD_LAMBDAS` wavelengths (the paste and the skin over it are uneven at
 /// every scale), so some ridges take the compression and the ground between
 /// them stays flat. By eye.
-const FOLD_SPREAD: f32 = 0.8;
-const FOLD_LAMBDAS: f32 = 3.0;
+const FOLD_SPREAD: f32 = 1.2;
+const FOLD_LAMBDAS: f32 = 4.0;
+/// How far along a ridge its height is shared, wavelengths each way: a fold
+/// runs as long as this before it may stand lower. By eye.
+const ALONG: f32 = 2.0;
 /// How tall a fold may stand, as a multiple of the amplitude of a sinusoid
 /// of the same root mean square slope: a fold gathers its slopes into a
 /// ridge taller than a ripple's (the cap is there so the wall of a stroke at
 /// a skin's edge is not a wrinkle). By eye.
-const TALL: f32 = 2.5;
+const TALL: f32 = 3.5;
 const JITTER_SEED: u64 = 0x7a11_5eed;
 const FOLD_SEED: u64 = 0xf01d_5eed;
 /// Steps a wrinkle's shape takes to settle, and the gain of a step: how
@@ -306,6 +320,11 @@ const FILM_MIN: f32 = 24.0 * 60.0;
 const OIL_SEED: u64 = 0x0011_5eed;
 const DRIER_SEED: u64 = 0xd41e_5eed;
 const NONE: u32 = u32::MAX;
+/// The tiles a tick looks for skin that could wrinkle in, px.
+const TILE: usize = 32;
+/// A packet's `slope` once a pass has measured it and found none at its
+/// wavelength (0: not measured yet).
+const FLAT: f32 = -1.0;
 
 /// One baked film at one pixel.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -335,8 +354,8 @@ pub(crate) struct Packet {
     pub binder: f32,
     /// The rms slope of the relief over it at its wrinkle's wavelength,
     /// brush marks and wrinkle together, as the last pass measured it (0:
-    /// not measured yet). What the yielded bulk under its skin holds
-    /// against is this.
+    /// not measured yet; `FLAT`: measured, and none there). What the
+    /// yielded bulk under its skin holds against is this.
     pub slope: f32,
     /// The packet under it, or `NONE`.
     pub below: u32,
@@ -407,11 +426,11 @@ struct Site {
     /// (negative: how far the skin is from wrinkling), at the slopes the
     /// skin was last measured with; 0 while it has none measured.
     delta: f32,
-    /// The lower of the two bands its wavelength is drawn between (blur
-    /// radius, px).
+    /// The two bands its wavelength is drawn between (`BANDS`).
     band: u8,
-    /// The share of the wrinkle drawn at the band above `band`: where its
-    /// wavelength lies between the two, by its logarithm.
+    next: u8,
+    /// The share of the wrinkle drawn at `next`: where its wavelength lies
+    /// between the two, by its logarithm.
     mix: f32,
     /// Its wavelength, in `BAND_LAMBDA`s (under 1: finer than the finest
     /// band, which draws it).
@@ -453,7 +472,7 @@ impl Site {
     fn share(&self, band: u8) -> f32 {
         if band == self.band {
             1.0 - self.mix
-        } else if band == self.band + 1 {
+        } else if band == self.next {
             self.mix
         } else {
             0.0
@@ -505,6 +524,45 @@ fn band_gain(r: usize) -> f32 {
         g * g
     };
     (twice(2 * r + 1) - twice(4 * r + 1)).max(0.05)
+}
+
+/// The boxes (tiles, end-exclusive) of the marked tiles of a `tw` × `th`
+/// grid, each with `m` tiles around it: marks within reach of each other
+/// share a box, and boxes that overlap are one.
+fn patches(marks: &[bool], tw: usize, th: usize, m: usize) -> Vec<(usize, usize, usize, usize)> {
+    let mut boxes: Vec<(usize, usize, usize, usize)> = Vec::new();
+    let mut seen = vec![false; tw * th];
+    for i in 0..tw * th {
+        if !marks[i] || seen[i] {
+            continue;
+        }
+        let mut b = (tw, th, 0, 0);
+        let mut todo = vec![i];
+        seen[i] = true;
+        while let Some(j) = todo.pop() {
+            let (x, y) = (j % tw, j / tw);
+            b = (b.0.min(x), b.1.min(y), b.2.max(x + 1), b.3.max(y + 1));
+            for v in y.saturating_sub(2 * m)..(y + 2 * m + 1).min(th) {
+                for u in x.saturating_sub(2 * m)..(x + 2 * m + 1).min(tw) {
+                    if marks[v * tw + u] && !seen[v * tw + u] {
+                        seen[v * tw + u] = true;
+                        todo.push(v * tw + u);
+                    }
+                }
+            }
+        }
+        boxes.push((b.0.saturating_sub(m), b.1.saturating_sub(m), (b.2 + m).min(tw), (b.3 + m).min(th)));
+    }
+    while let Some((a, b)) = (0..boxes.len()).flat_map(|a| (a + 1..boxes.len()).map(move |b| (a, b))).find(|&(a, b)| {
+        let (p, q) = (boxes[a], boxes[b]);
+        p.0 < q.2 && q.0 < p.2 && p.1 < q.3 && q.1 < p.3
+    }) {
+        let q = boxes.swap_remove(b);
+        let p = &mut boxes[a];
+        *p = (p.0.min(q.0), p.1.min(q.1), p.2.max(q.2), p.3.max(q.3));
+    }
+    boxes.sort_unstable_by_key(|b| (b.1, b.0));
+    boxes
 }
 
 /// `src` (`w` × `h`) blurred by a Gaussian of `scale` × `sigma` px,
@@ -577,14 +635,18 @@ fn grain(xm: f32, ym: f32, born: f32, mm: &[f32], seed: u64) -> f32 {
 }
 
 /// Ripples `lam` mm apart in patches `cell` mm across, each patch's own
-/// heading and phase (`seed`), passing smoothly from one patch to the next:
-/// about the center of each of the four patches nearest (`xm`, `ym`), its
-/// ripple, weighed by how near. Unit amplitude.
+/// heading and phase (`seed`), passing from one patch to the next where
+/// they meet: about the center of each of the four patches nearest (`xm`,
+/// `ym`), its ripple, weighed by how near, read at a place pushed about by
+/// `WARP` and as high as `RIDGE_SPREAD` has it there. About unit amplitude.
 fn domains(xm: f32, ym: f32, lam: f32, cell: f32, seed: u64) -> f32 {
+    let field = |s: u64| (vnoise(xm / (WARP_LAMBDAS * lam), ym / (WARP_LAMBDAS * lam), seed ^ s) - 0.5) / 0.214;
+    let height = (1.0 + RIDGE_SPREAD * field(0x4e1d)).max(0.0);
+    let (xm, ym) = (xm + WARP * lam * field(0x7a2b), ym + WARP * lam * field(0x7a2c));
     let (fx, fy) = (xm / cell - 0.5, ym / cell - 0.5);
     let (i0, j0) = (fx.floor(), fy.floor());
     let ease = |t: f32| t * t * (3.0 - 2.0 * t);
-    let (tx, ty) = (ease(fx - i0), ease(fy - j0));
+    let (tx, ty) = (ease(ease(fx - i0)), ease(ease(fy - j0)));
     let mut sum = 0.0f32;
     for (di, dj, wt) in [(0, 0, (1.0 - tx) * (1.0 - ty)), (1, 0, tx * (1.0 - ty)), (0, 1, (1.0 - tx) * ty), (1, 1, tx * ty)] {
         let (i, j) = (i0 as i64 + di, j0 as i64 + dj);
@@ -593,7 +655,7 @@ fn domains(xm: f32, ym: f32, lam: f32, cell: f32, seed: u64) -> f32 {
         let (cx, cy) = ((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell);
         sum += wt * (std::f32::consts::TAU / lam * ((xm - cx) * heading.cos() + (ym - cy) * heading.sin()) + phase).cos();
     }
-    sum
+    sum * height
 }
 
 /// The paint `hd` as it is at the point (`xm`, `ym`) mm of a film that
@@ -690,8 +752,9 @@ impl Canvas {
     /// skin asks for, counting the slopes it already has, and the
     /// compression of every layer of its plate is relieved by what it
     /// took. `site` covers the box `bx` (buffer pixels); the pass works
-    /// over `pb`, that box padded by the widest window.
-    fn wrinkle(&mut self, site: &[Site], bx: (usize, usize, usize, usize), pb: (usize, usize, usize, usize), bands: Vec<u8>) {
+    /// over `pb`, that box padded by the widest window. Not `draw`: it only
+    /// measures the slopes.
+    fn wrinkle(&mut self, site: &[Site], bx: (usize, usize, usize, usize), pb: (usize, usize, usize, usize), bands: Vec<u8>, draw: bool) {
         let w = self.f.w;
         let (pw, ph) = (pb.2 - pb.0, pb.3 - pb.1);
         let (bw, bh) = (bx.2 - bx.0, bx.3 - bx.1);
@@ -809,6 +872,9 @@ impl Canvas {
             // roughness every surface has (`SEED_UM`, `DOMAIN_UM`), which
             // seeds where the ridges start and which way they run but is
             // not a slope the paste holds against
+            if !draw {
+                continue;
+            }
             let lam_mm = BAND_LAMBDA * r as f32 * mm;
             let place = |k: usize| ((pb.0 + k % pw + self.f.x0) as f32 * mm, (pb.1 + k / pw + self.f.y0) as f32 * mm);
             zr.par_iter_mut().enumerate().for_each(|(k, v)| {
@@ -1012,7 +1078,8 @@ impl Canvas {
             // along it, so a ridge grows as the relief along it is high,
             // over a wavelength each way; the ridges run across the slopes'
             // greater axis)
-            let len = (BAND_LAMBDA * r as f32).round() as isize;
+            let len = (ALONG * BAND_LAMBDA * r as f32).round() as isize;
+            let stride = ((BAND_LAMBDA * r as f32 / 4.0) as isize).max(1);
             let along: Vec<f32> = (0..pw * ph).into_par_iter().map(|k| {
                 if !within(k) || skin[k] == 0.0 {
                     return grows[k];
@@ -1021,7 +1088,7 @@ impl Canvas {
                 let (tx, ty) = (-th.sin(), th.cos());
                 let (x, y) = ((k % pw) as f32, (k / pw) as f32);
                 let (mut sum, mut count) = (0.0f32, 0.0f32);
-                for t in -len..=len {
+                for t in (-len / stride..=len / stride).map(|i| i * stride) {
                     let (sx, sy) = ((x + t as f32 * tx).round(), (y + t as f32 * ty).round());
                     if sx >= 0.0 && sy >= 0.0 && (sx as usize) < pw && (sy as usize) < ph {
                         let j = sy as usize * pw + sx as usize;
@@ -1120,7 +1187,8 @@ impl Canvas {
             }
         }
         for &k in &soft {
-            self.skin.pool[site[k].at as usize].slope = msq[padded(k)].sqrt();
+            let m = msq[padded(k)].sqrt();
+            self.skin.pool[site[k].at as usize].slope = if m > 0.0 { m } else { FLAT };
         }
         if !took.is_empty() {
             // the bulk only moves sideways: what the crests gather the
@@ -1256,13 +1324,13 @@ impl Canvas {
         // to the first soft one), its compression, and whether the gel under
         // it gives: the critical wavenumber and force of the plate on it
         let (bw, bh) = (bx.2 - bx.0, bx.3 - bx.1);
-        let mut site = vec![Site { at: NONE, delta: 0.0, band: 0, mix: 0.0, lam: 0.0, plate: 0.0, floor: 0.0, measure: false, runs: false, nf: 0.0, bend: 0.0, hold: 0.0, c: 0.0, cap: 0.0, yielded: 0.0, gives: 0.0 }; bw * bh];
+        let mut site = vec![Site { at: NONE, delta: 0.0, band: 0, next: 0, mix: 0.0, lam: 0.0, plate: 0.0, floor: 0.0, measure: false, runs: false, nf: 0.0, bend: 0.0, hold: 0.0, c: 0.0, cap: 0.0, yielded: 0.0, gives: 0.0 }; bw * bh];
         let (top, pool, engine) = (&self.skin.top, &self.skin.pool, self.engine);
         let (mm, x0, y0) = (self.px_mm(), self.f.x0, self.f.y0);
         site.par_chunks_mut(bw).enumerate().for_each(|(y, row)| {
             for (x, site) in row.iter_mut().enumerate() {
                 let mut at = top[(bx.1 + y) * w + bx.0 + x];
-                let (mut plate, mut force) = (0.0f32, 0.0f32);
+                let (mut plate, mut force, mut over) = (0.0f32, 0.0f32, 0.0f32);
                 let mut soft = NONE;
                 while at != NONE {
                     let p = &pool[at as usize];
@@ -1270,6 +1338,7 @@ impl Canvas {
                     force += p.n;
                     if p.s >= thick - DRY_UM {
                         plate += thick;
+                        over = p.slope;
                         at = p.below;
                         continue;
                     }
@@ -1281,6 +1350,9 @@ impl Canvas {
                     continue;
                 }
                 let p = &pool[soft as usize];
+                // (a film that has just become the soft one under a skin that
+                // cured through has the relief that skin was measured with)
+                let slope = if p.slope != 0.0 { p.slope } else { over };
                 let t = plate * 1e-6;
                 let b = SKIN_PA * t * t * t / (12.0 * (1.0 - NU * NU));
                 let c = SKIN_PA * t / (1.0 - NU * NU);
@@ -1304,7 +1376,7 @@ impl Canvas {
                 // beats the lesser of the two
                 let elastic = |q: f32| if q * hb >= DEEP { 2.0 * g / q } else { 12.0 * g / (hb * hb * hb * q * q * q * q) };
                 let yielded = |q: f32| std::f32::consts::FRAC_PI_2 * std::f32::consts::SQRT_2 * yield_pa / (q * (q * hb).min(1.0));
-                let need = |q: f32| b * q * q + if p.slope > 0.0 { elastic(q).min(yielded(q) / p.slope) } else { elastic(q) };
+                let need = |q: f32| b * q * q + if slope > 0.0 { elastic(q).min(yielded(q) / slope) } else { elastic(q) };
                 // the wavenumber that needs the least compression: on an
                 // elastic gel (G / B)^(1/3) on deep bulk, (24 G / B H³)^(1/6)
                 // on thin; on a yielded paste at the slopes measured, where
@@ -1312,9 +1384,9 @@ impl Canvas {
                 // deep bulk and (π τ_y / √2 B H σ)^(1/4) on thin
                 let qh = (g / b).cbrt();
                 let mut qc = if qh * hb >= DEEP { qh } else { (24.0 * g / (b * hb * hb * hb)).powf(1.0 / 6.0).min(DEEP / hb) };
-                if p.slope > 0.0 {
-                    let deep = (std::f32::consts::FRAC_PI_4 * std::f32::consts::FRAC_1_SQRT_2 * yield_pa / (b * p.slope)).cbrt();
-                    let thin = (std::f32::consts::FRAC_PI_2 * std::f32::consts::SQRT_2 * yield_pa / (b * hb * p.slope)).powf(0.25);
+                if slope > 0.0 {
+                    let deep = (std::f32::consts::FRAC_PI_4 * std::f32::consts::FRAC_1_SQRT_2 * yield_pa / (b * slope)).cbrt();
+                    let thin = (std::f32::consts::FRAC_PI_2 * std::f32::consts::SQRT_2 * yield_pa / (b * hb * slope)).powf(0.25);
                     for q in [deep, thin] {
                         if q > 0.0 && q.is_finite() && need(q) < need(qc) {
                             qc = q;
@@ -1334,8 +1406,9 @@ impl Canvas {
                 let (xm, ym) = ((bx.0 + x + x0) as f32 * mm, (bx.1 + y + y0) as f32 * mm);
                 let stray = (JITTER * grain(xm, ym, p.born, &JITTER_MM, JITTER_SEED)).exp();
                 let at = (2.0 * std::f32::consts::PI / (qc.min(nyq) * dx) / BAND_LAMBDA * stray).clamp(FINEST / BAND_LAMBDA, BAND_MAX as f32);
-                let band = (at as u8).clamp(1, BAND_MAX as u8);
-                let mix = if at > band as f32 { (at / band as f32).ln() / (1.0 + 1.0 / band as f32).ln() } else { 0.0 };
+                let i = BANDS.iter().rposition(|&b| b as f32 <= at).unwrap_or(0);
+                let (band, next) = (BANDS[i], BANDS[(i + 1).min(BANDS.len() - 1)]);
+                let mix = if next > band && at > band as f32 { (at / band as f32).ln() / (next as f32 / band as f32).ln() } else { 0.0 };
                 let q = 2.0 * std::f32::consts::PI / (at * BAND_LAMBDA * dx);
                 // von Kármán: slopes of mean square 2 (N − N_c) / C take up
                 // the compression past the threshold (short of it: how far
@@ -1345,19 +1418,19 @@ impl Canvas {
                 // has, q² H² / 2: a film nearly cured through holds what
                 // compression it has left.
                 let room = (p.h + p.w - p.s) * 1e-6;
-                let mut s = Site { at: soft, delta: 0.0, band, mix, lam: at, plate, floor: p.s - p.h + DRY_UM, measure: false, runs: false, nf, bend: b * q * q, hold: elastic(q), c, cap: 0.5 * (q * room) * (q * room), yielded: yielded(q), gives: 0.0 };
+                let mut s = Site { at: soft, delta: 0.0, band, next, mix, lam: at, plate, floor: p.s - p.h + DRY_UM, measure: false, runs: false, nf, bend: b * q * q, hold: elastic(q), c, cap: 0.5 * (q * room) * (q * room), yielded: yielded(q), gives: 0.0 };
                 // a skin whose slopes are not measured asks nothing of its
                 // neighbors yet; it asks for a pass when it could wrinkle
                 // on a bulk that has yielded, and the pass draws at the
                 // slopes it measures
-                if p.slope > 0.0 {
-                    s.delta = s.ask(p.slope);
-                    let plateau = s.yielded / p.slope;
-                    s.runs = s.delta > 0.0 && plateau < s.hold && 2.0 * plateau * (1.0 - p.slope / (p.slope * p.slope + s.delta).sqrt()) / c >= GROW * GROW;
+                if slope > 0.0 {
+                    s.delta = s.ask(slope);
+                    let plateau = s.yielded / slope;
+                    s.runs = s.delta > 0.0 && plateau < s.hold && 2.0 * plateau * (1.0 - slope / (slope * slope + s.delta).sqrt()) / c >= GROW * GROW;
                     if plateau < s.hold && nf > s.bend {
                         s.gives = (plateau / (nf - s.bend)).min(1.0) * (q * hb).min(1.0) / (q * room).min(1.0);
                     }
-                } else {
+                } else if slope == 0.0 {
                     s.measure = (2.0 * (nf - s.bend) / c).min(s.cap) >= GROW * GROW;
                 }
                 *site = s;
@@ -1396,17 +1469,61 @@ impl Canvas {
                     need[padded(k)] = s.delta;
                 }
             }
-            let mut bands: Vec<u8> = site.iter().filter(|s| s.at != NONE).flat_map(|s| [s.band, s.band + (s.mix > 0.0) as u8]).collect();
+            let mut bands: Vec<u8> = site.iter().filter(|s| s.at != NONE).flat_map(|s| [s.band, if s.mix > 0.0 { s.next } else { s.band }]).collect();
             bands.sort_unstable();
             bands.dedup();
-            let asks = site.iter().any(|s| s.at != NONE && s.measure) || bands.iter().any(|&band| {
-                crate::surface::box_blur_into(need, pw, ph, 2 * band as usize, tmp);
-                crate::surface::box_blur_into(tmp, pw, ph, 2 * band as usize, avg);
-                site.iter().enumerate().any(|(k, s)| s.at != NONE && s.share(band) > 0.0 && (avg[padded(k)] >= GROW * GROW || (s.runs && avg[padded(k)] > 0.0)))
-            });
+            // (a pass draws where the skin takes a wrinkle, where what it asks
+            // for averaged over its wavelength is more than nothing, and
+            // measures the skin not measured yet; a tick that has only skin
+            // to measure measures it and draws nothing. Each is found in
+            // tiles, with the skin around them as far as a window reaches;
+            // the rest keeps the slopes it was last measured with)
+            let (tw, th) = (bw.div_ceil(TILE), bh.div_ceil(TILE));
+            let mut takes = vec![false; tw * th];
+            let mut asks = false;
+            for (k, s) in site.iter().enumerate() {
+                if s.at != NONE && s.measure {
+                    takes[k / bw / TILE * tw + k % bw / TILE] = true;
+                }
+            }
+            let measures = takes.clone();
+            if site.iter().any(|s| s.at != NONE && (s.delta >= GROW * GROW || s.runs)) {
+                for &band in &bands {
+                    crate::surface::box_blur_into(need, pw, ph, 2 * band as usize, tmp);
+                    crate::surface::box_blur_into(tmp, pw, ph, 2 * band as usize, avg);
+                    let avg = &*avg;
+                    let rows: Vec<(bool, Vec<bool>)> = (0..th).into_par_iter().map(|ty| {
+                        let (mut ask, mut row) = (false, vec![false; tw]);
+                        for k in ty * TILE * bw..((ty + 1) * TILE).min(bh) * bw {
+                            let s = &site[k];
+                            if s.at == NONE || s.share(band) == 0.0 {
+                                continue;
+                            }
+                            let a = avg[padded(k)];
+                            row[k % bw / TILE] |= a > 0.0;
+                            ask |= a >= GROW * GROW || (s.runs && a > 0.0);
+                        }
+                        (ask, row)
+                    }).collect();
+                    for (ty, (ask, row)) in rows.into_iter().enumerate() {
+                        asks |= ask;
+                        for (tx, t) in row.into_iter().enumerate() {
+                            takes[ty * tw + tx] |= t;
+                        }
+                    }
+                }
+            }
             give(scratch);
-            if asks {
-                self.wrinkle(&site, bx, pb, bands);
+            let marks = if asks { takes } else { measures };
+            let m = (4 * BAND_MAX).div_ceil(TILE);
+            let boxes = patches(&marks, tw, th, m);
+            for (tx0, ty0, tx1, ty1) in boxes {
+                let (sx0, sy0, sx1, sy1) = (tx0 * TILE, ty0 * TILE, (tx1 * TILE).min(bw), (ty1 * TILE).min(bh));
+                let site: Vec<Site> = (sy0..sy1).flat_map(|y| site[y * bw + sx0..y * bw + sx1].iter().copied()).collect();
+                let bx = (bx.0 + sx0, bx.1 + sy0, bx.0 + sx1, bx.1 + sy1);
+                let pb = (bx.0.saturating_sub(pad), bx.1.saturating_sub(pad), (bx.2 + pad).min(w), (bx.3 + pad).min(self.f.h));
+                let bands: Vec<u8> = bands.iter().copied().filter(|&band| site.iter().any(|s| s.at != NONE && s.share(band) > 0.0)).collect();
+                self.wrinkle(&site, bx, pb, bands, asks);
             }
         }
         // 4. packets cured through from the bottom up are done: their

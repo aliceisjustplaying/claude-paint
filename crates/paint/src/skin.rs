@@ -272,9 +272,17 @@ const FINEST: f32 = 4.0;
 /// them stays flat. By eye.
 const FOLD_SPREAD: f32 = 1.2;
 const FOLD_LAMBDAS: f32 = 12.0;
-/// How far along a ridge its height is shared, wavelengths each way: a fold
-/// runs as long as this before it may stand lower. By eye.
-const ALONG: f32 = 4.0;
+/// How far a fold takes the compression off the skin beside it, in
+/// wavelengths: the half width of the share of it it relieves (a Lorentzian
+/// cut where it falls to a tenth, as a crack relieves the stress beside it,
+/// `crate::crack`). By eye.
+const FOLD_REACH: f32 = 1.5;
+/// How compressed the skin must be for a fold to run on through it, as a
+/// share of what wrinkles it (a fold starts only where the skin is past
+/// that; a crack starts at half again the stress it runs on at). By eye.
+const FOLD_RUN: f32 = 0.9;
+/// How wide a fold is, in wavelengths: the skin it gathers its slopes into.
+const FOLD_WIDTH: f32 = 1.0;
 /// How tall a fold may stand, as a multiple of the amplitude of a sinusoid
 /// of the same root mean square slope: a fold gathers its slopes into a
 /// ridge taller than a ripple's (the cap is there so the wall of a stroke at
@@ -772,7 +780,7 @@ impl Canvas {
         let dx_um = self.px_mm() * 1e3;
         let soft: Vec<usize> = (0..bw * bh).filter(|&k| site[k].at != NONE).collect();
         let padded = |k: usize| (bx.1 + k / bw - pb.1) * pw + bx.0 + k % bw - pb.0;
-        let mut scratch = take(23);
+        let mut scratch = take(24);
         let mut buffers = scratch.drain(..);
         let mut buffer = |n: usize| {
             let mut b = buffers.next().unwrap();
@@ -788,6 +796,7 @@ impl Canvas {
         z.par_iter_mut().enumerate().for_each(|(k, z)| *z = self.height[(pb.1 + k / pw) * w + pb.0 + k % pw]);
         let mut wf = buffer(pw * ph);
         let mut need = buffer(pw * ph);
+        let mut press = buffer(pw * ph);
         let mut skin = buffer(pw * ph);
         let mut msq = buffer(pw * ph);
         let mm = self.px_mm();
@@ -872,8 +881,11 @@ impl Canvas {
                 let ask = if share > 0.0 {
                     let slope = (far[p] / gain).powi(2) + wrinkled[p].max(0.0);
                     msq[p] += share * slope;
+                    let hold = if slope > 0.0 { s.hold.min(s.yielded / slope.sqrt()) } else { s.hold };
+                    press[p] = if s.cap > 0.0 && s.bend + hold > 0.0 { s.nf / (s.bend + hold) } else { 0.0 };
                     if s.cap > 0.0 { s.ask(slope.sqrt()) } else { 0.0 }
                 } else {
+                    press[p] = 0.0;
                     s.delta
                 };
                 need[p] = if ask > 0.0 { share * ask } else { ask };
@@ -1083,38 +1095,160 @@ impl Canvas {
                     *v = skin[k] * (top + (bottom - top) * ty);
                 }
             });
-            // (a fold is a ridge: the skin can't stand tall at one place on
-            // a ridge and low a wavelength further along it without bending
-            // along it, so a ridge grows as the relief along it is high,
-            // over a wavelength each way; the ridges run across the slopes'
-            // greater axis)
-            let len = (ALONG * BAND_LAMBDA * r as f32).round() as isize;
-            let stride = ((BAND_LAMBDA * r as f32 / 4.0) as isize).max(1);
-            let along: Vec<f32> = (0..pw * ph).into_par_iter().map(|k| {
-                if !within(k) || skin[k] == 0.0 {
-                    return grows[k];
-                }
-                let th = 0.5 * (2.0 * rho[k]).atan2(near[k] - far[k]);
-                let (tx, ty) = (-th.sin(), th.cos());
-                let (x, y) = ((k % pw) as f32, (k / pw) as f32);
-                let (mut sum, mut count) = (0.0f32, 0.0f32);
-                for t in (-len / stride..=len / stride).map(|i| i * stride) {
-                    let (sx, sy) = ((x + t as f32 * tx).round(), (y + t as f32 * ty).round());
-                    if sx >= 0.0 && sy >= 0.0 && (sx as usize) < pw && (sy as usize) < ph {
-                        let j = sy as usize * pw + sx as usize;
-                        if skin[j] > 0.0 {
-                            sum += grows[j];
-                            count += 1.0;
+            // (folds form one at a time, as cracks do (`crate::crack`): a
+            // fold starts where the skin is most compressed and its relief
+            // stands most out of its surroundings, runs along its ridge while
+            // the skin it reaches is still compressed enough, and takes the
+            // compression off the skin beside it, gathering it into its own
+            // slopes. The next fold starts only where enough compression is
+            // left, so a few long folds stand over calm ground and later ones
+            // stop where they meet them. On the band's coarse grid, a cell
+            // to a pixel of the finest band)
+            let mut fold_need = need.clone();
+            {
+                let n0 = down(&need.iter().map(|v| v.max(0.0)).collect::<Vec<f32>>());
+                let (ig, sh) = (down(&grows), down(&shape));
+                let (tn, tf, tr) = (down(&near), down(&far), down(&rho));
+                let mut left = n0.clone();
+                let mut pressed = down(&press);
+                let mut dep = vec![0.0f32; cw * ch];
+                let mut owner = vec![0u32; cw * ch];
+                let l = FOLD_REACH * BAND_LAMBDA;
+                let reach = 3.0 * l;
+                let half = 0.5 * FOLD_WIDTH * BAND_LAMBDA;
+                let relief = |d: f32| {
+                    let x = d / l;
+                    ((1.0 / (1.0 + x * x) - 0.1) / 0.9).max(0.0)
+                };
+                let cell = |x: f32, y: f32| (x >= 0.0 && y >= 0.0 && (x as usize) < cw && (y as usize) < ch).then(|| y as usize * cw + x as usize);
+                let tangent = |i: usize| {
+                    let th = 0.5 * (2.0 * tr[i]).atan2(tn[i] - tf[i]);
+                    (-th.sin(), th.cos())
+                };
+                let mut heap: std::collections::BinaryHeap<(u32, std::cmp::Reverse<u32>)> = (0..cw * ch).filter(|&c| cm[c] > 0.0 && n0[c] > 0.0).map(|c| ((n0[c] * ig[c]).to_bits(), std::cmp::Reverse(c as u32))).collect();
+                let (mut mark, mut best) = (vec![0u32; cw * ch], vec![0.0f32; cw * ch]);
+                let mut touched: Vec<usize> = Vec::new();
+                let mut fold = 0u32;
+                while let Some((rank, std::cmp::Reverse(c))) = heap.pop() {
+                    let c = c as usize;
+                    if owner[c] != 0 || left[c] <= 0.0 || pressed[c] < 1.0 {
+                        continue;
+                    }
+                    let q = left[c] * ig[c];
+                    if q.to_bits() < rank {
+                        // (relieved since it was queued: queued again at its new rank)
+                        heap.push((q.to_bits(), std::cmp::Reverse(c as u32)));
+                        continue;
+                    }
+                    fold += 1;
+                    // (it keeps to its ridge: of the places across it a step
+                    // on, the one standing highest, or lowest for a trough)
+                    let up = if sh[c] >= 0.0 { 1.0 } else { -1.0 };
+                    let start = ((c % cw) as f32 + 0.5, (c / cw) as f32 + 0.5);
+                    let mut path = vec![start];
+                    for side in [1.0f32, -1.0] {
+                        let (t0, t1) = tangent(c);
+                        let (mut x, mut y, mut hx, mut hy) = (start.0, start.1, side * t0, side * t1);
+                        let mut run = Vec::new();
+                        while let Some(i) = cell(x, y) {
+                            let (t0, t1) = tangent(i);
+                            (hx, hy) = if t0 * hx + t1 * hy < 0.0 { (-t0, -t1) } else { (t0, t1) };
+                            let Some((x1, y1, j)) = [-1.0f32, 0.0, 1.0].iter().filter_map(|k| {
+                                let (x1, y1) = (x + hx - k * hy, y + hy + k * hx);
+                                cell(x1, y1).map(|j| (x1, y1, j))
+                            }).max_by(|a, b| (up * sh[a.2]).total_cmp(&(up * sh[b.2]))) else { break };
+                            if cm[j] == 0.0 || pressed[j] < FOLD_RUN || owner[j] != 0 || run.len() > cw + ch {
+                                break;
+                            }
+                            (x, y) = (x1, y1);
+                            run.push((x, y));
+                        }
+                        if side > 0.0 {
+                            path.extend(run);
+                        } else {
+                            run.reverse();
+                            path.splice(0..0, run);
+                        }
+                    }
+                    // what it relieves, along chords of its path (the relief
+                    // reaches far past the jags of a path on the grid)
+                    let stride = ((0.5 * reach) as usize).max(1);
+                    let mut knots: Vec<(f32, f32)> = path.iter().step_by(stride).copied().collect();
+                    if (path.len() - 1) % stride != 0 || path.len() == 1 {
+                        knots.push(*path.last().unwrap());
+                    }
+                    touched.clear();
+                    for pair in knots.windows(2) {
+                        let ((ax, ay), (bx, by)) = (pair[0], pair[1]);
+                        let (dx, dy) = (bx - ax, by - ay);
+                        let l2 = dx * dx + dy * dy;
+                        let (x0, x1) = ((ax.min(bx) - reach).max(0.0) as usize, ((ax.max(bx) + reach) as usize).min(cw - 1));
+                        let (y0, y1) = ((ay.min(by) - reach).max(0.0) as usize, ((ay.max(by) + reach) as usize).min(ch - 1));
+                        for yy in y0..=y1 {
+                            for xx in x0..=x1 {
+                                let (cx, cy) = (xx as f32 + 0.5, yy as f32 + 0.5);
+                                let t = if l2 > 0.0 { (((cx - ax) * dx + (cy - ay) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+                                let (ex, ey) = (cx - ax - t * dx, cy - ay - t * dy);
+                                let d2 = ex * ex + ey * ey;
+                                if d2 >= reach * reach {
+                                    continue;
+                                }
+                                let i = yy * cw + xx;
+                                if mark[i] != fold {
+                                    mark[i] = fold;
+                                    best[i] = d2;
+                                    touched.push(i);
+                                } else if d2 < best[i] {
+                                    best[i] = d2;
+                                }
+                            }
+                        }
+                    }
+                    let mut released = 0.0f32;
+                    for &i in &touched {
+                        let off = relief(best[i].sqrt());
+                        let take = left[i] * off;
+                        left[i] -= take;
+                        released += take;
+                        pressed[i] *= 1.0 - off;
+                    }
+                    // and gathers into the skin it runs over, as wide as it is
+                    let mut foot = Vec::new();
+                    let hr = half.ceil() as isize;
+                    for &(px, py) in &path {
+                        for oy in -hr..=hr {
+                            for ox in -hr..=hr {
+                                let (qx, qy) = (px + ox as f32, py + oy as f32);
+                                if let Some(i) = cell(qx, qy)
+                                    && owner[i] == 0
+                                    && cm[i] > 0.0
+                                    && ((ox * ox + oy * oy) as f32) <= half * half
+                                {
+                                    owner[i] = fold;
+                                    foot.push(i);
+                                }
+                            }
+                        }
+                    }
+                    if !foot.is_empty() {
+                        let each = released / foot.len() as f32;
+                        for &i in &foot {
+                            dep[i] += each;
                         }
                     }
                 }
-                if count > 0.0 { sum / count } else { grows[k] }
-            }).collect();
-            shape.par_iter_mut().zip(&along).enumerate().for_each(|(k, (v, g))| {
-                if within(k) {
-                    *v *= g;
-                }
-            });
+                fold_need.par_chunks_mut(pw).enumerate().take(sb.3).skip(sb.1).for_each(|(y, row)| {
+                    let j = (y - sb.1) / r;
+                    for (x, v) in row.iter_mut().enumerate().take(sb.2).skip(sb.0) {
+                        if skin[y * pw + x] == 0.0 {
+                            continue;
+                        }
+                        let c = j * cw + (x - sb.0) / r;
+                        let keep = if n0[c] > 0.0 { left[c] / n0[c] } else { 1.0 };
+                        *v = if *v > 0.0 { *v * keep } else { *v } + dep[c];
+                    }
+                });
+            }
             // and is drawn at its own wavelengths alone: the saturated
             // ridges' edges are finer than the finest bands' pixels can hold
             gauss_into(&shape, pw, ph, sb, &sig, 1.0, &mut px, &mut near);
@@ -1160,6 +1294,9 @@ impl Canvas {
             blur2(&need, 2 * r, &mut dot);
             m2r.par_iter_mut().zip(&dot).zip(&skin).for_each(|((m, d), s)| *m = (*d > 0.0 && *s > 0.0) as u8 as f32);
             blur2(&m2r, 2 * r, &mut mr);
+            // (what each place draws: what it asks for, the folds having
+            // gathered it from the skin around them)
+            blur2(&fold_need, 2 * r, &mut dot);
             // a sinusoid of unit rms slope has an amplitude of λ √2 / 2π:
             // the pattern is bounded by `TALL` of it, so the wall of a
             // stroke at the skin's edge is not a wrinkle's worth of relief
@@ -1260,7 +1397,7 @@ impl Canvas {
             self.surf_gen += 1;
             self.base = None;
         }
-        give(vec![z, wf, need, skin, msq, inner, wx, wy, dw, tmp, mr, m2r, mi, near, far, rho, wrinkled, zr, px, py, dot, shape, rms]);
+        give(vec![z, wf, need, press, skin, msq, inner, wx, wy, dw, tmp, mr, m2r, mi, near, far, rho, wrinkled, zr, px, py, dot, shape, rms]);
     }
 
     /// The box (buffer pixels, end-exclusive) of the pixels holding packets.

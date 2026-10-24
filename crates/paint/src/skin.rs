@@ -227,8 +227,10 @@ const SEED_UM: f32 = 0.2;
 /// Steps a wrinkle's shape takes to settle, and the gain of a step: how
 /// far past its threshold the skin is, as Swift–Hohenberg's ε (well past
 /// it: the pattern saturates into ridges a wavelength apart, as a skin
-/// pressed hard enough to yield its paste does). By eye.
-const SETTLE: usize = 8;
+/// pressed hard enough to yield its paste does). The more steps, the
+/// longer its ridges grow and the more they follow the marks it cured
+/// over. By eye.
+const SETTLE: usize = 24;
 const SETTLE_GAIN: f32 = 1.5;
 /// How unevenly the medium mixed into a paint is spread through its film:
 /// one standard deviation, as a share of the medium (or, blotted, of the
@@ -453,24 +455,28 @@ fn band_gain(r: usize) -> f32 {
 }
 
 /// `src` (`w` × `h`) blurred by a Gaussian of `sigma` px, rows then
-/// columns, the edges held.
-fn gauss_into(src: &[f32], w: usize, h: usize, sigma: f32, tmp: &mut Vec<f32>, out: &mut Vec<f32>) {
+/// columns, the edges held, over the box `bx` of `out` (the rest of it
+/// left as it was).
+fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize), sigma: f32, tmp: &mut Vec<f32>, out: &mut Vec<f32>) {
+    let (x0, y0, x1, y1) = bx;
     let r = (3.0 * sigma).ceil() as usize;
     let mut k: Vec<f32> = (0..=2 * r).map(|i| (-((i as f32 - r as f32) / sigma).powi(2) / 2.0).exp()).collect();
     let sum: f32 = k.iter().sum();
     k.iter_mut().for_each(|v| *v /= sum);
     tmp.resize(w * h, 0.0);
     out.resize(w * h, 0.0);
-    tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        let s = &src[y * w..(y + 1) * w];
-        for (x, o) in row.iter_mut().enumerate() {
+    let (t0, t1) = (y0.saturating_sub(r), (y1 + r).min(h));
+    tmp[t0 * w..t1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
+        let s = &src[(t0 + j) * w..(t0 + j + 1) * w];
+        for (x, o) in row.iter_mut().enumerate().take(x1).skip(x0) {
             *o = k.iter().enumerate().map(|(i, kv)| kv * s[(x + i).saturating_sub(r).min(w - 1)]).sum();
         }
     });
-    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+    out[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
+        let row = &mut row[x0..x1];
         row.fill(0.0);
         for (i, kv) in k.iter().enumerate() {
-            let t = &tmp[(y + i).saturating_sub(r).min(h - 1) * w..][..w];
+            let t = &tmp[(y0 + j + i).saturating_sub(r).min(h - 1) * w..][x0..x1];
             row.iter_mut().zip(t).for_each(|(o, v)| *o += kv * v);
         }
     });
@@ -766,19 +772,72 @@ impl Canvas {
             // Gaussians at σ and 2σ peaks at a wavelength of 2πσ / 0.961;
             // Gaussians, unlike boxes, favor no direction)
             let sigma = BAND_LAMBDA * r as f32 * 0.961 / std::f32::consts::TAU;
-            gauss_into(&skin, pw, ph, sigma, &mut px, &mut zr);
-            gauss_into(&skin, pw, ph, 2.0 * sigma, &mut px, &mut wrinkled);
+            // (over the pixels drawn at this band, and as far around them
+            // as their windows reach)
+            let reach = 4 * r + 2 + (6.0 * sigma).ceil() as usize;
+            let sb = soft.iter().filter(|&&k| site[k].share(band) > 0.0).fold((pw, ph, 0, 0), |b, &k| {
+                let p = padded(k);
+                let (x, y) = (p % pw, p / pw);
+                (b.0.min(x.saturating_sub(reach)), b.1.min(y.saturating_sub(reach)), b.2.max((x + reach + 1).min(pw)), b.3.max((y + reach + 1).min(ph)))
+            });
+            let within = |k: usize| (sb.0..sb.2).contains(&(k % pw)) && (sb.1..sb.3).contains(&(k / pw));
+            gauss_into(&skin, pw, ph, sb, sigma, &mut px, &mut zr);
+            gauss_into(&skin, pw, ph, sb, 2.0 * sigma, &mut px, &mut wrinkled);
+            // (a band's pattern is the finest band's r times over: it
+            // settles on a grid r times coarser, where it is the finest
+            // band's, and is drawn back up)
+            let (cw, ch) = ((sb.2 - sb.0).div_ceil(r), (sb.3 - sb.1).div_ceil(r));
+            let down = |v: &[f32]| -> Vec<f32> {
+                (0..cw * ch).into_par_iter().map(|c| {
+                    let (x0, y0) = (sb.0 + c % cw * r, sb.1 + c / cw * r);
+                    let (x1, y1) = ((x0 + r).min(sb.2), (y0 + r).min(sb.3));
+                    let sum: f32 = (y0..y1).map(|y| v[y * pw + x0..y * pw + x1].iter().sum::<f32>()).sum();
+                    sum / ((x1 - x0) * (y1 - y0)) as f32
+                }).collect()
+            };
+            let box2 = |v: &[f32], out: &mut Vec<f32>, t: &mut Vec<f32>| {
+                crate::surface::box_blur_into(v, cw, ch, 2, t);
+                crate::surface::box_blur_into(t, cw, ch, 2, out);
+            };
+            let cm = down(&skin);
+            let mut cv = down(&shape);
+            let (cs, cb) = (sigma / r as f32, (0, 0, cw, ch));
+            let (mut ct, mut c1, mut c2, mut cn, mut cf, mut cr, mut cmr) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            gauss_into(&cm, cw, ch, cb, cs, &mut ct, &mut c1);
+            gauss_into(&cm, cw, ch, cb, 2.0 * cs, &mut ct, &mut c2);
+            box2(&cm, &mut cmr, &mut ct);
             for _ in 0..SETTLE {
-                gauss_into(&shape, pw, ph, sigma, &mut px, &mut near);
-                over(&mut near, &zr);
-                gauss_into(&shape, pw, ph, 2.0 * sigma, &mut px, &mut far);
-                over(&mut far, &wrinkled);
-                near.par_iter_mut().zip(&far).for_each(|(n, f)| *n -= f);
-                dot.par_iter_mut().zip(&near).zip(&skin).for_each(|((d, n), s)| *d = s * n * n);
-                blur2(&dot, 2 * r, &mut rms);
-                over(&mut rms, &m2r);
-                shape.par_iter_mut().zip(&near).zip(&rms).zip(&skin).for_each(|(((v, n), f), s)| *v = if *f > 1e-12 { s * (SETTLE_GAIN * n / f.sqrt()).tanh() } else { 0.0 });
+                gauss_into(&cv, cw, ch, cb, cs, &mut ct, &mut cn);
+                gauss_into(&cv, cw, ch, cb, 2.0 * cs, &mut ct, &mut cf);
+                cn.par_iter_mut().zip(&cf).zip(&c1).zip(&c2).for_each(|(((n, f), a), b)| *n = if *a > 1e-6 && *b > 1e-6 { *n / a - f / b } else { 0.0 });
+                cf.par_iter_mut().zip(&cn).zip(&cm).for_each(|((d, n), m)| *d = m * n * n);
+                box2(&cf, &mut cr, &mut ct);
+                cv.par_iter_mut().zip(&cn).zip(&cr).zip(&cmr).zip(&cm).for_each(|((((v, n), f), d), m)| {
+                    let f = if *d > 1e-6 { f / d } else { 0.0 };
+                    *v = if f > 1e-12 { m * (SETTLE_GAIN * n / f.sqrt()).tanh() } else { 0.0 };
+                });
             }
+            shape.par_chunks_mut(pw).enumerate().take(sb.3).skip(sb.1).for_each(|(y, row)| {
+                let at = |i: usize, j: usize| cv[j.min(ch - 1) * cw + i.min(cw - 1)];
+                let fy = (((y - sb.1) as f32 + 0.5) / r as f32 - 0.5).max(0.0);
+                let (j, ty) = (fy as usize, fy.fract());
+                for (x, v) in row.iter_mut().enumerate().take(sb.2).skip(sb.0) {
+                    let fx = (((x - sb.0) as f32 + 0.5) / r as f32 - 0.5).max(0.0);
+                    let (i, tx) = (fx as usize, fx.fract());
+                    let top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx;
+                    let bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
+                    *v = skin[y * pw + x] * (top + (bottom - top) * ty);
+                }
+            });
+            // and is drawn at its band alone: the saturated ridges' edges
+            // are finer than the finest bands' pixels can hold
+            gauss_into(&shape, pw, ph, sb, sigma, &mut px, &mut near);
+            gauss_into(&shape, pw, ph, sb, 2.0 * sigma, &mut px, &mut far);
+            shape.par_iter_mut().zip(&near).zip(&far).zip(&zr).zip(&wrinkled).zip(&skin).enumerate().for_each(|(k, (((((v, n), f), m1), m2), s))| {
+                if within(k) {
+                    *v = if *m1 > 1e-6 && *m2 > 1e-6 { s * (n / m1 - f / m2) } else { 0.0 };
+                }
+            });
             rms_slope(&shape, &mut px, &mut py, &mut dot, &mut far, &mut blur2);
             dot.par_iter_mut().zip(&px).zip(&py).zip(&wx).zip(&wy).zip(&far).zip(&inner).for_each(|((((((d, px), py), wx), wy), f), m)| *d = if *f > 0.0 { m * (px * wx + py * wy) / f } else { 0.0 });
             blur2(&dot, 2 * r, &mut rho);

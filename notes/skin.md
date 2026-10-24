@@ -61,7 +61,11 @@ The physics and its sources are in the module doc of `skin.rs`. In short:
   stretching, so each place keeps one way: the pattern settles as an
   effective Swift–Hohenberg equation has wrinkling skins settle (Stoop et
   al. 2015), into a labyrinth of ridges a wavelength apart that wind,
-  branch and turn. The bulk moves sideways under the skin and the total
+  branch and turn, and grow longer the longer they settle, leaning
+  along the marks the skin cured over. The settling uses Gaussians,
+  which favor no direction (two boxes favor the grid's two, and a
+  labyrinth settled through them comes out a maze of right angles), on
+  a grid as coarse as the band allows. The bulk moves sideways under the skin and the total
   paint is conserved.
 - **The give.** A yielded paste gives way point by point, where the skin
   presses it past its yield stress, and the skin presses in proportion
@@ -119,9 +123,8 @@ The skin's six-hourly tick is a pass over the live packets, and a wrinkle
 pass (box blurs over the dirty box at each wavelength in use) only when a
 wavelength of skin asks for `GROW` of slope or more, or a skin that could
 wrinkle has its slopes to measure. The 90-day demo of a 440 mm canvas at
-1200 px (two knife slabs and eight brush strokes) takes 113 s of skin work
-on top of its 4.4 s material-0 replay, on four cores; settling the
-pattern is about half of it. The gate's live-frame case
+1200 px (two knife slabs and eight brush strokes) takes 74 s of skin work
+on top of its 4.4 s material-0 replay, on four cores. The gate's live-frame case
 (`live_frames committed_frames_are_numbered_atomic_and_not_replayed`, a
 1920-wide painting with a stroke and its checkpoints) runs in 89.7 s on
 this material against 84.9 s without it, on the same machine, same gate.

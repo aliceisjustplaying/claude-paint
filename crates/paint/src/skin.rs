@@ -264,10 +264,10 @@ const FINEST: f32 = 4.0;
 /// every scale), so some ridges take the compression and the ground between
 /// them stays flat. By eye.
 const FOLD_SPREAD: f32 = 1.2;
-const FOLD_LAMBDAS: f32 = 4.0;
+const FOLD_LAMBDAS: f32 = 8.0;
 /// How far along a ridge its height is shared, wavelengths each way: a fold
 /// runs as long as this before it may stand lower. By eye.
-const ALONG: f32 = 2.0;
+const ALONG: f32 = 3.0;
 /// How tall a fold may stand, as a multiple of the amplitude of a sinusoid
 /// of the same root mean square slope: a fold gathers its slopes into a
 /// ridge taller than a ripple's (the cap is there so the wall of a stroke at
@@ -282,7 +282,7 @@ const FOLD_SEED: u64 = 0xf01d_5eed;
 /// longer its ridges grow and the more they follow the marks it cured
 /// over. By eye.
 const SETTLE: usize = 24;
-const SETTLE_GAIN: f32 = 1.5;
+const SETTLE_GAIN: f32 = 3.0;
 /// The flow index n of the paste under a skin: a pigment paste thins as
 /// it flows (Herschel–Bulkley, stress τ_y + K γ̇ⁿ with n under 1; pastes
 /// and paints run 0.3–0.8). Estimate.

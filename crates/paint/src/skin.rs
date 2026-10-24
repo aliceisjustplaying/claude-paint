@@ -224,6 +224,12 @@ const GROW: f32 = 0.1;
 /// so a skin cured over a perfectly level film still has an imperfection
 /// to buckle from (a deterministic noise, so a replay is a replay).
 const SEED_UM: f32 = 0.2;
+/// Steps a wrinkle's shape takes to settle, and the gain of a step: how
+/// far past its threshold the skin is, as Swift–Hohenberg's ε (well past
+/// it: the pattern saturates into ridges a wavelength apart, as a skin
+/// pressed hard enough to yield its paste does). By eye.
+const SETTLE: usize = 8;
+const SETTLE_GAIN: f32 = 1.5;
 /// How unevenly the medium mixed into a paint is spread through its film:
 /// one standard deviation, as a share of the medium (or, blotted, of the
 /// oil drawn out). A pile thinned with a knife on the palette is streaked
@@ -446,6 +452,30 @@ fn band_gain(r: usize) -> f32 {
     (twice(2 * r + 1) - twice(4 * r + 1)).max(0.05)
 }
 
+/// `src` (`w` × `h`) blurred by a Gaussian of `sigma` px, rows then
+/// columns, the edges held.
+fn gauss_into(src: &[f32], w: usize, h: usize, sigma: f32, tmp: &mut Vec<f32>, out: &mut Vec<f32>) {
+    let r = (3.0 * sigma).ceil() as usize;
+    let mut k: Vec<f32> = (0..=2 * r).map(|i| (-((i as f32 - r as f32) / sigma).powi(2) / 2.0).exp()).collect();
+    let sum: f32 = k.iter().sum();
+    k.iter_mut().for_each(|v| *v /= sum);
+    tmp.resize(w * h, 0.0);
+    out.resize(w * h, 0.0);
+    tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let s = &src[y * w..(y + 1) * w];
+        for (x, o) in row.iter_mut().enumerate() {
+            *o = k.iter().enumerate().map(|(i, kv)| kv * s[(x + i).saturating_sub(r).min(w - 1)]).sum();
+        }
+    });
+    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        row.fill(0.0);
+        for (i, kv) in k.iter().enumerate() {
+            let t = &tmp[(y + i).saturating_sub(r).min(h - 1) * w..][..w];
+            row.iter_mut().zip(t).for_each(|(o, v)| *o += kv * v);
+        }
+    });
+}
+
 /// A smooth field of zero mean and unit spread over the canvas (`xm`, `ym`
 /// mm) and the gel time of a film (`born` minutes): the octaves of
 /// `PATCH_MM`, each a value noise that passes to a fresh one over
@@ -555,7 +585,8 @@ impl Canvas {
     }
 
     /// Draw this tick's wrinkles. At each wavelength in use, the relief
-    /// band-passed there and scaled to unit rms slope is the pattern; each
+    /// band-passed there, evened to slopes as steep every way and settled
+    /// into ridges, scaled to unit rms slope, is the pattern; each
     /// pixel's bulk takes as much of it as brings the slopes to what its
     /// skin asks for, counting the slopes it already has, and the
     /// compression of every layer of its plate is relieved by what it
@@ -691,6 +722,63 @@ impl Canvas {
             blur2(&zr, 2 * r, &mut rms);
             over(&mut rms, &mi);
             shape.par_iter_mut().zip(&rms).zip(&near).zip(&skin).for_each(|(((v, f), n), s)| *v = s * (*v + n - f));
+            // the skin is compressed the same every way, and a ripple
+            // relieves it only across itself (½ w_x² takes up strain along
+            // x, ½ w_y² along y): a skin rippled across a knife's drag is
+            // still compressed along it, and buckles that way too, out of
+            // what imperfection it has that way, until its slopes are as
+            // steep both ways (Chen and Hutchinson 2004; Huang, Hong and
+            // Suo 2005). The shape's slopes, their tensor over a
+            // wavelength; its part along the lesser axis (its second
+            // derivative that way, over the band's) is raised to match
+            gradient(&shape, &mut px, &mut py);
+            dot.par_iter_mut().zip(&px).zip(&inner).for_each(|((d, x), m)| *d = m * x * x);
+            blur2(&dot, 2 * r, &mut zr);
+            over(&mut zr, &mi);
+            dot.par_iter_mut().zip(&py).zip(&inner).for_each(|((d, y), m)| *d = m * y * y);
+            blur2(&dot, 2 * r, &mut near);
+            over(&mut near, &mi);
+            dot.par_iter_mut().zip(&px).zip(&py).zip(&inner).for_each(|(((d, x), y), m)| *d = m * x * y);
+            blur2(&dot, 2 * r, &mut wrinkled);
+            over(&mut wrinkled, &mi);
+            rho.resize(pw * ph, 0.0);
+            gradient(&px, &mut rms, &mut rho);
+            gradient(&py, &mut far, &mut dot);
+            let qd = ((2.0 * std::f32::consts::PI / (BAND_LAMBDA * r as f32)).sin() / dx_um).powi(2);
+            shape.par_iter_mut().enumerate().for_each(|(k, v)| {
+                let (a, b, c) = (zr[k], near[k], wrinkled[k]);
+                let half = (0.25 * (a - b) * (a - b) + c * c).sqrt();
+                let (big, small) = (0.5 * (a + b) + half, 0.5 * (a + b) - half);
+                if inner[k] == 0.0 || small <= 0.0 || big <= 0.0 {
+                    return;
+                }
+                let th = 0.5 * (2.0 * c).atan2(a - b);
+                let (ex, ey) = (-th.sin(), th.cos());
+                let along = ex * ex * rms[k] + 2.0 * ex * ey * rho[k] + ey * ey * dot[k];
+                *v -= ((big / small).sqrt() - 1.0) * along / qd;
+            });
+            // a skin can't ripple two ways at one place without stretching
+            // (a bump has Gaussian curvature; a ripple only bends about a
+            // line), so the two ways compete and each place keeps the one
+            // its shape is strongest in: the shape settles as under an
+            // effective Swift–Hohenberg equation (Stoop et al. 2015), its
+            // band kept and its height saturating (a difference of
+            // Gaussians at σ and 2σ peaks at a wavelength of 2πσ / 0.961;
+            // Gaussians, unlike boxes, favor no direction)
+            let sigma = BAND_LAMBDA * r as f32 * 0.961 / std::f32::consts::TAU;
+            gauss_into(&skin, pw, ph, sigma, &mut px, &mut zr);
+            gauss_into(&skin, pw, ph, 2.0 * sigma, &mut px, &mut wrinkled);
+            for _ in 0..SETTLE {
+                gauss_into(&shape, pw, ph, sigma, &mut px, &mut near);
+                over(&mut near, &zr);
+                gauss_into(&shape, pw, ph, 2.0 * sigma, &mut px, &mut far);
+                over(&mut far, &wrinkled);
+                near.par_iter_mut().zip(&far).for_each(|(n, f)| *n -= f);
+                dot.par_iter_mut().zip(&near).zip(&skin).for_each(|((d, n), s)| *d = s * n * n);
+                blur2(&dot, 2 * r, &mut rms);
+                over(&mut rms, &m2r);
+                shape.par_iter_mut().zip(&near).zip(&rms).zip(&skin).for_each(|(((v, n), f), s)| *v = if *f > 1e-12 { s * (SETTLE_GAIN * n / f.sqrt()).tanh() } else { 0.0 });
+            }
             rms_slope(&shape, &mut px, &mut py, &mut dot, &mut far, &mut blur2);
             dot.par_iter_mut().zip(&px).zip(&py).zip(&wx).zip(&wy).zip(&far).zip(&inner).for_each(|((((((d, px), py), wx), wy), f), m)| *d = if *f > 0.0 { m * (px * wx + py * wy) / f } else { 0.0 });
             blur2(&dot, 2 * r, &mut rho);

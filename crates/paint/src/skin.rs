@@ -122,7 +122,10 @@
 //! stays as it is. The surface tension of the oil counts against the
 //! compression (`surface::SIGMA`). Each place's wavelength strays from its
 //! skin's by a seeded factor (`JITTER`), and some ridges gather into folds
-//! faster than others (`FOLD_SPREAD`). A wavelength under `FINEST` pixels
+//! faster than others (`FOLD_SPREAD`). Within a pass the folds form one at
+//! a time, as cracks do: each runs along its ridge and takes the
+//! compression off the skin beside it, so a few long folds stand over calm
+//! ground (`FOLD_REACH`). A wavelength under `FINEST` pixels
 //! is below what the picture draws cleanly: the skin is drawn there if it
 //! beats the threshold there (every wavelength the compression beats is
 //! unstable; the least one only grows fastest).
@@ -276,16 +279,18 @@ const FOLD_LAMBDAS: f32 = 12.0;
 /// wavelengths: the half width of the share of it it relieves (a Lorentzian
 /// cut where it falls to a tenth, as a crack relieves the stress beside it,
 /// `crate::crack`). By eye.
-const FOLD_REACH: f32 = 1.5;
+const FOLD_REACH: f32 = 2.5;
 /// How compressed the skin must be for a fold to run on through it, as a
 /// share of what wrinkles it, over a wavelength or so: a fold starts only
 /// where the skin is past that, as a crack starts at half again the stress
-/// it runs on at (`crate::crack`).
-const FOLD_RUN: f32 = 1.0 / 1.5;
+/// it runs on at (`crate::crack`), and runs on further. By eye.
+const FOLD_RUN: f32 = 0.5;
 /// How far a running fold turns toward the way the ridges run, per cell.
 const FOLD_STEER: f32 = 0.5;
+/// Of the pattern's `SETTLE` steps, how many it takes around its folds.
+const FOLD_SETTLE: usize = 8;
 /// How wide a fold is, in wavelengths: the skin it gathers its slopes into.
-const FOLD_WIDTH: f32 = 1.0;
+const FOLD_WIDTH: f32 = 0.6;
 /// How tall a fold may stand, as a multiple of the amplitude of a sinusoid
 /// of the same root mean square slope: a fold gathers its slopes into a
 /// ridge taller than a ripple's (the cap is there so the wall of a stroke at
@@ -1017,9 +1022,9 @@ impl Canvas {
             gauss_into(&cm, cw, ch, cb, &cs, 1.0, &mut ct, &mut c1);
             gauss_into(&cm, cw, ch, cb, &cs, 2.0, &mut ct, &mut c2);
             box2(&cm, &mut cmr, &mut ct);
-            for _ in 0..SETTLE {
-                gauss_into(&cv, cw, ch, cb, &cs, 1.0, &mut ct, &mut cn);
-                gauss_into(&cv, cw, ch, cb, &cs, 2.0, &mut ct, &mut cf);
+            let mut settle = |cv: &mut Vec<f32>| {
+                gauss_into(cv, cw, ch, cb, &cs, 1.0, &mut ct, &mut cn);
+                gauss_into(cv, cw, ch, cb, &cs, 2.0, &mut ct, &mut cf);
                 cn.par_iter_mut().zip(&cf).zip(&c1).zip(&c2).for_each(|(((n, f), a), b)| *n = if *a > 1e-6 && *b > 1e-6 { *n / a - f / b } else { 0.0 });
                 cf.par_iter_mut().zip(&cn).zip(&cm).for_each(|((d, n), m)| *d = m * n * n);
                 box2(&cf, &mut cr, &mut ct);
@@ -1027,6 +1032,9 @@ impl Canvas {
                     let f = if *d > 1e-6 { f / d } else { 0.0 };
                     *v = if f > 1e-12 { m * (SETTLE_GAIN * n / f.sqrt()).tanh() } else { 0.0 };
                 });
+            };
+            for _ in 0..SETTLE - FOLD_SETTLE {
+                settle(&mut cv);
             }
             // (folds form one at a time, as cracks do (`crate::crack`): a
             // fold starts where the skin is most compressed and its relief
@@ -1037,14 +1045,16 @@ impl Canvas {
             // slopes: one ridge between two troughs along its length. The
             // next fold starts only where enough compression is left, so a
             // few long folds stand over calm ground and later ones stop
-            // where they meet them. On the band's coarse grid, a cell to a
+            // where they meet them. The pattern settles its last
+            // `FOLD_SETTLE` steps around the folds, so the ridges beside a
+            // fold line up with it. On the band's coarse grid, a cell to a
             // pixel of the finest band)
             let mut fold_need = need.clone();
             {
                 let n0 = down(&need.iter().map(|v| v.max(0.0)).collect::<Vec<f32>>());
                 let (ig, sh) = (down(&grows), down(&shape));
-                let mut pressed = Vec::new();
-                box2(&down(&press), &mut pressed, &mut ct);
+                let (mut pressed, mut spare) = (Vec::new(), Vec::new());
+                box2(&down(&press), &mut pressed, &mut spare);
                 let grad = |c: usize| {
                     let (x, y) = (c % cw, c / cw);
                     let gx = 0.5 * (cv[y * cw + (x + 1).min(cw - 1)] - cv[y * cw + x.saturating_sub(1)]);
@@ -1059,7 +1069,7 @@ impl Canvas {
                 for t in &mut tensor {
                     for _ in 0..2 {
                         let v = t.clone();
-                        box2(&v, t, &mut ct);
+                        box2(&v, t, &mut spare);
                     }
                 }
                 let [txx, tyy, txy] = tensor;
@@ -1218,16 +1228,25 @@ impl Canvas {
                         }
                     }
                 }
-                // (a fold's ridge, with a trough either side of it, fading
-                // into the pattern around it over the next half wavelength)
-                cv.par_iter_mut().zip(&near_fold).zip(&way).zip(&cm).for_each(|(((v, d), s), m)| {
-                    let h = 0.5 * BAND_LAMBDA;
-                    if *d >= BAND_LAMBDA {
-                        return;
-                    }
-                    let w = if *d <= h { 1.0 } else { 0.5 * (1.0 + (std::f32::consts::PI * (d - h) / h).cos()) };
-                    *v += w * (m * s * (std::f32::consts::TAU * d / BAND_LAMBDA).cos() - *v);
-                });
+                // (a fold's ridge, with a trough either side of it, as
+                // steep-sided as the settled pattern's, fading into the
+                // pattern around it over the next half wavelength)
+                let pin = |cv: &mut Vec<f32>| {
+                    cv.par_iter_mut().zip(&near_fold).zip(&way).zip(&cm).for_each(|(((v, d), s), m)| {
+                        let h = 0.5 * BAND_LAMBDA;
+                        if *d >= BAND_LAMBDA {
+                            return;
+                        }
+                        let w = if *d <= h { 1.0 } else { 0.5 * (1.0 + (std::f32::consts::PI * (d - h) / h).cos()) };
+                        let c = (std::f32::consts::TAU * d / BAND_LAMBDA).cos();
+                        *v += w * (m * s * c.signum() * c.abs().sqrt() - *v);
+                    });
+                };
+                pin(&mut cv);
+                for _ in 0..FOLD_SETTLE {
+                    settle(&mut cv);
+                    pin(&mut cv);
+                }
                 fold_need.par_chunks_mut(pw).enumerate().take(sb.3).skip(sb.1).for_each(|(y, row)| {
                     let j = (y - sb.1) / r;
                     for (x, v) in row.iter_mut().enumerate().take(sb.2).skip(sb.0) {

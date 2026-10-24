@@ -50,8 +50,32 @@ The physics and its sources are in the module doc of `skin.rs`. In short:
   flat with a 1/H³ stiffness: 22.8 N/m against 6.7 N/m of compression at
   day 20, at a wavelength of 1 mm.
   The pattern is the relief the skin cured over, band-passed at its own
-  wavelength, so wrinkles lie along the brush marks. The bulk moves
-  sideways under the skin and the total paint is conserved.
+  wavelength, so wrinkles lie along the brush marks. A wavelength between
+  two of the drawn bands is drawn as a mix of both (by its logarithm), so
+  a skin whose wavelength changes from place to place has no seam where
+  it passes from one band to the next. The bulk moves sideways under the
+  skin and the total paint is conserved.
+- **The give.** A yielded paste gives way point by point, where the skin
+  presses it past its yield stress, and the skin presses in proportion
+  to the wrinkle's height there: the paste gives under the highest
+  crests and deepest troughs first and holds between them. The skin makes
+  only the slopes the paste lets it make, and the compression it can't
+  spend drives the paste harder at the next tick, so a few strong folds
+  take the compression first and quieter skin lies between them.
+- **The unevenness.** No film is the same everywhere. The medium mixed
+  into a paint is spread through its film with a standard deviation of
+  three tenths of the medium (`OIL_SPREAD`): a knife-thinned pile is
+  streaked fatter and leaner, and a fatter spot is a softer paste with
+  more binder to expand. Its drier is spread with a standard deviation of
+  0.5 in the log of the drying rate (`DRIER_SPREAD`), so the skin is
+  thicker in some places than others. Both vary over patches of 16 mm down
+  to 0.5 mm and are seeded per film by its gel time: paint laid a day
+  later was mixed afresh. Tube paint without medium keeps its oil even;
+  only its drier varies. On the 198 µm fat knife slab of the demo this
+  spreads the yield stress from 7 to 46 Pa (10th to 90th percentile),
+  around its 17 Pa. Both spreads are estimates, set by eye against
+  photographs of wrinkled oil: real wrinkles bend and branch, and strong
+  folds lie among quieter skin.
 - **The clock.** Fronts, skins and wrinkles step every six hours of the
   painting's clock (`TICK_MIN`), never at a wait's own ends, so a wait
   split any way leaves the same relief

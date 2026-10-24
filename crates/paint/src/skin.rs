@@ -229,15 +229,15 @@ const SEED_UM: f32 = 0.2;
 /// oil drawn out). A pile thinned with a knife on the palette is streaked
 /// fatter and leaner; paint as it left the tube is milled even. Estimate:
 /// Ranquet's lead-white films go from wrinkled to flat between 32 and
-/// 42 vol% of pigment, and a fifth of the medium of a pile thinned half with
-/// it moves its paint's yield stress between 11 and 31 Pa.
-pub const OIL_SPREAD: f32 = 0.2;
+/// 42 vol% of pigment, and three tenths of the medium of a pile thinned half
+/// with it moves its paint's yield stress between 9 and 43 Pa.
+pub const OIL_SPREAD: f32 = 0.3;
 /// How unevenly a film cures through: the standard deviation of the log of
 /// its paint's drying rate from place to place. Driers and drier pigments
 /// are spread by hand as unevenly as the medium, and the air, the warmth
 /// and the ground under a film are not the same everywhere (Golden;
 /// Ranquet). Estimate.
-pub const DRIER_SPREAD: f32 = 0.3;
+pub const DRIER_SPREAD: f32 = 0.5;
 /// The sizes, mm, of the streaks and patches a film's medium and drier
 /// vary over, largest first, each as uneven as the others: a knife's mixing
 /// streaks are centimeters long, its lumps under a millimeter.

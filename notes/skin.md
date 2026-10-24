@@ -53,20 +53,25 @@ The physics and its sources are in the module doc of `skin.rs`. In short:
   wavelength, so wrinkles lie along the brush marks. A wavelength between
   two of the drawn bands is drawn as a mix of both (by its logarithm), so
   a skin whose wavelength changes from place to place has no seam where
-  it passes from one band to the next. The skin is compressed the same
-  every way, and a ripple relieves it only across itself, so a skin
-  rippled across a knife's drag is still compressed along it and buckles
-  that way too, until its slopes are as steep both ways (Chen and
-  Hutchinson 2004). It can't ripple both ways at one place without
-  stretching, so each place keeps one way: the pattern settles as an
-  effective Swift–Hohenberg equation has wrinkling skins settle (Stoop et
-  al. 2015), into a labyrinth of ridges a wavelength apart that wind,
-  branch and turn, and grow longer the longer they settle, leaning
-  along the marks the skin cured over. The settling uses Gaussians,
-  which favor no direction (two boxes favor the grid's two, and a
-  labyrinth settled through them comes out a maze of right angles), on
-  a grid as coarse as the band allows. The bulk moves sideways under the skin and the total
-  paint is conserved.
+  it passes from one band to the next. A skin can't ripple two ways at
+  one place without stretching, so each place keeps one way: the pattern
+  settles as an effective Swift–Hohenberg equation has wrinkling skins
+  settle (Stoop et al. 2015), into a labyrinth of ridges a wavelength
+  apart that wind, branch and turn, and grow longer the longer they
+  settle, leaning along the marks the skin cured over. The settling uses
+  Gaussians, which favor no direction (two boxes favor the grid's two,
+  and a labyrinth settled through them comes out a maze of right
+  angles), on a grid as coarse as the band allows. The skin is
+  compressed the same every way, and a ripple relieves it only across
+  itself, so a skin rippled across a knife's drag is still compressed
+  along it, and its ridges bend, as a herringbone's do (Chen and
+  Hutchinson 2004; Audoly and Boudaoud 2008), until their slopes are as
+  steep both ways. They bend where the paint under the skin lies higher
+  or lower over a few wavelengths (`BEND`), each place moving across its
+  ridges by as much as tilts them to make up the share of the slopes
+  that runs along them; a settled labyrinth left straight runs in long
+  rows across the drag joined by short jogs at right angles. The bulk
+  moves sideways under the skin and the total paint is conserved.
 - **The give.** A yielded paste gives way point by point, where the skin
   presses it past its yield stress, and the skin presses in proportion
   to the wrinkle's height there: the paste gives under the highest

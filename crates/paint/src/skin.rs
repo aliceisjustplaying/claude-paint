@@ -232,6 +232,11 @@ const SEED_UM: f32 = 0.2;
 /// over. By eye.
 const SETTLE: usize = 24;
 const SETTLE_GAIN: f32 = 1.5;
+/// How many wavelengths the unevenness that bends a wrinkle's ridges
+/// spans: a herringbone's ridges jog every few wavelengths (Audoly and
+/// Boudaoud 2008), and a skin on uneven paint bends them where the paint
+/// lies higher or lower. By eye.
+const BEND: usize = 3;
 /// How unevenly the medium mixed into a paint is spread through its film:
 /// one standard deviation, as a share of the medium (or, blotted, of the
 /// oil drawn out). A pile thinned with a knife on the palette is streaked
@@ -591,8 +596,8 @@ impl Canvas {
     }
 
     /// Draw this tick's wrinkles. At each wavelength in use, the relief
-    /// band-passed there, evened to slopes as steep every way and settled
-    /// into ridges, scaled to unit rms slope, is the pattern; each
+    /// band-passed there, settled into ridges that bend until their slopes
+    /// are as steep every way, scaled to unit rms slope, is the pattern; each
     /// pixel's bulk takes as much of it as brings the slopes to what its
     /// skin asks for, counting the slopes it already has, and the
     /// compression of every layer of its plate is relieved by what it
@@ -728,47 +733,12 @@ impl Canvas {
             blur2(&zr, 2 * r, &mut rms);
             over(&mut rms, &mi);
             shape.par_iter_mut().zip(&rms).zip(&near).zip(&skin).for_each(|(((v, f), n), s)| *v = s * (*v + n - f));
-            // the skin is compressed the same every way, and a ripple
-            // relieves it only across itself (½ w_x² takes up strain along
-            // x, ½ w_y² along y): a skin rippled across a knife's drag is
-            // still compressed along it, and buckles that way too, out of
-            // what imperfection it has that way, until its slopes are as
-            // steep both ways (Chen and Hutchinson 2004; Huang, Hong and
-            // Suo 2005). The shape's slopes, their tensor over a
-            // wavelength; its part along the lesser axis (its second
-            // derivative that way, over the band's) is raised to match
-            gradient(&shape, &mut px, &mut py);
-            dot.par_iter_mut().zip(&px).zip(&inner).for_each(|((d, x), m)| *d = m * x * x);
-            blur2(&dot, 2 * r, &mut zr);
-            over(&mut zr, &mi);
-            dot.par_iter_mut().zip(&py).zip(&inner).for_each(|((d, y), m)| *d = m * y * y);
-            blur2(&dot, 2 * r, &mut near);
-            over(&mut near, &mi);
-            dot.par_iter_mut().zip(&px).zip(&py).zip(&inner).for_each(|(((d, x), y), m)| *d = m * x * y);
-            blur2(&dot, 2 * r, &mut wrinkled);
-            over(&mut wrinkled, &mi);
-            rho.resize(pw * ph, 0.0);
-            gradient(&px, &mut rms, &mut rho);
-            gradient(&py, &mut far, &mut dot);
-            let qd = ((2.0 * std::f32::consts::PI / (BAND_LAMBDA * r as f32)).sin() / dx_um).powi(2);
-            shape.par_iter_mut().enumerate().for_each(|(k, v)| {
-                let (a, b, c) = (zr[k], near[k], wrinkled[k]);
-                let half = (0.25 * (a - b) * (a - b) + c * c).sqrt();
-                let (big, small) = (0.5 * (a + b) + half, 0.5 * (a + b) - half);
-                if inner[k] == 0.0 || small <= 0.0 || big <= 0.0 {
-                    return;
-                }
-                let th = 0.5 * (2.0 * c).atan2(a - b);
-                let (ex, ey) = (-th.sin(), th.cos());
-                let along = ex * ex * rms[k] + 2.0 * ex * ey * rho[k] + ey * ey * dot[k];
-                *v -= ((big / small).sqrt() - 1.0) * along / qd;
-            });
             // a skin can't ripple two ways at one place without stretching
             // (a bump has Gaussian curvature; a ripple only bends about a
-            // line), so the two ways compete and each place keeps the one
-            // its shape is strongest in: the shape settles as under an
-            // effective Swift–Hohenberg equation (Stoop et al. 2015), its
-            // band kept and its height saturating (a difference of
+            // line), so each place keeps the one way its shape is
+            // strongest in: the shape settles as under an effective
+            // Swift–Hohenberg equation (Stoop et al. 2015), its band kept
+            // and its height saturating (a difference of
             // Gaussians at σ and 2σ peaks at a wavelength of 2πσ / 0.961;
             // Gaussians, unlike boxes, favor no direction)
             let sigma = BAND_LAMBDA * r as f32 * 0.961 / std::f32::consts::TAU;
@@ -827,6 +797,57 @@ impl Canvas {
                     let top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx;
                     let bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
                     *v = skin[y * pw + x] * (top + (bottom - top) * ty);
+                }
+            });
+            // the skin is compressed the same every way, and a ripple
+            // relieves it only across itself (½ w_x² takes up strain along
+            // x, ½ w_y² along y): a skin rippled across a knife's drag is
+            // still compressed along it, and its ridges bend, as a
+            // herringbone's do (Chen and Hutchinson 2004; Audoly and
+            // Boudaoud 2008), until their slopes are as steep both ways.
+            // Each place moves across its ridges by as much as tilts them
+            // to make up the lesser way's share of the slopes (their
+            // tensor over two wavelengths), as the paint under the skin
+            // lies higher or lower over `BEND` wavelengths: the ridges bend
+            // where it was laid unevenly
+            gradient(&shape, &mut px, &mut py);
+            dot.par_iter_mut().zip(&px).zip(&inner).for_each(|((d, x), m)| *d = m * x * x);
+            blur2(&dot, 4 * r, &mut near);
+            dot.par_iter_mut().zip(&py).zip(&inner).for_each(|((d, y), m)| *d = m * y * y);
+            blur2(&dot, 4 * r, &mut far);
+            dot.par_iter_mut().zip(&px).zip(&py).zip(&inner).for_each(|(((d, x), y), m)| *d = m * x * y);
+            blur2(&dot, 4 * r, &mut rho);
+            let rb = BEND * r;
+            let (mut a1, mut a2, mut s1, mut s2) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            dot.par_iter_mut().zip(&z).zip(&skin).for_each(|((d, z), s)| *d = s * z);
+            blur2(&dot, rb, &mut a1);
+            blur2(&dot, 2 * rb, &mut a2);
+            blur2(&skin, rb, &mut s1);
+            blur2(&skin, 2 * rb, &mut s2);
+            let lift: Vec<f32> = (0..pw * ph).into_par_iter().map(|k| if s1[k] > 1e-6 && s2[k] > 1e-6 { a1[k] / s1[k] - a2[k] / s2[k] } else { 0.0 }).collect();
+            let (sum, count) = (sb.1..sb.3).flat_map(|y| (sb.0..sb.2).map(move |x| y * pw + x)).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0usize), |(s, c), k| (s + (lift[k] as f64).powi(2), c + 1));
+            let spread = if count > 0 { (sum / count as f64).sqrt() as f32 } else { 0.0 };
+            let settled = shape.clone();
+            shape.par_chunks_mut(pw).enumerate().take(sb.3).skip(sb.1).for_each(|(y, row)| {
+                for (x, v) in row.iter_mut().enumerate().take(sb.2).skip(sb.0) {
+                    let k = y * pw + x;
+                    let (a, b, c) = (near[k], far[k], rho[k]);
+                    let half = (0.25 * (a - b) * (a - b) + c * c).sqrt();
+                    let (big, small) = (0.5 * (a + b) + half, 0.5 * (a + b) - half);
+                    if skin[k] == 0.0 || big <= 0.0 || spread <= 0.0 {
+                        continue;
+                    }
+                    // (a ridge tilted by θ has the share sin² θ of its
+                    // slopes along where it ran)
+                    let sin2 = ((big - small.max(0.0)) / (2.0 * big)).clamp(0.0, 0.49);
+                    let th = 0.5 * (2.0 * c).atan2(a - b);
+                    let u = (sin2 / (1.0 - sin2)).sqrt() * rb as f32 * BAND_LAMBDA / std::f32::consts::TAU * lift[k] / spread;
+                    let (fx, fy) = ((x as f32 + u * th.cos()).clamp(0.0, (pw - 1) as f32), (y as f32 + u * th.sin()).clamp(0.0, (ph - 1) as f32));
+                    let (i, j, tx, ty) = (fx as usize, fy as usize, fx.fract(), fy.fract());
+                    let at = |i: usize, j: usize| settled[j.min(ph - 1) * pw + i.min(pw - 1)];
+                    let top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx;
+                    let bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
+                    *v = skin[k] * (top + (bottom - top) * ty);
                 }
             });
             // and is drawn at its band alone: the saturated ridges' edges

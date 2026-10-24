@@ -230,8 +230,8 @@ const GROW: f32 = 0.1;
 /// Every so many ticks a pass draws whatever the skin asks for, however
 /// little: growth short of `GROW` waits for a tick that has that much,
 /// and a skin that never asks for that much again would keep it until its
-/// bulk cures through. Once a day.
-const DRAW_ALL: u64 = 4;
+/// bulk cures through. Twice a day.
+const DRAW_ALL: u64 = 2;
 /// Roughness every surface has, µm, at the wrinkle's own wavelength and an
 /// octave each side (dust, pigment lumps, a knife's chatter), so a skin
 /// cured over a level film still has imperfections to buckle from, and a

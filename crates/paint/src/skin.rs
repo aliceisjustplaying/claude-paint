@@ -137,11 +137,13 @@
 //! **The clock.** Fronts, skins and wrinkles step every six hours of the
 //! painting's clock (`TICK_MIN`), never at a wait's own ends: a wait
 //! split into any parts leaves the same relief as the whole. A tick draws
-//! wrinkles only when a wavelength's worth of skin asks for `GROW` of
-//! slope or more, and a pass settles every wavelength that asks, so the
-//! slow creep of a skin that has long since wrinkled costs a pass over
-//! the packets, not the blurs: a wait of months draws its wrinkles in a
-//! handful of passes.
+//! wrinkles only around skin whose wavelength's worth asks for `GROW` of
+//! slope or more, and there a pass settles every wavelength that asks at
+//! all; skin that only has to be measured is measured and not drawn, and
+//! twice a day (`DRAW_ALL`) a pass draws whatever any skin asks for. So
+//! the slow creep of a skin that has long since wrinkled costs a pass over
+//! its packets, not the blurs, and a pass runs over the tiles around the
+//! skin that asks, not over the whole picture.
 //!
 //! Engines 1 to 8 and engine-9 logs without `--@ material` have no
 //! packets and paint as they did. The coefficients below are estimates
@@ -223,9 +225,9 @@ const BANDS: [u8; 8] = [1, 2, 3, 4, 6, 8, 12, 16];
 /// The least growth of a wrinkle's rms slope, were it starting from
 /// level, that is drawn in one tick (6°, some 35 µm of amplitude at a
 /// 2 mm wavelength); slower growth is saved up for a tick that has this
-/// much, and a pass settles every wavelength that asks at all, so a skin
-/// that creeps costs a pass over its packets, not the blurs, and a wait
-/// of months draws its wrinkles in a handful of passes.
+/// much (or for one of `DRAW_ALL`'s), and a pass settles every wavelength
+/// that asks at all around it, so a skin that creeps costs a pass over its
+/// packets, not the blurs.
 const GROW: f32 = 0.1;
 /// Every so many ticks a pass draws whatever the skin asks for, however
 /// little: growth short of `GROW` waits for a tick that has that much,
@@ -1699,8 +1701,11 @@ mod tests {
         };
         let (b, a, c) = paired(film(paint(0.1), 40.0), 6.0);
         assert!(a > 4.0 * b && a > 8.0, "a 1 mm medium-rich film wrinkles: relief {b} → {a} µm rms");
-        let top = c.skin.column(32 * 64 + 32).next().unwrap();
-        assert!(top.w.abs() > 1.0 && top.s < top.h + top.w, "bulk moved under a skin: {top:?}");
+        // (over the middle of the film: a single pixel may lie where the
+        // wrinkle's bulk crosses level)
+        let tops: Vec<(f32, f32, f32)> = (24..41).flat_map(|y| (24..41).map(move |x| y * 64 + x)).filter_map(|k| c.skin.column(k).next().map(|t| (t.w, t.s, t.h))).collect();
+        let moved = tops.iter().filter(|(w, s, h)| w.abs() > 1.0 && s < &(h + w)).count();
+        assert!(2 * moved > tops.len(), "bulk moved under a skin: {moved} of {} pixels", tops.len());
         let (b, a, _) = paired(film(paint(1.0), 40.0), 6.0);
         assert!(a < 1.5 * b, "stiff tube paint (3000 Pa yield) holds: {b} → {a}");
         let (b, a, _) = paired(film(paint(0.1), 2.0), 6.0);

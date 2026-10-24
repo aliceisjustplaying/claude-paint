@@ -232,6 +232,15 @@ const SEED_UM: f32 = 0.2;
 /// over. By eye.
 const SETTLE: usize = 24;
 const SETTLE_GAIN: f32 = 1.5;
+/// The flow index n of the paste under a skin: a pigment paste thins as
+/// it flows (Herschel–Bulkley, stress τ_y + K γ̇ⁿ with n under 1; pastes
+/// and paints run 0.3–0.8). Estimate.
+const FLOW_INDEX: f32 = 0.5;
+/// How many times farther than a wrinkle's window (`2 r`) a fold gathers
+/// the compression from: the wrinkles around it relax as it grows (period
+/// doubling and quadrupling before a fold; Brau et al. 2011), and its
+/// slopes are measured, and spent, over that much skin. By eye.
+const FOLD: usize = 4;
 /// How many wavelengths the unevenness that bends a wrinkle's ridges
 /// spans: a herringbone's ridges jog every few wavelengths (Audoly and
 /// Boudaoud 2008), and a skin on uneven paint bends them where the paint
@@ -615,7 +624,9 @@ impl Canvas {
 
     /// Draw this tick's wrinkles. At each wavelength in use, the relief
     /// band-passed there, settled into ridges that bend until their slopes
-    /// are as steep every way, scaled to unit rms slope, is the pattern; each
+    /// are as steep every way, each ridge grown as tall as the relief along
+    /// it already stands (so a few gather into folds), scaled to unit rms
+    /// slope over a fold's reach, is the pattern; each
     /// pixel's bulk takes as much of it as brings the slopes to what its
     /// skin asks for, counting the slopes it already has, and the
     /// compression of every layer of its plate is relieved by what it
@@ -707,16 +718,17 @@ impl Canvas {
             near.par_iter_mut().zip(&far).for_each(|(n, f)| *n -= f);
             // the imperfection's slopes, their root mean square over a
             // wavelength
-            let rms_slope = |v: &[f32], px: &mut Vec<f32>, py: &mut Vec<f32>, dot: &mut Vec<f32>, out: &mut Vec<f32>, blur2: &mut dyn FnMut(&[f32], usize, &mut Vec<f32>)| {
+            let rms_slope = |v: &[f32], px: &mut Vec<f32>, py: &mut Vec<f32>, dot: &mut Vec<f32>, out: &mut Vec<f32>, blur2: &mut dyn FnMut(&[f32], usize, &mut Vec<f32>), radius: usize, within: &mut Vec<f32>| {
                 gradient(v, px, py);
                 dot.par_iter_mut().zip(&*px).zip(&*py).zip(&inner).for_each(|(((d, x), y), m)| *d = m * (x * x + y * y));
-                blur2(dot, 2 * r, out);
-                over(out, &mi);
+                blur2(dot, radius, out);
+                blur2(&inner, radius, within);
+                over(out, within);
                 // (no slope within a window, or no interior to measure one
                 // on: nothing to scale, and the bulk there stays)
                 out.par_iter_mut().for_each(|f| *f = if *f > 1e-12 { f.sqrt() } else { 0.0 });
             };
-            rms_slope(&near, &mut px, &mut py, &mut dot, &mut far, &mut blur2);
+            rms_slope(&near, &mut px, &mut py, &mut dot, &mut far, &mut blur2, 2 * r, &mut rms);
             // the slopes the skin has at this wavelength, brush marks and
             // wrinkle together: what its yielded bulk holds against. The
             // measurement is kept on the packet, and the skin asks at it.
@@ -805,6 +817,25 @@ impl Canvas {
                 crate::surface::box_blur_into(v, cw, ch, 2, t);
                 crate::surface::box_blur_into(t, cw, ch, 2, out);
             };
+            // (the paste under the skin thins as it flows: it moves from
+            // under a trough to under a crest at a rate that grows as the
+            // pressure to the power 1/n (Herschel–Bulkley), and the plate
+            // presses with N q² A, so a crest taller than those around it
+            // grows faster than in proportion and takes the compression
+            // first, as a skin past its onset gathers into folds while the
+            // wrinkles beside them relax (Pocivavsek et al. 2008; Brau et
+            // al. 2011). The settle says where the ridges run; each grows as
+            // high as the relief under it already is, over that of `FOLD`
+            // wavelengths around, to the power 1/n)
+            let fold = 2 * r * FOLD;
+            dot.par_iter_mut().zip(&shape).zip(&inner).for_each(|((d, v), m)| *d = m * v * v);
+            blur2(&dot, r, &mut near);
+            blur2(&inner, r, &mut far);
+            over(&mut near, &far);
+            blur2(&dot, fold, &mut rho);
+            blur2(&inner, fold, &mut far);
+            over(&mut rho, &far);
+            let grows: Vec<f32> = near.par_iter().zip(&rho).map(|(h, around)| if *around > 1e-12 { (h / around).powf(0.5 / FLOW_INDEX) } else { 1.0 }).collect();
             let cm = down(&skin);
             let mut cv = down(&shape);
             let (cs, cb): (Vec<f32>, _) = (down(&sig).into_iter().map(|s| s / r as f32).collect(), (0, 0, cw, ch));
@@ -863,6 +894,12 @@ impl Canvas {
             let lift: Vec<f32> = (0..pw * ph).into_par_iter().map(|k| if s1[k] > 1e-6 && s2[k] > 1e-6 { a1[k] / s1[k] - a2[k] / s2[k] } else { 0.0 }).collect();
             let (sum, count) = (sb.1..sb.3).flat_map(|y| (sb.0..sb.2).map(move |x| y * pw + x)).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0usize), |(s, c), k| (s + (lift[k] as f64).powi(2), c + 1));
             let spread = if count > 0 { (sum / count as f64).sqrt() as f32 } else { 0.0 };
+            // (a ridge's axis has no sign: each place moves across its
+            // ridges the same way round as the band's ridges lie on the
+            // whole, or a ridge would tear wherever its axis turns past
+            // the grid's)
+            let whole = (sb.1..sb.3).flat_map(|y| (sb.0..sb.2).map(move |x| y * pw + x)).filter(|&k| skin[k] > 0.0).fold((0.0f64, 0.0f64, 0.0f64), |(a, b, c), k| (a + near[k] as f64, b + far[k] as f64, c + rho[k] as f64));
+            let th0 = (0.5 * (2.0 * whole.2).atan2(whole.0 - whole.1)) as f32;
             let settled = shape.clone();
             shape.par_chunks_mut(pw).enumerate().take(sb.3).skip(sb.1).for_each(|(y, row)| {
                 for (x, v) in row.iter_mut().enumerate().take(sb.2).skip(sb.0) {
@@ -877,6 +914,7 @@ impl Canvas {
                     // slopes along where it ran)
                     let sin2 = ((big - small.max(0.0)) / (2.0 * big)).clamp(0.0, 0.49);
                     let th = 0.5 * (2.0 * c).atan2(a - b);
+                    let th = if (th - th0).cos() < 0.0 { th + std::f32::consts::PI } else { th };
                     let u = (sin2 / (1.0 - sin2)).sqrt() * rb as f32 * BAND_LAMBDA / std::f32::consts::TAU * lift[k] / spread;
                     let (fx, fy) = ((x as f32 + u * th.cos()).clamp(0.0, (pw - 1) as f32), (y as f32 + u * th.sin()).clamp(0.0, (ph - 1) as f32));
                     let (i, j, tx, ty) = (fx as usize, fy as usize, fx.fract(), fy.fract());
@@ -884,6 +922,37 @@ impl Canvas {
                     let top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx;
                     let bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
                     *v = skin[k] * (top + (bottom - top) * ty);
+                }
+            });
+            // (a fold is a ridge: the skin can't stand tall at one place on
+            // a ridge and low a wavelength further along it without bending
+            // along it, so a ridge grows as the relief along it is high,
+            // over a wavelength each way; the ridges run across the slopes'
+            // greater axis)
+            let len = (BAND_LAMBDA * r as f32).round() as isize;
+            let along: Vec<f32> = (0..pw * ph).into_par_iter().map(|k| {
+                if !within(k) || skin[k] == 0.0 {
+                    return grows[k];
+                }
+                let th = 0.5 * (2.0 * rho[k]).atan2(near[k] - far[k]);
+                let (tx, ty) = (-th.sin(), th.cos());
+                let (x, y) = ((k % pw) as f32, (k / pw) as f32);
+                let (mut sum, mut count) = (0.0f32, 0.0f32);
+                for t in -len..=len {
+                    let (sx, sy) = ((x + t as f32 * tx).round(), (y + t as f32 * ty).round());
+                    if sx >= 0.0 && sy >= 0.0 && (sx as usize) < pw && (sy as usize) < ph {
+                        let j = sy as usize * pw + sx as usize;
+                        if skin[j] > 0.0 {
+                            sum += grows[j];
+                            count += 1.0;
+                        }
+                    }
+                }
+                if count > 0.0 { sum / count } else { grows[k] }
+            }).collect();
+            shape.par_iter_mut().zip(&along).enumerate().for_each(|(k, (v, g))| {
+                if within(k) {
+                    *v *= g;
                 }
             });
             // and is drawn at its own wavelengths alone: the saturated
@@ -895,7 +964,7 @@ impl Canvas {
                     *v = if *m1 > 1e-6 && *m2 > 1e-6 { s * (n / m1 - f / m2) } else { 0.0 };
                 }
             });
-            rms_slope(&shape, &mut px, &mut py, &mut dot, &mut far, &mut blur2);
+            rms_slope(&shape, &mut px, &mut py, &mut dot, &mut far, &mut blur2, fold, &mut wrinkled);
             dot.par_iter_mut().zip(&px).zip(&py).zip(&wx).zip(&wy).zip(&far).zip(&inner).for_each(|((((((d, px), py), wx), wy), f), m)| *d = if *f > 0.0 { m * (px * wx + py * wy) / f } else { 0.0 });
             blur2(&dot, 2 * r, &mut rho);
             over(&mut rho, &mi);
@@ -917,7 +986,7 @@ impl Canvas {
                 let at = site[k].gives * rms[p].max(0.0).sqrt();
                 shape[p] = shape[p].signum() * (shape[p].abs() - at).max(0.0);
             }
-            rms_slope(&shape, &mut px, &mut py, &mut dot, &mut rms, &mut blur2);
+            rms_slope(&shape, &mut px, &mut py, &mut dot, &mut rms, &mut blur2, fold, &mut wrinkled);
             // a wrinkle is a wavelength's worth of skin acting together:
             // what the skin asks for, averaged over one (the cured paint
             // around a soft spot asks nothing, and holds it; paint short

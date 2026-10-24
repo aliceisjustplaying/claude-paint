@@ -74,8 +74,28 @@ The physics and its sources are in the module doc of `skin.rs`. In short:
   or lower over a few wavelengths (`BEND`), each place moving across its
   ridges by as much as tilts them to make up the share of the slopes
   that runs along them; a settled labyrinth left straight runs in long
-  rows across the drag joined by short jogs at right angles. The bulk
-  moves sideways under the skin and the total paint is conserved.
+  rows across the drag joined by short jogs at right angles. (A ridge's
+  axis has no sign, so every place moves the same way round across its
+  ridges; moving each along its own axis tore the ridges wherever that
+  axis turned past the grid's.) The bulk moves sideways under the skin
+  and the total paint is conserved.
+- **The folds.** The settle says where the ridges run, not how tall they
+  stand: it brings every crest to the same height (measured on the fat
+  slab, the tallest tenth of crests over the lowest tenth goes from 3–8
+  before it to 1.05 after it). The paste under the skin thins as it
+  flows (Herschel–Bulkley, flow index about one half, `FLOW_INDEX`), and
+  the plate presses on it in proportion to the crest's height, so a crest
+  taller than those around it grows faster than in proportion and takes
+  the compression first, the way a skin past its onset gathers into folds
+  while the wrinkles beside them relax (Pocivavsek et al. 2008; Brau et
+  al. 2011). Each ridge grows as the square of how tall the relief along
+  it already stands (averaged a wavelength each way along the ridge: the
+  skin can't be tall at one point of a ridge and low a wavelength along
+  without bending), against that of four wavelength windows around
+  (`FOLD`), and its slopes are measured and spent over that much skin, so
+  a fold relieves the skin it gathers from. Left alone the slab came out
+  as one even texture; with the folds it has ridged patches and flatter
+  ground between.
 - **The give.** A yielded paste gives way point by point, where the skin
   presses it past its yield stress, and the skin presses in proportion
   to the wrinkle's height there: the paste gives under the highest

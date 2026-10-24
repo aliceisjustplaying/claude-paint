@@ -123,9 +123,10 @@
 //! compression (`surface::SIGMA`). Each place's wavelength strays from its
 //! skin's by a seeded factor (`JITTER`), and some ridges gather into folds
 //! faster than others (`FOLD_SPREAD`). Within a pass the folds form one at
-//! a time, as cracks do: each runs along its ridge and takes the
-//! compression off the skin beside it, so a few long folds stand over calm
-//! ground (`FOLD_REACH`). A wavelength under `FINEST` pixels
+//! a time, as cracks do: each runs along its ridge, the next starts a
+//! wavelength off its flank, and the train they make takes the compression
+//! off the skin around it, so trains of long folds stand over calm ground
+//! (`FOLD_REACH`). A wavelength under `FINEST` pixels
 //! is below what the picture draws cleanly: the skin is drawn there if it
 //! beats the threshold there (every wavelength the compression beats is
 //! unstable; the least one only grows fastest).
@@ -275,7 +276,7 @@ const FINEST: f32 = 4.0;
 /// them stays flat. By eye.
 const FOLD_SPREAD: f32 = 1.2;
 const FOLD_LAMBDAS: f32 = 12.0;
-/// How far a fold takes the compression off the skin beside it, in
+/// How far a train of folds takes the compression off the skin beside it, in
 /// wavelengths: the half width of the share of it it relieves (a Lorentzian
 /// cut where it falls to a tenth, as a crack relieves the stress beside it,
 /// `crate::crack`). By eye.
@@ -1040,12 +1041,14 @@ impl Canvas {
             // fold starts where the skin is most compressed and its relief
             // stands most out of its surroundings, runs along the way the
             // ridges run while the skin ahead is still compressed enough
-            // (it runs on at less than it took to start), and takes the
-            // compression off the skin beside it, gathering it into its own
-            // slopes: one ridge between two troughs along its length. The
-            // next fold starts only where enough compression is left, so a
-            // few long folds stand over calm ground and later ones stop
-            // where they meet them. The pattern settles its last
+            // (it runs on at less than it took to start), and the next one
+            // starts beside it, a wavelength off its flank, so the ridges
+            // come in trains. A train takes the compression off the skin
+            // around it, gathering it into its folds' slopes: one ridge
+            // between two troughs along each. The next train starts only
+            // where enough compression is left, so trains of long folds
+            // stand over calm ground and later folds stop where they meet
+            // them. The pattern settles its last
             // `FOLD_SETTLE` steps around the folds, so the ridges beside a
             // fold line up with it. On the band's coarse grid, a cell to a
             // pixel of the finest band)
@@ -1106,41 +1109,25 @@ impl Canvas {
                     let d = if den < 0.0 { (0.5 * (a - c) / den).clamp(-0.5, 0.5) } else { 0.0 };
                     (x - d * hy, y + d * hx)
                 };
-                let mut heap: std::collections::BinaryHeap<(u32, std::cmp::Reverse<u32>)> = (0..cw * ch).filter(|&c| cm[c] > 0.0 && pressed[c] >= 1.0).map(|c| ((pressed[c] * ig[c]).to_bits(), std::cmp::Reverse(c as u32))).collect();
-                let (mut mark, mut best) = (vec![0u32; cw * ch], vec![0.0f32; cw * ch]);
-                let (mut mark2, mut best2) = (vec![0u32; cw * ch], vec![0.0f32; cw * ch]);
-                let mut seen = vec![0u32; cw * ch];
-                let mut touched: Vec<usize> = Vec::new();
-                let mut fold = 0u32;
-                while let Some((rank, std::cmp::Reverse(c))) = heap.pop() {
-                    let c = c as usize;
-                    if owner[c] != 0 || pressed[c] < 1.0 {
-                        continue;
+                // (a fold runs both ways along the ridges from where it
+                // starts, while the skin ahead is compressed enough, and
+                // stops where it meets another fold or comes round to its
+                // own path)
+                let walk = |seen: &mut [u32], owner: &[u32], near_fold: &[f32], pressed: &[f32], id: u32, from: (f32, f32), (t0, t1): (f32, f32), up: f32| {
+                    let mut path = vec![from];
+                    if let Some(c) = cell(from.0, from.1) {
+                        seen[c] = id;
                     }
-                    let q = pressed[c] * ig[c];
-                    if q.to_bits() < rank {
-                        // (relieved since it was queued: queued again at its new rank)
-                        heap.push((q.to_bits(), std::cmp::Reverse(c as u32)));
-                        continue;
-                    }
-                    fold += 1;
-                    let up = if sh[c] >= 0.0 { 1.0 } else { -1.0 };
-                    let (t0, t1) = tangent(c);
-                    let start = crest((c % cw) as f32 + 0.5, (c / cw) as f32 + 0.5, t0, t1, up);
-                    let mut path = vec![start];
-                    seen[c] = fold;
                     for side in [1.0f32, -1.0] {
-                        let (mut x, mut y, mut hx, mut hy) = (start.0, start.1, side * t0, side * t1);
+                        let (mut x, mut y, mut hx, mut hy) = (from.0, from.1, side * t0, side * t1);
                         let mut run = Vec::new();
                         loop {
                             let (x1, y1) = crest(x + hx, y + hy, hx, hy, up);
                             let Some(j) = cell(x1, y1) else { break };
-                            // (and stops where it meets another fold, or
-                            // comes round to its own path)
-                            if cm[j] == 0.0 || pressed[j] < FOLD_RUN || owner[j] != 0 || (seen[j] == fold && cell(x, y) != Some(j)) || run.len() > cw + ch {
+                            if cm[j] == 0.0 || pressed[j] < FOLD_RUN || owner[j] != 0 || near_fold[j] < 0.5 * BAND_LAMBDA || (seen[j] == id && cell(x, y) != Some(j)) || run.len() > cw + ch {
                                 break;
                             }
-                            seen[j] = fold;
+                            seen[j] = id;
                             (x, y) = (x1, y1);
                             run.push((x, y));
                             // (it turns with the ridges, as a crack turns with
@@ -1161,45 +1148,127 @@ impl Canvas {
                             path.splice(0..0, run);
                         }
                     }
-                    // the distance of each place near it from its path:
-                    // within a fold's width it is the fold's own, and what
-                    // it relieves reaches along chords of its path (the
-                    // relief reaches far past the jags of a path on the grid)
-                    let near_path = |pts: &[(f32, f32)], within: f32, mark: &mut Vec<u32>, best: &mut Vec<f32>, touched: &mut Vec<usize>| {
-                        touched.clear();
-                        let segs: Vec<((f32, f32), (f32, f32))> = if pts.len() == 1 { vec![(pts[0], pts[0])] } else { pts.windows(2).map(|w| (w[0], w[1])).collect() };
-                        for ((ax, ay), (bx, by)) in segs {
-                            let (dx, dy) = (bx - ax, by - ay);
-                            let l2 = dx * dx + dy * dy;
-                            let (x0, x1) = ((ax.min(bx) - within).max(0.0) as usize, ((ax.max(bx) + within) as usize).min(cw - 1));
-                            let (y0, y1) = ((ay.min(by) - within).max(0.0) as usize, ((ay.max(by) + within) as usize).min(ch - 1));
-                            for yy in y0..=y1 {
-                                for xx in x0..=x1 {
-                                    let (cx, cy) = (xx as f32 + 0.5, yy as f32 + 0.5);
-                                    let t = if l2 > 0.0 { (((cx - ax) * dx + (cy - ay) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
-                                    let (ex, ey) = (cx - ax - t * dx, cy - ay - t * dy);
-                                    let d2 = ex * ex + ey * ey;
-                                    if d2 >= within * within {
-                                        continue;
-                                    }
-                                    let i = yy * cw + xx;
-                                    if mark[i] != fold {
-                                        mark[i] = fold;
-                                        best[i] = d2;
-                                        touched.push(i);
-                                    } else if d2 < best[i] {
-                                        best[i] = d2;
-                                    }
+                    path
+                };
+                // (the next fold of a train: of the places a wavelength off
+                // the last one's flank, on the next crest over, the one where
+                // the skin is most compressed, if it is past wrinkling there,
+                // heading along it)
+                let flank = |path: &[(f32, f32)], side: f32, up: f32, owner: &[u32], near_fold: &[f32], pressed: &[f32]| {
+                    let mut found: Option<((f32, f32), (f32, f32), f32)> = None;
+                    for i in (0..path.len()).step_by(((0.5 * BAND_LAMBDA) as usize).max(1)) {
+                        let (a, b) = (path[i.saturating_sub(1)], path[(i + 1).min(path.len() - 1)]);
+                        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                        let n = (dx * dx + dy * dy).sqrt();
+                        let Some((tx, ty)) = (if n > 1e-6 { Some((dx / n, dy / n)) } else { cell(path[i].0, path[i].1).map(tangent) }) else { continue };
+                        let (qx, qy) = crest(path[i].0 - side * BAND_LAMBDA * ty, path[i].1 + side * BAND_LAMBDA * tx, tx, ty, up);
+                        let Some(j) = cell(qx, qy) else { continue };
+                        if cm[j] == 0.0 || owner[j] != 0 || near_fold[j] < 0.5 * BAND_LAMBDA || pressed[j] < 1.0 {
+                            continue;
+                        }
+                        if found.is_none_or(|f| pressed[j] > f.2) {
+                            found = Some(((qx, qy), (tx, ty), pressed[j]));
+                        }
+                    }
+                    found.map(|(q, t, _)| (q, t))
+                };
+                // the distance of each place near a path from it (`mark` the
+                // places reached for `id`, `best` their squared distance)
+                let near_path = |pts: &[(f32, f32)], within: f32, id: u32, mark: &mut [u32], best: &mut [f32], touched: &mut Vec<usize>| {
+                    let segs: Vec<((f32, f32), (f32, f32))> = if pts.len() == 1 { vec![(pts[0], pts[0])] } else { pts.windows(2).map(|w| (w[0], w[1])).collect() };
+                    for ((ax, ay), (bx, by)) in segs {
+                        let (dx, dy) = (bx - ax, by - ay);
+                        let l2 = dx * dx + dy * dy;
+                        let (x0, x1) = ((ax.min(bx) - within).max(0.0) as usize, ((ax.max(bx) + within) as usize).min(cw - 1));
+                        let (y0, y1) = ((ay.min(by) - within).max(0.0) as usize, ((ay.max(by) + within) as usize).min(ch - 1));
+                        for yy in y0..=y1 {
+                            for xx in x0..=x1 {
+                                let (cx, cy) = (xx as f32 + 0.5, yy as f32 + 0.5);
+                                let t = if l2 > 0.0 { (((cx - ax) * dx + (cy - ay) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+                                let (ex, ey) = (cx - ax - t * dx, cy - ay - t * dy);
+                                let d2 = ex * ex + ey * ey;
+                                if d2 >= within * within {
+                                    continue;
+                                }
+                                let i = yy * cw + xx;
+                                if mark[i] != id {
+                                    mark[i] = id;
+                                    best[i] = d2;
+                                    touched.push(i);
+                                } else if d2 < best[i] {
+                                    best[i] = d2;
                                 }
                             }
                         }
-                    };
-                    let stride = ((0.5 * reach) as usize).max(1);
-                    let mut knots: Vec<(f32, f32)> = path.iter().step_by(stride).copied().collect();
-                    if (path.len() - 1) % stride != 0 {
-                        knots.push(*path.last().unwrap());
                     }
-                    near_path(&knots, reach, &mut mark, &mut best, &mut touched);
+                };
+                let mut heap: std::collections::BinaryHeap<(u32, std::cmp::Reverse<u32>)> = (0..cw * ch).filter(|&c| cm[c] > 0.0 && pressed[c] >= 1.0).map(|c| ((pressed[c] * ig[c]).to_bits(), std::cmp::Reverse(c as u32))).collect();
+                let (mut mark, mut best) = (vec![0u32; cw * ch], vec![0.0f32; cw * ch]);
+                let (mut mark2, mut best2) = (vec![0u32; cw * ch], vec![0.0f32; cw * ch]);
+                let mut seen = vec![0u32; cw * ch];
+                let (mut touched, mut foot): (Vec<usize>, Vec<usize>) = (Vec::new(), Vec::new());
+                let mut fold = 0u32;
+                while let Some((rank, std::cmp::Reverse(c))) = heap.pop() {
+                    let c = c as usize;
+                    if owner[c] != 0 || pressed[c] < 1.0 {
+                        continue;
+                    }
+                    let q = pressed[c] * ig[c];
+                    if q.to_bits() < rank {
+                        // (relieved since it was queued: queued again at its new rank)
+                        heap.push((q.to_bits(), std::cmp::Reverse(c as u32)));
+                        continue;
+                    }
+                    // a train of folds: the first, then the next a wavelength
+                    // off its flank and along it, and the next off that one's,
+                    // each way, while the skin there is past wrinkling. A fold
+                    // presses the skin beside it into a trough, and the crest
+                    // beyond is the next fold's start (cracks spawn their
+                    // neighbours the same way)
+                    let train = fold + 1;
+                    let up = if sh[c] >= 0.0 { 1.0 } else { -1.0 };
+                    let t = tangent(c);
+                    let mut members: Vec<Vec<(f32, f32)>> = Vec::new();
+                    foot.clear();
+                    for side in [1.0f32, -1.0] {
+                        let mut next = if side > 0.0 { Some((crest((c % cw) as f32 + 0.5, (c / cw) as f32 + 0.5, t.0, t.1, up), t)) } else { flank(&members[0], side, up, &owner, &near_fold, &pressed) };
+                        while let Some((from, heading)) = next {
+                            fold += 1;
+                            let path = walk(&mut seen, &owner, &near_fold, &pressed, fold, from, heading, up);
+                            if !members.is_empty() && (path.len() as f32) < BAND_LAMBDA {
+                                break;
+                            }
+                            // (within a fold's width the skin is the fold's own)
+                            touched.clear();
+                            near_path(&path, BAND_LAMBDA, fold, &mut mark2, &mut best2, &mut touched);
+                            for &i in &touched {
+                                let d = best2[i].sqrt();
+                                if d < near_fold[i] {
+                                    near_fold[i] = d;
+                                    way[i] = up;
+                                }
+                                if d <= half && owner[i] == 0 && cm[i] > 0.0 {
+                                    owner[i] = fold;
+                                    foot.push(i);
+                                }
+                            }
+                            next = flank(&path, side, up, &owner, &near_fold, &pressed);
+                            members.push(path);
+                        }
+                    }
+                    // the train takes the compression off the skin around it,
+                    // along chords of its folds (the relief reaches far past
+                    // the jags of a path on the grid), and gathers it into
+                    // its folds
+                    let stride = ((0.5 * reach) as usize).max(1);
+                    touched.clear();
+                    for path in &members {
+                        let mut knots: Vec<(f32, f32)> = path.iter().step_by(stride).copied().collect();
+                        if (path.len() - 1) % stride != 0 {
+                            knots.push(*path.last().unwrap());
+                        }
+                        near_path(&knots, reach, train, &mut mark, &mut best, &mut touched);
+                    }
                     let mut released = 0.0f32;
                     for &i in &touched {
                         let off = relief(best[i].sqrt());
@@ -1207,19 +1276,6 @@ impl Canvas {
                         left[i] -= take;
                         released += take;
                         pressed[i] *= 1.0 - off;
-                    }
-                    near_path(&path, BAND_LAMBDA, &mut mark2, &mut best2, &mut touched);
-                    let mut foot = Vec::new();
-                    for &i in &touched {
-                        let d = best2[i].sqrt();
-                        if d < near_fold[i] {
-                            near_fold[i] = d;
-                            way[i] = up;
-                        }
-                        if d <= half && owner[i] == 0 && cm[i] > 0.0 {
-                            owner[i] = fold;
-                            foot.push(i);
-                        }
                     }
                     if !foot.is_empty() {
                         let each = released / foot.len() as f32;
@@ -1255,9 +1311,10 @@ impl Canvas {
                         }
                         let c = j * cw + (x - sb.0) / r;
                         // (a fold runs on into skin short of wrinkling, and
-                        // wrinkles it with the compression it gathered)
+                        // wrinkles it with the compression it gathered: its
+                        // ridge and its troughs are its own)
                         let keep = if n0[c] > 0.0 { left[c] / n0[c] } else { 1.0 };
-                        let v0 = if owner[c] != 0 { v.max(0.0) } else { *v };
+                        let v0 = if near_fold[c] < BAND_LAMBDA { v.max(0.0) } else { *v };
                         *v = if v0 > 0.0 { v0 * keep } else { v0 } + dep[c];
                     }
                 });

@@ -105,7 +105,8 @@
 //! wrinkle around it. The pattern it gets is the relief it cured over,
 //! band-passed at its own wavelength (a difference of box blurs: the
 //! brush marks are the imperfections a wrinkle grows from, and it lies
-//! along them; a level film has `SEED_UM` of roughness to start from) and
+//! along them, and along the roughness every surface has, `SEED_UM`, which
+//! runs in domains of their own heading, `DOMAIN_UM`) and
 //! scaled to unit rms slope, and the bulk takes `a` of it such that
 //! `(ρ + a)² − ρ² = Δ`, with `ρ` the pattern's projection on the slopes
 //! already there (so a wrinkle that is there deepens, a new wavelength
@@ -119,10 +120,12 @@
 //! The plate's thickness is what lies above each packet's front, and when
 //! the front reaches the bottom the soft bulk is gone and the wrinkle
 //! stays as it is. The surface tension of the oil counts against the
-//! compression (`surface::SIGMA`). A wavelength under two pixels is
-//! below the picture's resolution: the skin is drawn at the finest the
-//! grid has if it beats the threshold there (every wavelength the
-//! compression beats is unstable; the least one only grows fastest).
+//! compression (`surface::SIGMA`). Each place's wavelength strays from its
+//! skin's by a seeded factor (`JITTER`), and some ridges gather into folds
+//! faster than others (`FOLD_SPREAD`). A wavelength under `FINEST` pixels
+//! is below what the picture draws cleanly: the skin is drawn there if it
+//! beats the threshold there (every wavelength the compression beats is
+//! unstable; the least one only grows fastest).
 //!
 //! A skin that thickens under compression wrinkles more than one of its
 //! final thickness would: the thin early skin buckles at large slopes for
@@ -220,10 +223,43 @@ const BAND_MAX: usize = 16;
 /// that creeps costs a pass over its packets, not the blurs, and a wait
 /// of months draws its wrinkles in a handful of passes.
 const GROW: f32 = 0.1;
-/// Micro-roughness every surface has, µm, at the wrinkle's own wavelength,
-/// so a skin cured over a perfectly level film still has an imperfection
-/// to buckle from (a deterministic noise, so a replay is a replay).
-const SEED_UM: f32 = 0.2;
+/// Roughness every surface has, µm, at the wrinkle's own wavelength and an
+/// octave each side (dust, pigment lumps, a knife's chatter), so a skin
+/// cured over a level film still has imperfections to buckle from, and a
+/// skin over brush marks buckles from them as well as from the marks: a
+/// noise seeded by the place and the film, so a replay is a replay. By eye.
+const SEED_UM: f32 = 1.0;
+/// Ripples of the wrinkle's own wavelength in that roughness, µm, each
+/// patch of `DOMAIN_LAMBDAS` wavelengths running its own way: a skin
+/// buckles in domains that each pick a heading, and its ridges turn where
+/// two meet (as a zinc drawdown's do, Gnemmi). By eye: as strong as a
+/// knife's marks, so the patches' headings show through them.
+const DOMAIN_UM: f32 = 25.0;
+const DOMAIN_LAMBDAS: f32 = 8.0;
+/// How much a skin's wavelength strays from place to place beyond what its
+/// thickness and its paste make of it: the standard deviation of its
+/// logarithm, over patches of `JITTER_MM` (a film is never as even as its
+/// averages). By eye.
+const JITTER: f32 = 0.4;
+const JITTER_MM: [f32; 3] = [8.0, 4.0, 2.0];
+/// The finest wavelength drawn, px: under `BAND_LAMBDA` the finest band's
+/// pattern is drawn by its Gaussians alone, down to here (finer, its ridges
+/// alias into a hatching of the grid).
+const FINEST: f32 = 4.0;
+/// How unevenly the ridges of one wavelength gather into folds: the standard
+/// deviation of the logarithm of how fast each grows, over patches of
+/// `FOLD_LAMBDAS` wavelengths (the paste and the skin over it are uneven at
+/// every scale), so some ridges take the compression and the ground between
+/// them stays flat. By eye.
+const FOLD_SPREAD: f32 = 0.8;
+const FOLD_LAMBDAS: f32 = 3.0;
+/// How tall a fold may stand, as a multiple of the amplitude of a sinusoid
+/// of the same root mean square slope: a fold gathers its slopes into a
+/// ridge taller than a ripple's (the cap is there so the wall of a stroke at
+/// a skin's edge is not a wrinkle). By eye.
+const TALL: f32 = 2.5;
+const JITTER_SEED: u64 = 0x7a11_5eed;
+const FOLD_SEED: u64 = 0xf01d_5eed;
 /// Steps a wrinkle's shape takes to settle, and the gain of a step: how
 /// far past its threshold the skin is, as Swift–Hohenberg's ε (well past
 /// it: the pattern saturates into ridges a wavelength apart, as a skin
@@ -377,6 +413,9 @@ struct Site {
     /// The share of the wrinkle drawn at the band above `band`: where its
     /// wavelength lies between the two, by its logarithm.
     mix: f32,
+    /// Its wavelength, in `BAND_LAMBDA`s (under 1: finer than the finest
+    /// band, which draws it).
+    lam: f32,
     /// The plate's thickness, µm: every cured layer down to the soft one.
     plate: f32,
     /// The least displacement the bulk allows, µm (none left under the skin).
@@ -515,10 +554,10 @@ fn gauss_into(src: &[f32], w: usize, h: usize, bx: (usize, usize, usize, usize),
 }
 
 /// A smooth field of zero mean and unit spread over the canvas (`xm`, `ym`
-/// mm) and the gel time of a film (`born` minutes): the octaves of
-/// `PATCH_MM`, each a value noise that passes to a fresh one over
-/// `FILM_MIN` of gel time.
-fn patchy(xm: f32, ym: f32, born: f32, seed: u64) -> f32 {
+/// mm) and the gel time of a film (`born` minutes): an octave per size in
+/// `mm`, each a value noise that passes to a fresh one over `FILM_MIN` of
+/// gel time.
+fn grain(xm: f32, ym: f32, born: f32, mm: &[f32], seed: u64) -> f32 {
     let t = born / FILM_MIN;
     let cell = t.floor();
     let f = t - cell;
@@ -526,7 +565,7 @@ fn patchy(xm: f32, ym: f32, born: f32, seed: u64) -> f32 {
     let step = 0x9e37_79b9_u64;
     let at = seed.wrapping_add((cell as i64 as u64).wrapping_mul(step));
     let mut sum = 0.0f32;
-    for (o, &mm) in PATCH_MM.iter().enumerate() {
+    for (o, &mm) in mm.iter().enumerate() {
         let s = at.wrapping_add(o as u64 * 0x1_0000);
         let now = vnoise(xm / mm, ym / mm, s) - 0.5;
         let next = vnoise(xm / mm, ym / mm, s.wrapping_add(step)) - 0.5;
@@ -534,7 +573,27 @@ fn patchy(xm: f32, ym: f32, born: f32, seed: u64) -> f32 {
     }
     // (a value noise spreads 0.214: bilinear, smoothstep weights; two of
     // them blended at f spread as √((1 − f)² + f²) of one)
-    sum / (0.214 * (PATCH_MM.len() as f32 * ((1.0 - f) * (1.0 - f) + f * f)).sqrt())
+    sum / (0.214 * (mm.len() as f32 * ((1.0 - f) * (1.0 - f) + f * f)).sqrt())
+}
+
+/// Ripples `lam` mm apart in patches `cell` mm across, each patch's own
+/// heading and phase (`seed`), passing smoothly from one patch to the next:
+/// about the center of each of the four patches nearest (`xm`, `ym`), its
+/// ripple, weighed by how near. Unit amplitude.
+fn domains(xm: f32, ym: f32, lam: f32, cell: f32, seed: u64) -> f32 {
+    let (fx, fy) = (xm / cell - 0.5, ym / cell - 0.5);
+    let (i0, j0) = (fx.floor(), fy.floor());
+    let ease = |t: f32| t * t * (3.0 - 2.0 * t);
+    let (tx, ty) = (ease(fx - i0), ease(fy - j0));
+    let mut sum = 0.0f32;
+    for (di, dj, wt) in [(0, 0, (1.0 - tx) * (1.0 - ty)), (1, 0, tx * (1.0 - ty)), (0, 1, (1.0 - tx) * ty), (1, 1, tx * ty)] {
+        let (i, j) = (i0 as i64 + di, j0 as i64 + dj);
+        let heading = std::f32::consts::PI * crate::rng::hash2(i, j, seed);
+        let phase = std::f32::consts::TAU * crate::rng::hash2(i, j, seed ^ 0x9e37_79b9);
+        let (cx, cy) = ((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell);
+        sum += wt * (std::f32::consts::TAU / lam * ((xm - cx) * heading.cos() + (ym - cy) * heading.sin()) + phase).cos();
+    }
+    sum
 }
 
 /// The paint `hd` as it is at the point (`xm`, `ym`) mm of a film that
@@ -545,13 +604,13 @@ fn patchy(xm: f32, ym: f32, born: f32, seed: u64) -> f32 {
 fn uneven(hd: &crate::wet::Prop, xm: f32, ym: f32, born: f32) -> crate::wet::Prop {
     let mut p = *hd;
     let medium = if hd[4] >= 1.0 { (hd[4] - 1.0) / 1.5 } else { hd[4] - 1.0 };
-    let here = medium + OIL_SPREAD * medium.abs() * patchy(xm, ym, born, OIL_SEED);
+    let here = medium + OIL_SPREAD * medium.abs() * grain(xm, ym, born, &PATCH_MM, OIL_SEED);
     let (k, kh) = (1.0 - medium, (1.0 - here).max(0.0));
     if k > 0.0 {
         p[1] = (hd[1] * (kh / k) * (kh / k)).min(1.0);
     }
     p[4] = if here >= 0.0 { 1.0 + 1.5 * here } else { (1.0 + here).max(0.1) };
-    p[2] = hd[2] * (DRIER_SPREAD * patchy(xm, ym, born, DRIER_SEED)).exp();
+    p[2] = hd[2] * (DRIER_SPREAD * grain(xm, ym, born, &PATCH_MM, DRIER_SEED)).exp();
     p
 }
 
@@ -658,8 +717,11 @@ impl Canvas {
         let mut need = buffer(pw * ph);
         let mut skin = buffer(pw * ph);
         let mut msq = buffer(pw * ph);
+        let mm = self.px_mm();
+        let mut born = vec![0.0f32; pw * ph];
         for &k in &soft {
             let p = padded(k);
+            born[p] = self.skin.pool[site[k].at as usize].born;
             wf[p] = self.skin.pool[site[k].at as usize].w;
             z[p] -= wf[p] + 0.5 * site[k].plate;
             skin[p] = 1.0;
@@ -703,14 +765,7 @@ impl Canvas {
             blur2(&skin, r, &mut mr);
             blur2(&skin, 2 * r, &mut m2r);
             blur2(&inner, 2 * r, &mut mi);
-            let cell = BAND_LAMBDA * r as f32 / 2.0;
-            zr.par_chunks_mut(pw).enumerate().for_each(|(y, row)| {
-                for (x, v) in row.iter_mut().enumerate() {
-                    let k = y * pw + x;
-                    let (gx, gy) = ((pb.0 + x + self.f.x0) as f32, (pb.1 + y + self.f.y0) as f32);
-                    *v = skin[k] * (z[k] + SEED_UM * (vnoise(gx / cell, gy / cell, seed + r as u64) - 0.5));
-                }
-            });
+            zr.par_iter_mut().zip(&z).zip(&skin).for_each(|((v, z), s)| *v = s * z);
             blur2(&zr, r, &mut near);
             over(&mut near, &mr);
             blur2(&zr, 2 * r, &mut far);
@@ -750,6 +805,26 @@ impl Canvas {
                 };
                 need[p] = if ask > 0.0 { share * ask } else { ask };
             }
+            // the imperfection the wrinkle grows from: the relief and the
+            // roughness every surface has (`SEED_UM`, `DOMAIN_UM`), which
+            // seeds where the ridges start and which way they run but is
+            // not a slope the paste holds against
+            let lam_mm = BAND_LAMBDA * r as f32 * mm;
+            let place = |k: usize| ((pb.0 + k % pw + self.f.x0) as f32 * mm, (pb.1 + k / pw + self.f.y0) as f32 * mm);
+            zr.par_iter_mut().enumerate().for_each(|(k, v)| {
+                if skin[k] == 0.0 {
+                    *v = 0.0;
+                    return;
+                }
+                let (xm, ym) = place(k);
+                let film = seed ^ ((born[k] / FILM_MIN).floor() as i64 as u64).wrapping_mul(0x9e37_79b9) ^ (r as u64) << 40;
+                *v = z[k] + SEED_UM * grain(xm, ym, born[k], &[0.5 * lam_mm, lam_mm, 2.0 * lam_mm], seed + r as u64) + DOMAIN_UM * domains(xm, ym, lam_mm, DOMAIN_LAMBDAS * lam_mm, film);
+            });
+            blur2(&zr, r, &mut near);
+            over(&mut near, &mr);
+            blur2(&zr, 2 * r, &mut far);
+            over(&mut far, &m2r);
+            near.par_iter_mut().zip(&far).for_each(|(n, f)| *n -= f);
             // the shape the skin has at this band, its imperfection and its
             // wrinkle together: its slopes' root mean square over a
             // wavelength (its scale) and their projection on the wrinkle's
@@ -791,7 +866,7 @@ impl Canvas {
                 let s = site[k];
                 if s.share(band) > 0.0 {
                     let p = padded(k);
-                    lam[p] = s.band as f32 * (1.0 + 1.0 / s.band as f32).powf(s.mix);
+                    lam[p] = s.lam;
                     has[p] = 1.0;
                 }
             }
@@ -835,7 +910,15 @@ impl Canvas {
             blur2(&dot, fold, &mut rho);
             blur2(&inner, fold, &mut far);
             over(&mut rho, &far);
-            let grows: Vec<f32> = near.par_iter().zip(&rho).map(|(h, around)| if *around > 1e-12 { (h / around).powf(0.5 / FLOW_INDEX) } else { 1.0 }).collect();
+            // (and some ridges faster than others: `FOLD_SPREAD`)
+            let grows: Vec<f32> = near.par_iter().zip(&rho).enumerate().map(|(k, (h, around))| {
+                let g = if *around > 1e-12 { (h / around).powf(0.5 / FLOW_INDEX) } else { 1.0 };
+                if skin[k] == 0.0 {
+                    return g;
+                }
+                let (xm, ym) = place(k);
+                g * (FOLD_SPREAD * grain(xm, ym, born[k], &[1.5 * FOLD_LAMBDAS * lam_mm, 0.75 * FOLD_LAMBDAS * lam_mm], FOLD_SEED + r as u64)).exp()
+            }).collect();
             let cm = down(&skin);
             let mut cv = down(&shape);
             let (cs, cb): (Vec<f32>, _) = (down(&sig).into_iter().map(|s| s / r as f32).collect(), (0, 0, cw, ch));
@@ -1001,9 +1084,9 @@ impl Canvas {
             m2r.par_iter_mut().zip(&dot).zip(&skin).for_each(|((m, d), s)| *m = (*d > 0.0 && *s > 0.0) as u8 as f32);
             blur2(&m2r, 2 * r, &mut mr);
             // a sinusoid of unit rms slope has an amplitude of λ √2 / 2π:
-            // the pattern is bounded by it, so the wall of a stroke at the
-            // skin's edge is not a wrinkle's worth of relief
-            let cap = BAND_LAMBDA * r as f32 * dx_um * std::f32::consts::FRAC_1_SQRT_2 / std::f32::consts::PI;
+            // the pattern is bounded by `TALL` of it, so the wall of a
+            // stroke at the skin's edge is not a wrinkle's worth of relief
+            let cap = TALL * BAND_LAMBDA * r as f32 * dx_um * std::f32::consts::FRAC_1_SQRT_2 / std::f32::consts::PI;
             for &k in &soft {
                 let s = site[k];
                 if s.share(band) == 0.0 {
@@ -1173,8 +1256,9 @@ impl Canvas {
         // to the first soft one), its compression, and whether the gel under
         // it gives: the critical wavenumber and force of the plate on it
         let (bw, bh) = (bx.2 - bx.0, bx.3 - bx.1);
-        let mut site = vec![Site { at: NONE, delta: 0.0, band: 0, mix: 0.0, plate: 0.0, floor: 0.0, measure: false, runs: false, nf: 0.0, bend: 0.0, hold: 0.0, c: 0.0, cap: 0.0, yielded: 0.0, gives: 0.0 }; bw * bh];
+        let mut site = vec![Site { at: NONE, delta: 0.0, band: 0, mix: 0.0, lam: 0.0, plate: 0.0, floor: 0.0, measure: false, runs: false, nf: 0.0, bend: 0.0, hold: 0.0, c: 0.0, cap: 0.0, yielded: 0.0, gives: 0.0 }; bw * bh];
         let (top, pool, engine) = (&self.skin.top, &self.skin.pool, self.engine);
+        let (mm, x0, y0) = (self.px_mm(), self.f.x0, self.f.y0);
         site.par_chunks_mut(bw).enumerate().for_each(|(y, row)| {
             for (x, site) in row.iter_mut().enumerate() {
                 let mut at = top[(bx.1 + y) * w + bx.0 + x];
@@ -1241,14 +1325,17 @@ impl Canvas {
                 // bands around it (by its logarithm), so a skin whose
                 // wavelength changes from place to place passes from one
                 // band to the next without a seam; the threshold is the
-                // plate's at the wavenumber drawn. A wavelength under the
-                // finest band is below the picture's resolution, and the
-                // skin is drawn at the finest the grid has if it beats the
-                // threshold there (every wavelength the compression beats is
-                // unstable; the least one only grows fastest)
-                let at = (2.0 * std::f32::consts::PI / (qc.min(nyq) * dx) / BAND_LAMBDA).clamp(1.0, BAND_MAX as f32);
-                let band = (at as u8).min(BAND_MAX as u8 - 1);
-                let mix = (at / band as f32).ln() / (1.0 + 1.0 / band as f32).ln();
+                // plate's at the wavenumber drawn. Each place strays from its
+                // skin's wavelength (`JITTER`); under the finest band its
+                // Gaussians alone draw it, down to `FINEST`, and the skin is
+                // drawn there if it beats the threshold there (every
+                // wavelength the compression beats is unstable; the least one
+                // only grows fastest)
+                let (xm, ym) = ((bx.0 + x + x0) as f32 * mm, (bx.1 + y + y0) as f32 * mm);
+                let stray = (JITTER * grain(xm, ym, p.born, &JITTER_MM, JITTER_SEED)).exp();
+                let at = (2.0 * std::f32::consts::PI / (qc.min(nyq) * dx) / BAND_LAMBDA * stray).clamp(FINEST / BAND_LAMBDA, BAND_MAX as f32);
+                let band = (at as u8).clamp(1, BAND_MAX as u8);
+                let mix = if at > band as f32 { (at / band as f32).ln() / (1.0 + 1.0 / band as f32).ln() } else { 0.0 };
                 let q = 2.0 * std::f32::consts::PI / (at * BAND_LAMBDA * dx);
                 // von Kármán: slopes of mean square 2 (N − N_c) / C take up
                 // the compression past the threshold (short of it: how far
@@ -1258,7 +1345,7 @@ impl Canvas {
                 // has, q² H² / 2: a film nearly cured through holds what
                 // compression it has left.
                 let room = (p.h + p.w - p.s) * 1e-6;
-                let mut s = Site { at: soft, delta: 0.0, band, mix, plate, floor: p.s - p.h + DRY_UM, measure: false, runs: false, nf, bend: b * q * q, hold: elastic(q), c, cap: 0.5 * (q * room) * (q * room), yielded: yielded(q), gives: 0.0 };
+                let mut s = Site { at: soft, delta: 0.0, band, mix, lam: at, plate, floor: p.s - p.h + DRY_UM, measure: false, runs: false, nf, bend: b * q * q, hold: elastic(q), c, cap: 0.5 * (q * room) * (q * room), yielded: yielded(q), gives: 0.0 };
                 // a skin whose slopes are not measured asks nothing of its
                 // neighbors yet; it asks for a pass when it could wrinkle
                 // on a bulk that has yielded, and the pass draws at the

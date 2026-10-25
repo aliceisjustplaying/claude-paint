@@ -96,9 +96,11 @@ pub const DRAIN_MARK: &str = "--@ drain";
 pub const PAPER_MARK: &str = "--@ paper";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
-/// top down, and a skin over soft paint wrinkles (paint's `skin`). Every
-/// new painting has it; a log without it replays the single-cure film
-/// engine 9 was released with, as it was painted. It requires engine 9.
+/// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
+/// opt-in: only a log whose head has the line paints with it, and a new
+/// painting's doesn't, so a new painting, and every log without the line,
+/// paints the single-cure film engine 9 was released with. It requires
+/// engine 9.
 pub const MATERIAL_MARK: &str = "--@ material";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
@@ -1544,8 +1546,9 @@ fn box_list() -> String {
 /// blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
-/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of engine
-/// 9's current material (`MATERIAL_MARK`); an existing one's as its log says.
+/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
+/// material 0; a log is of material 1 only where its head says so
+/// (`MATERIAL_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1567,7 +1570,6 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.brush_skim = true;
         b.rag_lift = true;
         b.drain = true;
-        b.material = paint::skin::MATERIAL;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -2239,21 +2241,23 @@ mod tests {
         assert!(box_for(Some(&format!("--@ engine 3\n{LIQUID_FILM_LEVELS_MARK}\n"))).is_err());
     }
 
-    /// A new painting is of engine 9's current material
-    /// (`paint::Canvas::with_material`) and its log's head says so; a replay
-    /// of that log and a save of it are too, and a log without the line
-    /// (every painting before it) replays the single-cure film it was
-    /// painted with. Only engine 9 has it.
+    /// Material 1 is opt-in: a new painting is of material 0, the
+    /// single-cure film engine 9 was released with, and its log's head names
+    /// no material; a log whose head has `--@ material 1` paints with
+    /// `paint::Canvas::with_material`, and a replay of either log and a
+    /// save of it keep its material. Only engine 9 has it.
     #[test]
-    fn new_paintings_record_the_material_and_older_logs_replay_without_it() {
+    fn material_1_only_where_the_log_names_it() {
         let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
         let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
         live.run(canvas).unwrap();
-        assert_eq!(live.canvas().unwrap().material(), paint::skin::MATERIAL);
-        let text = live.program("p");
+        assert_eq!(live.canvas().unwrap().material(), 0);
+        let plain = live.program("p");
+        assert!(!plain.contains(MATERIAL_MARK), "{plain}");
         let mark = format!("{MATERIAL_MARK} {}", paint::skin::MATERIAL);
+        let text = plain.replacen(&format!("\n\n{MARK} 1\n"), &format!("\n{mark}\n\n{MARK} 1\n"), 1);
         assert!(text.contains(&format!("\n{mark}\n")), "{text}");
-        for (log, material) in [(text.clone(), paint::skin::MATERIAL), (text.replace(&format!("{mark}\n"), ""), 0)] {
+        for (log, material) in [(text.clone(), paint::skin::MATERIAL), (plain, 0)] {
             let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
             for chunk in parse_program(&log) {
                 replay.run(&chunk).unwrap();

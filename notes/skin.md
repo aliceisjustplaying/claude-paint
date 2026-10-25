@@ -10,9 +10,10 @@ drying `drying(x, y)` reports (open, setting, tacky, dry) is the same and
 no stroke lays differently; the relief is what moves, and paint laid later
 lands on it.
 
-Every new painting has the line. A log without it replays the single-cure
-film engine 9 was released with, bit for bit, and engines 1 to 8 are
-untouched (`skin::tests::legacy_material_keeps_no_packets`; the gate's
+It is opt-in: a new painting's log doesn't have the line, so only a log
+whose head names it paints with it. A log without it, a new painting's
+included, paints the single-cure film engine 9 was released with, bit for
+bit, and engines 1 to 8 are untouched (`skin::tests::legacy_material_keeps_no_packets`; the gate's
 replay checks are the witnesses).
 
 ## What the paint does
@@ -143,8 +144,8 @@ for more compression, about as much as the extra skin supplies.
   and a `Style` sets it on the canvas after the ground is laid, so the
   ground is a cured floor, not a film.
 - `crates/easel/src/session.rs`: `MATERIAL_MARK`, `logged_material` and
-  `box_for` (a new painting gets `skin::MATERIAL`; a log's line needs
-  engine 9); `save.rs` restores it from the canvas.
+  `box_for` (a new painting gets material 0; material 1 comes only from a
+  log's line, which needs engine 9); `save.rs` restores it from the canvas.
 
 ## Cost
 
@@ -152,8 +153,10 @@ The skin's six-hourly tick is a pass over the live packets, and a wrinkle
 pass (box blurs over the dirty box at each wavelength in use) only when a
 wavelength of skin asks for `GROW` of slope or more, or a skin that could
 wrinkle has its slopes to measure. The 90-day demo of a 440 mm canvas at
-1200 px (two knife slabs and eight brush strokes) takes 74 s of skin work
-on top of its 4.4 s material-0 replay, on four cores. The gate's live-frame case
-(`live_frames committed_frames_are_numbered_atomic_and_not_replayed`, a
-1920-wide painting with a stroke and its checkpoints) runs in 89.7 s on
-this material against 84.9 s without it, on the same machine, same gate.
+2400 px (two knife slabs and eight brush strokes) takes 784 s against
+41 s at material 0, on four cores. In a live session at 2400 px (a
+studio's log replayed at this material, four cores), a call that waits 2
+to 3 days takes 17 to 30 s and one that waits 4 days 40 to 44 s, against
+3 to 5 s at material 0; paint calls are unchanged (a median of 8.2 s
+against 8.1 s). Most of a wait call is the twice-daily pass over the
+whole skin at its finest wavelength.

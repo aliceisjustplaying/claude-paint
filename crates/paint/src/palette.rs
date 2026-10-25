@@ -821,9 +821,10 @@ pub struct Palette {
     /// `CALLS_AGREE_MARK`): new paintings.
     pub calls_agree: bool,
     /// Engine 9's material revision (`Canvas::with_material`; an easel log's
-    /// `--@ material`): `skin::MATERIAL` for new paintings, whose baked
-    /// films keep curing from the top down and wrinkle; 0 is the single-cure
-    /// film engine 9 was released with, and every other engine's.
+    /// `--@ material`): 1 only where a log's head names it, whose baked
+    /// films keep curing from the top down and wrinkle; 0, for new paintings,
+    /// is the single-cure film engine 9 was released with, and every other
+    /// engine's.
     pub material: u32,
     lat: Vec<[f32; crate::mixer::LATENT_SIZE]>,
     lat9: Vec<[f32; crate::mixer::LATENT_SIZE]>,

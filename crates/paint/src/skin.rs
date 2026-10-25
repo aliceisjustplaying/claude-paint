@@ -736,23 +736,23 @@ fn conserve(dw: &mut [f32], moved: &[usize], bound: impl Fn(usize) -> (usize, f3
     }
     while surplus > 0.0 && free > 0 {
         let share = (surplus / free as f64) as f32;
-        let mut removed = 0.0f64;
+        surplus = 0.0;
         free = 0;
         for &k in moved {
             let (p, least) = bound(k);
             if dw[p] > least {
-                let next = (dw[p] - share).max(least);
-                removed += dw[p] as f64 - next as f64;
-                dw[p] = next;
-                if next > least {
+                let next = dw[p] - share;
+                if next < least {
+                    surplus += (least - next) as f64;
+                    dw[p] = least;
+                } else {
+                    dw[p] = next;
+                }
+                if dw[p] > least {
                     free += 1;
                 }
             }
         }
-        if removed <= 0.0 {
-            break;
-        }
-        surplus -= removed;
     }
 }
 
@@ -2013,6 +2013,21 @@ mod tests {
             assert!(dw.iter().zip(&floor).all(|(d, f)| d >= f), "displacements {dw:?}, floors {floor:?}");
             assert!(dw.iter().map(|&d| d as f64).sum::<f64>().abs() < 1e-5, "{dw:?}");
         }
+    }
+
+    #[test]
+    fn redistribution_does_not_chase_roundoff_after_the_last_clamp() {
+        let mut dw = vec![2.931, 5.059, -0.989, -5.256, -7.949, -3.031, 2.845, 5.843, 0.984, 7.842, -0.298, -5.331, -4.011, 1.724, 2.564, -4.103];
+        let moved: Vec<_> = (0..dw.len()).collect();
+        let calls = std::cell::Cell::new(0);
+        let limit = dw.len() * (dw.len() + 2);
+        conserve(&mut dw, &moved, |k| {
+            calls.set(calls.get() + 1);
+            assert!(calls.get() <= limit, "each continuing round must clamp another pixel");
+            (k, -2.0)
+        });
+        assert!(dw.iter().all(|&d| d >= -2.0), "{dw:?}");
+        assert!(dw.iter().map(|&d| d as f64).sum::<f64>().abs() < 1e-5, "{dw:?}");
     }
 
     #[test]

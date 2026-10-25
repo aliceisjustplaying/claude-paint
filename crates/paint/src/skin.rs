@@ -719,6 +719,43 @@ fn binder_share(hd: &crate::wet::Prop) -> f32 {
     (ov * oil / (1.0 - ov + ov * oil)).clamp(0.0, 1.0)
 }
 
+fn conserve(dw: &mut [f32], moved: &[usize], bound: impl Fn(usize) -> (usize, f32)) {
+    let mean = (moved.iter().map(|&k| dw[bound(k).0] as f64).sum::<f64>() / moved.len() as f64) as f32;
+    let mut surplus = 0.0f64;
+    let mut free = 0usize;
+    for &k in moved {
+        let (p, least) = bound(k);
+        dw[p] -= mean;
+        if dw[p] < least {
+            surplus += (least - dw[p]) as f64;
+            dw[p] = least;
+        }
+        if dw[p] > least {
+            free += 1;
+        }
+    }
+    while surplus > 0.0 && free > 0 {
+        let share = (surplus / free as f64) as f32;
+        let mut removed = 0.0f64;
+        free = 0;
+        for &k in moved {
+            let (p, least) = bound(k);
+            if dw[p] > least {
+                let next = (dw[p] - share).max(least);
+                removed += dw[p] as f64 - next as f64;
+                dw[p] = next;
+                if next > least {
+                    free += 1;
+                }
+            }
+        }
+        if removed <= 0.0 {
+            break;
+        }
+        surplus -= removed;
+    }
+}
+
 impl Canvas {
     /// Paint with material revision `rev` (`MATERIAL`; an easel log's
     /// `--@ material`): engine 9 only. 0 is the single-cure film engine 9
@@ -767,9 +804,14 @@ impl Canvas {
     /// The clock moves from `start` to `end` minutes: step the fronts, the
     /// skins and the wrinkles at every tick (`TICK_MIN`) in between.
     pub(crate) fn skin_advance(&mut self, start: f64, end: f64) {
-        if !self.skins() || self.skin.live == 0 || end <= start {
+        if !self.skins() || end <= start {
             return;
         }
+        if self.skin.live == 0 {
+            self.skin.ticked = (end / TICK_MIN).floor() * TICK_MIN;
+            return;
+        }
+        self.skin.ticked = (start / TICK_MIN).floor() * TICK_MIN;
         let first = (start / TICK_MIN).floor() + 1.0;
         let last = (end / TICK_MIN).floor();
         let mut k = first;
@@ -1513,29 +1555,7 @@ impl Canvas {
             let mut moved: Vec<usize> = took.iter().map(|&(k, ..)| k).collect();
             moved.sort_unstable();
             moved.dedup();
-            let mean = (moved.iter().map(|&k| dw[padded(k)] as f64).sum::<f64>() / moved.len() as f64) as f32;
-            let mut surplus = 0.0f64;
-            let mut free = 0usize;
-            for &k in &moved {
-                let p = padded(k);
-                dw[p] -= mean;
-                let least = site[k].floor - wf[p];
-                if dw[p] < least {
-                    surplus += (least - dw[p]) as f64;
-                    dw[p] = least;
-                } else {
-                    free += 1;
-                }
-            }
-            if surplus > 0.0 && free > 0 {
-                let share = (surplus / free as f64) as f32;
-                for &k in &moved {
-                    let p = padded(k);
-                    if dw[p] > site[k].floor - wf[p] {
-                        dw[p] -= share;
-                    }
-                }
-            }
+            conserve(&mut dw, &moved, |k| (padded(k), site[k].floor - wf[padded(k)]));
             // the wrinkle relieves every layer of the plate over the pixels
             // it reaches, each by its share of the plate's stiffness (a
             // trough cut short at the paint under it is credited in full:
@@ -1621,14 +1641,14 @@ impl Canvas {
         let e = (-dtm / EXPAND_MIN).exp();
         self.skin.pool.par_iter_mut().zip(&above).for_each(|(p, &above)| {
             let thick = p.h + p.w;
-            if p.h <= 0.0 || p.s >= thick || dtm <= 0.0 {
+            if p.h <= 0.0 || dtm <= 0.0 {
                 return;
             }
             let dt = (now as f32 - (since as f32).max(p.born)).max(0.0);
             let u0 = above + p.s;
             let g = u0 + u0 * u0 / (2.0 * OXYGEN_UM) + p.v0 * dt;
             let u1 = -OXYGEN_UM + (OXYGEN_UM * OXYGEN_UM + 2.0 * OXYGEN_UM * g).sqrt();
-            let s1 = (u1 - above).clamp(p.s, thick);
+            let s1 = if p.s < thick { (u1 - above).clamp(p.s, thick) } else { p.s };
             let rate = (s1 - p.s) / dtm;
             p.s = s1;
             let x_int = p.x * EXPAND_MIN * (1.0 - e) + rate * EXPAND_MIN * (dtm - EXPAND_MIN * (1.0 - e));
@@ -1931,6 +1951,68 @@ mod tests {
 
     fn total_paint(c: &Canvas) -> f64 {
         c.height.iter().map(|&h| h as f64).sum()
+    }
+
+    #[test]
+    fn an_idle_gap_is_not_expansion_time_for_a_new_film() {
+        let mut c = canvas(1, 1);
+        lay(&mut c, &paint(0.9), 1.0, (0, 0, 1, 1));
+        c.dry();
+        c.wait(7.0 * 24.0 * 60.0);
+        assert_eq!(c.skin.live, 0);
+        c.wait(30.0 * 24.0 * 60.0 + 137.0);
+        let previous = (c.clock() / TICK_MIN).floor() * TICK_MIN;
+        assert_eq!(c.skin.ticked, previous);
+        lay(&mut c, &paint(0.1), 40.0, (0, 0, 1, 1));
+        c.dry();
+        let before = *c.skin.column(0).next().unwrap();
+        let next = c.skin.ticked + TICK_MIN;
+        c.wait((next - c.clock()) as f32);
+        let after = *c.skin.column(0).next().unwrap();
+        let dt = TICK_MIN as f32;
+        let e = (-dt / EXPAND_MIN).exp();
+        let expected = before.x * e + (after.s - before.s) / dt * EXPAND_MIN * (1.0 - e);
+        assert!((after.x - expected).abs() < 1e-5, "reserve {} vs {expected}", after.x);
+    }
+
+    #[test]
+    fn a_cured_cover_keeps_expanding_over_soft_paint() {
+        let mut c = canvas(1, 1);
+        let base = Paint::new([0.2; 3], 0.9, 0.5).with_drying(0.3);
+        lay(&mut c, &base, 40.0, (0, 0, 1, 1));
+        c.dry();
+        lay(&mut c, &paint(0.9), 1.0, (0, 0, 1, 1));
+        c.dry();
+        c.wait(3.0 * 24.0 * 60.0);
+        let before: Vec<_> = c.skin.column(0).copied().collect();
+        assert_eq!(before.len(), 2);
+        assert!(before[0].s >= before[0].h + before[0].w && before[0].x > 0.0);
+        assert!(before[1].s < before[1].h);
+        c.wait(TICK_MIN as f32);
+        let after = *c.skin.column(0).next().unwrap();
+        let expanded = before[0].x * (1.0 - (-TICK_MIN as f32 / EXPAND_MIN).exp());
+        let force = SKIN_PA / (1.0 - NU * NU) * EXPAND * before[0].binder * expanded * 1e-6;
+        assert_eq!(after.s, before[0].s);
+        assert!((after.x - (before[0].x - expanded)).abs() < 1e-5);
+        assert!((after.n - (before[0].n + force)).abs() < 1e-5);
+        assert!(after.n > before[0].n);
+    }
+
+    #[test]
+    fn redistribution_conserves_volume_without_crossing_any_floor() {
+        for (mut dw, floor) in [
+            (vec![-6.0, -1.0, 7.0], vec![-2.0; 3]),
+            (vec![-10.0, -2.0, -1.0, 0.0, 13.0], vec![-2.0; 5]),
+            (vec![-6.0, -1.0, 7.0], vec![-2.0, -1.0, 0.0]),
+            (vec![-6.0, -1.0, 7.0], vec![0.0; 3]),
+            (vec![-6.0, -1.0, 7.0], vec![-20.0; 3]),
+            (vec![-4.0, 1.0, 9.0], vec![-2.0; 3]),
+        ] {
+            let moved: Vec<_> = (0..dw.len()).collect();
+            conserve(&mut dw, &moved, |k| (k, floor[k]));
+            assert!(dw.iter().zip(&floor).all(|(d, f)| d >= f), "displacements {dw:?}, floors {floor:?}");
+            assert!(dw.iter().map(|&d| d as f64).sum::<f64>().abs() < 1e-5, "{dw:?}");
+        }
     }
 
     #[test]

@@ -207,6 +207,7 @@ check studio-pictures 'node --test --test-reporter=tap studio/test_pictures.cjs'
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
+  skin::tests::redistribution_does_not_chase_roundoff_after_the_last_clamp \
   mixer::tests::researched_tubes_have_independent_exact_spectra \
   mixer::tests::researched_tubes_keep_their_spectra_in_wet_and_retained_films \
   mixer::tests::researched_spectra_mix_by_volume_and_dilute_through_knives_and_wet_paint \

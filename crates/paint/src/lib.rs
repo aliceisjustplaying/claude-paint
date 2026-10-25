@@ -45,6 +45,7 @@ pub mod tally;
 pub mod style;
 pub mod hand;
 pub mod outline;
+pub mod skin;
 pub mod surface;
 pub mod thinner;
 

@@ -94,6 +94,14 @@ pub const DRAIN_MARK: &str = "--@ drain";
 /// with none of it. It names no engine of its own: it rides on engine 5
 /// and later (`box_for`).
 pub const PAPER_MARK: &str = "--@ paper";
+/// A log's head line, `--@ material 1`: engine 9's material revision
+/// (`paint::Canvas::with_material`). Its baked films keep curing from the
+/// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
+/// opt-in: only a log whose head has the line paints with it, and a new
+/// painting's doesn't, so a new painting, and every log without the line,
+/// paints the single-cure film engine 9 was released with. It requires
+/// engine 9.
+pub const MATERIAL_MARK: &str = "--@ material";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -782,6 +790,10 @@ impl Session {
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
         }
+        let material = self.st.borrow().tubes.material;
+        if material != 0 {
+            let _ = writeln!(s, "{MATERIAL_MARK} {material}");
+        }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
             s.push_str(&c.src);
@@ -1402,6 +1414,25 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
     Ok(found.unwrap_or(1))
 }
 
+/// The material revision a session file names in its head (its
+/// `MATERIAL_MARK` line before the first chunk): 0 if it names none.
+pub fn logged_material(text: &str) -> Result<u32, String> {
+    let mut found = None;
+    for l in text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)) {
+        if let Some(rest) = l.strip_prefix(MATERIAL_MARK) {
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| (1..=paint::skin::MATERIAL).contains(&v));
+            let Some(v) = v else {
+                return Err(format!("the log's line {l:?} names no material this easel has ({MATERIAL_MARK} <1 to {}>)", paint::skin::MATERIAL));
+            };
+            if found.is_some() {
+                return Err(format!("the log names its material twice ({MATERIAL_MARK} lines)"));
+            }
+            found = Some(v);
+        }
+    }
+    Ok(found.unwrap_or(0))
+}
+
 /// The width a session file names in its head (its `WIDTH_MARK` line before
 /// the first chunk): `LEGACY_WIDTH` if it names none.
 pub fn logged_width(text: &str) -> Result<usize, String> {
@@ -1515,7 +1546,9 @@ fn box_list() -> String {
 /// blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
-/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`).
+/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
+/// material 0; a log is of material 1 only where its head says so
+/// (`MATERIAL_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1540,6 +1573,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Ok(b);
     };
     let engine = logged_engine(text)?;
+    let material = logged_material(text)?;
+    if material != 0 && engine != paint::PIGMENT_MIXER {
+        return Err(format!("the log's {MATERIAL_MARK} line (engine 9's material revision) requires engine 9; this log names engine {engine}; nothing ran"));
+    }
     if logged_paper(text) && engine < 5 {
         return Err(format!("the log's {PAPER_MARK} line (the paper-and-pastel switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }
@@ -1604,6 +1641,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7, 8 or 9"));
     }
     b.drain = drain;
+    b.material = material;
     Ok(b)
 }
 
@@ -1660,6 +1698,12 @@ mod image_tolerance;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A new painting's log as engine `engine` would have written it: its
+    /// engine line changed and its material line, engine 9's, gone.
+    fn as_engine(text: &str, engine: u32) -> String {
+        text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}")).replace(&format!("{MATERIAL_MARK} {}\n", paint::skin::MATERIAL), "")
+    }
 
     fn checkpoint_base_format(bytes: &[u8]) -> u64 {
         assert_eq!(&bytes[..8], b"PAINTC19");
@@ -2014,7 +2058,7 @@ mod tests {
         assert!(restored.blend_feather() && restored.brush_skim());
         for engine in [paint::engine7::ENGINE, paint::REACH_END] {
             for (feather, skim) in [(false, false), (false, true), (true, false), (true, true)] {
-                let mut log = text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}"));
+                let mut log = as_engine(&text, engine);
                 for (on, mark) in [(feather, BLEND_FEATHER_MARK), (skim, BRUSH_SKIM_MARK)] {
                     if !on {
                         log = log.replace(&format!("{mark}\n"), "");
@@ -2059,8 +2103,8 @@ mod tests {
         for (log, skims) in [
             (text.clone(), true),
             (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
-            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7"), true),
-            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7").replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
+            (as_engine(&text, 7), true),
+            (as_engine(&text, 7).replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
         ] {
             let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
             for chunk in parse_program(&log) {
@@ -2095,7 +2139,7 @@ mod tests {
         for engine in [paint::engine7::ENGINE, paint::REACH_END] {
             for lifts in [false, true] {
                 for other_flags in [false, true] {
-                    let mut log = text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}"));
+                    let mut log = as_engine(&text, engine);
                     for (on, mark) in [(lifts, RAG_LIFT_MARK), (other_flags, KNIFE_SKIM_MARK), (other_flags, BLEND_FEATHER_MARK), (other_flags, BRUSH_SKIM_MARK)] {
                         if !on {
                             log = log.replace(&format!("{mark}\n"), "");
@@ -2197,6 +2241,48 @@ mod tests {
         assert!(box_for(Some(&format!("--@ engine 3\n{LIQUID_FILM_LEVELS_MARK}\n"))).is_err());
     }
 
+    /// Material 1 is opt-in: a new painting is of material 0, the
+    /// single-cure film engine 9 was released with, and its log's head names
+    /// no material; a log whose head has `--@ material 1` paints with
+    /// `paint::Canvas::with_material`, and a replay of either log and a
+    /// save of it keep its material. Only engine 9 has it.
+    #[test]
+    fn material_1_only_where_the_log_names_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert_eq!(live.canvas().unwrap().material(), 0);
+        let plain = live.program("p");
+        assert!(!plain.contains(MATERIAL_MARK), "{plain}");
+        let mark = format!("{MATERIAL_MARK} {}", paint::skin::MATERIAL);
+        let text = plain.replacen(&format!("\n\n{MARK} 1\n"), &format!("\n{mark}\n\n{MARK} 1\n"), 1);
+        assert!(text.contains(&format!("\n{mark}\n")), "{text}");
+        for (log, material) in [(text.clone(), paint::skin::MATERIAL), (plain, 0)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().material(), material);
+            assert_eq!(replay.program("p"), log);
+            let mut saved = Vec::new();
+            replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+            assert_eq!(&saved[..8], if material == 0 { b"PAINTC19" } else { b"PAINTC22" });
+            let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+            assert_eq!(restored.material(), material);
+        }
+        for engine in [5, paint::engine7::ENGINE, paint::REACH_END] {
+            let e = box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}")))).unwrap_err();
+            assert!(e.contains(MATERIAL_MARK), "{e}");
+            if engine != 5 {
+                assert_eq!(box_for(Some(&as_engine(&text, engine))).unwrap().material, 0);
+            }
+        }
+        for line in ["--@ material 2", "--@ material 0", "--@ material", "--@ material one", "--@ material 1\n--@ material 1"] {
+            assert!(box_for(Some(&text.replace(&mark, line))).is_err(), "{line}");
+        }
+        assert_eq!(box_for(Some(&text.replace(&format!("{mark}\n"), &format!("--@ chunk 1\n{mark}\n")))).unwrap().material, 0);
+    }
+
     /// A new painting's glaze and scumble lay a thin film
     /// (`paint::Canvas::with_glaze_film`) and its log's head says so; a
     /// replay of that log and a save of it do too, and a log without the line
@@ -2215,8 +2301,8 @@ mod tests {
         for (log, film) in [
             (text.clone(), true),
             (text.replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false),
-            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7"), true),
-            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7").replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false),
+            (as_engine(&text, 7), true),
+            (as_engine(&text, 7).replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false),
         ] {
             let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
             for chunk in parse_program(&log) {

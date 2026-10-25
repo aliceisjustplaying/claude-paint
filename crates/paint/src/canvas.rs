@@ -241,6 +241,11 @@ pub struct Canvas {
     pub(crate) hand_slice: Option<f32>,
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
+    /// Engine 9's material revision (`crate::skin::MATERIAL`): 1 keeps its
+    /// baked films curing from the top down in `skin`; 0 is the single-cure
+    /// film engine 9 was released with.
+    pub(crate) material: u32,
+    pub(crate) skin: crate::skin::Film,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
@@ -325,6 +330,8 @@ impl Canvas {
             tally: crate::tally::Tally::default(),
             hand_slice: None,
             engine: crate::ENGINE,
+            material: 0,
+            skin: Default::default(),
             quarter_tiles: false,
             adaptive_sweep: false,
             liquid_film_levels: false,
@@ -355,6 +362,9 @@ impl Canvas {
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
+        if v < crate::PIGMENT_MIXER {
+            self.material = 0;
+        }
         self
     }
     pub fn engine(&self) -> u32 {

@@ -21,7 +21,10 @@ easel run painting.lua --replay-checkpoint replay.ckpt --out final.png --checkpo
 
 `--until-chunk` is an absolute, inclusive chunk number. `--for-minutes` stops
 at the first successful chunk boundary after its wall-time budget; it cannot
-interrupt a chunk. Repeating the command resumes the existing checkpoint,
+interrupt a chunk. `--checkpoint-at 200,402` writes the checkpoint only after
+the chunks it names (a benchmark replay of a painting whose state is
+gigabytes, where a write after every chunk would cost as much as the
+painting); the progress file still moves at every chunk. Repeating the command resumes the existing checkpoint,
 not a new replay. A partial batch saves its checkpoint and exits successfully
 without exporting a partial final picture. The complete batch exports normally,
 including the existing finish-only `--checkpoint-out` format. An already-complete

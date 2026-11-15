@@ -1610,12 +1610,14 @@ mod tests {
         assert!(after > 1.3 * v[7], "fixed takes more: {} vs {}", after, v[7]);
     }
 
-    /// A gritted coat's tooth (notes/research/sanded_paper.md): a few
-    /// times a drawing paper's pores (2–4× at P400), more for a coarser
-    /// grade (P320 over P600: painters layer on the coarse grades and detail
-    /// on the fine), less for a closed coat than an open one (a closed coat
-    /// loads sooner); its pixels scatter about it; an acrylic coat seals the
-    /// sheet against oil, a glue one lets it through.
+    /// A gritted coat's tooth (notes/research/sanded_paper.md §1): the open
+    /// volume of its grain packing, 3.5–4.9 times a drawing paper's pores at
+    /// P400 (acrylic to glue; the makers' and painters' claims run 4–8), more
+    /// for a coarser grade (P320 over P600: painters layer on the coarse
+    /// grades and detail on the fine), less for a closed coat than an open
+    /// one (a closed coat loads sooner), more in a lean glue than in acrylic;
+    /// its pixels scatter about it; an acrylic coat seals the sheet against
+    /// oil, a glue one lets it through.
     #[test]
     fn a_gritted_coat_has_its_tooth() {
         use crate::paper::{Binder, Grit};
@@ -1625,7 +1627,9 @@ mod tests {
         let plain = c.clone().with_paper(Paper::drawing(4));
         let sanded = c.with_paper(Paper { grit: Some(p400), ..Paper::drawing(4) });
         let (pm, sm) = (plain.mean_micro_um().unwrap(), sanded.mean_micro_um().unwrap());
-        assert!(sm > 2.0 * pm && sm < 4.0 * pm, "P400 tooth {sm} µm vs paper {pm} µm");
+        assert!(sm > 3.0 * pm && sm < 8.0 * pm, "P400 tooth {sm} µm vs paper {pm} µm");
+        // (the research's packing: P400 21 µm in acrylic, 29 µm in glue)
+        assert!((p400.tooth_um() / 21.0 - 1.0).abs() < 0.05 && (g(35.0, 0.6, Binder::Glue).tooth_um() / 29.4 - 1.0).abs() < 0.05, "{}", p400.tooth_um());
         assert!((sm / p400.tooth_um() - 1.0).abs() < 0.05, "the pixels scatter about the coat's tooth");
         assert!(sanded.micro.iter().any(|&m| (m - sm).abs() > 0.05 * sm), "and scatter");
         assert!(g(46.2, 0.6, Binder::Acrylic).tooth_um() > p400.tooth_um() && p400.tooth_um() > g(25.8, 0.6, Binder::Acrylic).tooth_um());
@@ -1638,39 +1642,39 @@ mod tests {
         assert_eq!(sanded.height, plain.height, "the sheet's grain shows through the thin coat");
     }
 
-    /// The same hatching stroke at 1 N, twelve times over one place, on a
+    /// The same hatching stroke at 1 N, thirty times over one place, on a
     /// drawing paper and on the same sheet with a sanded coat of P400 grit
-    /// (35 µm, the grade most painters use). Thresholds from
-    /// notes/research/sanded_paper.md, not from this code: drawing paper
-    /// takes 2–3 layers and then refuses, so by its fifth pass it lays under
-    /// a quarter of its first; a gritted coat's open volume is 2–4 times the
-    /// paper's pores and painters find it holds many more layers, so over the
-    /// twelve passes it holds at least twice the pastel, its later passes
-    /// (the fifth on) lay at least 2.5 times what the paper's do, and its
-    /// sixth pass still lays more than that quarter.
+    /// (35 µm, the grade most painters use), until both refuse. Thresholds
+    /// from notes/research/sanded_paper.md §2, not from this code: the coat's
+    /// open volume is 3.5–4.9 times the paper's pores, so it holds at least 3
+    /// times the pastel; and counted in layers of what a pass lays on fresh
+    /// paper (a covering application, which on sanded paper a painter lays
+    /// with a lighter hand), drawing paper takes 2–3 layers and refuses (here
+    /// fewer than 5), and the sanded sheet 10–25 (here at least 10).
     #[test]
     fn a_sanded_sheet_takes_layer_on_layer() {
         use crate::paper::{Binder, Grit};
         let passes = |grit: Option<Grit>| {
             let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
             let mut st = Stick::round([0.1, 0.1, 0.5], 0.8, 12.0);
-            (0..12).map(|_| line(&mut c, &mut st, 500.0, 1.0, 55.0).volume_mm3).collect::<Vec<f32>>()
+            (0..30).map(|_| line(&mut c, &mut st, 500.0, 1.0, 55.0).volume_mm3).collect::<Vec<f32>>()
         };
         let plain = passes(None);
         let sanded = passes(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
-        let (sum, late) = (|v: &[f32]| v.iter().sum::<f32>(), |v: &[f32]| v[4..].iter().sum::<f32>());
-        let bar = 0.25 * plain[0];
-        assert!(plain[4] < bar, "drawing paper refuses: {plain:?}");
-        assert!(sanded[5] > bar, "the sanded sheet still takes it: {sanded:?} (bar {bar})");
-        assert!(sum(&sanded) > 2.0 * sum(&plain), "holds more: {sanded:?} vs {plain:?}");
-        assert!(late(&sanded) > 2.5 * late(&plain), "later layers lay: {sanded:?} vs {plain:?}");
+        let sum = |v: &[f32]| v.iter().sum::<f32>();
+        assert!(plain[29] < 0.02 * plain[0] && sanded[29] < 0.02 * sanded[0], "both refuse: {plain:?} {sanded:?}");
+        assert!(sum(&sanded) > 3.0 * sum(&plain), "holds more: {sanded:?} vs {plain:?}");
+        let layers = |v: &[f32]| sum(v) / plain[0];
+        assert!(layers(&plain) < 5.0, "drawing paper holds {} layers", layers(&plain));
+        assert!(layers(&sanded) >= 10.0, "the sanded sheet holds {} layers", layers(&sanded));
     }
 
     /// The grains abrade the stick faster than the fibers do (painters:
-    /// sanded paper "eats" pastel; abrasive wear goes as the asperities'
-    /// slope, 2–4 times a fiber's: notes/research/sanded_paper.md): the
-    /// first stroke on a fresh sheet takes at least twice as much off the
-    /// same stick, and cuts its new facet deeper.
+    /// sanded paper "eats" pastel; Rabinowicz's abrasive wear with a crushed
+    /// grain's facets against a fiber crossing's flank gives 2.3–5.1 times:
+    /// notes/research/sanded_paper.md §3): the first stroke on a fresh sheet
+    /// takes that much more off the same stick, and cuts its new facet
+    /// deeper.
     #[test]
     fn grit_wears_the_stick_faster() {
         use crate::paper::{Binder, Grit};
@@ -1681,7 +1685,8 @@ mod tests {
             (laid, st.facets.last().unwrap()[3])
         };
         let (paper, sanded) = (stroke(None), stroke(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic })));
-        assert!(sanded.0 > 2.0 * paper.0, "worn {} on grit vs {} on paper", sanded.0, paper.0);
+        let ratio = sanded.0 / paper.0;
+        assert!((2.3..=5.1).contains(&ratio), "worn {} on grit vs {} on paper", sanded.0, paper.0);
         assert!(sanded.1 < paper.1, "its face cut further: {} vs {}", sanded.1, paper.1);
     }
 

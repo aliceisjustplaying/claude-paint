@@ -1113,6 +1113,106 @@ use("painting")
   and a session without the switch refuses to receive one.
 - **Physics and estimates:** notes/research/intaglio_physics.md, notes/research/plate_physics.md.
 
+### Etching: grounds, acid and aquatint
+
+A painting whose log's head also says `--@ etch` (new paintings do; it needs `--@ plate`) may
+ground its plates, draw through the ground, bite them in acid and lay an aquatint. Without the
+switch these tools refuse ("this painting doesn't etch"), and a plate no etching tool has
+touched saves and replays byte for byte as before. Still no ink or press: those come with
+`--@ press`.
+
+```lua
+use(k)
+k:ground("hard", {um=4})                        -- rolled over the face
+n = needle{tip=40, cone=30}
+r = k:needle(n, {{100,200},{900,200}}, {force=0.3})   -- through the ground: r.touched, r.width (the window)
+k:bite{acid="ferric", baume=36, minutes=10}     -- face down by default; 10 minutes pass on the clock
+k:stop_out(rect(0, 400, 1000, 300))             -- varnish: no acid there
+k:bite{acid="ferric", baume=36, minutes=30, rock=true}
+k:clean()                                       -- solvent: ground, varnish, rosin off
+k:aquatint{box=0.6, wait=30, minutes=1}         -- the dust box: wait s after stirring, minutes in it
+k:melt()
+k:bite{acid="nitric", parts=8, minutes=2, feather=true}   -- on zinc: sweep the bubbles
+print(k:feel(500, 200).words)
+use("painting")
+```
+
+- **`k:ground("hard", {um=})`.** A hard ground (beeswax, bitumen, rosin) rolled over the
+  whole face, 4 µm by default (an estimate: 2–8). It covers whatever lines are already
+  there. It goes on a clean plate (`k:clean()` first), and takes 10 minutes of hand time.
+  Soft ground is `--@ soft-ground`, later.
+- **`k:needle(n, pts, {force=, alt=, azimuth=, speed=})`** draws an etching needle
+  (`needle{}`) through the ground.
+  - **The window.** It parts the ground where its point is wider than the ground is thick.
+    The window it leaves (`width`) is the point's width at the ground's top.
+  - **The metal.** The rest of the force falls on the metal, which it marks lightly by the
+    same scratch law as drypoint. The default 0.3 N with a 40 µm point is about 3 µm.
+  - **A line too light** to get through the ground (the ground carries a few mN) bares
+    nothing, and the verb says so (`touched`).
+  - The default speed is 40 mm/s. An etching needle needs a ground: without one, use
+    `k:drypoint`.
+- **`k:stop_out(mask)`.** Stopping-out varnish brushed where the mask (made while the plate
+  is in hand) is at least half. No acid reaches there until `k:clean()`. Hand time is its
+  area at 160 mm²/s (an estimate).
+- **`k:bite{acid=, …, minutes=}`** puts the plate in its tray for `minutes` of the shared
+  clock: the minutes pass as `wait` passes them, for every surface, with 2 minutes of
+  handling.
+  - **`acid`:**
+    - `"ferric"`: ferric chloride, strength `baume=` (default 38 °Bé) or `molar=`
+    - `"nitric"`: nitric acid, `parts=` of water to one of acid (default 8) or `molar=`
+    - `"dutch"`: Dutch mordant, by the 1911 Britannica's recipe
+  - **`temp=`** °C (default 20).
+  - **`face=`:** `"down"` (held off the tray's floor, ferric's default), `"upright"` (in
+    a tank) or `"up"` (in a tray, nitric's and Dutch's default).
+  - **`rock=true`** or `{tilt=, period=}` rocks the tray. **`feather=true`** or seconds
+    between sweeps (nitric only, face up) sweeps the bubbles.
+  - **`fresh=true`** makes a fresh bath. Otherwise the plate's tray keeps its acid between
+    bites and slows as it takes up metal.
+  - **The rate** is the oxidant's mass transfer, worked out from the CRC viscosities and
+    standard convection correlations, with no fitted constant.
+    - Ferric chloride face down at 20 °C bites about 1 µm/min. It is fastest near 2 M and
+      1.4× faster per 10 °C (its measured 24.9 kJ/mol).
+    - Face up and still, the spent acid lies on the plate and the bite slows as √t.
+    - Nitric acid on zinc is several times faster, slowed where its bubbles sit.
+    - Dutch mordant is slow and even (its rate is an estimate).
+  - **Lines** bite down and sideways under the ground (etch factor 1.2 for ferric), so a
+    line widens by 2·depth/K. A narrow line bites slower as it deepens.
+  - **Bitten lines have no burr:** the acid takes the needle's.
+  - Loose (unmelted) rosin floats off.
+  - **The result:** `rate` (µm/min at the start), `layer` (µm), `bubbles`, `depth`, `metal`
+    (µm³ taken), `loaded` (g/L of metal in the bath), `molar`, `washed`.
+- **`k:aquatint{box=, wait=, minutes=}`** puts the plate in the rosin dust box: `box` m
+  tall (0.6), `wait` s after the cloud was stirred (30), `minutes` in it (1).
+  - **Grain size.** Grains settle at their Stokes speed, so the largest still falling
+    after the wait is √(18µH/ρgt): 61 µm after 5 s, 18 µm after 60 s.
+  - **Cover** comes from the cloud's density (an estimate, set to give the workshops' 50 %
+    on these defaults).
+  - **Speckle.** Each cell takes its own random share of grains.
+  - The wait and the minutes pass on the clock. The verb returns `largest` and `cover`.
+- **`k:melt()`** heats the plate until the grains melt on, each spreading to 1.3 times its
+  width.
+  - A bite then eats the bare metal between the dots and under them. The pits deepen and
+    the tone rises.
+  - When the undercut reaches a dot's radius the dot is lost. The pits merge into an open
+    bite and the tone falls: an over-bitten aquatint prints lighter.
+  - Stop out between bites for stepped tones.
+- **`k:clean()`** takes ground, varnish and rosin off with solvent (5 minutes). What the acid
+  opened stays as the plate's lines and pits. The drypoint tools want a clean plate.
+- **What the acid opens joins the plate's cells,** in the same width bins as drypoint lines,
+  so wiping and the press will read a bitten line as they read a drypoint one. The metal the
+  acid takes is counted, and the tray holds it.
+- **The look.**
+  - A grounded plate is dark brown: a film of bitumen over the metal, from its optics.
+  - Needle lines show bright metal through it, and bitten lines their walls.
+  - Varnish is near black. Rosin speckles the face.
+  - `k:feel` adds the ground, the varnish and the rosin (`ground`, `rosin`). `probe` adds the
+    coats, the deepest bite, the ink a wipe's yarns would leave (a guide to the tone), and
+    the tray.
+- **Saves, checkpoints, replay and handoff** keep the coats and the tray in the plate's
+  section (`PLAT` version 2; version 1 plates still read). A session that doesn't etch
+  refuses to receive an etched plate.
+- **Physics and estimates:** notes/research/etch_physics.md.
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

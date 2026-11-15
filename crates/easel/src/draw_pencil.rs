@@ -107,14 +107,22 @@ fn is_pastel_pencil(st: &S, p: &Table) -> Result<bool> {
     Ok(is_stick(st, p)? && p.get::<Option<String>>("section")?.as_deref() == Some("pencil"))
 }
 
-/// The shortest pastel pencil a hand still holds to draw, mm: a stub
-/// shorter wants an extender (an estimate: a grip from the fingertips to
-/// the web of the hand; notes/research/pastel_stick_tribology.md §1).
-const PENCIL_HOLD_MM: f32 = 50.0;
-/// The hand time of a sharpening, s (an estimate: the wood shaved off
-/// around with a blade and the point touched up on sandpaper;
-/// notes/research/pastel_stick_tribology.md §1).
-const SHARPEN_SECS: f64 = 10.0;
+/// The shortest pastel pencil a hand still holds to draw, mm: one that
+/// reaches from the tripod grip's pinch, 20 mm back of the point, past the
+/// index finger to rest on the web of a small hand (a 5th-percentile
+/// woman's index finger, 62 mm tip to base crease, less 9 mm to the pad's
+/// middle: 20 + 53 = 73). A stub shorter wants an extender.
+/// notes/research/pastel_stick_tribology.md §1.
+const PENCIL_HOLD_MM: f32 = 75.0;
+/// The hand time of a sharpening, s: its motions timed by MTM-1's tables
+/// (knife taken up and put down, the wood shaved round once, the core's
+/// eight cuts, a touch-up on sandpaper: 437 TMU of 0.036 s, 15.7 s).
+/// notes/research/pastel_stick_tribology.md §1.
+const SHARPEN_SECS: f64 = 16.0;
+/// A pastel pencil's core, mm: Stabilo's CarbOthello lead is 4.4 mm
+/// (stabilo.com; Faber-Castell's Pitt measures 4.3). A log without
+/// `--@ pastel-pencil-sharpen` keeps its 4.5.
+const PENCIL_CORE_MM: f32 = 4.4;
 
 /// Sharpen a pastel pencil (`--@ pastel-pencil-sharpen`): a fresh point cut,
 /// the core shorter by the cut (paint's `Stick::sharpen`), stored in its
@@ -738,7 +746,9 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             let stick = match kind.as_str() {
                 "soft" => paint::pastel::Stick::round(color, soft.unwrap_or(0.75), dia.unwrap_or(12.0).clamp(4.0, 25.0)),
                 "hard" => paint::pastel::Stick::square(color, soft.unwrap_or(0.25), dia.unwrap_or(6.35).clamp(3.0, 15.0)),
-                "pencil" => paint::pastel::Stick::pencil(color, soft.unwrap_or(0.35), dia.unwrap_or(4.5).clamp(2.0, 8.0)),
+                // (a log without `--@ pastel-pencil-sharpen` keeps the pencil it was painted with)
+                "pencil" if tubes.pastel_pencil_sharpen => paint::pastel::Stick::pencil(color, soft.unwrap_or(0.35), dia.unwrap_or(PENCIL_CORE_MM).clamp(2.0, 8.0)),
+                "pencil" => paint::pastel::Stick::pencil_as_before(color, soft.unwrap_or(0.35), dia.unwrap_or(4.5).clamp(2.0, 8.0)),
                 k => return err(format!("pastel: kind {k:?}: soft (a round stick), hard (a square one) or pencil")),
             };
             if soft.is_some_and(|s| !(0.0..=1.0).contains(&s)) {
@@ -1093,12 +1103,20 @@ mod tests {
             let older = "--@ engine 8\n--@ paper\n--@ calls-agree\n";
             let mut s = Session::with_box(256, box_for(if enabled { None } else { Some(older) }).unwrap()).unwrap().with_paper(true).unwrap();
             run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            // a new painting's pencil is a Pitt Pastel's 175 mm on a 4.4 mm core; an older
+            // log's is the 120 mm, 4.5 mm pencil it was painted with, its point as it was cut
+            let made = run(&mut s, r#"local q = pastel(pile{{"bone black", 1}}, {kind="pencil"}) print(q.length, q.size, q.facets[4], q.facets[11])"#);
+            let made: Vec<f32> = made.split_whitespace().map(|v| v.parse().unwrap()).collect();
+            let (taper, blunt): (f32, f32) = if enabled { (0.20, 0.251) } else { (0.22, 0.15) };
+            assert_eq!(made[..2], if enabled { [175.0, 4.4] } else { [120.0, 4.5] }, "{made:?}");
+            assert!((made[2] + blunt).abs() < 0.002 && (made[3] + taper.sin()).abs() < 1e-6, "{made:?}");
             // (a copy of a pencil as it is: its facets and length)
             run(&mut s, r#"black = pile{{"bone black", 1}}
                 function fresh() return pastel(black, {kind="pencil"}) end
                 function copy(p) local c = fresh() c.facets = {table.unpack(p.facets)} c.length = p.length return c end
                 soft = pastel(black, {kind="soft"})
-                p = fresh() for i = 1, 20 do p:line({{100, 900 + (i % 5) * 15}, {900, 900 + (i % 5) * 15}}, {pressure=0.5}) end"#);
+                p = fresh() for i = 1, 20 do p:line({{100, 900 + (i % 5) * 15}, {900, 900 + (i % 5) * 15}}, {pressure=0.5}) end
+                worn = copy(p)"#);
             let new = line_darkness(&mut s, "fresh()", LINE, 40.0, 6);
             let worn = line_darkness(&mut s, "copy(p)", LINE, 310.0, 6);
             assert!(worn < 0.8 * new, "a pencil worn by 20 lines lays a paler line: {worn} vs {new}");
@@ -1119,7 +1137,8 @@ mod tests {
             let clock = s.st.borrow().clock;
             let cut: f32 = run(&mut s, "print(p:sharpen())").trim().parse().unwrap();
             let secs = (s.st.borrow().clock - clock) * 60.0;
-            assert!((9.0..=11.0).contains(&secs), "a sharpening takes some 10 s of hand time: {secs}");
+            // MTM-1: 436.7 TMU × 0.036 s (notes/research/pastel_stick_tribology.md §1)
+            assert!((15.0..=16.5).contains(&secs), "a sharpening takes some 15.7 s of hand time: {secs}");
             let after = length(&mut s);
             assert!(cut > 0.5 && cut < 15.0, "the cut {cut} mm");
             assert!((before - cut - after).abs() < 1e-4, "{before} - {cut} = {after}");
@@ -1142,9 +1161,10 @@ mod tests {
             let restored = crate::save::read(&path).unwrap().session;
             std::fs::remove_file(path).unwrap();
             assert!(restored.st.borrow().tubes.pastel_pencil_sharpen);
-            // too short to hold
-            let e = s.run(r#"stub = pastel(black, {kind="pencil", length=45}) stub:sharpen()"#).unwrap_err();
-            assert!(e.contains("too short to hold"), "{e}");
+            // too short to hold: under 75 mm once cut (a fresh stub's point needs no cut)
+            let e = s.run(r#"stub = copy(worn) stub.length = 76 stub:sharpen()"#).unwrap_err();
+            assert!(e.contains("too short to hold") && e.contains("under 75 mm"), "{e}");
+            run(&mut s, r#"stub = fresh() stub.length = 75 assert(stub:sharpen() == 0)"#);
         }
     }
 

@@ -41,6 +41,7 @@ mod session;
 mod state_dump;
 mod studio;
 mod surfaces;
+mod plate;
 mod time;
 mod world;
 
@@ -1679,6 +1680,10 @@ impl Server {
         if (pose.is_some() || side.is_some()) && hold.is_none() {
             return Err("look: --pose and --side hold a pastel stick: they go with --hold <stick> --at x,y".into());
         }
+        // a plate (plate.rs) is looked at whole or in a crop, in any light and mirrored
+        if self.s.st.borrow().plate.is_some() && (survey || compare.is_some() || hold.is_some() || at.is_some() || reference.is_some()) {
+            return Err("look: a plate is looked at whole or in a crop (--crop, --mode relief, mirror, value, --light), not with --survey, --compare, --hold or --ref".into());
+        }
         if let Some(r) = reference {
             if survey || compare.is_some() || hold.is_some() || at.is_some() {
                 return Err("look: --ref is a look of its own: no --survey, --compare or --hold".into());
@@ -1750,6 +1755,27 @@ impl Server {
             let (w, h, png) = palette_look(&self.s)?;
             let path = new_look(&session_dir(&self.name), &png)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
+        }
+        if self.s.st.borrow().plate.is_some() {
+            if !v.mask.is_empty() {
+                return Err("look: a plate's look takes no --mask".into());
+            }
+            let (w, h, png) = {
+                let st = self.s.st.borrow();
+                plate::render(st.canvas.as_ref().ok_or("the plate has no canvas")?, st.plate.as_ref().unwrap(), &v)?
+            };
+            let path = match path {
+                Some(p) => {
+                    if let Some(dir) = p.parent() {
+                        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::write(&p, &png).map_err(|e| e.to_string())?;
+                    p
+                }
+                None => new_look(&session_dir(&self.name), &png)?,
+            };
+            let scale = look::crop_scale(self.s.canvas().unwrap().window(), &v, w, h)?;
+            return Ok(format!("{} ({w}x{h}, {:.2}s){scale}\n", path.display(), t0.elapsed().as_secs_f64()));
         }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         if let Some(pool) = &self.display && v.display_eligible() {
@@ -1873,6 +1899,10 @@ impl Server {
             (i, ((b * f.scale).ceil() as usize).saturating_sub(lo).clamp(i + 1, n))
         };
         let ((px0, px1), (py0, py1)) = (span(x0, x1, f.x0, f.w), span(y0, y1, f.y0, f.h));
+        // a plate: its lines, burr and level (plate.rs)
+        if let Some(p) = self.s.st.borrow().plate.as_ref() {
+            return Ok(plate::probe(p, &place, (px0, py0, px1, py1)));
+        }
         let (plain, lit, stages) = (c.seen(), c.seen_lit(GALLERY_LIGHT.0, GALLERY_LIGHT.1, 1.0), c.stages());
         let (mut sums, mut counts) = ([[0.0f64; 3]; 2], [0usize; 4]);
         for y in py0..py1 {
@@ -2046,6 +2076,7 @@ impl Server {
             live,
             current: self.s.st.borrow().surfaces.current_name().to_string(),
             resting,
+            plates: surfaces::plates(&self.s.st.borrow()),
         })
     }
 
@@ -2202,6 +2233,9 @@ impl Server {
             "probe" => self.probe(args),
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
+                if self.s.st.borrow().plate.is_some() {
+                    return Err("save: a plate isn't a picture to save: look at it (look --surface <plate>), or hand it off (handoff)".into());
+                }
                 // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
                 let (path, light) = save_args(args)?;
                 let p = match path {

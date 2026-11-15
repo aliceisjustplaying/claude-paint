@@ -65,6 +65,9 @@ pub enum Kind {
     Painting,
     /// A sheet of paper (`sheet{}`).
     Sheet,
+    /// A copper or zinc plate (`plate{}`, `--@ plate`: plate.rs). Its entry's payload is the
+    /// plate's state (paint's `PLAT` section); its canvas keeps its clock.
+    Plate,
 }
 
 impl Kind {
@@ -72,6 +75,7 @@ impl Kind {
         match self {
             Kind::Painting => 0,
             Kind::Sheet => 1,
+            Kind::Plate => 2,
         }
     }
 
@@ -79,6 +83,7 @@ impl Kind {
         match word {
             0 => Ok(Kind::Painting),
             1 => Ok(Kind::Sheet),
+            2 => Ok(Kind::Plate),
             k => Err(format!("a surface of kind {k}, which this build doesn't know")),
         }
     }
@@ -87,6 +92,7 @@ impl Kind {
         match self {
             Kind::Painting => "painting",
             Kind::Sheet => "sheet",
+            Kind::Plate => "plate",
         }
     }
 }
@@ -180,11 +186,13 @@ pub struct Own {
     /// The surface's canvas clock when the studio clock read 0 (`Studio::clock0`).
     pub clock0: f64,
     pub view: Option<crate::world::ViewU>,
+    /// A plate's state (plate.rs): None for the painting and sheets.
+    pub plate: Option<Rc<paint::plate::Plate>>,
 }
 
 impl Own {
     pub(crate) fn take(s: &mut Studio) -> Own {
-        Own { style: s.style.take(), setup: s.setup.take(), canvas_src: s.canvas_src.take(), recording_ground: s.recording_ground, clock0: s.clock0, view: s.view.take() }
+        Own { style: s.style.take(), setup: s.setup.take(), canvas_src: s.canvas_src.take(), recording_ground: s.recording_ground, clock0: s.clock0, view: s.view.take(), plate: s.plate.take() }
     }
 
     pub(crate) fn put(self, s: &mut Studio) {
@@ -194,12 +202,22 @@ impl Own {
         s.recording_ground = self.recording_ground;
         s.clock0 = self.clock0;
         s.view = self.view;
+        s.plate = self.plate;
     }
 
     /// The current surface's, as the studio holds them (a copy; the world view is left out,
     /// as a checkpoint leaves it out: `fields`).
     fn of(s: &Studio) -> Own {
-        Own { style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), recording_ground: s.recording_ground, clock0: s.clock0, view: None }
+        Own { style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), recording_ground: s.recording_ground, clock0: s.clock0, view: None, plate: s.plate.clone() }
+    }
+
+    /// Its entry's payload in a multi-surface checkpoint: a plate's state, or nothing.
+    pub(crate) fn payload(&self) -> std::io::Result<Vec<u8>> {
+        let mut b = Vec::new();
+        if let Some(p) = &self.plate {
+            p.write(&mut b)?;
+        }
+        Ok(b)
     }
 }
 
@@ -352,6 +370,8 @@ impl UserData for SurfaceU {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        // a plate's tools (plate.rs; `--@ plate`)
+        crate::plate::methods(m);
         m.add_meta_method(MetaMethod::ToString, |_, s, ()| Ok(format!("{} {:?} ({} mm, 1000 x {} units)", s.kind.name(), s.name, crate::api::fmt_num(s.size_mm), crate::api::fmt_num(s.h))));
     }
 }
@@ -375,7 +395,7 @@ fn no_surface(s: &Surfaces, verb: &str, name: &str) -> mlua::Error {
 }
 
 /// The session's surfaces start being kept by name: the painting is the first.
-fn name_the_painting(s: &mut Studio) {
+pub(crate) fn name_the_painting(s: &mut Studio) {
     if s.surfaces.slots.is_empty() {
         s.surfaces.slots.push(Slot { name: MAIN.into(), kind: Kind::Painting, rest: None });
         s.surfaces.current = 0;
@@ -383,7 +403,7 @@ fn name_the_painting(s: &mut Studio) {
 }
 
 /// A new surface's checks: a canvas to lie beside, a name of its own, room for it.
-fn check_new(s: &Studio, verb: &str, name: &str) -> Result<()> {
+pub(crate) fn check_new(s: &Studio, verb: &str, name: &str) -> Result<()> {
     if !valid_name(name) {
         return crate::api::err(format!("{verb}: name {name:?}: 1 to 64 letters, digits, _ or -"));
     }
@@ -470,6 +490,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
                 // (its clock reads the studio's from the start: `wake_up`)
                 clock0: clock - s.clock,
                 view: None,
+                plate: None,
             };
             name_the_painting(&mut s);
             let since = s.clock;
@@ -527,6 +548,10 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
             let o = o.ok_or_else(|| mlua::Error::runtime(RECEIVE_HELP))?;
             receive(&st, &path, &o)
         })?)?;
+    }
+    // plate{}: a copper or zinc plate among the surfaces (plate.rs), with its own switch
+    if st.borrow().tubes.plate {
+        crate::plate::install(lua, st)?;
     }
     Ok(())
 }
@@ -638,7 +663,7 @@ fn handoff(st: &S, name: &str, path: &str) -> Result<String> {
             {
                 // (one thread: the same surface makes the same bytes)
                 let mut z = zstd::stream::write::Encoder::new(&mut hashed, 3)?;
-                let entry = SurfaceEntry { name: name.clone(), kind: slot.kind.word(), fields: fields(&rest.own, None) };
+                let entry = SurfaceEntry { name: name.clone(), kind: slot.kind.word(), fields: fields(&rest.own, None), payload: rest.own.payload()? };
                 paint::checkpoint::write_surfaces(&mut z, &header, &name, &[entry], |_, w| packed.copy_state(w))?;
                 z.finish()?;
             }
@@ -770,15 +795,20 @@ fn receive(st: &S, path: &str, o: &Table) -> Result<SurfaceU> {
     if read.slots.len() != 1 {
         return crate::api::err(format!("receive {path}: a handed-off file holds one surface, this one {}", read.slots.len()));
     }
-    let ReadBack { mut canvas, mut slots, current_fields, .. } = read;
-    let (sent_name, kind, _, _) = slots.pop().unwrap();
+    let ReadBack { mut canvas, mut slots, current_fields, current_payload, .. } = read;
+    let (sent_name, kind, _, _, _) = slots.pop().unwrap();
     if kind == Kind::Painting {
         return crate::api::err(format!("receive {path}: a painting isn't handed off"));
     }
+    if kind == Kind::Plate && !tubes.plate {
+        return crate::api::err(format!("receive {path}: a plate, and this painting has no plates (its log's head has no {:?} line)", crate::session::PLATE_MARK));
+    }
+    let plate = plate_of(kind, &current_payload).map_err(|e| mlua::Error::runtime(format!("receive {path}: {e}")))?;
     let canvas = canvas.take().ok_or_else(|| mlua::Error::runtime(format!("receive {path}: the surface has no canvas")))?;
     let name = o.get::<Option<String>>("name")?.unwrap_or(sent_name.clone());
     check_new(&st.borrow(), "receive", &name)?;
-    let (own, _) = read_fields(&current_fields, &tubes).map_err(|e| mlua::Error::runtime(format!("receive {path}: {e}")))?;
+    let (mut own, _) = read_fields(&current_fields, &tubes).map_err(|e| mlua::Error::runtime(format!("receive {path}: {e}")))?;
+    own.plate = plate;
     let size_mm = own.style.as_ref().map_or(0.0, |s| s.width_mm);
     let h = canvas.height();
     let packed = Rc::new(Packed::rest(&canvas).map_err(|e| mlua::Error::runtime(format!("receive {path}: the surface couldn't be put aside: {e}")))?);
@@ -796,6 +826,27 @@ fn receive(st: &S, path: &str, o: &Table) -> Result<SurfaceU> {
         crate::api::fmt_num(after as f32)
     ));
     Ok(SurfaceU { name, kind, size_mm, h })
+}
+
+/// Every surface's plate, by name, as a check compares them (check.rs): the current one's as
+/// it is, the others' as they rest. Empty while no plate is among the surfaces.
+pub(crate) fn plates(s: &Studio) -> Vec<(String, Vec<u8>)> {
+    let bytes = |p: &paint::plate::Plate| {
+        let mut b = Vec::new();
+        p.write(&mut b).expect("a plate writes to memory");
+        b
+    };
+    let mut out = Vec::new();
+    if let Some(p) = &s.plate {
+        out.push((s.surfaces.current_name().to_string(), bytes(p)));
+    }
+    for slot in &s.surfaces.slots {
+        if let Some(p) = slot.rest.as_ref().and_then(|r| r.own.plate.as_ref()) {
+            out.push((slot.name.clone(), bytes(p)));
+        }
+    }
+    out.sort();
+    out
 }
 
 // ---------------------------------------------------------------- checkpoints
@@ -853,6 +904,8 @@ pub(crate) fn read_fields(text: &str, tubes: &paint::Palette) -> std::result::Re
         recording_ground: hex64("ground")?.unwrap_or(0),
         clock0,
         view: None,
+        // (a plate's is its entry's payload: `plate_of`)
+        plate: None,
     };
     Ok((own, since))
 }
@@ -863,13 +916,16 @@ pub(crate) fn read_fields(text: &str, tubes: &paint::Palette) -> std::result::Re
 pub(crate) fn write_all(s: &Studio, header: &str, w: &mut impl Write) -> std::io::Result<()> {
     let sf = &s.surfaces;
     let entries: Vec<SurfaceEntry> = sf.slots.iter().enumerate().map(|(i, slot)| {
-        let fields = match &slot.rest {
-            Some(r) => fields(&r.own, Some(r.since)),
-            None => fields(&Own::of(s), None),
+        let (fields, payload) = match &slot.rest {
+            Some(r) => (fields(&r.own, Some(r.since)), r.own.payload()?),
+            None => {
+                let own = Own::of(s);
+                (fields(&own, None), own.payload()?)
+            }
         };
         debug_assert_eq!(slot.rest.is_none(), i == sf.current);
-        SurfaceEntry { name: slot.name.clone(), kind: slot.kind.word(), fields }
-    }).collect();
+        Ok(SurfaceEntry { name: slot.name.clone(), kind: slot.kind.word(), fields, payload })
+    }).collect::<std::io::Result<_>>()?;
     let missing = || std::io::Error::other("a surface without its canvas");
     paint::checkpoint::write_surfaces(w, header, sf.current_name(), &entries, |i, w| match &sf.slots[i].rest {
         None => s.canvas.as_ref().ok_or_else(missing)?.write_state(&mut &mut *w, ""),
@@ -884,14 +940,27 @@ pub(crate) struct ReadBack {
     pub canvas: Option<Canvas>,
     current: usize,
     current_fields: String,
-    /// Each surface's name, kind, fields and (but the current one's) packed canvas.
-    slots: Vec<(String, Kind, String, Option<Rc<Packed>>)>,
+    /// The current surface's payload (a plate's state, or nothing).
+    current_payload: Vec<u8>,
+    /// Each surface's name, kind, fields, (but the current one's) packed canvas and payload.
+    slots: Vec<(String, Kind, String, Option<Rc<Packed>>, Vec<u8>)>,
+}
+
+/// A surface's plate from its entry's payload: a plate has one, no other surface has any.
+fn plate_of(kind: Kind, payload: &[u8]) -> std::result::Result<Option<Rc<paint::plate::Plate>>, String> {
+    match (kind, payload.is_empty()) {
+        (Kind::Plate, false) => paint::plate::Plate::read(&mut std::io::Cursor::new(payload)).map(|p| Some(Rc::new(p))).map_err(|e| e.to_string()),
+        (Kind::Plate, true) => Err("a plate without its state".into()),
+        (_, true) => Ok(None),
+        (k, false) => Err(format!("a {} with a payload it shouldn't have", k.name())),
+    }
 }
 
 pub(crate) fn read_all(r: &mut impl Read) -> std::io::Result<ReadBack> {
     let mut slots = Vec::new();
     let mut canvas = None;
     let mut current_fields = None;
+    let mut current_payload = Vec::new();
     let (header, current) = paint::checkpoint::read_surfaces(r, |e, c| {
         let kind = Kind::of(e.kind).map_err(std::io::Error::other)?;
         let rests = e.fields.lines().any(|l| l.starts_with("since="));
@@ -903,9 +972,10 @@ pub(crate) fn read_all(r: &mut impl Read) -> std::io::Result<ReadBack> {
             }
             canvas = Some(c);
             current_fields = Some(e.fields.clone());
+            current_payload = e.payload.clone();
             None
         };
-        slots.push((e.name, kind, e.fields, packed));
+        slots.push((e.name, kind, e.fields, packed, e.payload));
         Ok(())
     })?;
     let at = slots.iter().position(|s| s.0 == current).ok_or_else(|| std::io::Error::other("the current surface isn't among them"))?;
@@ -913,7 +983,7 @@ pub(crate) fn read_all(r: &mut impl Read) -> std::io::Result<ReadBack> {
         return Err(std::io::Error::other("the current surface's entry says it rests"));
     }
     let current_fields = current_fields.ok_or_else(|| std::io::Error::other("no current surface"))?;
-    Ok(ReadBack { header, canvas, current: at, current_fields, slots })
+    Ok(ReadBack { header, canvas, current: at, current_fields, current_payload, slots })
 }
 
 impl ReadBack {
@@ -921,21 +991,32 @@ impl ReadBack {
     /// styles. The painting is the first, and only it.
     pub(crate) fn surfaces(&self, tubes: &paint::Palette) -> std::result::Result<(Surfaces, Own), String> {
         let mut slots = Vec::new();
-        for (i, (name, kind, f, packed)) in self.slots.iter().enumerate() {
+        for (i, (name, kind, f, packed, payload)) in self.slots.iter().enumerate() {
             if (i == 0) != (name == MAIN && *kind == Kind::Painting) {
                 return Err("the painting is a multi-surface checkpoint's first surface, and only it".into());
             }
+            if *kind == Kind::Plate && !tubes.plate {
+                return Err(format!("the surface {name:?} is a plate, and the painting has no plates (no {:?} in its head)", crate::session::PLATE_MARK));
+            }
             let rest = match packed {
                 Some(p) => {
-                    let (own, since) = read_fields(f, tubes)?;
+                    let (mut own, since) = read_fields(f, tubes)?;
+                    own.plate = plate_of(*kind, payload)?;
                     Some(Resting { own, canvas: Some(p.clone()), since: since.ok_or("a resting surface without its since=")? })
                 }
                 None => None,
             };
             slots.push(Slot { name: name.clone(), kind: *kind, rest });
         }
-        let (own, _) = read_fields(&self.current_fields, tubes)?;
+        let (mut own, _) = read_fields(&self.current_fields, tubes)?;
+        own.plate = plate_of(self.slots[self.current].1, &self.current_payload)?;
         Ok((Surfaces { slots, current: self.current }, own))
+    }
+
+    /// The current surface's plate, as the checkpoint kept it (a replay checkpoint's
+    /// reconstruction puts it in place: replay_checkpoint.rs).
+    pub(crate) fn current_plate(&self) -> std::result::Result<Option<Rc<paint::plate::Plate>>, String> {
+        plate_of(self.slots[self.current].1, &self.current_payload)
     }
 
     /// The resting surfaces' canvases into `into`, surfaces of the same names, kinds and
@@ -948,9 +1029,12 @@ impl ReadBack {
         if !same {
             return Err("the surfaces the checkpoint holds aren't the reconstructed session's".into());
         }
-        for (slot, (_, _, _, packed)) in into.slots.iter_mut().zip(self.slots) {
+        // (and their plates as it kept them: the reconstruction's tools took their effects from
+        // the trace, and changed none)
+        for (slot, (_, kind, _, packed, payload)) in into.slots.iter_mut().zip(self.slots) {
             if let (Some(r), Some(p)) = (slot.rest.as_mut(), packed) {
                 r.canvas = Some(p);
+                r.own.plate = plate_of(kind, &payload)?;
             }
         }
         Ok(())

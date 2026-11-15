@@ -175,11 +175,12 @@ fn three_surfaces_replay_save_and_checkpoint() {
     // a damaged section is refused: the section's version, then a byte of its first canvas
     let bytes = std::fs::read(&path).unwrap();
     assert!(paint::checkpoint::is_surfaces(&bytes));
-    let mut v2 = bytes.clone();
-    v2[8] = 2;
-    std::fs::write(&path, &v2).unwrap();
+    // (version 2 holds plates: `--@ plate`; a version this build doesn't know is refused)
+    let mut v9 = bytes.clone();
+    v9[8] = 9;
+    std::fs::write(&path, &v9).unwrap();
     let e = crate::save::read(&path).err().unwrap();
-    assert!(e.contains("version 2"), "{e}");
+    assert!(e.contains("version 9"), "{e}");
     let mut cut = bytes.clone();
     cut.truncate(bytes.len() - 100);
     std::fs::write(&path, &cut).unwrap();

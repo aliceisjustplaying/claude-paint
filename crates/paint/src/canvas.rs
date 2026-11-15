@@ -519,6 +519,11 @@ impl Canvas {
         self
     }
 
+    /// The sheet of paper the canvas is, if it is one.
+    pub fn paper(&self) -> Option<crate::paper::Paper> {
+        self.paper
+    }
+
     /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the
     /// paper's where paper is bare or only stained; over a paint film, the
     /// film's own, which follows its gloss (a glossy film is smooth, about

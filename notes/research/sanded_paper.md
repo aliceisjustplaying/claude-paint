@@ -17,8 +17,10 @@ counts below are makers' and painters' claims. The coat's geometry is
 worked out from first principles (FEPA's grain sizes, random packing, the
 binder's solids, where the stick rests) and the coated-abrasive literature,
 which describes sandpaper, not pastel paper. The stick's wear comes from
-Rabinowicz's abrasive model, and the only estimate in it is the shape of a
-crushed grain's corner.
+Rabinowicz's abrasive model with the grains' measured angularity. The only
+estimate in it is where an alumina grain sits in the measured range. The
+binder's wet level is a bench value, set at the lean end of its bounds by
+Colourfix's coat weight.
 
 ---
 
@@ -54,7 +56,15 @@ crushed grain's corner.
     favorite"), 500, 600 ("detailed work") and 800 ("finest").
   - Pastel Premier: 320 and 400, plus a 600 extra fine.
   - Neither maker says which standard the numbers follow. **[E]** The
-    easel takes FEPA P, which gives the coarser reading.
+    easel takes FEPA P, which gives the coarser reading. FEPA's P scale
+    (ISO 6344) is the coated-abrasive standard outside North America, and
+    UART is coated electrostatically, as sandpaper is. Its origin is
+    disputed: Dakota Art Pastels lists Germany, while Jackson's and an
+    Australian retailer list the US. So origin can't settle it, and the
+    missing "P" in the US retailers' names is not evidence for CAMI either.
+    A CAMI reading would give 22–23 µm at 400 and a tooth 37% smaller. A
+    micrograph of a UART or Pastel Premier surface at a known scale would
+    settle it; none was found published.
 - **[M] Open and closed coats.** In a closed coat the grain covers 100% of
   the backing. An open coat covers 50–70%, which "leaves significant
   valleys between the grains". Closed coats "clog or load quickly" on soft
@@ -93,10 +103,39 @@ next to this note.
 
 - **The coat.** The grains are spheres of FEPA's spread (above), lying at
   random on the sheet with the given cover.
-  - **The binder is laid level with the median grain's top.** That is the
-    leanest wet coat that carries its grains, which is how a primer is
-    brushed or rolled. **[E]** A thicker wet coat is possible, and gives
+  - **The binder is laid level with the median grain's top**
+    (`BINDER_WET` = 1 d50). That is the leanest wet coat that carries its
+    grains, which is how a primer is brushed or rolled. **[D, a bench
+    value]** A cross-section micrograph would measure it. Its bounds are
+    1–1.3 d50: below the median grain's top the coat doesn't hold half its
+    grains, and 1.3 d50 reaches the tallest ones. A thicker wet coat gives
     less tooth (below).
+  - **[M/D] The coat weight puts it at the lean bound.**
+    - Colourfix is 300 g/m² hot-pressed paper screen-printed with its
+      primer to make 340 g/m² (Art Spectrum's brochure and Colourfix Smooth
+      page; Jackson's; Talas). So the dry coat weighs 40 g/m².
+    - The model's coat at a cover of 0.6 holds 13.6 µm of grain at P400
+      (cover · 2/3 · E[d³]/E[d²], with E[d³]/E[d²] = d50·e^(−σ²/2) = 34.1 µm
+      by number), plus the dry binder. At 1 µm per g/cm³ per g/m², with
+      acrylic at 1.1 g/cm³ (`sanded_paper_coat.py`, `coat_weight`):
+
+      | grade | grit | binder at d50 | binder at 1.3 d50 |
+      |---|---|---|---|
+      | P400 | quartz or marble, 2.65 g/cm³ | 47.0 g/m² | 51.9 g/m² |
+      | P400 | alumina, 3.95 g/cm³ | 64.7 | 69.7 |
+      | P500 | quartz | 40.6 | 44.8 |
+      | P600 | quartz | 34.6 | 38.3 |
+
+    - Art Spectrum doesn't name its grit or its size, and calls the surface
+      a "fine tooth". At the easel's P400, every coat inside the bounds
+      outweighs 40 g/m², and the leanest comes closest. At P500 with a
+      quartz grit, the leanest level is the one that weighs 40 g/m². A
+      tinted primer's pigment also weighs something, which leaves even less
+      for binder. So the measured weight points to the lean bound, and the
+      easel keeps d50.
+    - The weight can't separate grain size from binder level: at P600
+      quartz, 40 g/m² would allow 1.44 d50, past the bound. Both weights are
+      nominal, and neither maker states a tolerance.
   - **It dries to its solids by volume.** The dry binder fills the coat
     between the grains from the sheet up.
   - **[M/D] Acrylic:** an acrylic emulsion is 46–47% solids by weight
@@ -110,30 +149,44 @@ next to this note.
 - **Where the stick rests.** The tooth is full once the pastel reaches the
   level where the stick's face rests, and from then on the stick slides on
   its own pastel (the existing fill and third-body model). The face rests
-  where the tallest grains carry the stick's real contact, F/(σp·A₀): **2%**
-  (`GRIT_FACE`; 0.4–5% for a pastel at 2 N, pastel_stick_tribology.md §4).
+  where the tallest grains carry the stick's real contact, F/(σp·A₀): **1%**
+  (`GRIT_FACE`). **[D]**
+  - The default soft stick (`soft` 0.75) has σp = 30^0.25 · 2^0.75 = 3.9 MPa
+    (`Stick::mechanics`). The hand's default force is 2.0–2.5 N (0.4–0.5 ×
+    `FORCE_AT_FULL` 5 N; a hatching 0.45, 2.25 N).
+  - At 2.25 N that gives 2.9% on a fresh 20 mm² crescent, 1.1% on 50 mm²
+    and 0.39% on a fully worn facet: 148 mm², a 12 mm stick at 50°.
+  - A stick wears flat at once (pastel_stick_tribology.md §4), so take the
+    geometric middle of the range, 1%.
+  - It stays a constant of the sheet rather than each stroke's
+    F/(σp·A₀). The tooth is the coat's pore field (`Canvas::micro`): the
+    pastel fills it and the fill model reads it. Each step's force
+    already sets how far the stick sinks into that relief (`pastel::seat`,
+    against the stick's σp). A per-stroke share would count the load twice,
+    and would change a filled pixel's room after the fact.
 - **The tooth** is the open volume between the binder and that level. **[D]**:
 
   | grade | acrylic, µm | glue, µm | × drawing paper (6 µm) | binder level / d50 (acrylic, glue) | face / d50 | grains carrying the stick, per mm² | their depth in the stick, µm |
   |---|---|---|---|---|---|---|---|
-  | P240 | 35.2 | 49.2 | 5.9–8.2 | 0.46, 0.05 | 1.27 | 12 | 7.4 |
-  | P320 | 27.8 | 38.8 | 4.6–6.5 | 0.46, 0.05 | 1.27 | 19 | 5.8 |
-  | P400 | 21.0 | 29.4 | 3.5–4.9 | 0.46, 0.05 | 1.27 | 33 | 4.4 |
-  | P500 | 18.1 | 25.4 | 3.0–4.2 | 0.46, 0.05 | 1.27 | 44 | 3.8 |
-  | P600 | 15.5 | 21.7 | 2.6–3.6 | 0.46, 0.05 | 1.27 | 60 | 3.3 |
-  | P800 | 13.1 | 18.3 | 2.2–3.1 | 0.46, 0.05 | 1.27 | 84 | 2.8 |
+  | P240 | 40.8 | 54.8 | 6.8–9.1 | 0.46, 0.05 | 1.37 | 5 | 7.6 |
+  | P320 | 32.2 | 43.3 | 5.4–7.2 | 0.46, 0.05 | 1.37 | 8 | 6.0 |
+  | P400 | 24.4 | 32.8 | 4.1–5.5 | 0.46, 0.05 | 1.37 | 15 | 4.6 |
+  | P500 | 21.0 | 28.3 | 3.5–4.7 | 0.46, 0.05 | 1.37 | 20 | 3.9 |
+  | P600 | 18.0 | 24.2 | 3.0–4.0 | 0.46, 0.05 | 1.37 | 27 | 3.4 |
+  | P800 | 15.2 | 20.4 | 2.5–3.4 | 0.46, 0.05 | 1.37 | 38 | 2.8 |
 
-  - The tooth goes as the grain size: 0.60 d50 in acrylic and 0.84 d50 in
+  - The tooth goes as the grain size: 0.70 d50 in acrylic and 0.94 d50 in
     glue, at a cover of 0.6.
   - **The spread matters most.** The stick rests on the coarse tail, the few
-    percent of grains above ds3, at 1.27 d50. The open volume under them is
+    percent of grains above ds3, at 1.37 d50. The open volume under them is
     about twice what grains of one size would leave: 11 µm at P400.
   - **P400 in acrylic, with one input changed at a time:**
-    - face 1% → 24.4 µm; 5% → 16.4
-    - solids 0.35 → 23.2; 0.55 → 18.8
-    - a wet coat 1.3 d50 deep → 16.6
-    - σ 0.20 → 19.5; 0.27 → 23.2
-    - cover 0.3 → 21.4; 0.85 → 19.5; 1 → 18.4
+    - 24.4 µm as it stands (face 1%)
+    - face 2% → 21.0; 5% → 16.4
+    - solids 0.35 → 26.6; 0.55 → 22.2
+    - a wet coat 1.3 d50 deep → 19.9
+    - σ 0.20 → 22.3; 0.27 → 27.3
+    - cover 0.3 → 24.9; 0.85 → 22.8; 1 → 21.6
   - A closed coat holds a little less, as the abrasive trade has it: closed
     coats load sooner.
 - **[D] The pastel reaches all of it.**
@@ -155,7 +208,7 @@ next to this note.
     tooth holds (µ, the right number here) and the bearing curve near the
     top, 1 − e^(−o/µ).
   - The real coat's bearing rises more slowly under the face: 2 µm below
-    it, the grains cover 3.0% at P400, against 10.9% for an exponential of
+    it, the grains cover 1.5% at P400, against 7.9% for an exponential of
     the same mean. Only the coarse tail is there.
   - So the stick sinks a little less into the model's grit than into a real
     coat's. Archard's wear depends on the real contact area F/σp, not on the
@@ -181,28 +234,28 @@ next to this note.
   - Jackson's compared 400–800 grades with 1 and 4 layers, in photographs
     only.
 - **[D] What the physics gives against the claims.**
-  - At P320–P400, the coat's open volume is 3.5–6.5× the paper's pores
-    (§1, acrylic to glue). P240 gives up to 8×, P600–P800 2–4×.
+  - At P320–P400, the coat's open volume is 4.1–7.2× the paper's pores
+    (§1, acrylic to glue). P240 gives up to 9×, P600–P800 2.5–4×.
   - The claims are 10–25 layers against 2–3, i.e. 4–8×, and they are made
-    for the 320 and 400 grades. **The physics meets the low half of the
-    claims, and is kept as it is, not tuned to them.**
+    for the 320 and 400 grades. **The physics falls inside the claims, and
+    is kept as it is, not tuned to them.**
 - **What "a layer" means.**
   - **A painter's layer is a covering application**, not a stroke at a set
-    force. The grains file the stick about 4.5× as fast as paper does (§3).
-  - So at the same force, a sanded sheet fills in about as many strokes as
-    paper does: 4.5× the pastel per stroke, into 3.5–4.9× the room.
+    force. The grains file the stick about 3× as fast as paper does (§3).
+  - So at the same force, a sanded sheet fills in a few more strokes than
+    paper does: 3× the pastel per stroke, into 4.1–5.5× the room.
   - Painters say it takes a lighter touch, and laid that way, each pass as
     thick as one on fresh paper, it holds many more.
   - **Counted in passes of fresh paper's thickness,** the model's drawing
-    paper takes 3.1 and P400 in acrylic 12.7.
+    paper takes 3.1 and P400 in acrylic 13.8.
   - **The rest of the gap** is likely the makers' "as many as 25" (a
     ceiling, for glue-leaner or coarser coats) and "a layer" as a light
     scumble. Nothing measures either.
 - **Test thresholds** (pastel.rs `a_sanded_sheet_takes_layer_on_layer`).
   These come from the sources and the derivation above, not from the model.
   The same hatching at 1 N runs 30 times, until both sheets refuse.
-  - The sanded sheet holds at least 3× the pastel. The derivation gives 3.5
-    at P400 in acrylic.
+  - The sanded sheet holds at least 3.5× the pastel. The derivation gives
+    4.1 at P400 in acrylic (the model, 4.5).
   - Counted in layers of a fresh paper pass, drawing paper holds fewer than
     5 (claims: 2–3) and P400 at least 10 (claims: 10–25).
 
@@ -236,12 +289,12 @@ next to this note.
     below the 1.2× threshold. That is likely part of why graphite wears
     20–100× more on frosted glass than on paper (Archambault). The ratio
     doesn't carry over to pastel.)
-- **[D] The wear ratio, `GRIT_WEAR` = 4.5.** Rabinowicz gives K as the
+- **[B/D] The wear ratio, `GRIT_WEAR` = 3.0.** Rabinowicz gives K as the
   groove's cross-section over half the bearing area. For a cone that is
-  (2/π)·tan θ. The model's wear is K × the real contact × the distance slid
-  (pastel.rs), so the grit's factor is K_grit/K_fiber. The same share of the
-  groove comes off the same friable compact on either, since it crumbles
-  rather than piling up.
+  (2/π)·tan α at an attack angle α. The model's wear is K × the real
+  contact × the distance slid (pastel.rs), so the grit's factor is
+  K_grit/K_fiber. The same share of the groove comes off the same friable
+  compact on either, since it crumbles rather than piling up.
   - **The fiber.** The stick rests on fiber crossings.
     - A crossing is a ridge 12.5 µm in radius across the fiber (ω = 25 µm,
       `Paper::drawing`). Along the fiber it is 100–300 µm, where the upper
@@ -249,24 +302,56 @@ next to this note.
     - A layer covers ln(1/ε) = 0.69 of the sheet (paper_surface.md). Its
       fibers are 0.69/ω = 27.6 mm per mm², so they cross (2/π)·27.6² = 489
       times per mm².
-    - **Greenwood–Williamson, plastic, at 2% real contact**, on a drawing
-      paper of Rq 3–5 µm (paper_surface.md): 25–61 crossings carry the
-      stick, each 1.35–2.27 µm into it.
+    - **Greenwood–Williamson, plastic, at the stick's 1% real contact**
+      (`GRIT_FACE`, §1), on a drawing paper of Rq 3–5 µm
+      (paper_surface.md): 14–34 crossings carry the stick, each 1.2–2.1 µm
+      into it.
     - A ridge at random to the stroke gives K = (8/3π)(2/π)·√(δ/2R) =
-      **0.13–0.16**.
+      **0.120–0.155**, 0.137 in the middle.
   - **The grain.** The stick rests on the tallest grains (§1's table),
-    2.8–7.4 µm deep in it from P800 to P240.
+    2.8–7.6 µm deep in it from P800 to P240.
     - That is far past a crushed grain's tip radius: about 1 µm (Sin, Saka
       & Suh 1979; they note it can't be measured exactly). So the grain cuts
       with its facets, not its rounded tip.
-    - **[D] The facets' slope is the one estimate.** A fracture corner of
-      90° facets (a cube's corner, at random to the stroke) gives
-      **K = 0.64**, numerically (`sanded_paper_coat.py`): an attack angle of
-      45°. A more obtuse corner, with 30° slopes, gives 0.37. Spheres of the
-      same size would give 0.27, but crushed grains are not rounded.
-  - **The ratio.** It is 2.3–5.1 over the paper's roughness and the grain's
-    corner. The easel takes **4.5**, the cube corner at the middle of the
-    paper's Rq.
+    - **[M] The facets' slope is measured as angularity.** Hamblin &
+      Stachowiak's spike parameter SPQ fits each corner that stands outside
+      a particle's equal-area circle, and averages cos(θ/2) over them, θ
+      being the corner's apex angle. A circle has 0, a square 0.707, an
+      equilateral triangle 0.866 (Mikli et al. 2001, Table 3).
+      - Over six abrasives of 0.25–0.3 mm (glass, silica sand, garnet,
+        quartz, alumina, SiC), SPQ runs 0.023–0.601 (Stachowiak &
+        Stachowiak 2000, quoted by Mikli et al.). The values for each
+        abrasive are not in the quote. The round glass beads, which wear
+        least, are presumably the low end. Angular quartz and SiC give the
+        most friction (Stachowiak & Stachowiak, *Wear* 249 (2001) 201), so
+        the top presumably belongs to crushed grains like these and the
+        crushed alumina in the set.
+      - Freshly fractured WC-Co powder measures 0.63–0.65: the fine
+        fraction, which stays there however often it is milled because it is
+        "the product of direct fracture" (Mikli et al., Table 5). Repeated
+        milling rounds the coarse fraction from 0.65 to 0.52.
+    - **[M] Chalk is the measured proxy for pastel.** Hamblin & Stachowiak's
+      two-body tests abraded chalk pins, and their wear rates rose nearly
+      linearly with the abrasives' mean SPQ (*Tribol. Trans.* 39 (1996)
+      803; the linearity as cited by Stachowiak & Stachowiak 2001). So
+      wear here scales with the corners' slope, as Rabinowicz's model
+      assumes.
+    - **[D] The attack angle.** A corner of apex θ meets the stick at
+      90° − θ/2:
+      - SPQ 0.50: 30.0°, K = 0.37
+      - SPQ 0.55: 33.4°, K = 0.42
+      - SPQ 0.60: 36.9°, K = 0.48
+    - **[E] Where in that range.** The per-abrasive SPQ table wasn't reached
+      (the 2000–2001 papers are paywalled), so alumina's own value is
+      unknown. Its bounds are 0.50–0.60: 0.60 is the angular end of the
+      measured abrasives, and 0.50 a hexagon's corner. The easel takes
+      **0.55**, their middle and a little under fresh fracture.
+    - The PR's first estimate, a cube's corner at random (SPQ 0.71, K =
+      0.64 from `sanded_paper_coat.py`), is sharper than any measured
+      abrasive.
+  - **The ratio.** It is 0.419/0.137 = **3.05** at SPQ 0.55 and the middle
+    of the paper's roughness, so take **3.0**. Over SPQ 0.50–0.60 and Rq
+    3–5 µm it is 2.4–4.0.
   - **[D] No grade effect.**
     - Below about 100 µm, metals wear less on finer grit (Misra & Finnie
       1981). Sin et al. trace this to grooves that become as shallow as the
@@ -279,11 +364,11 @@ next to this note.
     pastel_stick_tribology.md) is 0.1–0.5 of the fiber's geometric 0.13–0.16.
     That share comes off. On grit the same share gives K ≈ 0.04–0.3, within
     Rabinowicz's two-body range (10⁻²–10⁻¹).
-  - In the model, 4.5 multiplies the stick's wear where it touches the grit
+  - In the model, 3.0 multiplies the stick's wear where it touches the grit
     above the fill. A fixed crust over the grit is pastel, and files the
     stick as it does on paper (`CRUST_WEAR`).
   - **Test** (`grit_wears_the_stick_faster`): the first stroke on fresh P400
-    takes 2.3–5.1× what it does on drawing paper. The model gives 4.6.
+    takes 2.4–4.0× what it does on drawing paper. The model gives 3.1.
 
 ## 4. Fixative
 - **[M]** Colourfix is meant to take many layers "without the need for
@@ -358,6 +443,9 @@ next to this note.
 - UART grades: UART (https://www.uartpastelpaper.com/); Texas Art Supply (https://www.texasart.com/products/uart-premium-sanded-pastel-paper); Jackson's Art Blog, "UArt Pastel Paper" (https://www.jacksonsart.com/blog/2015/12/04/uart-pastel-paper/); The Artistic Gnome, "UART Sanded Paper Review" (https://theartisticgnome.com/uart-sanded-paper-review/).
 - Pastel Premier: Jerry's Artarama (https://www.jerrysartarama.com/global-arts-premier-sanded-paper-320-grit-italian-clay-sanded-paper-sheets-10-pack-20x26-quot); Art Department LLC (https://artdepartmentsupply.com/products/pastel-premier-sanded-pastel-paper-12x16-white); FLAX (https://flaxart.com/pastel-premier-sanded-pastel-paper/).
 - Colourfix: Art Spectrum, Colourfix brochure (https://artspectrum.com.au/wp-content/uploads/2017/10/Colourfix-DL-Web.pdf); Delta Art technical sheet (https://www.deltaart.ca/images/uploads/file/coloufixprimer[1].pdf); Jerry's Artarama (https://www.jerrysartarama.com/art-spectrum-colourfix-pastel-primer); Jackson's (https://www.jacksonsart.com/en-ca/art-spectrum-colourfix-pastel-primer).
+- Colourfix's weight (300 g/m² hot-pressed paper printed to 340 g/m²): Art Spectrum, Colourfix Smooth (https://artspectrum.com.au/products/colourfix-smooth/); Jackson's, Colourfix Original 340gsm (https://www.jacksonsart.com/en-us/art-spectrum-colourfix-original-340gsm-23x30cm-apx-9x12in-sand); Talas (https://www.talasonline.com/Colorfix-Pastel-Paper).
+- UART's origin and process: Dakota Art Pastels (https://www.dakotapastels.com/products/UArt-Sheets: Germany, 300 g/m²); Jackson's (https://www.jacksonsart.com/uart-sanded-pastel-paper-800-grade-sheets: US, electrostatic coating); softpastels.com.au (https://www.softpastels.com.au/pastel_paper/uart/uart.php: US).
+- Particle angularity: Mikli, Käerdi, Kulu & Besterci, "Characterization of powder particle morphology", *Proc. Estonian Acad. Sci. Eng.* 7 (2001) 22–34 (https://kirj.ee/wp-content/plugins/kirj/pub/eng-1-2001-22-34_20230304173220.pdf): SPQ's definition, the regular shapes (Table 3), WC-Co powders (Table 5), and the 0.0231–0.6008 range for six abrasives citing Stachowiak & Stachowiak, NORDTRIB 2000, vol. 2, 434–443. Hamblin & Stachowiak, "Description of abrasive particle shape and its relation to two-body abrasive wear", *Tribol. Trans.* 39 (1996) 803 (https://www.tandfonline.com/doi/abs/10.1080/10402009608983598). Stachowiak & Stachowiak, "The effects of particle characteristics on three-body abrasive wear", *Wear* 249 (2001) 201 (https://www.sciencedirect.com/science/article/abs/pii/S0043164801005579), which cites the chalk tests' near-linear wear against SPQ. Stachowiak, "Particle angularity and its relationship to abrasive and erosive wear", *Wear* 241 (2000) 214 (https://www.sciencedirect.com/science/article/abs/pii/S0043164800003781). The per-abrasive SPQ values are in these last two, not reached.
 - Painters on layers and wear: Paul Rubens Shop, "Soft Pastel Paper" (https://www.paulrubensshop.com/blogs/knowledge/soft-pastel-paper); Fine Art Tutorials, "The Best Pastel Paper" (https://finearttutorials.com/guide/best-pastel-paper/); Ellen Questel (https://www.ellenquestel.com/blog/161250/introduction-to-soft-pastels-and-some-tips-on-how-to-work-with-them); WetCanvas, "Wallis Sanded Paper" (https://www.wetcanvas.com/forums/topic/wallis-sanded-paper/).
 - Abrasive wear coefficients: ScienceDirect Topics, "Abrasion" (https://www.sciencedirect.com/topics/materials-science/abrasion), citing Rabinowicz, *Friction and Wear of Materials*, 2nd ed. (1995), and Rabinowicz, Dunn & Russell, *Wear* 4, 345 (1961).
 - FEPA P sedimentation limits (ds3, ds50, ds94): whitefusedalumina.net, "White Fused Alumina Powder" (https://whitefusedalumina.net/product/white-fused-alumina-powder/); ISO 6344-3:2021 is the governing standard (https://www.boutique.afnor.org/en-gb/standard/iso-634432021/coated-abrasives-determination-and-designation-of-grain-size-distribution-p/xs138520/280048).

@@ -8,7 +8,10 @@ Run: uv run --no-project --with numpy python -I notes/research/sanded_paper_coat
    its real contact. The tooth is the open volume between the binder and that
    level (paper::Grit::tooth_um does the same sum).
 2. The stick's wear on grit against fiber: Rabinowicz's groove area over half
-   the bearing area, for a crushed grain's corner and for a fiber crossing.
+   the bearing area, for a crushed grain's corner (its slope from the measured
+   angularity SPQ) and for a fiber crossing.
+3. The coat's weight per area, against Colourfix's 40 g/m² (300 g/m² paper
+   printed to 340 g/m²), for the binder's wet level.
 """
 from math import pi, sqrt
 from statistics import NormalDist
@@ -16,7 +19,7 @@ from statistics import NormalDist
 import numpy as np
 
 SIG = 0.23  # sd of ln d (FEPA P400/P500 ds94 and ds3 limits)
-FACE = 0.02  # the stick's real contact share F/(σp·A0)
+FACE = 0.01  # the stick's real contact share F/(σp·A0)
 ACRYLIC, GLUE = 0.45, 0.07  # binder solids by volume
 PAPER_MU = 6.0  # the drawing paper's mean pore depth, µm (Paper::drawing)
 
@@ -43,6 +46,24 @@ def coat(d50, cover=0.6, solids=ACRYLIC, face=FACE, wet=1.0, sig=SIG):
     p = np.sum(wk * eng)
     depth = np.sum(wk * eng * (d - top)) / p
     return np.sum(1 - mr[sel]) * dz, b / d50, top / d50, n * p * 1e6, depth
+
+
+def coat_weight(d50, wet=1.0, cover=0.6, solids=ACRYLIC, rho_grain=2.65, rho_binder=1.1):
+    """The dry coat's weight, g/m² (1 µm at 1 g/cm³ is 1 g/m²): its grains and its dry binder."""
+    d = d50 * np.exp(SIG * zk - 3 * SIG * SIG)
+    r = d / 2
+    n = cover / np.sum(wk * pi * r * r)
+    zs = np.linspace(0, d.max(), 2000)
+    dz = zs[1] - zs[0]
+    mr = n * pi * np.sum(wk[None, :] * np.clip(r[None, :] ** 2 - (zs[:, None] - r[None, :]) ** 2, 0, None), axis=1)
+    below = np.cumsum(mr) * dz
+    level = wet * d50
+    return below[-1] * rho_grain + solids * (level - np.interp(level, zs, below)) * rho_binder
+
+
+def spq_k(spq):
+    """Rabinowicz's K for a corner of angularity SPQ = cos(θ/2): it attacks at 90° − θ/2."""
+    return (2 / pi) * np.tan(pi / 2 - np.arccos(spq))
 
 
 def cube_corner_k(trials=5000, seed=2):
@@ -113,3 +134,13 @@ if __name__ == "__main__":
         for r2 in (100.0, 300.0):
             kf, eta, eng, depth = fiber_k(rq, r2)
             print(f"paper Rq {rq} R_along {r2:.0f}: {eta:.0f} crossings/mm², {eng:.0f} carry, {depth:.2f} µm deep, K {kf:.3f}; grit/fiber {k30/kf:.1f}–{kc/kf:.1f}")
+    kf = [fiber_k(rq, r2)[0] for rq in (3.0, 4.0, 5.0) for r2 in (100.0, 300.0)]
+    mid = (min(kf) + max(kf)) / 2
+    print(f"fiber K {min(kf):.3f}–{max(kf):.3f}, middle {mid:.3f}")
+    for spq in (0.50, 0.55, 0.60):
+        k = spq_k(spq)
+        print(f"SPQ {spq:.2f}: K {k:.3f}, grit/fiber {k/max(kf):.2f}–{k/min(kf):.2f}, at the middle {k/mid:.2f}")
+    print("coat weight, g/m² (Colourfix: 40):")
+    for name, d in [("P400", 35.0), ("P500", 30.2), ("P600", 25.8)]:
+        for rho, grit in ((2.65, "quartz"), (3.95, "alumina")):
+            print(f"  {name} {grit:7s} wet level d50 {coat_weight(d, 1.0, rho_grain=rho):.1f}, 1.3 d50 {coat_weight(d, 1.3, rho_grain=rho):.1f}")

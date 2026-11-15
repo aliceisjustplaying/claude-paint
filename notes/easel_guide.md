@@ -111,10 +111,10 @@ holds a little less). The binder is `"acrylic"` (modern sanded papers, or
 pumice in acrylic gesso) or `"glue"` (glue or starch, the older pumice
 grounds; leaner, so more of the coat is open). The tooth is then the open
 room between the grains, under the tallest ones the stick rests on: at P400
-3.5 times a drawing paper's in acrylic and 5 times in glue, more on the
-coarse grades (P240 6–8 times), less on the fine (P800 2–3). The hard, sharp
-grains also wear a stick about four and a half times as fast ("sanded paper
-eats pastel"), so at the same force it fills in about as many strokes as
+4 times a drawing paper's in acrylic and 5.5 times in glue, more on the
+coarse grades (P240 7–9 times), less on the fine (P800 2.5–3.5). The hard,
+angular grains also wear a stick about three times as fast ("sanded paper
+eats pastel"), so at the same force it fills in a few more strokes than
 paper does. Laid with a lighter hand, a pass at a time as thick as one on
 fresh paper, it takes 10–15 layers where drawing paper goes slick after
 two or three. The sheet's grain shows through the coat. An acrylic coat seals the paper
@@ -633,8 +633,8 @@ feel(x, y)                     -- what a fingertip feels there
 - **The tooth fills.** Loose pastel in the pores is a third body the stick
   slides on: the more there is, the less a stroke lays, until the paper
   refuses it. A drawing paper takes two or three layers. A sanded sheet
-  (`paper={grit=...}`) holds three to five times as much at P400, and its
-  grains file the stick about four and a half times as fast, so a light
+  (`paper={grit=...}`) holds four to five and a half times as much at
+  P400, and its grains file the stick about three times as fast, so a light
   hand lays layer on layer there.
   Fixative binds it into a rough crust that files the stick again,
   so a fixed passage takes more pastel; and darkens it a little, as the resin

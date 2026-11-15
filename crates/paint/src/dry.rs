@@ -97,14 +97,35 @@ pub const LAKE_SUBSTRATE_INDEX: f32 = 1.57;
 /// color depends on exactly that: its dye against its substrate's
 /// scattering in air. Each loading is fitted so the pure lake's dry color
 /// matches measured powder (Cosentino 2014 FORS powders, corrected for the
-/// probe's offset: dry_pigment_optics.md §6, dry_lake_fit.py). Magenta has
-/// no measured powder; it takes yellow lake's loading, its K being made the
-/// same way (an estimate). None for a tube that isn't a dye lake.
+/// integrating sphere's floor and gain, set by a carbon black powder's total
+/// reflectance and rutile's: dry_pigment_optics.md §6, dry_lake_fit.py).
+/// The loadings agree with dye chemistry: madder's K/S needs 1–9 wt% dye on
+/// its alumina, as lakes carry. Magenta has no measured powder; it takes
+/// yellow lake's loading, its K being made the same way (an estimate). None
+/// for a tube that isn't a dye lake.
 pub fn dye_loading(name: &str) -> Option<f32> {
     match name {
-        "rose madder" => Some(31.9),
-        "carmine lake" => Some(2.57),
-        "yellow lake" | "magenta" => Some(10.6),
+        "rose madder" => Some(35.7),
+        "carmine lake" => Some(3.01),
+        "yellow lake" | "magenta" => Some(12.2),
+        _ => None,
+    }
+}
+
+/// The measured refractive index of a pigment that `refractive_index` has
+/// wrong, given with the dry-lakes switch (`Palette::dry_lakes`; the table
+/// stays for old paintings): permanent alizarin is quinacridone violet
+/// PV19, 2.02–2.04, not a lake; green earth (glauconite, celadonite) 1.62;
+/// verdigris 1.53/1.56; lead-tin yellow (type I) 2.29/2.31; transparent
+/// oxide yellow is goethite, 2.26/2.39/2.40 (dry_pigment_optics.md §6.4).
+/// None where the table's index stands.
+pub fn measured_index(name: &str) -> Option<f32> {
+    match name {
+        "permanent alizarin" => Some(2.03),
+        "green earth" => Some(1.62),
+        "copper green" => Some(1.545),
+        "lead-tin yellow" => Some(2.30),
+        "transparent oxide yellow" => Some(2.35),
         _ => None,
     }
 }

@@ -822,8 +822,10 @@ pub struct Palette {
     pub calls_agree: bool,
     /// Engine 9: a dye lake (rose madder, carmine, yellow lake, magenta) looks
     /// dry as its dye loading and its alumina substrate make it, not as a
-    /// tint of its oil absorption (`dry::dye_loading`; the easel's session.rs
-    /// `DRY_LAKES_MARK`): new paintings.
+    /// tint of its oil absorption (`dry::dye_loading`), and a pigment the
+    /// index table has wrong scatters dry by its measured index
+    /// (`dry::measured_index`; the easel's session.rs `DRY_LAKES_MARK`): new
+    /// paintings.
     pub dry_lakes: bool,
     /// Engine 9's material revision (`Canvas::with_material`; an easel log's
     /// `--@ material`): 1 only where a log's head names it, whose baked
@@ -1060,7 +1062,10 @@ impl Palette {
             );
             let list: Vec<_> = parts.iter().map(|&(i, f)| {
                 let name = self.tubes[i].name;
-                let n = crate::dry::carbon_ratio(name).map_or_else(|| crate::dry::refractive_index(name), |r| -r);
+                // with the switch, a pigment the index table had wrong scatters
+                // by its measured index (`dry::measured_index`)
+                let index = || crate::dry::measured_index(name).filter(|_| self.dry_lakes).unwrap_or_else(|| crate::dry::refractive_index(name));
+                let n = crate::dry::carbon_ratio(name).map_or_else(index, |r| -r);
                 // a lake as the box has it, with the switch: its dye's
                 // absorption at the loading measured powders show, scattering
                 // as its alumina does (`dry::dye_loading`)
@@ -1342,12 +1347,11 @@ mod tests {
     /// With the switch, pure rose madder dry is a rose, as madder lake powder
     /// is, and carmine and yellow lake stay with theirs. The expected colors
     /// are measurements, not this code's (dry_pigment_optics.md §6):
-    /// Cosentino's 2014 FORS powders, corrected for the probe's black floor
-    /// and white scale with either white (madder lake L*a*b* 54.7–57.7,
-    /// 24.7–25.9, 7.7–8.8; midpoint 56.2/25.3/8.3), and two lab-made madder
-    /// lakes measured as powder (Sattar 2024, J. Chem. Educ. 101:4983,
-    /// 66.1/25.5/9.4; J. Chem. Educ. 2020, doi:10.1021/acs.jchemed.9b01093,
-    /// 62.6/23.9/16.7).
+    /// Cosentino's 2014 FORS powders, corrected for the integrating sphere's
+    /// floor and gain (madder lake L*a*b* 54.5/24.6/8.8, L* 52.6–56.2 over the
+    /// correction's bounds), and two lab-made madder lakes measured as powder
+    /// (Sattar 2024, J. Chem. Educ. 101:4983, 66.1/25.5/9.4; J. Chem. Educ.
+    /// 2020, doi:10.1021/acs.jchemed.9b01093, 62.6/23.9/16.7).
     #[test]
     fn dry_lakes_look_as_their_powders_do() {
         let palette = lakes_palette(true);
@@ -1355,23 +1359,45 @@ mod tests {
         let white = at("lead white");
         let madder = lab(palette.dry_color(&[(at("rose madder"), 1.0)]));
         // within the three measurements' span, widened by 5 each way
-        assert!((50.0..71.0).contains(&madder[0]), "rose madder L* {madder:?}");
-        assert!((19.0..31.0).contains(&madder[1]), "rose madder a* {madder:?}");
-        assert!((2.7..21.7).contains(&madder[2]), "rose madder b* {madder:?}");
-        assert!(delta_e(madder, [56.2, 25.3, 8.3]) < 8.0, "rose madder {madder:?} against its FORS powder");
-        // carmine lake powder 30.8–31.6/41.4–45.2/7.8–8.1, yellow (weld) lake 66.4–70.2/2.1–3.0/42.2–44.1
+        assert!((47.6..71.1).contains(&madder[0]), "rose madder L* {madder:?}");
+        assert!((18.9..30.5).contains(&madder[1]), "rose madder a* {madder:?}");
+        assert!((3.8..21.7).contains(&madder[2]), "rose madder b* {madder:?}");
+        assert!(delta_e(madder, [54.5, 24.6, 8.8]) < 8.0, "rose madder {madder:?} against its FORS powder");
+        // carmine lake powder 30.7/41.0/7.7 (its oil K's own shape holds the fit
+        // to ΔE 9.9), yellow (weld) lake 66.1/2.9/41.9
         let carmine = lab(palette.dry_color(&[(at("carmine lake"), 1.0)]));
-        assert!(delta_e(carmine, [31.2, 43.3, 8.0]) < 10.0, "carmine lake {carmine:?} against its FORS powder");
+        assert!(delta_e(carmine, [30.7, 41.0, 7.7]) < 11.0, "carmine lake {carmine:?} against its FORS powder");
         let yellow = lab(palette.dry_color(&[(at("yellow lake"), 1.0)]));
-        assert!(delta_e(yellow, [68.3, 2.5, 43.1]) < 8.0, "yellow lake {yellow:?} against its FORS powder");
+        assert!(delta_e(yellow, [66.1, 2.9, 41.9]) < 8.0, "yellow lake {yellow:?} against its FORS powder");
         // and madder with as much lead white is a pink, lighter than the lake
         let tint = lab(palette.dry_color(&[(at("rose madder"), 0.5), (white, 0.5)]));
         assert!(tint[0] > madder[0] + 5.0 && tint[0] < 80.0 && tint[1] > 15.0, "rose madder 1:1 lead white {tint:?}");
     }
 
+    /// With the switch a pigment the index table had wrong scatters dry by its
+    /// measured index: permanent alizarin, quinacridone violet PV19 at 2.03,
+    /// takes the high-index rule (its oil scattering × the Mie air/oil ratio)
+    /// and is no longer a lake's near-white; lead-tin yellow at 2.30 comes
+    /// nearer its FORS powder (L*a*b* 86.6/−8.8/36.1, dry_lake_fit.py).
+    #[test]
+    fn dry_lakes_switch_gives_measured_indices() {
+        let (off, on) = (lakes_palette(false), lakes_palette(true));
+        let at = |name: &str| on.tubes.iter().position(|t| t.name == name).unwrap();
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+        let pv19 = crate::mixer::pigment9(&crate::mixer::tube9("permanent alizarin").unwrap()).scaled(crate::COAT_UM / 100.0);
+        let alizarin = at("permanent alizarin");
+        assert_eq!(on.dry_color(&[(alizarin, 1.0)]), crate::dry::spectral_color(&[(pv19, 2.03, 1.0)], &white));
+        let (was, now) = (lab(off.dry_color(&[(alizarin, 1.0)])), lab(on.dry_color(&[(alizarin, 1.0)])));
+        assert!(now[0] < was[0] - 15.0 && now[1] > was[1], "permanent alizarin {was:?} -> {now:?}");
+        let powder = [86.6, -8.8, 36.1];
+        let lty = at("lead-tin yellow");
+        let (was, now) = (lab(off.dry_color(&[(lty, 1.0)])), lab(on.dry_color(&[(lty, 1.0)])));
+        assert!(delta_e(now, powder) < delta_e(was, powder), "lead-tin yellow {was:?} -> {now:?}");
+    }
+
     /// Without the switch every dry color is as engine 9 gave it before the
     /// switch: the bits are main's at 4bbbbec3 (the unchanged code), and only
-    /// the lakes change with it.
+    /// the lakes and the re-indexed pigments change with it.
     #[test]
     fn dry_lakes_switch_off_keeps_the_dry_colors() {
         let (off, on) = (lakes_palette(false), lakes_palette(true));
@@ -1390,9 +1416,9 @@ mod tests {
             assert_eq!(bits(off.dry_color(&parts)), expected, "{parts:?}");
         }
         for (i, t) in off.tubes.iter().enumerate() {
-            let lake = crate::dry::dye_loading(t.name).is_some();
+            let changed = crate::dry::dye_loading(t.name).is_some() || crate::dry::measured_index(t.name).is_some();
             for parts in [vec![(i, 1.0)], vec![(i, 0.5), (white, 0.5)]] {
-                assert_eq!(off.dry_color(&parts) == on.dry_color(&parts), !lake, "{}", t.name);
+                assert_eq!(off.dry_color(&parts) == on.dry_color(&parts), !changed, "{}", t.name);
             }
         }
         // a lake the box has changed is its own paint: the loading is the catalog lake's

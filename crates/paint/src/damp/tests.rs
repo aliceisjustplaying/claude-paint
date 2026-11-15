@@ -237,6 +237,10 @@ fn stiffness_falls_with_moisture_as_measured() {
     let m = c.moisture().unwrap();
     assert!((m.stiffness - stiffness(gab(1.0))).abs() < 1e-15);
     assert!((m.z_mpa - paper(&c).z_mpa as f64 * m.stiffness).abs() < 1e-9);
+    assert!(m.plastic, "damp: its bonds are open");
+    let fiber = dry_fiber(&paper(&c));
+    c.damp_set(fiber * 0.2, 1).unwrap();
+    assert!(!c.moisture().unwrap().plastic, "below fiber saturation the bonds have re-formed");
 }
 
 /// The damp sheet goes in its checkpoint and comes back; a sheet never

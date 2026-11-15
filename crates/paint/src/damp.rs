@@ -488,6 +488,11 @@ pub struct Moisture {
     pub z_mpa: f64,
     /// Open faces (0: covered).
     pub faces: u8,
+    /// Whether its fiber bonds are opened by water (free water in its pores,
+    /// past fiber saturation): a shape pressed into it now sets as it dries
+    /// below saturation, the bonds re-forming in the shape (the plate mark,
+    /// intaglio_physics.md §6.3) (§5).
+    pub plastic: bool,
 }
 
 impl Moisture {
@@ -609,6 +614,7 @@ impl Canvas {
             stiffness: k,
             z_mpa: p.z_mpa as f64 * k,
             faces: d.faces,
+            plastic: mc >= fiber_saturation(),
         })
     }
 

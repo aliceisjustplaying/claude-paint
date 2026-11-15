@@ -93,11 +93,12 @@ struct Felt {
     stiffness: f64,
     z_mpa: f64,
     faces: u8,
+    plastic: bool,
 }
 
 impl Felt {
     fn of(m: &paint::damp::Moisture) -> Felt {
-        Felt { mc: m.mc, word: m.word().to_string(), water: m.water, standing: m.standing, activity: m.activity, size: m.size_mm, made: m.made_mm, stiffness: m.stiffness, z_mpa: m.z_mpa, faces: m.faces }
+        Felt { mc: m.mc, word: m.word().to_string(), water: m.water, standing: m.standing, activity: m.activity, size: m.size_mm, made: m.made_mm, stiffness: m.stiffness, z_mpa: m.z_mpa, faces: m.faces, plastic: m.plastic }
     }
 }
 
@@ -291,6 +292,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
             t.set("stiffness", f.stiffness)?;
             t.set("z_mpa", f.z_mpa)?;
             t.set("faces", f.faces)?;
+            t.set("plastic", f.plastic)?;
             Ok((f.mc, f.word, t))
         })?)?;
     }

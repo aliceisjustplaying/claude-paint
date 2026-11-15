@@ -25,6 +25,7 @@ pub mod scene;
 pub mod palette;
 pub mod paper;
 pub mod pastel;
+pub mod plate;
 pub mod pigment;
 pub mod prepared_optics;
 pub mod rng;

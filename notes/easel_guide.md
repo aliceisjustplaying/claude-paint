@@ -699,24 +699,27 @@ and a pencil's, and the finger, the eraser, a dry brush, a puff and fixative
 work on them as on pastel.
 
 ```lua
-v = charcoal()                          -- vine, a round stick Ø6 mm (charcoal{kind="vine", diameter=4, length=})
-k = charcoal("compressed")              -- compressed, a square stick 7 mm (charcoal{kind="compressed", diameter=})
+v = charcoal()                          -- vine, a round stick Ø8 mm × 140 (charcoal{kind="vine", diameter=5, length=}: thin 5, medium 8, thick 10)
+k = charcoal("compressed")              -- compressed, a square stick 6.35 mm × 76 (charcoal{kind="compressed", diameter=})
 v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v:roll, v:snap as a pastel's
 ```
 
 - **Vine** is soft and black, its splinters lying loose on the tooth: the
-  kneaded eraser takes it more readily than graphite (an erased passage is
-  nearly clean), a finger smears it far, a dry brush or a puff lifts it.
-  It reads grey where the line is broken and the paper shows. It is for
-  laying in and correcting.
-- **Compressed** is darker (its fine powder is packed, so its facets
-  reflect less) and lays finer particles, which hold to the fibres about
-  as hard as the eraser pulls: the eraser lightens it and leaves a stain.
-  Its gum binds nothing once dry, so the finger and a puff move it as they
-  move vine.
-- Charcoal is matte: no graphite sheen. **Fixative** (`fix()`) binds it and
-  darkens it a little, as pastel; the eraser and the finger then leave it.
-  Paint over it seals it.
+  kneaded eraser takes it a little more readily than graphite, a finger
+  smears it far, a dry brush or a puff lifts it. The stick is mostly pores,
+  so a stroke lays little: it reads grey where the line is broken and the
+  paper shows. It is for laying in and correcting.
+- **Compressed** is darker (half its carbon is fine soot packed with gum,
+  so its facets reflect less), covers far more per stroke, and lays finer
+  particles, which hold to the fibres about as hard as the eraser pulls:
+  the eraser lightens it and leaves a stain. Its gum binds nothing once
+  dry (at the studio's 50 % humidity), so the finger and a puff move it as
+  they move vine.
+- Charcoal is matte: no graphite sheen, and no veil of reflected light over
+  it either (a bed of carbon particles shows only what its facets reflect):
+  it is a deep black. **Fixative** (`fix()`) binds it and darkens it a
+  little, the more the thinner it lies; the eraser and the finger then
+  leave it. Paint over it seals it.
 - **Pastel over charcoal.** Pastel laid over loose charcoal mixes with it in
   the tooth and comes out greyer; over fixed charcoal it lies clean. Fix a
   charcoal drawing before laying pastel on it. (The stick itself doesn't
@@ -725,9 +728,11 @@ v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v
 
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it
-was painted and has no `charcoal`. Its color and how the eraser takes it
-come from carbon's optics and the particles' adhesion; its hardness and
-wear are estimates (notes/research/charcoal.md).
+was painted and has no `charcoal`. Its color, how much a stroke covers and
+how the eraser takes it come from carbon's optics, the stick's porosity
+and the particles' adhesion; vine's hardness is wood charcoal's measured
+one; compressed's hardness and both wear rates are estimates
+(notes/research/charcoal.md).
 
 ## The rag
 

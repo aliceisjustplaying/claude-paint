@@ -240,9 +240,10 @@ fn a_plate_survives_its_section() {
     q.write(&mut again).unwrap();
     assert!(again == b);
     assert!(p.tiles_used() < p.tiles.len() || p.tiles.len() <= 8);
-    let mut v2 = b.clone();
-    v2[4] = 2;
-    assert!(Plate::read(&mut std::io::Cursor::new(&v2)).unwrap_err().to_string().contains("version 2"));
+    // (version 2 is a plate etched, `--@ etch`: an unknown version is 9)
+    let mut v9 = b.clone();
+    v9[4] = 9;
+    assert!(Plate::read(&mut std::io::Cursor::new(&v9)).unwrap_err().to_string().contains("version 9"));
     assert!(Plate::read(&mut std::io::Cursor::new(&b[..b.len() - 3])).is_err());
     let mut longer = b.clone();
     longer.push(0);

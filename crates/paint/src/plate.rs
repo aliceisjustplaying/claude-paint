@@ -612,6 +612,30 @@ pub enum Op {
     Burnish { radius_mm: f32, passes: u32, pts: Vec<Point> },
     Scrape { width_mm: f32, passes: u32, pts: Vec<Point> },
     Roulette { pitch_mm: f32, tooth_um: f32, cone_deg: f32, pts: Vec<Point> },
+    // the etching tools (`etched`, the easel's `--@ etch`)
+    /// A hard ground laid over the face, `um` thick.
+    Ground { um: f32 },
+    /// An etching needle drawn through the ground.
+    Needle { tip_um: f32, cone_deg: f32, pts: Vec<Point> },
+    /// Stopping-out varnish brushed where `bits` (a `w` × `h` raster over the
+    /// plate, a bit a cell, row by row) is set.
+    StopOut { w: u32, h: u32, bits: Vec<u8> },
+    /// Rosin dust from the box: grains per µm² by size bin, and the seed they
+    /// are scattered from.
+    Aquatint { per_um2: Vec<f32>, seed: u64 },
+    /// The plate heated until its rosin melts on.
+    Melt,
+    /// A bite: each step's bite of a flat face (µm) and diffusion layer (µm).
+    Bite { acid: crate::etch::Acid, doses: Vec<(f32, f32)> },
+    /// Solvent: grounds, varnish and rosin off.
+    Clean,
+}
+
+impl Op {
+    /// An etching tool's (`--@ etch`): written only in a plate's version 2.
+    pub fn etching(&self) -> bool {
+        !matches!(self, Op::Drypoint { .. } | Op::Burnish { .. } | Op::Scrape { .. } | Op::Roulette { .. })
+    }
 }
 
 /// What a tool's use did (for the verb's report and its tests).
@@ -667,6 +691,9 @@ pub struct Plate {
     pub chip_um3: f64,
     /// While rebuilt for a crop: the cells written (x0, y0, x1, y1).
     clip: Option<(usize, usize, usize, usize)>,
+    /// Grounds, varnish, rosin and the acid's bites (`etched`): None until an
+    /// etching tool touches the plate.
+    coats: Option<Box<etched::Coats>>,
 }
 
 impl Plate {
@@ -675,7 +702,7 @@ impl Plate {
     pub fn new(metal: Metal, temper: Temper, width_mm: f32, height_mm: f32, thickness_mm: f32, bevel_deg: f32, w: usize, h: usize) -> Plate {
         let pitch = width_mm as f64 * 1000.0 / w as f64;
         let (tw, th) = (w.div_ceil(TILE), h.div_ceil(TILE));
-        Plate { metal, temper, facing: None, width_mm, height_mm, thickness_mm, bevel_deg, w, h, pitch, tiles: vec![None; tw * th], ops: Vec::new(), chip_um3: 0.0, clip: None }
+        Plate { metal, temper, facing: None, width_mm, height_mm, thickness_mm, bevel_deg, w, h, pitch, tiles: vec![None; tw * th], ops: Vec::new(), chip_um3: 0.0, clip: None, coats: None }
     }
 
     pub fn size_px(&self) -> (usize, usize) {
@@ -775,6 +802,7 @@ impl Plate {
             Op::Burnish { radius_mm, passes, pts } => self.burnish(*radius_mm as f64, *passes, pts),
             Op::Scrape { width_mm, passes, pts } => self.scrape(*width_mm as f64, *passes, pts),
             Op::Roulette { pitch_mm, tooth_um, cone_deg, pts } => self.roulette(*pitch_mm as f64, *tooth_um as f64, *cone_deg as f64, pts),
+            op => self.run_etch(op),
         }
     }
 
@@ -1199,9 +1227,17 @@ impl Plate {
         let (x0, y0, x1, y1) = rect;
         let mut col = Vec::with_capacity((x1 - x0) * (y1 - y0));
         let mut hgt = Vec::with_capacity(col.capacity());
+        let coats = self.coats.as_deref().map(|c| etched::Looks::new(self, c));
         for y in y0..y1 {
             for x in x0..x1 {
                 let c = self.cell(x, y);
+                if let Some(l) = &coats
+                    && let Some(px) = l.cell(self, x, y, &c, &flat, &walls)
+                {
+                    col.push(px);
+                    hgt.push(c.height());
+                    continue;
+                }
                 let open = c.open_share().min(1.0);
                 let burr = c.burr_area.min(1.0 - open);
                 let mut px = flat.map(|v| v * (1.0 - open - burr));
@@ -1221,6 +1257,9 @@ impl Plate {
                     for q in 0..3 {
                         px[q] += burr * t[q];
                     }
+                }
+                if let Some(l) = &coats {
+                    px = l.rosin(self, x, y, px);
                 }
                 col.push(px);
                 hgt.push(c.height());
@@ -1250,12 +1289,19 @@ impl Plate {
 
     // ------------------------------------------------------------ persistence
 
-    /// The plate's state as its surface entry's payload (`PLAT`, version 1):
-    /// the metal, its size and cells, its facing, its tool uses and what
-    /// they took off, then the tiles in use with their cells.
+    /// The plate's state as its surface entry's payload (`PLAT`): the metal,
+    /// its size and cells, its facing, its tool uses and what they took off,
+    /// then the tiles in use with their cells. Version 1 is that; version 2
+    /// (`--@ etch`) is a plate an etching tool has touched: its etching tools
+    /// among its uses, each with its own data after its points (a length and
+    /// the bytes), and after the tiles its coats (`etched`: the ground, the
+    /// rosin, the tray, the metal the acid took, and the etched cells). A
+    /// plate no etching tool has touched is written as version 1, byte for
+    /// byte as before.
     pub fn write(&self, w: &mut impl Write) -> io::Result<()> {
+        let v2 = self.coats.is_some() || self.ops.iter().any(Op::etching);
         w.write_all(PLAT_MAGIC)?;
-        put64(w, PLAT_V)?;
+        put64(w, if v2 { PLAT_V } else { 1 })?;
         put64(w, self.metal.word())?;
         put64(w, self.temper.word())?;
         for v in [self.width_mm, self.height_mm, self.thickness_mm, self.bevel_deg] {
@@ -1275,11 +1321,38 @@ impl Plate {
         }
         put64(w, self.ops.len() as u64)?;
         for op in &self.ops {
+            let none: &[Point] = &[];
+            let mut blob = Vec::new();
             let (tag, a, b, c, pts) = match op {
-                Op::Drypoint { tip_um, cone_deg, pts } => (0u64, *tip_um, *cone_deg, 0.0, pts),
-                Op::Burnish { radius_mm, passes, pts } => (1, *radius_mm, *passes as f32, 0.0, pts),
-                Op::Scrape { width_mm, passes, pts } => (2, *width_mm, *passes as f32, 0.0, pts),
-                Op::Roulette { pitch_mm, tooth_um, cone_deg, pts } => (3, *pitch_mm, *tooth_um, *cone_deg, pts),
+                Op::Drypoint { tip_um, cone_deg, pts } => (0u64, *tip_um, *cone_deg, 0.0, pts.as_slice()),
+                Op::Burnish { radius_mm, passes, pts } => (1, *radius_mm, *passes as f32, 0.0, pts.as_slice()),
+                Op::Scrape { width_mm, passes, pts } => (2, *width_mm, *passes as f32, 0.0, pts.as_slice()),
+                Op::Roulette { pitch_mm, tooth_um, cone_deg, pts } => (3, *pitch_mm, *tooth_um, *cone_deg, pts.as_slice()),
+                Op::Ground { um } => (4, *um, 0.0, 0.0, none),
+                Op::Needle { tip_um, cone_deg, pts } => (5, *tip_um, *cone_deg, 0.0, pts.as_slice()),
+                Op::StopOut { w, h, bits } => {
+                    blob.extend_from_slice(&w.to_le_bytes());
+                    blob.extend_from_slice(&h.to_le_bytes());
+                    blob.extend_from_slice(bits);
+                    (6, 0.0, 0.0, 0.0, none)
+                }
+                Op::Aquatint { per_um2, seed } => {
+                    blob.extend_from_slice(&seed.to_le_bytes());
+                    for v in per_um2 {
+                        blob.extend_from_slice(&v.to_bits().to_le_bytes());
+                    }
+                    (7, 0.0, 0.0, 0.0, none)
+                }
+                Op::Melt => (8, 0.0, 0.0, 0.0, none),
+                Op::Bite { acid, doses } => {
+                    blob.extend_from_slice(&acid.word().to_le_bytes());
+                    for (d, delta) in doses {
+                        blob.extend_from_slice(&d.to_bits().to_le_bytes());
+                        blob.extend_from_slice(&delta.to_bits().to_le_bytes());
+                    }
+                    (9, 0.0, 0.0, 0.0, none)
+                }
+                Op::Clean => (10, 0.0, 0.0, 0.0, none),
             };
             put64(w, tag)?;
             for v in [a, b, c] {
@@ -1290,6 +1363,10 @@ impl Plate {
                 for v in [q.x, q.y, q.force, q.alt, q.az, q.speed] {
                     put32(w, v.to_bits())?;
                 }
+            }
+            if op.etching() {
+                put64(w, blob.len() as u64)?;
+                w.write_all(&blob)?;
             }
         }
         let used: Vec<usize> = (0..self.tiles.len()).filter(|&i| self.tiles[i].is_some()).collect();
@@ -1306,11 +1383,14 @@ impl Plate {
             }
             w.write_all(&buf)?;
         }
+        if v2 {
+            etched::write_etch(self.coats.as_deref().unwrap_or(&etched::Coats::default()), w)?;
+        }
         Ok(())
     }
 
-    /// `write` read back: refuses another version, a damaged size, a tool
-    /// it doesn't know and trailing data.
+    /// `write` read back (version 1 or 2): refuses another version, a
+    /// damaged size, a tool it doesn't know and trailing data.
     pub fn read(r: &mut impl Read) -> io::Result<Plate> {
         let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, format!("plate: {m}"));
         let mut m = [0u8; 4];
@@ -1319,8 +1399,8 @@ impl Plate {
             return Err(bad("not a plate's section"));
         }
         let v = get64(r)?;
-        if v != PLAT_V {
-            return Err(bad(&format!("a plate of version {v}: this build reads version {PLAT_V}")));
+        if v != 1 && v != PLAT_V {
+            return Err(bad(&format!("a plate of version {v}: this build reads versions 1 to {PLAT_V}")));
         }
         let metal = Metal::of(get64(r)?).ok_or_else(|| bad("a metal this build doesn't know"))?;
         let temper = Temper::of(get64(r)?).ok_or_else(|| bad("a temper this build doesn't know"))?;
@@ -1360,12 +1440,44 @@ impl Plate {
             for _ in 0..n {
                 pts.push(Point { x: f(r)?, y: f(r)?, force: f(r)?, alt: f(r)?, az: f(r)?, speed: f(r)? });
             }
+            if tag <= 3 {
+                p.ops.push(match tag {
+                    0 => Op::Drypoint { tip_um: a, cone_deg: b, pts },
+                    1 => Op::Burnish { radius_mm: a, passes: b as u32, pts },
+                    2 => Op::Scrape { width_mm: a, passes: b as u32, pts },
+                    _ => Op::Roulette { pitch_mm: a, tooth_um: b, cone_deg: c, pts },
+                });
+                continue;
+            }
+            if v < 2 || tag > 10 {
+                return Err(bad(&format!("a tool of kind {tag}, which this build doesn't know")));
+            }
+            let n = get64(r)?;
+            if n > 1 << 30 {
+                return Err(bad("a tool's data is too long"));
+            }
+            let mut blob = vec![0u8; n as usize];
+            r.read_exact(&mut blob)?;
+            let w32 = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+            let w64 = |b: &[u8], i: usize| u64::from_le_bytes(b[i..i + 8].try_into().unwrap());
             p.ops.push(match tag {
-                0 => Op::Drypoint { tip_um: a, cone_deg: b, pts },
-                1 => Op::Burnish { radius_mm: a, passes: b as u32, pts },
-                2 => Op::Scrape { width_mm: a, passes: b as u32, pts },
-                3 => Op::Roulette { pitch_mm: a, tooth_um: b, cone_deg: c, pts },
-                t => return Err(bad(&format!("a tool of kind {t}, which this build doesn't know"))),
+                4 => Op::Ground { um: a },
+                5 => Op::Needle { tip_um: a, cone_deg: b, pts },
+                6 if blob.len() >= 8 => {
+                    let (bw, bh) = (w32(&blob, 0), w32(&blob, 4));
+                    if (bw as usize * bh as usize).div_ceil(8) != blob.len() - 8 {
+                        return Err(bad("a stopping-out is damaged"));
+                    }
+                    Op::StopOut { w: bw, h: bh, bits: blob[8..].to_vec() }
+                }
+                7 if blob.len() == 8 + 4 * crate::etch::DUST_BINS => Op::Aquatint { seed: w64(&blob, 0), per_um2: (0..crate::etch::DUST_BINS).map(|i| f32::from_bits(w32(&blob, 8 + 4 * i))).collect() },
+                8 => Op::Melt,
+                9 if blob.len() >= 8 && (blob.len() - 8) % 8 == 0 => {
+                    let acid = crate::etch::Acid::of(w64(&blob, 0)).ok_or_else(|| bad("an acid this build doesn't know"))?;
+                    Op::Bite { acid, doses: (8..blob.len()).step_by(8).map(|i| (f32::from_bits(w32(&blob, i)), f32::from_bits(w32(&blob, i + 4)))).collect() }
+                }
+                10 => Op::Clean,
+                _ => return Err(bad("an etching tool's data is damaged")),
             });
         }
         let used = get64(r)?;
@@ -1407,6 +1519,9 @@ impl Plate {
             }
             p.tiles[i] = Some(cells.into_boxed_slice());
         }
+        if v == 2 {
+            p.coats = Some(Box::new(etched::read_etch(&p, r)?));
+        }
         if r.read(&mut [0u8; 1])? != 0 {
             return Err(bad("trailing data"));
         }
@@ -1415,7 +1530,9 @@ impl Plate {
 }
 
 const PLAT_MAGIC: &[u8; 4] = b"PLAT";
-pub const PLAT_V: u64 = 1;
+/// The newest version of a plate's section (`write`): 2, a plate an etching
+/// tool has touched; version 1 is still read.
+pub const PLAT_V: u64 = 2;
 
 fn put64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -1436,6 +1553,8 @@ fn get32(r: &mut (impl Read + ?Sized)) -> io::Result<u32> {
     r.read_exact(&mut b)?;
     Ok(u32::from_le_bytes(b))
 }
+
+pub mod etched;
 
 #[cfg(test)]
 mod tests;

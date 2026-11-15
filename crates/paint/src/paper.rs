@@ -530,6 +530,11 @@ pub struct Preset {
     pub laid: Option<Laid>,
     /// The sheet's tone: parts of the catalog's tubes, seen dry.
     pub tone: &'static [(&'static str, f32)],
+    /// Its sizing against water (`Paper::cobb60`, read only by wet
+    /// pastel): the machine-made and mold-made sheets were rosin-alum or
+    /// gelatin sized, as a bond paper is (25 g/m², the drawing paper's);
+    /// Japan paper is unsized (None) (wet_pastel.md §4.2).
+    pub cobb60: Option<f32>,
 }
 
 /// A colored machine-made wove pastel sheet of the 1880s–1900s: wood pulp
@@ -550,6 +555,7 @@ const WOVE: Preset = Preset {
     felt: Some(Felt { cell_mm: 0.7, depth_um: 14.0 }),
     laid: None,
     tone: &[],
+    cobb60: Some(25.0),
 };
 
 /// The named sheets (the research note's table).
@@ -564,7 +570,7 @@ pub const PRESETS: &[Preset] = &[
     // a handmade or mold-made rag laid sheet (her print and drawing papers)
     Preset { name: "cream laid", grammage: 110.0, fiber_mm: 2.2, calender: 0.2, felt: Some(Felt { cell_mm: 0.8, depth_um: 15.0 }), laid: Some(Laid { per_cm: 9.0, chain_mm: 25.0, deficit: 0.15 }), tone: &[("lead white", 1.0), ("yellow ochre", 0.15), ("raw sienna", 0.02), ("green earth", 3.0)], ..WOVE },
     // Japan paper: long kozo fibers, thin, open, well formed, smooth
-    Preset { name: "japan paper", grammage: 45.0, fiber_mm: 10.0, fiber_um: 30.0, thick_um: 5.0, coarseness: 0.1, porosity: 0.6, floc: 0.15, floc_mm: 2.0, press: 0.7, calender: 0.6, felt: None, laid: None, tone: &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)] },
+    Preset { name: "japan paper", grammage: 45.0, fiber_mm: 10.0, fiber_um: 30.0, thick_um: 5.0, coarseness: 0.1, porosity: 0.6, floc: 0.15, floc_mm: 2.0, press: 0.7, calender: 0.6, felt: None, laid: None, tone: &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)], cobb60: None },
 ];
 
 impl Preset {
@@ -585,6 +591,7 @@ impl Preset {
             calender: self.calender,
             felt: self.felt,
             laid: self.laid,
+            cobb60: self.cobb60,
             ..Paper::drawing(seed)
         }
     }
@@ -1144,6 +1151,9 @@ mod tests {
             assert_eq!(got, v, "{name}");
             let d = Paper::drawing(7);
             assert!(p.felt == felt && p.laid == laid && p.absorbent == d.absorbent && p.z_mpa == d.z_mpa && p.drum.is_none() && p.seed == 7, "{name}");
+            // sized as a bond paper is, but Japan paper unsized (wet_pastel.md §4.2)
+            assert_eq!(p.cobb60, if name == "japan paper" { None } else { d.cobb60 }, "{name}");
+            assert_eq!(d.cobb60, Some(25.0));
             // every tone's tube is in the catalog
             let every = crate::palette::Palette::named_box("every").unwrap();
             assert!(tone.iter().all(|(t, _)| every.tubes.iter().any(|e| e.name == *t)), "{name}");

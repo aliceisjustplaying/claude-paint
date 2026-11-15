@@ -82,6 +82,11 @@ The numbers behind crates/paint/src/wet_pastel.rs (the wet pastel switch, `--@ w
 - **Glue coat [D].** Animal glue or starch at 7 % solids by volume (sanded_paper.md §1) leaves most of the coat open, so water passes through to the sheet as oil does, at the sheet's own sizing and to its own capacity. The glue is itself a size (gelatin is what Cobb sizing measures), so no separate rate is added.
 - **Not modelled:** a glue coat softening and swelling in water (it is water-soluble and can let grains go under a wet brush); water filling the coat's open tooth as standing room (it is counted with the pastel's pores and the standing water, as on paper).
 
+### 4.2 The named sheets' sizing (`paper="tan wove"` …, cassatt_papers.md)
+
+- **The wove and laid sheets keep Cobb 25 [D].** Machine-made paper was internally (engine) sized with rosin and alum from the 1830s–1840s on, and paper made 1850–1950 is rosin-alum sized (Britannica, *Papermaking*; Handpapermaking, *Sizing at Hayle Mill*; AIC Book and Paper Group Annual 29, the aging of rosin-alum sized papers). That is the writing and bond papers' sizing, Cobb 22–30 (§4), so the 1880s–1900s colored wove sheets keep the default 25. The mold-made rag laid sheet is gelatin sized as Canson's is, and keeps 25 as well [E: no Cobb measured on a period sheet].
+- **Japan paper is unsized [P].** "Most Japanese papers are unsized and, as a result, are generally more absorbent" (Japanese Paper Place, *Washi and printmaking*); kozo printing sheets are sold sized only for woodcut. Its `cobb60` is None, so water enters at its pores' Washburn rate, to its capacity (0.8 × 0.6 × its caliper).
+
 ## 5. The brush: how much it holds and lays
 
 - **Capacity, `Held::capacity_mm3` [C, with one estimate].** A round's belly is taken as a cone of the brush's width and a hair length 4.7 times that, the liquid filling 0.6 of it. The ratio is Rosemary & Co Series 33 kolinsky rounds' (retail tables: size 4 3.4 × 15.7 mm, 6 3.9 × 20 mm, 8 5.2 × 24.2 mm, 4.6–5.1) [M]; the 0.6 is the hairs' packing in a wet bundle [E: no gravimetric measurement of a sable's load was found; retailers say only "3× a synthetic"]. A 6 mm round holds about 0.16 mL, a 10 mm one 0.74 mL. Other shapes keep the engine's full paint load (`Held::full`). The first version used the full paint load for every brush (0.14 mL for a 10 mm round sable).
@@ -174,6 +179,10 @@ notes/estimates-audit-2.md (branch notes/estimates-audit-2), the #322 table. Eac
 - **The studio's 50 %** (W6): a choice inside measured bounds (36–68 %).
 
 ## Sources
+- Britannica, *Papermaking* (Illig's rosin-alum sizing, published 1807, in wide use about 25 years later): https://www.britannica.com/technology/papermaking
+- Handpapermaking, *Sizing at Hayle Mill* (rosin sizing in common use from the 1840s): https://www.handpapermaking.org/magazine-articles/sizing-at-hayle-mill
+- AIC Book and Paper Group Annual 29, *Study of the aging behavior of rosin-alum sized papers* (paper of 1850–1950 internally sized with rosin and alum): https://cool.culturalheritage.org/coolaic/sg/bpg/annual/v29/bpga29-21.pdf
+- Japanese Paper Place, *Washi and printmaking* ("Most Japanese papers are unsized"): https://www.japanesepaperplace.com/news/washi-and-printmaking/
 
 - Musée d'Orsay, "Degas the pastel artist." https://www.musee-orsay.fr/en/articles/degas-pastel-artist-219377
 - Museo Nacional Thyssen-Bornemisza, "Edgar Degas. At the Milliner's. Technical study of a pastel." https://www.museothyssen.org/en/conservation/edgar-degas-milliners-technical-study-pastel

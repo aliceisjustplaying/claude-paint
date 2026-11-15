@@ -371,8 +371,9 @@ pub struct Held {
     /// Painting with engine 4 or later: its `Debug` gives each bristle's
     /// paint its solvent and oil too. Not printed itself.
     shows_oil: bool,
-    /// Painting on a canvas that drains (`Canvas::with_drain`): and the
-    /// pigment's packing, `Prop`'s last five (`with_packing`).
+    /// Painting on a canvas that drains (`Canvas::with_drain`) or with the
+    /// oils switch (`Canvas::with_oils`): and the pigment's packing and wax,
+    /// `Prop`'s last five (`with_packing`).
     shows_packing: bool,
     #[cfg_attr(feature = "replay-effects", serde(skip))]
     volume_latent: bool,
@@ -387,7 +388,7 @@ pub struct Held {
 /// thinner, field for field, plus `solvent` when `show` (engine 3); the
 /// paint's properties without solvent and oil unless `oil` (engine 4), and
 /// without the pigment's packing (`Prop`'s last five) unless `packing` (the
-/// drain switch, `Canvas::with_drain`).
+/// drain or oils switch, `Canvas::with_drain`, `Canvas::with_oils`).
 struct BristleText<'a>(&'a Bristle, bool, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
@@ -521,8 +522,9 @@ impl Held {
         self
     }
 
-    /// The brush of a painting whose canvas drains (`Canvas::with_drain`):
-    /// its `Debug` gives each bristle's paint the pigment's packing too.
+    /// The brush of a painting whose canvas drains (`Canvas::with_drain`) or
+    /// whose tubes come in their oils, with wax (`Canvas::with_oils`): its
+    /// `Debug` gives each bristle's paint the pigment's packing and wax too.
     pub fn with_packing(mut self, on: bool) -> Self {
         self.shows_packing = on;
         self
@@ -560,12 +562,12 @@ impl Held {
                 let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
         }
     }
 
@@ -591,12 +593,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - paint.thinner);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
                 b.solvent += v * paint.thinner;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
         }
     }
 
@@ -2969,7 +2971,7 @@ pub struct Knife {
 }
 
 /// As derived, but the paint's properties without the pigment's packing
-/// (`Prop`'s last five) unless `shows_packing` (the drain switch): a knife
+/// (`Prop`'s last five) unless `shows_packing` (the drain or oils switch): a knife
 /// without it prints as it always did (`easel run --state-digest` hashes it).
 impl std::fmt::Debug for Knife {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -3006,8 +3008,9 @@ impl Knife {
         self.volume_latent = engine >= crate::PIGMENT_MIXER;
         self
     }
-    /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
-    /// its `Debug` gives the paint's packing too.
+    /// The knife of a painting whose canvas drains (`Canvas::with_drain`) or
+    /// whose tubes come in their oils (`Canvas::with_oils`): its `Debug`
+    /// gives the paint's packing and wax too.
     pub fn with_packing(mut self, on: bool) -> Self {
         self.shows_packing = on;
         self
@@ -3043,7 +3046,7 @@ impl Knife {
         }
         let color = if self.volume_latent { crate::mixer::decode9(&self.lat) } else { crate::mixer::decode(&self.lat) };
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, volume_latent: self.volume_latent, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, volume_latent: self.volume_latent, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], wax: self.hide[9], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {

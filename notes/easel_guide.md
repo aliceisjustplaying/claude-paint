@@ -125,7 +125,7 @@ notes/research/cassatt_papers.md.
 | `"green wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, yellow ochre 0.65, viridian 0.45, bone black 0.45 |
 | `"brown wove"` | 150 | 1.4 (coarseness 0.2, floc 0.6) | 0.8 mm, 18 µm | | 0.25 | raw sienna 1, bitumen 3 |
 | `"cream laid"` | 110 | 2.2 | 0.8 mm, 15 µm | 9 per cm, chains 25 mm, deficit 0.15 | 0.2 | lead white 1, yellow ochre 0.15, raw sienna 0.02, green earth 3 |
-| `"japan"` | 45 | 10 (width 30 µm, coarseness 0.1, porosity 0.6, floc 0.15) | none | | 0.6 | lead white 1, yellow ochre 0.1, raw sienna 0.1, viridian 0.02 |
+| `"japan paper"` | 45 | 10 (width 30 µm, coarseness 0.1, porosity 0.6, floc 0.15) | none | | 0.6 | lead white 1, yellow ochre 0.1, raw sienna 0.1, viridian 0.02 |
 
 Every other dial is the drawing paper's (fiber width 25 µm, thickness
 6 µm, coarseness 0.16, porosity 0.5, floc 0.5 of 1.5 mm, press 0.65,
@@ -141,7 +141,7 @@ the sheet (`stiffness` stays the sheet's own; the mount's give adds to it):
 - `"canvas"`: laid down on canvas on a firm bed; the cloth compacts under
   the stick, softer still
 - `"strainer"`: on canvas tacked to a wooden strainer. Over the bars (the
-  outer 40 mm of the picture) it is as firm as on canvas. Between them the
+  outer 50 mm of the picture) it is as firm as on canvas. Between them the
   sheet and canvas drum: they soften over the first centimeter or so in
   from a bar, then give the same over the rest of the bay, whatever its
   size (the whole bay sinks millimeters under the hand, but that carries
@@ -153,9 +153,10 @@ the sheet (`stiffness` stays the sheet's own; the mount's give adds to it):
 Each give is derived from measured moduli under a worn stick's full facet
 (notes/research/cassatt_papers.md §1). A softer bed spreads the stick's
 contact wider, so less of it rides on pastel the stroke has just laid in
-the tooth and the same stroke lays a little more: on board about 14% more
-than on a hard drawing board, on canvas 17%, in a strainer's bay 19%. It
-never lays more than the stick wears, which is the same on any bed
+the tooth and the same stroke lays a little more: on board about 6% more
+than on a hard drawing board, on canvas about 12%, and in a strainer's bay
+about as on canvas (past canvas it levels off). It never lays more than the
+stick wears, which is the same on any bed
 (Archard). A firm bed's marks are crisper (a narrower contact), which may
 be the "bite" painters describe.
 

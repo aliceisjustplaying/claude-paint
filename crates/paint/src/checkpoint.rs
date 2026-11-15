@@ -181,7 +181,8 @@ const SEALED_DRAWING_GUIDE: u64 = 1 << 41;
 const DRAWING_OPTICS: u64 = 1 << 42;
 /// Pastel takes water (`Canvas::with_wet_pastel`): the engine word has
 /// this bit, and its section follows the word (`WET_PASTEL_MARK`).
-const WET_PASTEL: u64 = 1 << 43;
+/// (Bit 43 is the tube oils switch's, in a pull request of its own.)
+const WET_PASTEL: u64 = 1 << 44;
 /// Marks the wet pastel section ("WETP"), and its version: written right
 /// after the engine word exactly when it has `WET_PASTEL`: whether a
 /// drawing follows (0 or 1), then the water standing in each of its cells,

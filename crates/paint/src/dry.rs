@@ -181,6 +181,37 @@ pub fn scatter_in(n: f32, n_med: f32) -> f32 {
     (at(&T[i].1) + (at(&T[i + 1].1) - at(&T[i].1)) * u).min(1.0)
 }
 
+/// A particle's transport scattering with a fixative's resin in its pores
+/// and around it (poly(n-butyl methacrylate), n 1.49: charcoal.md §2), as a
+/// share of its scattering in air: Mie, size-averaged as `scatter_in`'s
+/// table (lognormal σ_ln 0.5, λ 550 nm, at a pastel's d₃₂ 1.7 µm),
+/// dry_pigment_mie.py `resin`. Near the resin's own index a particle hardly
+/// scatters in it (ultramarine 0.0005, Prussian blue 0.027, whiting by its
+/// mean index 0.056); a high-index one keeps most of it (lead white 0.49,
+/// vermilion 0.72). The fixative index switch (`Canvas::with_fixative_index`)
+/// reads it.
+pub fn scatter_in_resin(n: f32) -> f32 {
+    const T: [(f32, f32); 13] = [
+        (1.50, 0.0005),
+        (1.56, 0.0270),
+        (1.59, 0.0563),
+        (1.65, 0.1425),
+        (1.70, 0.2380),
+        (1.74, 0.3040),
+        (1.84, 0.4493),
+        (2.00, 0.4917),
+        (2.15, 0.5567),
+        (2.30, 0.6002),
+        (2.40, 0.6098),
+        (2.45, 0.6049),
+        (3.00, 0.7185),
+    ];
+    let n = n.clamp(T[0].0, T[12].0);
+    let i = T.windows(2).position(|w| n <= w[1].0).unwrap_or(11);
+    let u = (n - T[i].0) / (T[i + 1].0 - T[i].0);
+    T[i].1 + (T[i + 1].1 - T[i].1) * u
+}
+
 /// Whiting (Champagne or Meudon chalk, ground calcite), the filler a pastel
 /// tint is let down with: its refractive index, 1.59 (ground calcite; its
 /// ω 1.658 and ε 1.486 average 1.60) [M]; its dry color, linear RGB of

@@ -1010,6 +1010,16 @@ painting begun before this came (its head has no `--@ pastel-veil`) shows
 its pastel veiled, as it was painted, and its charcoal unveiled
 (notes/research/pastel_surface.md).
 
+**What fixative does to each pastel.** The resin of `fix()` fills part of
+the pastel's pores (all of a thin line's, a tenth of a thick layer's), and
+where it fills them each pigment scatters less by how near its refractive
+index is to the resin's: ultramarine, Prussian blue, the lakes and the
+chalk of a pale tint darken most, lead white, the earths and vermilion
+hardly at all, charcoal a little. A thin line darkens more than a heavy
+layer. A painting begun before this came (its head has no
+`--@ fixative-index`) darkens every pastel by one fixed amount, as it was
+painted (notes/research/pastel_surface.md §4).
+
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it
 was painted and has no `charcoal`. Its color, how much a stroke covers and

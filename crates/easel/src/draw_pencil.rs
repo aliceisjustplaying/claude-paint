@@ -2572,4 +2572,46 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         run(&mut s, "fix()");
         assert!(s.canvas().unwrap().pastel_veil());
     }
+
+    /// The fixative index switch: a new painting's log has it, and `fix()`
+    /// darkens its pastel by the particles' own index (a log without the
+    /// line darkens by the old fifth); it rides on the wet pastel switch,
+    /// replays bit for bit and a save keeps it.
+    #[test]
+    fn fixative_index_comes_with_its_log_head_line() {
+        use crate::session::{FIXATIVE_INDEX_MARK, WET_PASTEL_MARK, box_for};
+        let older = format!("--@ engine 9\n--@ paper\n--@ drawing-optics\n{WET_PASTEL_MARK}\n");
+        assert!(!box_for(Some(&older)).unwrap().fixative_index);
+        assert!(box_for(Some(&format!("{older}{FIXATIVE_INDEX_MARK}\n"))).unwrap().fixative_index);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{FIXATIVE_INDEX_MARK}\n"))).unwrap().fixative_index, "only in the head");
+        assert!(box_for(None).unwrap().fixative_index, "a new painting has it");
+        // (without the wet pastel switch's index it does nothing)
+        let mut bare = Session::with_box(W, box_for(Some(&format!("--@ engine 9\n--@ paper\n--@ drawing-optics\n{FIXATIVE_INDEX_MARK}\n"))).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut bare, PAPER);
+        assert!(!bare.canvas().unwrap().fixative_index());
+        let src = r#"p = pastel(pile{{"vermilion", 1}})
+            p:stroke({{150, 400}, {850, 400}}, {force=2})
+            fix()"#;
+        let painted = |log: Option<&str>| {
+            let mut s = Session::with_box(W, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, src);
+            s
+        };
+        let (old, s) = (painted(Some(&older)), painted(None));
+        assert!(!old.canvas().unwrap().fixative_index() && s.canvas().unwrap().fixative_index());
+        assert_ne!(old.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+        let program = s.program("fix");
+        assert!(program.lines().any(|l| l == FIXATIVE_INDEX_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+        let path = std::env::temp_dir().join(format!("easel-fixative-index-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.fixative_index && restored.canvas().unwrap().fixative_index());
+    }
 }

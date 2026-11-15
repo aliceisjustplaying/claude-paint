@@ -369,15 +369,62 @@ impl Cell {
         self.bind_resin(wet, None);
     }
 
+    /// With the fixative index switch: the loose pastel's color once
+    /// `resin_um` of resin wets the share of its pores it fills
+    /// (`crate::charcoal::wet_share`, its pores' volume against the resin),
+    /// by one rule for every particle: over the wetted share K and S are
+    /// those in resin, mixed with those in air by share, as
+    /// `dry::CarbonBed::color` mixes them. A pigment's or chalk's K stays
+    /// and its S falls by Mie at its own index against the resin's
+    /// (`dry::scatter_in_resin` of the cell's index, `Cell::index`, its
+    /// carbon's share taken out); carbon's K and S are its beds' in resin
+    /// (`charcoal::resin_ratios`). The cell's K and S are split between
+    /// pastel and carbon by its scattering (`Cell::s`, with the K–M switch)
+    /// or else by volume.
+    fn resin_dark(&self, resin_um: f32) -> Rgb {
+        let ws = crate::charcoal::wet_share(resin_um, self.loose);
+        if ws <= 0.0 {
+            return self.r;
+        }
+        let c = self.carbon.clamp(0.0, 1.0);
+        // (the cell's index counts its carbon at the index it was recorded with)
+        let n = crate::wet_pastel::from_index(self.index);
+        let cv = self.carbon_share();
+        let n_p = if cv < 0.999 { (n - cv * crate::wet_pastel::DEFAULT_INDEX) / (1.0 - cv) } else { n };
+        let f_sp = 1.0 - ws + ws * crate::dry::scatter_in_resin(n_p);
+        let (kap, rho) = crate::charcoal::resin_ratios();
+        let (k_c, s_c) = crate::charcoal::lying_ks();
+        std::array::from_fn(|q| {
+            let ks = crate::dry::ks_of(self.r[q]);
+            let (ws_c, wk_c) = if c <= 0.0 {
+                (0.0, 0.0)
+            } else if self.s > 0.0 {
+                ((c * s_c / self.s).min(1.0), (c * k_c[q] / (ks * self.s).max(1e-9)).min(1.0))
+            } else {
+                (c, c)
+            };
+            let f_sc = 1.0 - ws + ws * rho[q];
+            let f_kc = 1.0 - ws + ws * kap[q];
+            crate::dry::r_of(ks * (1.0 - wk_c * (1.0 - f_kc)) / ((1.0 - ws_c) * f_sp + ws_c * f_sc))
+        })
+    }
+
+    /// `bind_resin` with the fixative index switch: the darkening by
+    /// `resin_dark` of `resin_um` of resin.
+    pub(crate) fn bind_by_index(&mut self, resin_um: f32) {
+        let dark = self.resin_dark(resin_um);
+        self.bind_dark(dark);
+    }
+
     /// `bind`, a light spray laying `resin_um` µm of resin: where the
     /// loose layer is carbon (`carbon`), the resin wets the share of its
     /// pores it fills (`crate::charcoal::wet_share`) and darkens it as
     /// carbon's facets do against resin (`crate::charcoal::WET_KS`),
     /// not by pastel's rule. Pastel keeps `wet` and its rule.
     pub(crate) fn bind_resin(&mut self, wet: f32, resin_um: Option<f32>) {
-        let Some(mut optics) = self.optics else { return };
-        let g = (self.non_pastel - self.non_pastel_floor).max(0.0);
-        let b = self.bound;
+        if self.optics.is_none() {
+            return;
+        }
         let l = self.loose;
         let carbon = if resin_um.is_some() { self.carbon } else { 0.0 };
         let wc = resin_um.map_or(0.0, |t| crate::charcoal::wet_share(t, l));
@@ -395,6 +442,15 @@ impl Cell {
             let ks = (1.0 - r).powi(2) / (2.0 * r) / (1.0 - wet + wet / 5.0);
             1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
         });
+        self.bind_dark(dark);
+    }
+
+    /// Bind the loose pastel, darkened to `dark`, onto the bound.
+    fn bind_dark(&mut self, dark: Rgb) {
+        let Some(mut optics) = self.optics else { return };
+        let g = (self.non_pastel - self.non_pastel_floor).max(0.0);
+        let b = self.bound;
+        let l = self.loose;
         if self.non_pastel > 0.0 {
             optics.fixed = (optics.fixed * self.non_pastel_floor + optics.graphite * g) / self.non_pastel;
         }
@@ -1526,5 +1582,59 @@ mod tests {
         let mut bare = Cell { optics: Some(Optics::default()), film: 0.0, ..Cell::default() };
         bare.add_grains(0.5, yellow, 3.0, Grains { s: s_y, layer: true, ..Grains::PASTEL });
         assert_eq!(bare.r, yellow);
+    }
+
+    /// Fixative by the particles' index: S in resin over S in air is the
+    /// repository's Mie at each index (estimates-audit-2, fault 3: 0.49 for n
+    /// 2.0, 0.61 for 2.4, 0.72 for 3.0, 0.30 for 1.74, 0.14 for 1.65, 0.056
+    /// for whiting, 0.027 for 1.56, about 0 for ultramarine), not one fifth.
+    /// A pastel wetted over `ws` of its pores then has K/S ÷ (1 − ws + ws·ρ):
+    /// lead white, vermilion and the earths darken less than the old rule
+    /// had them, ultramarine and whiting more. Pure charcoal fixed this way
+    /// is its beds' own R∞ with that share in resin (`CarbonBed::color`),
+    /// pastel's rule and carbon's one rule.
+    #[test]
+    fn fixative_darkens_each_particle_by_its_index() {
+        for (n, want) in [(2.0f32, 0.49f32), (2.4, 0.61), (3.0, 0.72), (1.74, 0.30), (1.65, 0.14), (1.59, 0.056), (1.56, 0.027), (1.50, 0.0)] {
+            assert!((crate::dry::scatter_in_resin(n) - want).abs() < 0.006, "{n}: {}", crate::dry::scatter_in_resin(n));
+        }
+        // 1.5 µm of resin into 18.2 µm of loose pastel (pores 0.55): 0.15 wetted, the old rule's share
+        let (t, loose) = (1.5f32, 1.5 / (0.55 * 0.15));
+        assert!((crate::charcoal::wet_share(t, loose) - 0.15).abs() < 1e-5);
+        let fixed = |n: f32, r: f32| {
+            let mut c = Cell { optics: Some(Optics::default()), film: 0.0, a: 0.9, r: [r; 3], loose, index: crate::wet_pastel::to_index(n), ..Cell::default() };
+            c.bind_by_index(t);
+            c.optics.unwrap().bound[0]
+        };
+        let old = |r: f32| {
+            let mut c = Cell { optics: Some(Optics::default()), film: 0.0, a: 0.9, r: [r; 3], loose, ..Cell::default() };
+            c.bind(0.15);
+            c.optics.unwrap().bound[0]
+        };
+        let ks = |r: f32| (1.0 - r) * (1.0 - r) / (2.0 * r);
+        let rinf = |q: f32| 1.0 + q - (q * q + 2.0 * q).sqrt();
+        for (n, rho, r) in [(2.0f32, 0.49f32, 0.85f32), (3.0, 0.72, 0.35), (2.1, 0.53, 0.4), (1.5, 0.0, 0.3), (1.59, 0.056, 0.85)] {
+            let want = rinf(ks(r) / (1.0 - 0.15 + 0.15 * rho));
+            assert!((fixed(n, r) - want).abs() < 2e-3, "{n}: {} against {want}", fixed(n, r));
+            if n >= 1.9 {
+                assert!(fixed(n, r) > old(r), "{n}: over-darkened before ({} against {})", old(r), fixed(n, r));
+            } else {
+                assert!(fixed(n, r) < old(r), "{n}: under-darkened before ({} against {})", old(r), fixed(n, r));
+            }
+        }
+        // a thin line is wetted through, a thick layer hardly: 3 µm against 30 µm
+        let (thin, thick) = (crate::charcoal::wet_share(t, 3.0), crate::charcoal::wet_share(t, 30.0));
+        assert!((thin - 0.909).abs() < 1e-3 && (thick - 0.0909).abs() < 1e-3);
+        // pure vine charcoal: its bed with that share of its pores in resin
+        let vine = crate::dry::VINE_CHARCOAL;
+        for loose in [3.0f32, 10.0, 30.0] {
+            let mut c = Cell { optics: Some(Optics::default()), film: 0.0, a: 0.9, r: vine.color(0.0), loose, carbon: 1.0, ..Cell::default() };
+            c.bind_by_index(t);
+            let want = vine.color(crate::charcoal::wet_share(t, loose));
+            let got = c.optics.unwrap().bound;
+            for q in 0..3 {
+                assert!((got[q] - want[q]).abs() < 3e-4, "{loose}: {got:?} against {want:?}");
+            }
+        }
     }
 }

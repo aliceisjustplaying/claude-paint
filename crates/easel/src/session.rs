@@ -178,6 +178,15 @@ pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
 /// rides on the drawing's optics (`DRAWING_OPTICS_MARK`): without them it
 /// does nothing.
 pub const PASTEL_VEIL_MARK: &str = "--@ pastel-veil";
+/// The fixative index switch, in the head of a session file: `fix()`
+/// darkens each particle by its own refractive index against the resin's,
+/// over the share of its pores the spray's resin fills (paint's
+/// `Canvas::with_fixative_index`), where an older log darkened every pastel
+/// by one fixed fifth of its scattering over a fixed share. A new painting
+/// has it; a log without it replays as it was painted. It reads the index
+/// the wet pastel switch records (`WET_PASTEL_MARK`): without that it does
+/// nothing.
+pub const FIXATIVE_INDEX_MARK: &str = "--@ fixative-index";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
 /// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
@@ -969,6 +978,9 @@ impl Session {
         }
         if self.st.borrow().tubes.pastel_veil {
             let _ = writeln!(s, "{PASTEL_VEIL_MARK}");
+        }
+        if self.st.borrow().tubes.fixative_index {
+            let _ = writeln!(s, "{FIXATIVE_INDEX_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1770,6 +1782,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.wet_pastel = true;
         b.pastel_km_mix = true;
         b.pastel_veil = true;
+        b.fixative_index = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1863,6 +1876,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.pastel_km_mix = head(PASTEL_KM_MARK);
     b.pastel_veil = head(PASTEL_VEIL_MARK);
+    b.fixative_index = head(FIXATIVE_INDEX_MARK);
     Ok(b)
 }
 

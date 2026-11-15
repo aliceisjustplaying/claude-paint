@@ -87,3 +87,19 @@ def media_table():
 
 if __name__ == "__main__" and __import__("sys").argv[1:] == ["media"]:
     media_table()
+
+# A fixative's resin in the pores (pastel_surface.md §4; dry.rs `scatter_in_resin`):
+# transport scattering in poly(n-butyl methacrylate), n 1.49, over the same in
+# air, at a pastel's particle size (the size average as `media`'s).
+RESIN = 1.49
+
+def resin_table():
+    print("n     S_resin/S_air (d %.1f um)" % D_PASTEL)
+    for n in (1.50, 1.56, 1.59, 1.65, 1.70, 1.74, 1.84, 2.00, 2.15, 2.30, 2.40, 2.45, 3.00):
+        print("%.2f  %.4f" % (n, sizeavg(n, RESIN, D_PASTEL)[0] / sizeavg(n, 1.0, D_PASTEL)[0]))
+    for name, idx in (("calcite", ((1.658, 2/3), (1.486, 1/3))), ("kaolin", ((1.553, 1/3), (1.559, 1/3), (1.565, 1/3)))):
+        r = sum(w * sizeavg(n, RESIN, D_PASTEL)[0] for n, w in idx) / sum(w * sizeavg(n, 1.0, D_PASTEL)[0] for n, w in idx)
+        print("%-6s%.4f" % (name, r))
+
+if __name__ == "__main__" and __import__("sys").argv[1:] == ["resin"]:
+    resin_table()

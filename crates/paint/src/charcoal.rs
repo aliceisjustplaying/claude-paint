@@ -101,7 +101,9 @@ pub const LIGHT_SPRAY_WET: f32 = 0.15;
 const BED_EPS: f32 = 0.55;
 
 /// The share of the pores of `loose_um` of loose charcoal (as it lies) that
-/// `resin_um` of resin fills, 0..1.
+/// `resin_um` of resin fills, 0..1. With the fixative index switch
+/// (`Canvas::with_fixative_index`) pastel's too: its pores are the same
+/// 0.55 of it (`wet_pastel::POROSITY`).
 pub fn wet_share(resin_um: f32, loose_um: f32) -> f32 {
     if loose_um <= 0.0 { 0.0 } else { (resin_um / (BED_EPS * loose_um)).clamp(0.0, 1.0) }
 }
@@ -111,7 +113,10 @@ pub fn wet_share(resin_um: f32, loose_um: f32) -> f32 {
 /// absorption barely moves (Mie of `crate::dry::VINE_CHARCOAL` and
 /// `COMPRESSED_CHARCOAL` in air and resin, their mean: 1.505/1.541,
 /// 1.281/1.315, 0.944/0.974; charcoal_optics.py §2). Pastel's rule, ×5 for
-/// a particle of n ≈ 2, would turn carbon to soot.
+/// a particle of n ≈ 2, would turn carbon to soot. With the fixative index
+/// switch the cell takes carbon's K and S in resin themselves
+/// (`resin_ratios`), mixed by the share wetted as `CarbonBed::color` mixes
+/// them; this scaling stays for logs without it.
 pub const WET_KS: [f32; 3] = [1.523, 1.298, 0.959];
 
 /// The share of a vine stick's volume that is char, its splinters' (the
@@ -128,6 +133,31 @@ pub const COMPRESSED_SOLIDS: f32 = 1.0;
 /// across the visible).
 pub fn bed_scatter(bed: &crate::dry::CarbonBed) -> f32 {
     bed.s_air.iter().sum::<f32>() / 3.0
+}
+
+/// What a fixative's resin (n 1.49) in all its pores does to a carbon bed,
+/// per channel: its Kubelka–Munk K and S in resin over in air, the mean of
+/// `crate::dry::VINE_CHARCOAL`'s and `COMPRESSED_CHARCOAL`'s (the cell doesn't
+/// know which), and carbon's K and S per µm as it lies in the tooth
+/// (`Stick::lying_scatter`'s rule, the mean of the two sticks'). The
+/// fixative index switch's general rule mixes K and S by the share wetted,
+/// as `CarbonBed::color` does (`Cell::bind_resin`).
+pub fn resin_ratios() -> (Rgb, Rgb) {
+    let (v, c) = (crate::dry::VINE_CHARCOAL, crate::dry::COMPRESSED_CHARCOAL);
+    let k = std::array::from_fn(|q| 0.5 * (v.k_resin[q] / v.k_air[q] + c.k_resin[q] / c.k_air[q]));
+    let s = std::array::from_fn(|q| 0.5 * (v.s_resin[q] / v.s_air[q] + c.s_resin[q] / c.s_air[q]));
+    (k, s)
+}
+
+/// Carbon's K (per channel) and gray S per µm of it as it lies in the tooth:
+/// each bed's per particle volume times its stick's solids over the volume
+/// a worn volume lies at, the mean of vine and compressed.
+pub fn lying_ks() -> (Rgb, f32) {
+    let per = |solids: f32, cover: f32| solids * cover / crate::pastel::PARTICLE_UM;
+    let (v, c) = (crate::dry::VINE_CHARCOAL, crate::dry::COMPRESSED_CHARCOAL);
+    let (fv, fc) = (per(VINE_SOLIDS, VINE_COVER_UM), per(COMPRESSED_SOLIDS, COMPRESSED_COVER_UM));
+    let k = std::array::from_fn(|q| 0.5 * (v.k_air[q] * fv + c.k_air[q] * fc));
+    (k, 0.5 * (bed_scatter(&v) * fv + bed_scatter(&c) * fc))
 }
 
 impl Stick {

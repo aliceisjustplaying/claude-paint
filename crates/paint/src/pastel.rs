@@ -1077,11 +1077,18 @@ impl Canvas {
     /// Charcoal in it (`Cell::carbon`) is wetted by the resin the spray lays
     /// (`crate::charcoal::LIGHT_SPRAY_UM` for a light one, in proportion to
     /// `wet`) over its pores' volume, and darkened as carbon is by resin.
+    /// With the fixative index switch (`with_fixative_index`) every cell is,
+    /// pastel or charcoal: wetted by that resin over its pores, each
+    /// particle darkened by its own index against the resin's
+    /// (`Cell::bind_by_index`).
     pub fn fix_pastel(&mut self, m: Option<&crate::Mask>, wet: f32) {
         let f = self.f;
         let w = wet.clamp(0.0, 1.0);
         let Some(d) = self.drawing.as_mut() else { return };
         let resin = d.carbon.then_some(crate::charcoal::LIGHT_SPRAY_UM * w / crate::charcoal::LIGHT_SPRAY_WET);
+        // (with the fixative index switch: every cell by its particles' own
+        // index, wetted by the resin over its pores, `Cell::bind_by_index`)
+        let by_index = self.fixative_index.then_some(crate::charcoal::LIGHT_SPRAY_UM * w / crate::charcoal::LIGHT_SPRAY_WET);
         // (a sheet laid on the picture keeps the spray off what it covers)
         let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
@@ -1090,7 +1097,10 @@ impl Canvas {
             }
             if c.optics.is_some() {
                 let before = (c.a, c.reflectance());
-                c.bind_resin(w, resin);
+                match by_index {
+                    Some(t) => c.bind_by_index(t),
+                    None => c.bind_resin(w, resin),
+                }
                 self.px[i] = c.repaint(self.px[i], before);
                 continue;
             }

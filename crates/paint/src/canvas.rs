@@ -257,6 +257,8 @@ pub struct Canvas {
     pub(crate) pastel_km: bool,
     /// No first-surface veil over any particle bed (`with_pastel_veil`).
     pub(crate) pastel_veil: bool,
+    /// Fixative darkens each particle by its own index (`with_fixative_index`).
+    pub(crate) fixative_index: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -349,6 +351,7 @@ impl Canvas {
             wet_pastel: false,
             pastel_km: false,
             pastel_veil: false,
+            fixative_index: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -528,6 +531,23 @@ impl Canvas {
 
     pub fn pastel_veil(&self) -> bool {
         self.pastel_veil
+    }
+
+    /// Fixative (`fix_pastel`) darkens the pastel by its particles' own
+    /// refractive index against the resin's (Mie, `dry::scatter_in_resin`
+    /// of `Cell::index`), over the share of its pores the resin it lays
+    /// fills (`charcoal::wet_share`), carbon by its own beds' K and S in
+    /// resin: one rule for pastel and charcoal, in place of pastel's fixed
+    /// fifth (right only near n 1.7) over a fixed 0.15 wetted. It reads the
+    /// index the wet pastel switch records (`with_wet_pastel`); without it
+    /// it stays off.
+    pub fn with_fixative_index(mut self, enabled: bool) -> Self {
+        self.fixative_index = enabled && self.wet_pastel;
+        self
+    }
+
+    pub fn fixative_index(&self) -> bool {
+        self.fixative_index
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

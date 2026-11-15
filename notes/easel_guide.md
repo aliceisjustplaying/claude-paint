@@ -970,6 +970,64 @@ with `scratch: true`; without it they work on the painting.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
 
+## Surfaces: sheets beside the painting
+
+A painting begun with named surfaces (its log's head says `--@ surfaces`, beside
+`--@ paper`) may keep sheets of paper beside its canvas, in the same session: a study to
+trace from, a proof to print on. An older painting replays as it was painted, and none of
+this is there: `sheet`, `use`, `surfaces`, `handoff` and `receive` don't exist in it.
+
+```lua
+st = sheet{name="study", size=300, aspect=4/3, paper={grammage=60, calender=0.6}}
+use(st)                       -- draw on the study: every drawing verb acts on it now
+h = pencil("2B"); h:line({{100,100},{800,700}})
+use("painting")               -- back to the canvas canvas{} made
+names, current = surfaces()   -- the names, the painting first, and the current one's
+```
+
+- **`sheet{name=, size=, aspect=, paper={...}, ground=, seed=}`** takes a sheet from the
+  drawer: a surface of its own, with its own paper (the keys `canvas{paper=}` takes) and
+  size in mm. It is laid out at the painting's pixel pitch, so a line keeps its width from
+  one sheet to another. Its width is 1000 units, as the painting's is (`st.H` is its
+  height). It is not in hand until `use(st)`.
+- **One surface is current.** Every drawing verb (pencil, pastel, brushes, knives, the rag,
+  `wait`'s ageing, `drying`) acts on it. `use(s)` or `use("name")` takes another up and
+  returns the name of the one put down. A sheet laid on the picture is lifted first.
+- **What each keeps.** A surface keeps its own paint, drawing, pastel and paper. The hand
+  is shared: the same brushes, knives, rags, palette and piles go from one to the other,
+  carrying what is on them.
+- **One clock.** Time passes for every sheet: hand time spent on the study and `wait`
+  there age the painting's paint too. A surface put down is aged all at once when it is
+  taken up, or looked at, to exactly what it would be had the painter waited beside it.
+- **A failed chunk** puts back every surface it touched, and which one was current.
+- **Looking.** `look`, `probe`, `save` and `status` take `--surface <name>`. Without it
+  `look`, `probe` and `save` show the painting, as before, and `status` the current
+  surface (its line names them all). A look changes nothing.
+- **Saves and checkpoints** keep every surface. A painting that never takes a sheet saves
+  exactly as before.
+
+**Handing a surface to another session.** An artist and a printer are two sessions, each
+seeing only what it is handed. A surface goes from one to the other as a file in the
+studio:
+
+```lua
+-- the artist's session
+sha = handoff(pl, "handoff/key.surface")   -- pl leaves this session; the reply gives its sha256
+-- the printer's session
+k = receive("handoff/key.surface", {after=90, sha256="<the hash handoff gave>"})
+use(k)
+```
+
+- **`handoff(s, path)`** takes the surface out of the session, with its whole state and
+  the session's clock, into a `.surface` file in the studio (never outside it, never over
+  a file already there). The painting itself stays. It happens only if the chunk is kept.
+- **`receive(path, {after=, sha256=, name=})`** takes it in. `after=` is the minutes it
+  spent on the way (the log names them: the wall clock can't be replayed), and it arrives
+  aged by exactly that, through the same drying as `wait`: ink on a plate keeps drying,
+  paint keeps setting. `after=0` brings it as it left. `sha256=` names the file's content:
+  a receive without it says the hash, and a replay that finds another file there refuses
+  it. `name=` renames it on arrival.
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

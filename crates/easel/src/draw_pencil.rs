@@ -1073,6 +1073,11 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if tubes.pastel_km_mix && tubes.drawing_optics {
                 p.set("s", paint::pastel::Stick::pastel_scatter(tubes.dry_scatter(&pile.mix.parts)))?;
             }
+            // (with the pastel lift switch: how readily the eraser takes what
+            // it lays, from its particles' adhesion; without, 0.55)
+            if tubes.pastel_lift {
+                p.set("lift", tubes.pastel_lift(&pile.mix.parts))?;
+            }
             if let Some(l) = o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
                 if !(5.0..=200.0).contains(&l) {
                     return err("pastel: length is the stick's length in mm, 5 to 200");
@@ -1581,6 +1586,40 @@ mod tests {
             let restored = crate::save::read(&path).unwrap().session;
             std::fs::remove_file(path).unwrap();
             assert_eq!(restored.st.borrow().tubes.dry_lakes, enabled);
+        }
+    }
+
+    /// A new painting's pastel stick is as readily lifted as its particles' adhesion makes
+    /// it (`PASTEL_LIFT_MARK`, paint's `Palette::pastel_lift`): a white stick, whiting, 0.608;
+    /// its canvas lays moved pastel again at that. An older log's stick has no `lift` and
+    /// lays at 0.55, as painted. The log and a save keep the switch.
+    #[test]
+    fn a_new_paintings_pastel_lifts_by_its_adhesion() {
+        use crate::session::{PASTEL_LIFT_MARK, box_for};
+        assert!(box_for(None).unwrap().pastel_lift);
+        for enabled in [false, true] {
+            let head = format!("--@ engine 9\n--@ paper\n{}", if enabled { format!("{PASTEL_LIFT_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.pastel_lift, enabled);
+            let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            assert_eq!(s.canvas().unwrap().pastel_lift(), enabled);
+            let out = run(&mut s, r#"p = pastel(pile{{"lead white", 1}}) print(p.lift)"#);
+            if enabled {
+                let lift: f32 = out.trim().parse().unwrap();
+                assert!((lift - 0.608).abs() < 0.003, "{out}");
+            } else {
+                assert_eq!(out.trim(), "nil");
+            }
+            let program = s.program("lift");
+            assert_eq!(program.lines().any(|l| l == PASTEL_LIFT_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().pastel_lift, enabled);
+            let path = std::env::temp_dir().join(format!("easel-pastel-lift-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.pastel_lift, enabled);
+            assert_eq!(restored.canvas().unwrap().pastel_lift(), enabled);
         }
     }
 

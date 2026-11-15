@@ -729,7 +729,14 @@ feel(x, y)                     -- what a fingertip feels there
   so a fixed passage takes more pastel; and darkens it a little, as the resin
   wets the particles.
   The eraser lifts loose pastel out of the tooth with the coverage it takes,
-  so an erased passage takes pastel again.
+  so an erased passage takes pastel again. How readily it lifts a stick's
+  pastel comes from its particles: the eraser pulls a particle off the
+  fibre if it pulls harder than the fibre holds it, and in the studio's
+  air a film of water at each contact holds it too. Whiting (a tint's
+  chalk) is taken about 0.61 a press; dense, high-index pigments
+  (vermilion, the iron reds) a little more, carbon blacks and ultramarine
+  a little less; vine charcoal, coarser, more than any pastel. Pastel a
+  finger, a brush or a puff moves keeps its lift where it is laid.
 - **The finger** picks up loose pastel and lays it down along its path as fine
   grains pressed into the pores: colors drag into each other and the passage
   covers more for its thickness. It leaves fixed pastel where it is.
@@ -946,10 +953,13 @@ has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 `tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. A painting
 begun before the lakes' dry colors came (its head has no `--@ dry-lakes`)
 replays its lake sticks and paper tones, and those of the pigments whose
-index was corrected, in the colors it was painted with. The numbers (how hard a stick is, how fast it wears, what dry pigment
+index was corrected, in the colors it was painted with. One begun before
+the eraser's lift came from adhesion (no `--@ pastel-lift`) replays every
+pastel at the lift it was painted with (0.55, moved pastel too). The numbers (how hard a stick is, how fast it wears, what dry pigment
 looks like) are estimates, not measurements (notes/pastel.md); the lakes'
 dry colors are fitted to measured powders
-(notes/research/dry_pigment_optics.md §6).
+(notes/research/dry_pigment_optics.md §6), and the eraser's lift is derived
+(notes/research/pastel_lift.md).
 
 **Charcoal.** Vine (willow) charcoal is a charred twig with no binder;
 compressed charcoal is charcoal powder pressed with a gum binder.

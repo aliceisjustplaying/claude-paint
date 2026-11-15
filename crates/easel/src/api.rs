@@ -895,6 +895,7 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
         }
         let mmu = b.st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.mm_per_unit();
         let km = b.st.borrow().canvas.as_ref().is_some_and(|c| c.pastel_km_mix());
+        let whole_lift = b.st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.pastel_lift();
         let cap = b.held.borrow().capacity_mm3(mmu);
         let mut h = b.held.borrow_mut();
         let eps = paint::wet_pastel::POROSITY;
@@ -925,8 +926,15 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
                     h.paste = [0, 1, 2].map(|k| (h.paste[k] * h.paste_mm3 + st.color[k] * v) / total);
                 }
                 h.paste_n = (h.paste_n * h.paste_mm3 + st.index * v) / total;
-                // (ground charcoal is bare carbon in the paste, at its own lift)
-                if st.carbon || h.paste_carbon > 0.0 {
+                // (ground charcoal is bare carbon in the paste, at its own lift;
+                // with the pastel lift switch the paste's lift is all of it's,
+                // by volume, as paint's `Carried` keeps it)
+                if whole_lift {
+                    h.paste_lift = (h.paste_lift * h.paste_mm3 + st.lift * v) / total;
+                    if st.carbon || h.paste_carbon > 0.0 {
+                        h.paste_carbon = (h.paste_carbon * h.paste_mm3 + if st.carbon { v } else { 0.0 }) / total;
+                    }
+                } else if st.carbon || h.paste_carbon > 0.0 {
                     let (ch, cv) = (h.paste_carbon * h.paste_mm3, if st.carbon { v } else { 0.0 });
                     if ch + cv > 0.0 {
                         h.paste_lift = (h.paste_lift * ch + st.lift * cv) / (ch + cv);

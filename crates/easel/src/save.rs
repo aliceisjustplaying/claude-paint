@@ -298,6 +298,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.drawing_optics = canvas.drawing_optics();
     tubes.wet_pastel = canvas.wet_pastel();
     tubes.pastel_km_mix = canvas.pastel_km_mix();
+    tubes.pastel_lift = canvas.pastel_lift();
     tubes.rag_lift = canvas.rag_lift();
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();

@@ -169,6 +169,13 @@ pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// it was painted. It rides on the drawing's optics (`DRAWING_OPTICS_MARK`):
 /// without them it does nothing.
 pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
+/// The pastel lift switch, in the head of a session file: a pastel stick is as
+/// readily lifted by the kneaded eraser as its particles' adhesion makes it, by the
+/// law charcoal's lift comes from (paint's `Palette::pastel_lift`, notes/research/
+/// pastel_lift.md), and pastel a finger, a blade, a brush or a puff moves is laid again
+/// as readily lifted as it was (`paint::Canvas::with_pastel_lift`). A new painting has
+/// it; a log without it replays as it was painted, every pastel at 0.55.
+pub const PASTEL_LIFT_MARK: &str = "--@ pastel-lift";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
 /// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
@@ -958,6 +965,9 @@ impl Session {
         if self.st.borrow().tubes.pastel_km_mix {
             let _ = writeln!(s, "{PASTEL_KM_MARK}");
         }
+        if self.st.borrow().tubes.pastel_lift {
+            let _ = writeln!(s, "{PASTEL_LIFT_MARK}");
+        }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1722,7 +1732,7 @@ fn box_list() -> String {
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise for sharpening a pastel
 /// pencil (`PASTEL_SHARPEN_MARK`), their lakes' dry colors (`DRY_LAKES_MARK`), a
 /// gritted ground on paper (`GRIT_MARK`) and a stick's hatching over an area
-/// (`PASTEL_AREA_STROKES_MARK`). New paintings are of
+/// (`PASTEL_AREA_STROKES_MARK`), and a pastel's eraser lift (`PASTEL_LIFT_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`). The drain and oils switches (`DRAIN_MARK`,
 /// `OILS_MARK`): a new one's on, an existing one's its log's.
@@ -1757,6 +1767,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.charcoal = true;
         b.wet_pastel = true;
         b.pastel_km_mix = true;
+        b.pastel_lift = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1849,6 +1860,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.pastel_km_mix = head(PASTEL_KM_MARK);
+    b.pastel_lift = head(PASTEL_LIFT_MARK);
     Ok(b)
 }
 

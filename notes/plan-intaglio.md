@@ -349,7 +349,7 @@ k:state("III")                 -- names the plate as it now stands; a proof can 
   - `edition{recipe=r, count=25, sheets={paper=...}}` pulls them all.
   - `pull{recipe=r, impression=12}` pulls one on plates worn to that point. The wear is computed from the counts of the impressions before it, without pulling them.
   - The hand's variation from sheet to sheet (pressure on the wipe, the dabbers) is seeded by the impression number.
-- **Roles.** The woodblock plan has its roles as sessions (woodblock §4b). For Cassatt, artist and printer worked together at the press ("imprimée par l'artiste et M. Leroy"), so one session plays both by default (I6).
+- **Roles.** As in the woodblock plan (§4b), the roles are sessions: an artist session makes the plates and marks proofs, and a printer session inks, wipes and pulls the proofs and the edition, with plates and proofs handed between them as files that keep aging in transit (I6). Cassatt inked her color plates beside Leroy ("imprimée par l'artiste et M. Leroy"); her marks on the proofs tell the printer session how.
 
 ## 9. Monotype (phase P8)
 ```lua
@@ -425,14 +425,19 @@ Ranked, from IP §9; each names what in the plan it would replace.
 8. Tarlatan's bending rigidity, yarn radius and spacing (§5.2).
 9. From the literature, not the bench: Mathews & Shapiro (1989) for Cassatt's mordant, inks, papers, plate transfer and registration; Stijnman (2012) for 19th-century presses and felts.
 
-## 13. Decisions
+## 13. Decisions (decided 2026-11-15: the most physical and realistic option each time)
 
-- **I1** Plate resolution: the sheet canvas's pitch, statistical below it (proposed), or a finer plate grid. A finer grid costs memory; the statistical plate loses only line shapes under 0.2 mm in a whole view, which crop renders rebuild from the vectors.
-- **I2** Surfaces: named surfaces in the painting's session (proposed), or the scratch canvas generalized into several sessions sharing a clock. The second keeps Lua states apart but can't run `press` between them.
-- **I3** Ink as an oil film on paper through the existing film code (proposed), or a print-specific film. The first gets drying and optics for free; the cost is engine-9 film memory on sheets.
-- **I4** Metal optics now (normal-incidence reflectance from optical constants) and Fresnel later with gap 10 (proposed), or both now.
-- **I5** Box: a `cassatt-prints` or 1890s Paris print box (copper, zinc, papers, inks of the period), refusing materials outside it as the woodblock plan's W2 does. Contents wait for Mathews & Shapiro.
-- **I6** Roles: one session as artist-printer (proposed for Cassatt), or the woodblock plan's split roles.
-- **I7** Order against woodblock: share P1 and the edition machinery (§8) with woodblock phase 4, built once.
-- **I8** Monotype brushes: the bristle model on a non-absorbent plate (proposed) or a simple ink-laying brush.
-- **I9** Bench measurements: who makes them, and whether the plan waits for Unknowns 1–3 before P3b merges or ships with the [E] values labelled.
+- **I6 Roles: two sessions, artist and printer** (the woodblock plan's W1 pattern, two roles instead of three). Each is its own session and sees only what it is handed:
+  - **The artist** gets the brief and makes the drawing, the plates (drypoint, grounds, acid, aquatint, soft-ground) and their states, and marks the proofs.
+  - **The printer** gets the plates and the marked proofs. It inks and wipes (à la poupée included), damps the paper, registers, and pulls the trial proofs and then the edition (the recipe a `pull` replays).
+  - **What passes between them is physical objects as files.** A plate leaves the artist with its whole state (height field, burr, grain, ground, any ink on it), and a proof leaves the printer with its paper, ink, moisture and plate mark.
+  - **Time keeps running in transit.** The time elapsed between sessions is recorded with each handoff and applied on arrival: ink on a plate dries, damp paper dries, copper tarnishes if modelled.
+  - **One session at a time** (RAM), as in the woodblock plan. Cassatt inked her color plates beside Leroy, so the printer session plays the hand that inks; the artist's marks on the proofs say how.
+- **I2 Surfaces: named surfaces inside each role's session**, sharing that session's clock: for the artist the plates, studies and tracing sheets; for the printer the plates and sheets. P1 also builds the export and import of a surface as a file, with its age, which is the handoff in I6. The alternative (several sessions sharing one clock) is dropped: `press` needs the plate and the sheet in one session.
+- **I1 Plate resolution: the sheet's pitch with the line geometry kept exactly** (the statistical plate). Wiping and transfer depend on each groove's width and depth (sag ∝ w⁴; transfer by depth), so each cell keeps its distribution of groove widths and depths and the vectors, not an average depth. A crop render rebuilds line shapes from the vectors. A finer grid would add memory without changing the physics the press sees.
+- **I3 Ink: an oil film through the existing film code.** Etching ink is linseed oil (burnt plate oil) and pigment, so its drying, gloss and optics are the oil film's. The film memory on sheets is accepted.
+- **I4 Metal optics: Fresnel from the metals' complex refractive indices now.** The closed form gives normal incidence and the angular dependence at once, so nothing waits for gap 10; gap 10 reuses it.
+- **I5 Box: an 1890s Paris print box.** Copper, zinc, steel facing, papers (laid, Japan), inks and mordants of the period, refusing materials outside it, as woodblock's W2 does. Contents come from the sources in hand and are marked as unconfirmed until Mathews & Shapiro (1989) is read.
+- **I7 Shared machinery: P1 surfaces, the handoffs and the edition machinery are built once** for intaglio and woodblock.
+- **I8 Monotype brushes: the existing bristle model on the plate as a non-absorbent surface.**
+- **I9 Bench measurements: nobody here can make them.** Phases ship with their [D] values derived from physics and their [E] values labelled. The tests read their expected numbers from the note's formulas, so a later measurement replaces a value without rewriting the code. Nothing waits for Unknowns 1–3.

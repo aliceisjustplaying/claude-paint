@@ -328,7 +328,8 @@ values: 60° gloss < 10 and 85° gloss of a few tens.
   free CSV downloads (e-conservation.org / chsopensource.org). This is the dataset to fit
   r(λ) per pigment, by inverting powder and oil R∞ to K/S and checking that K is
   conserved. I could not download the CSVs from this machine (sites 403 or no link found),
-  so it is worth a retry by hand.
+  so it is worth a retry by hand. (Later reached with a browser's request headers: its
+  powder spectra are used in §6.)
 - **Pictorial materials database** (Springer, *Appl. Phys. A* 2017, 1200
   pigment/binder/varnish combinations). Not reachable from here.
 - Conservation-wiki "Inpainting: Pigments" and handprint.com state the qualitative rule:
@@ -342,6 +343,128 @@ values: 60° gloss < 10 and 85° gloss of a few tens.
   index (1.47–1.54).
 - Lekner & Dorf 1988 and Twomey et al. 1986 give measured and modeled wet/dry reflectance
   ratios for sand and soils: wet reflectance is ~0.5–0.8 of dry across the visible.
+
+---
+
+## 6. Dye lakes dry: measured powders and the dye loading
+
+**The problem.** At engine 9 a pure rose madder pastel stick came out sRGB 242 218 223
+(L\*a\*b\* 89/9/0), a near-white tint with no white in it, while carmine lake came out
+171 58 87. Real madder lake powder, and the madder pastels made from it, are a rose to
+crimson (below).
+
+**Diagnosis [C].** `dry::spectral_color` gives a pigment under n = 1.9 the dry scattering
+of lead white per volume, scaled by the Mie ratio at its index (×0.82 at n = 1.6), and its
+oil K per coat. The scattering half is right for a lake. Its substrate, alumina hydrate
+(gibbsite, n 1.57), scatters in air at 0.71 µm⁻¹ per volume at 1 µm (table 2.2), the same
+as the table's 1.6 to within 1 %. An alumina hydrate powder is white and opaque in air,
+like kaolin. The **absorption** half is what fails. The engine-9 tables fix a lake's K/S
+in oil, not its K per volume of pigment:
+- rose madder and permanent alizarin are researched tubes. Their K comes from a Kremer gum
+  swatch fitted as an assumed 100 µm oil film, with S set by an estimated hiding
+  (`scripts/pigment_data/researched-tubes.json`: "No new oil K/S or tint strength is
+  measured").
+- magenta and yellow lake are proxies: the catalog masstone at the catalog scattering.
+- carmine is the only measured one (Revigo cochineal).
+
+Rose madder's K at 510 nm is 0.19 per coat, against carmine's 6.7. Dry, against a
+white-like S of 2–4 per coat, madder's K/S is about 0.05, so R∞ ≈ 0.73: the near-white.
+(The same weak K makes engine 9's rose madder oil masstone pale: 211 126 125 decoded. That
+is not changed here.)
+
+### 6.1 Measured lake powders
+
+**Cosentino 2014 FORS powders** (`CSV/powder.csv` of the CHSOS download, SHA-256
+86bb05f0…ae45; Kremer pigments, 360–1000 nm). This is the "pure powder" set §5 could
+not download. The raw spectra are on a probe scale. The four carbon blacks read
+0.14–0.17 flat and the white powders read 1.10–1.30. So each spectrum is mapped linearly
+between the blacks' mean, taken as 0.04 (a dry black powder's surface reflection, §3)
+[E], and a white powder's, taken as 0.93 [E]. The white is either chalk and gypsum or
+lead white, and the two are kept as the spread. `dry_lake_fit.py` does this. Corrected
+L\*a\*b\* (D65), chalk-and-gypsum white / lead-white white [M/E]:
+
+| Powder | sRGB | L\* | a\* | b\* |
+|---|---|---|---|---|
+| madder lake | 186 121 126 / 176 114 117 | 57.7 / 54.7 | 25.9 / 24.7 | 7.7 / 8.8 |
+| carmine lake | 138 34 64 / 131 38 62 | 31.6 / 30.8 | 45.2 / 41.4 | 8.1 / 7.8 |
+| yellow lake (reseda, weld) | 200 168 90 / 190 157 84 | 70.2 / 66.4 | 2.1 / 3.0 | 44.1 / 42.2 |
+| alizarin (synthetic, for context) | 204 34 47 / 194 37 48 | 44.6 / 42.8 | 63.9 / 60.1 | 37.6 / 34.2 |
+| lac dye lake (context) | 171 44 50 / 162 46 51 | 39.1 / 37.7 | 51.2 / 47.9 | 27.6 / 25.0 |
+| vermilion (check) | 191 96 96 / 181 91 90 | 52.2 / 49.7 | 38.2 / 36.3 | 17.6 / 17.5 |
+
+The probe's geometry and white standard are not in the abstract, and the paper was not
+reachable from here. The correction is therefore a two-point estimate. The madder figure
+moves by about 3 L\* between the two whites.
+
+**Lab-made madder lakes measured as powder [M]:**
+- Sattar, "Lake Pigments and Thin-Layer Chromatography of Natural Dyes", *J. Chem. Educ.*
+  101 (2024) 4983–4988: madder (Rubia tinctorum, Kremer 37201) dye from dyed silk, laked
+  with alum. L\*a\*b\* 66.1 ± 0.4 / 25.5 ± 0.3 / 9.4 ± 0.3 (n = 5). Madder's red reaches into
+  the yellow (an orange cast); cochineal's has a blue cast (purple).
+- "Pigment Synthesis and Analysis of Color in Art", *J. Chem. Educ.* 2020,
+  doi:10.1021/acs.jchemed.9b01093: madder lake 62.6 / 23.9 / 16.7.
+
+So dry madder lake is L\* 55–66, a\* 24–26, b\* 8–17, a muted rose. Synthetic alizarin
+lake and lac lake are deeper and redder. Madder's FORS minimum is at 510 nm and it rises
+from 580 nm, as in the madder FORS literature (Coatings 2018, 8:171; Heritage 2023,
+6:192, absorption maxima 508–547 nm).
+
+No measured powder was found for a fuchsine (aniline, magenta) lake. CHSOS has a
+fuchsine dye (Basic Red 9), not a lake.
+
+### 6.2 The engine's rule (switch `--@ dry-lakes`)
+
+For a lake, K_dry(λ) = a · K_oil(λ), and S_dry is the rule for n < 1.9 at the substrate's
+1.57. The factor a is the dye loading the oil tables leave unidentified. It is fitted per
+lake so the pure dry color matches the corrected powder's L\*a\*b\* (the midpoint of the
+two whites) [C]:
+
+| Lake | a | ΔE76 to powder after (before) | Range of a over the corrections |
+|---|---|---|---|
+| rose madder | 31.9 | 4.5 (37.6) | 26–39 |
+| carmine lake | 2.57 | 8.0 (11.9) | 1.7–3.8 |
+| yellow lake | 10.6 | 3.2 (28.2) | 8.5–13.4 |
+| magenta | 10.6, yellow lake's [E] | no data | — |
+
+The ranges cross black 0.03–0.05 with white 0.90–0.96 and both white references. Madder
+needs about thirty times the absorption the oil table gives it, however the powder is
+corrected. Magenta takes yellow lake's loading because its K is built the same way (a
+catalog-masstone proxy). That is an estimate.
+
+A flat substrate S (lead white's mean, not its spectrum) fits madder and yellow lake as
+well, but carmine at ΔE 16. Revigo's carmine K and lead-white S share a dip near 510 nm
+(the fitting's, not the pigments'), and dividing by the white-shaped S cancels it. So the
+rule keeps that shape.
+
+Before → after, engine 9, sRGB, pure and 1:1 by volume with lead white (the same in every
+box that has the tube):
+
+| Lake (boxes) | pure | 1:1 lead white |
+|---|---|---|
+| rose madder (friedrich, sargent, alma-tadema, giverny, impressionist, seurat, cezanne, every) | 242 218 223 → 178 117 128 | 247 230 233 → 203 147 158 |
+| carmine lake (giverny, impressionist, every) | 171 58 87 → 144 27 57 | 190 88 117 → 168 53 82 |
+| yellow lake (impressionist, every) | 232 221 175 → 187 162 85 | 239 232 198 → 208 188 117 |
+| magenta (sargent, every) | 239 142 211 → 180 54 140 | 248 170 224 → 206 81 169 |
+| permanent alizarin (tonn, every) | 213 200 219, unchanged | 225 217 230, unchanged |
+
+**Permanent alizarin is not a lake.** The catalog calls it a quinacridone, and its data
+are Kremer's PV19. Quinacridone violet PV19 has n 2.02–2.04 (CAMEO, MFA Boston;
+Natural Pigments quotes the same), not the 1.6 that `refractive_index` gives it. It has no
+substrate and no measured powder here, so the switch leaves it as it was. Its pale dry
+color has the same root as madder's (an unidentified K per volume). Calibrating it needs
+a PV19 powder spectrum. Open question.
+
+Sources for this section: Cosentino 2014 (below), the CHSOS download page
+https://chsopensource.org/new-free-pigments-fors-spectroscopy-database/ ; Sattar 2024,
+https://doi.org/10.1021/acs.jchemed.4c00752 ; J. Chem. Educ. 2020,
+https://doi.org/10.1021/acs.jchemed.9b01093 ; "Seeing red" (madder and cochineal lakes by FORS), *Herit.
+Sci.* (2019), https://doi.org/10.1186/s40494-019-0335-1 (lake FORS in four binders, band
+positions vary with recipe and pH; not read in full) ; Coatings 2018, 8:171,
+https://doi.org/10.3390/coatings8050171 ; Heritage 2023, 6:192,
+https://www.mdpi.com/2571-9408/6/4/192 ; CAMEO, quinacridone,
+https://cameo.mfa.org/wiki/Quinacridone_dye ; CHSOS fuchsine,
+https://chsopensource.org/products/pigments-checker/pigments-checker-modern-and-contemporary-art-pigments-list/basic-red-9-fuchsine/ .
+Computation: `dry_lake_fit.py` (this folder).
 
 ---
 

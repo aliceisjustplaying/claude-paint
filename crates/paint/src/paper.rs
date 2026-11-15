@@ -37,9 +37,10 @@
 //!   (FEPA P320 46 µm, P400 35 µm, P600 26 µm, with FEPA's spread) stand
 //!   in a binder, which seals the fibers under it: the tooth is then the
 //!   open volume of the packing between the binder and the tallest grains
-//!   the stick rests on, 3–8 times the drawing paper's, and the hard,
-//!   angular grains abrade a stick about 4.5 times as fast as rounded
-//!   fibers do (Rabinowicz; notes/research/sanded_paper.md).
+//!   the stick rests on, 2.5–9 times the drawing paper's, and the hard,
+//!   angular grains abrade a stick about 3 times as fast as rounded
+//!   fibers do (Rabinowicz, with the grains' measured angularity;
+//!   notes/research/sanded_paper.md).
 //!
 //! Everything is laid in millimeters of the sheet, so the paper is the same
 //! at any pixel width and in a crop render.
@@ -105,10 +106,25 @@ pub const GRIT_SPREAD: f32 = 0.23;
 /// and a starch paste for a pumice ground about as lean.
 const ACRYLIC_SOLIDS: f64 = 0.45;
 const GLUE_SOLIDS: f64 = 0.07;
-/// The share of the face the stick rests on: its real contact F/(σp·A₀),
-/// 0.4–5 % for a pastel at 2 N (pastel_stick_tribology.md §4). The coat's
-/// tooth is the open volume below the level where the grains carry that.
-const GRIT_FACE: f64 = 0.02;
+/// The binder's wet level, in median grain sizes: laid level with the
+/// median grain's top, the leanest wet coat that carries its grains. A
+/// bench measurement (a cross-section) would set it; its bounds are 1–1.3
+/// (a wet coat to the tallest grains). Colourfix's coat weighs 40 g/m²
+/// (300 g/m² paper printed to 340 g/m²), and the model's coat at P400,
+/// cover 0.6, already weighs 47 g/m² at this level with quartz grit (65
+/// with alumina) and 52 at 1.3. So the measured weight puts it at the lean
+/// bound (notes/research/sanded_paper.md §1).
+const BINDER_WET: f64 = 1.0;
+/// The share of the face the stick rests on: its real contact F/(σp·A₀).
+/// The default soft stick (σp 3.9 MPa) under the hand's default 2–2.5 N
+/// gives 2.9 % on a fresh 20 mm² crescent, 1.1 % on 50 mm² and 0.39 % on
+/// a fully worn 148 mm² facet. A stick wears flat at once
+/// (pastel_stick_tribology.md §4), so take the geometric middle, 1 %. The
+/// coat's tooth is the open volume below the level where the grains carry
+/// that. It is the sheet's, fixed: each step's own force already sets how
+/// far the stick sinks into that relief (`pastel::seat`), so a per-stroke
+/// share would count the load twice.
+const GRIT_FACE: f64 = 0.01;
 /// How much more a crushed grain abrades a stick than a paper fiber does, at
 /// the same load and distance. Both are far harder than pastel (alumina about
 /// 20 GPa, silicon carbide 25, pumice glass 5–6, a fiber wall 0.3–0.5,
@@ -118,16 +134,21 @@ const GRIT_FACE: f64 = 0.02;
 /// of the groove coming off a friable compact on either. A fiber crossing is
 /// a ridge 12.5 µm in radius across the fiber, long along it: the stick rests
 /// on the highest of the ~490 crossings per mm² of a sheet of Rq 3–5 µm
-/// (Greenwood–Williamson at 2 % contact), 1.4–2.3 µm deep, so K ≈ 0.13–0.16
-/// over random directions. A grain the stick rests on is one of the coat's
-/// tallest, 3–7 µm deep in it (P800 to P240) (`Grit::tooth_um`'s packing), far past a
-/// crushed grain's tip radius (about 1 µm, Sin et al. 1979), so its facets cut: a fracture
-/// corner of 90° facets (a cube's, at random) gives K ≈ 0.64, a more obtuse
-/// one of 30° slopes 0.37. The ratio is 2.3–5.1; this is the cube's at the
-/// middle of the paper's roughness. As every grade's grains sit deeper than
-/// their tips, it doesn't depend on the grade (the abrasive size effect of
-/// metals comes from sub-µm grooves) (notes/research/sanded_paper.md §3).
-pub const GRIT_WEAR: f32 = 4.5;
+/// (Greenwood–Williamson at the stick's 1 % real contact, `GRIT_FACE`), so
+/// K ≈ 0.12–0.155 over random directions. A grain the stick rests on is one
+/// of the coat's tallest, 3–8 µm deep in it (P800 to P240)
+/// (`Grit::tooth_um`'s packing), far past a crushed grain's tip radius
+/// (about 1 µm, Sin et al. 1979), so its facets cut. Their slope is
+/// measured: Hamblin & Stachowiak's angularity SPQ, the mean cos(θ/2) over
+/// a grain's corners of apex θ, runs to 0.60 over 0.25–0.3 mm abrasives
+/// (glass beads to SiC), 0.63–0.65 for freshly fractured WC-Co, and chalk's
+/// two-body wear rises linearly with it. A corner of SPQ 0.55 attacks at
+/// 90° − θ/2 = 33.4°, so K = (2/π)·tan 33.4° = 0.42, and over the fiber's
+/// middle 0.137 that is 3.05 (2.4–4.0 over SPQ 0.50–0.60 and the paper's
+/// roughness). As every grade's grains sit deeper than their tips, it
+/// doesn't depend on the grade (the abrasive size effect of metals comes
+/// from sub-µm grooves) (notes/research/sanded_paper.md §3).
+pub const GRIT_WEAR: f32 = 3.0;
 
 impl Grit {
     /// The tooth the coat offers, µm: the open volume per area between the
@@ -136,12 +157,12 @@ impl Grit {
     /// `Sheet::micro`). The grains are spheres of FEPA's lognormal spread
     /// (`GRIT_SPREAD`, by number: the mass median less 3σ² in ln d) at random
     /// on the sheet, covering `cover` of it seen from above. The binder is
-    /// laid level with the median grain's top and dries to its solids
+    /// laid level with the median grain's top (`BINDER_WET`) and dries to its solids
     /// (`ACRYLIC_SOLIDS`, `GLUE_SOLIDS`), filling the coat between the
     /// grains from the sheet up. The stick rests where the tallest grains
-    /// carry its real contact (`GRIT_FACE`): about 1.3 median sizes up. So the
-    /// tooth goes as the size: 0.60 of it in acrylic, 0.84 in glue at an
-    /// open coat (P400: 21 and 29 µm), a little less for a closed one.
+    /// carry its real contact (`GRIT_FACE`): about 1.37 median sizes up. So
+    /// the tooth goes as the size: 0.70 of it in acrylic, 0.94 in glue at an
+    /// open coat (P400: 24.4 and 32.8 µm), a little less for a closed one.
     pub fn tooth_um(&self) -> f32 {
         self.coat().0
     }
@@ -184,7 +205,8 @@ impl Grit {
             let i = ((z / dz) as usize).min(NZ - 1);
             below[i] + (z - i as f64 * dz) * mr[i]
         };
-        let binder = solids * (d50 - at(d50));
+        let wet = BINDER_WET * d50;
+        let binder = solids * (wet - at(wet));
         let bed = (0..NZ).find(|&i| (i + 1) as f64 * dz - below[i + 1] >= binder).unwrap_or(NZ);
         let face = (0..NZ).rev().find(|&i| mr[i] >= GRIT_FACE).unwrap_or(0);
         let open: f64 = (bed.min(face)..face).map(|i| (1.0 - mr[i]) * dz).sum();

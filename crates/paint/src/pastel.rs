@@ -1611,7 +1611,7 @@ mod tests {
     }
 
     /// A gritted coat's tooth (notes/research/sanded_paper.md §1): the open
-    /// volume of its grain packing, 3.5–4.9 times a drawing paper's pores at
+    /// volume of its grain packing, 4.1–5.5 times a drawing paper's pores at
     /// P400 (acrylic to glue; the makers' and painters' claims run 4–8), more
     /// for a coarser grade (P320 over P600: painters layer on the coarse
     /// grades and detail on the fine), less for a closed coat than an open
@@ -1628,8 +1628,8 @@ mod tests {
         let sanded = c.with_paper(Paper { grit: Some(p400), ..Paper::drawing(4) });
         let (pm, sm) = (plain.mean_micro_um().unwrap(), sanded.mean_micro_um().unwrap());
         assert!(sm > 3.0 * pm && sm < 8.0 * pm, "P400 tooth {sm} µm vs paper {pm} µm");
-        // (the research's packing: P400 21 µm in acrylic, 29 µm in glue)
-        assert!((p400.tooth_um() / 21.0 - 1.0).abs() < 0.05 && (g(35.0, 0.6, Binder::Glue).tooth_um() / 29.4 - 1.0).abs() < 0.05, "{}", p400.tooth_um());
+        // (the research's packing: P400 24.4 µm in acrylic, 32.8 µm in glue)
+        assert!((p400.tooth_um() / 24.4 - 1.0).abs() < 0.05 && (g(35.0, 0.6, Binder::Glue).tooth_um() / 32.8 - 1.0).abs() < 0.05, "{}", p400.tooth_um());
         assert!((sm / p400.tooth_um() - 1.0).abs() < 0.05, "the pixels scatter about the coat's tooth");
         assert!(sanded.micro.iter().any(|&m| (m - sm).abs() > 0.05 * sm), "and scatter");
         assert!(g(46.2, 0.6, Binder::Acrylic).tooth_um() > p400.tooth_um() && p400.tooth_um() > g(25.8, 0.6, Binder::Acrylic).tooth_um());
@@ -1646,8 +1646,8 @@ mod tests {
     /// drawing paper and on the same sheet with a sanded coat of P400 grit
     /// (35 µm, the grade most painters use), until both refuse. Thresholds
     /// from notes/research/sanded_paper.md §2, not from this code: the coat's
-    /// open volume is 3.5–4.9 times the paper's pores, so it holds at least 3
-    /// times the pastel; and counted in layers of what a pass lays on fresh
+    /// open volume is 4.1–5.5 times the paper's pores, so it holds at least
+    /// 3.5 times the pastel; and counted in layers of what a pass lays on fresh
     /// paper (a covering application, which on sanded paper a painter lays
     /// with a lighter hand), drawing paper takes 2–3 layers and refuses (here
     /// fewer than 5), and the sanded sheet 10–25 (here at least 10).
@@ -1663,7 +1663,7 @@ mod tests {
         let sanded = passes(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
         let sum = |v: &[f32]| v.iter().sum::<f32>();
         assert!(plain[29] < 0.02 * plain[0] && sanded[29] < 0.02 * sanded[0], "both refuse: {plain:?} {sanded:?}");
-        assert!(sum(&sanded) > 3.0 * sum(&plain), "holds more: {sanded:?} vs {plain:?}");
+        assert!(sum(&sanded) > 3.5 * sum(&plain), "holds more: {sanded:?} vs {plain:?}");
         let layers = |v: &[f32]| sum(v) / plain[0];
         assert!(layers(&plain) < 5.0, "drawing paper holds {} layers", layers(&plain));
         assert!(layers(&sanded) >= 10.0, "the sanded sheet holds {} layers", layers(&sanded));
@@ -1671,7 +1671,8 @@ mod tests {
 
     /// The grains abrade the stick faster than the fibers do (painters:
     /// sanded paper "eats" pastel; Rabinowicz's abrasive wear with a crushed
-    /// grain's facets against a fiber crossing's flank gives 2.3–5.1 times:
+    /// grain's facets, at their measured angularity, against a fiber
+    /// crossing's flank gives 2.4–4.0 times:
     /// notes/research/sanded_paper.md §3): the first stroke on a fresh sheet
     /// takes that much more off the same stick, and cuts its new facet
     /// deeper.
@@ -1686,7 +1687,7 @@ mod tests {
         };
         let (paper, sanded) = (stroke(None), stroke(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic })));
         let ratio = sanded.0 / paper.0;
-        assert!((2.3..=5.1).contains(&ratio), "worn {} on grit vs {} on paper", sanded.0, paper.0);
+        assert!((2.4..=4.0).contains(&ratio), "worn {} on grit vs {} on paper", sanded.0, paper.0);
         assert!(sanded.1 < paper.1, "its face cut further: {} vs {}", sanded.1, paper.1);
     }
 

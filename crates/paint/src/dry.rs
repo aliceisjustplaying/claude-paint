@@ -380,6 +380,15 @@ pub const COMPRESSED_CHARCOAL: CarbonBed = CarbonBed {
     s_resin: [0.011199, 0.012773, 0.016114],
 };
 
+/// The dry rule's scattering per coat for a particle of index `n` below 1.9
+/// at 1 µm (`spectral_reflectance`): lead white's oil S `white` times its
+/// air/oil ratio, times the Mie σ′(n)/σ′(2.0).
+pub fn rule_scatter(n: f32, white: &crate::spectral::Spectrum) -> crate::spectral::Spectrum {
+    let (sigma_white, r_white) = mie_air(2.0);
+    let (sigma, _) = mie_air(n);
+    std::array::from_fn(|w| r_white * white[w] * sigma / sigma_white)
+}
+
 /// Dry color retaining measured absorption and wavelength-dependent
 /// scattering. The air/oil rule is the same as `dry_color`.
 pub fn spectral_color(parts: &[(crate::spectral::SpectralPigment, f32, f32)], white: &crate::spectral::Spectrum) -> Rgb {

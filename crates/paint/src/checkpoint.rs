@@ -235,6 +235,24 @@ const WET_PASTEL: u64 = 1 << 44;
 const WET_PASTEL_MARK: u64 = 0x50544557;
 const WET_PASTEL_V: u64 = 2;
 
+// Tests only: write engine 9's latents as a checkpoint from before the
+// oil-K slots had them (`mixer::OIL_K`), to check such a file still reads.
+#[cfg(test)]
+thread_local! {
+    static WRITE_BEFORE_OIL_K: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn writes_before_oil_k() -> bool {
+    #[cfg(test)]
+    {
+        WRITE_BEFORE_OIL_K.with(|c| c.get())
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
 
@@ -604,7 +622,7 @@ impl Canvas {
         if material {
             put_u64(w, if backing { 21 } else if layers { 20 } else { 19 })?;
         }
-        put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else if self.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() })?;
+        put_u64(w, if self.spectral_films() { if writes_before_oil_k() { crate::mixer::film_identity_before_oil_k() } else { crate::mixer::film_identity() } } else if self.engine >= crate::PIGMENT_MIXER { if writes_before_oil_k() { crate::mixer::identity9_before_oil_k() } else { crate::mixer::identity9() } } else { crate::mixer::identity() })?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
         let f = self.f;
@@ -639,7 +657,7 @@ impl Canvas {
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
-        let width = if self.engine >= crate::PIGMENT_MIXER { LAT } else { crate::mixer::LEGACY_LATENT_SIZE };
+        let width = if self.engine >= crate::PIGMENT_MIXER { if writes_before_oil_k() { crate::mixer::LATENT_SIZE_BEFORE_OIL_K } else { LAT } } else { crate::mixer::LEGACY_LATENT_SIZE };
         put_all(w, wt.lat.iter().flat_map(|l| l.color[..width].iter().copied()))?;
         if version >= 11 {
             // (engine 4's five properties: the pigment's packing, `Prop`'s
@@ -761,7 +779,7 @@ impl Canvas {
                 put_u64(w, pixel.layers.len() as u64)?;
                 for layer in &pixel.layers {
                     put_f32(w, layer.share)?;
-                    put_all(w, layer.lat.color.into_iter())?;
+                    put_all(w, layer.lat.color[..if writes_before_oil_k() { crate::mixer::LATENT_SIZE_BEFORE_OIL_K } else { LAT }].iter().copied())?;
                     put_all(w, layer.hide.into_iter())?;
                     put_u64(w, layer.lat.parts.len() as u64)?;
                     for &(i, amount) in &layer.lat.parts {
@@ -803,6 +821,10 @@ impl Canvas {
         let spectral_backing = version == 21;
         let own_mixer = version >= 19;
         let identity = if own_mixer { get_u64(r)? } else { 0 };
+        // (written before engine 9's oil-K slots: its latents are that much
+        // narrower, and read widened with zeros, `mixer::OIL_K`)
+        let before_oil_k = own_mixer && (identity == crate::mixer::identity9_before_oil_k() || identity == crate::mixer::film_identity_before_oil_k());
+        let identity = if !before_oil_k { identity } else if identity == crate::mixer::identity9_before_oil_k() { crate::mixer::identity9() } else { crate::mixer::film_identity() };
         if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::identity9() && identity != crate::mixer::film_identity() {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
@@ -886,7 +908,7 @@ impl Canvas {
         let mut wet = crate::wet::Wet::new(0);
         wet.floor = vec![0.0; n];
         wet.vol = get_all(r, n)?;
-        let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else { LAT };
+        let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else if before_oil_k { crate::mixer::LATENT_SIZE_BEFORE_OIL_K } else { LAT };
         if own_mixer {
             // the stored latents go straight into the pixels' (no copy of them all as floats)
             let mut lat = Vec::with_capacity(n);
@@ -1200,7 +1222,9 @@ impl Canvas {
                 if count > 1 << 20 { return Err(bad("checkpoint layer count is invalid")); }
                 for _ in 0..count {
                     let share = get_f32(r)?;
-                    let color: [f32; LAT] = get_all(r, LAT)?.try_into().unwrap();
+                    let mut color = [0.0f32; LAT];
+                    let stored = if before_oil_k { crate::mixer::LATENT_SIZE_BEFORE_OIL_K } else { LAT };
+                    color[..stored].copy_from_slice(&get_all(r, stored)?);
                     let hide: crate::wet::Prop = get_all(r, 10)?.try_into().unwrap();
                     if !share.is_finite() || share <= 0.0 || !color.iter().chain(&hide).all(|x| x.is_finite()) { return Err(bad("checkpoint layer is invalid")); }
                     let mut lat = crate::wet::Latent::from_color(color);
@@ -2383,6 +2407,37 @@ mod tests {
             assert!(a.drawing_guide().data == b.drawing_guide().data);
         }
         assert!(all[1].1.has_drawing(), "the study has a drawing to spill");
+    }
+
+    /// A checkpoint written before engine 9's oil-K slots (`mixer::OIL_K`,
+    /// latents 48 floats wide, the old identity) still reads: its latents are
+    /// widened with zeros and its paint is as it was.
+    #[test]
+    fn a_checkpoint_from_before_the_oil_k_slots_reads() {
+        let mut c = Canvas::new(48, 1.0, [0.9; 3]).with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
+        let mut p = crate::Palette::new("old checkpoint", crate::palette::catalog());
+        p.engine = crate::PIGMENT_MIXER;
+        p.glaze_film = true;
+        let madder = p.tubes.iter().position(|t| t.name == "rose madder").unwrap();
+        let paint = p.pile(vec![(madder, 1.0)]).laid(0.0);
+        for (i, lat) in c.wet.lat.iter_mut().enumerate().take(200) {
+            lat.color = *paint.pigment_latent.as_ref().unwrap();
+            c.wet.vol[i] = 0.02;
+        }
+        let mut new = Vec::new();
+        c.write_state(&mut new, "").unwrap();
+        WRITE_BEFORE_OIL_K.with(|f| f.set(true));
+        let mut old = Vec::new();
+        let written = c.write_state(&mut old, "");
+        WRITE_BEFORE_OIL_K.with(|f| f.set(false));
+        written.unwrap();
+        assert!(old.len() < new.len());
+        let (a, b) = (Canvas::read_state(&mut Cursor::new(&new)).unwrap().0, Canvas::read_state(&mut Cursor::new(&old)).unwrap().0);
+        assert!(a.wet.lat.iter().zip(&b.wet.lat).all(|(x, y)| x.color == y.color));
+        assert!(b.wet.lat[0].color[crate::mixer::LATENT_SIZE_BEFORE_OIL_K..].iter().all(|&v| v == 0.0));
+        let mut again = Vec::new();
+        b.write_state(&mut again, "").unwrap();
+        assert!(again == new, "read back, it writes as a new checkpoint");
     }
 
     /// A resting canvas's drawing spilled to disk keeps charcoal's carbon

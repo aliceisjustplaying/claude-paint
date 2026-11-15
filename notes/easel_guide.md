@@ -572,6 +572,7 @@ a solid that rests on the tooth, wears and sheds what it abrades.
 p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"})   -- a round stick, Ø12 mm (diameter=)
 h = pastel(pile{{"bone black", 1}}, {kind="hard"})                     -- a square stick, 6.35 mm
 q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, sharpened
+q:sharpen()                    -- a pencil only: cut a fresh point; returns the mm of core it took off
 p:stroke(pts, {force=2, alt=60, azimuth=45, roll=0, speed=80})          -- one stroke; each may be a list along pts
 p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide as it is long (p:snap(mm) breaks one)
 p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
@@ -600,6 +601,17 @@ feel(x, y)                     -- what a fingertip feels there
   one way grows a facet and draws wider as it does; rolled or tilted it cuts a
   new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
   says how many facets it has and how long it is.
+- **Sharpening a pencil.** A pastel pencil's point wears flat as it draws,
+  and its line goes wider and paler. `q:sharpen()` cuts a fresh point, as a
+  blade does: the core gets shorter by what the cut takes off (as far back
+  as the worn end sits behind a fresh point, measured along the taper; a few
+  mm after twenty lines) and the call returns that in mm. It takes about
+  10 s of hand time (an estimate). A pencil shorter than 50 mm once cut is
+  too short to hold and is refused (also an estimate); take a fresh one. A
+  flat worn along the core with the pencil laid on its side (`q:side`)
+  stays. A soft or hard stick has no point and refuses `sharpen`. This needs
+  the switch `--@ pastel-pencil-sharpen`, which every new painting has; in
+  an older log a pencil's `sharpen` replays as it was painted (refused).
 - **Crumbs.** Most of what the stick abrades comes away as crumbs that ride
   under its face and settle into the tooth along and beside the stroke, the
   hollows taking more: a mark covers several times what the stick touches,

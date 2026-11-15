@@ -38,6 +38,12 @@ No measured values exist for artist pastel. Proxies:
 - **Hard square sticks:** 6–6.35 mm square × 65–92 mm (Conté carré, NuPastel).
 - **Pastel-pencil cores:** Ø 4.3–4.7 mm (Faber-Castell Pitt, Stabilo CarbOthello, Caran d'Ache).
 
+### Sharpening a pastel pencil
+- **[M, practice] The point.** A pastel pencil is sharpened with a craft knife or blade, then often touched up with a sharpener or on sandpaper. A plain sharpener tends to break the soft core. Derwent (Martin Aveling) starts the blade a couple of centimetres back and turns the pencil until "a little over a centimetre" of pastel is exposed all round. Emily Rose exposes about half an inch, then finishes on 150/180-grit sandpaper. The engine's point (`pastel.rs` `Stick::pencil`) is eight cuts at 0.22 rad (12.6°) to the axis. On a 4.5 mm core they reach the full diameter about 10 mm up, which matches that exposed length.
+- **[E] What a sharpening costs the core.** No measured loss per sharpening was found. The engine computes it from geometry: the least shift up the axis that puts a fresh point inside the worn core. That is the largest (h − d)/(−n_z) over the wear facets, where h is how far the fresh point reaches along a facet's normal n and d is the facet's support. A knife takes no more core than it must. Facets within 10° of the axis (the core laid flat, `p:side`) are left alone: the blade cuts the point, not the core's length.
+- **[E] Hand time:** about 10 s a sharpening (shave the wood round, touch the point up). The only figure found is anecdotal: a student spending ten minutes per pencil by knife (drawing-pencils.com), which is far slower than a practised hand.
+- **[E] Shortest pencil held:** 50 mm. Below that a stub wants a pencil extender (Wikipedia, "Pencil extender", gives no length). This is an estimate from a grip that runs from the fingertips to the web of the hand.
+
 ---
 
 ## 2. Wear and deposited mass
@@ -289,4 +295,5 @@ This replaces every [E] in §2–4.
 - JFDE review, "Temporal features of handwriting". https://jfde.org/index.php/jfde/article/download/255/131
 - MS handwriting kinematics, *Sci. Rep.* (2017). https://www.nature.com/articles/s41598-017-18066-7
 - Pastel composition: https://www.webexhibits.org/pigments/intro/pastel.html; https://en.wikipedia.org/wiki/Pastel; https://www.wetcanvas.com/forums/topic/instructions-for-making-your-own-pastels/; https://www.liveabout.com/how-to-make-your-own-pastels-2579005; https://en.wikipedia.org/wiki/Cont%C3%A9
+- Sharpening pastel pencils: Derwent, "Tips for sharpening pastel pencils with Martin Aveling" (2020), https://blog.derwentart.com/2020/12/04/tips-for-sharpening-pastel-pencils-with-martin-aveling/; Colin Bradley, "How to sharpen pastel pencils", https://www.colinbradleyart.com/blog/how-to-sharpen-pastel-pencils; Emily Rose, "How to sharpen pastel pencils", https://www.emilyrosefineart.co.uk/blog/how-to-sharpen-pastel-pencils; https://drawing-pencils.com/how-to-sharpen-pastel-pencils-a-stepbystep-guide-for-artists/ (anecdotal timing); "Pencil extender", https://en.wikipedia.org/wiki/Pencil_extender.
 - Stick dimensions: Jerry's Artarama / Dick Blick / Dakota Pastels listings (Sennelier, Rembrandt, Schmincke, NuPastel); Conté à Paris (https://eu.conteaparis.com/blogs/tutoriels/qu-est-ce-qu-un-carre); Faber-Castell, Stabilo, Caran d'Ache product pages.

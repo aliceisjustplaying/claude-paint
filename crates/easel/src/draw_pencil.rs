@@ -987,6 +987,12 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if !is_stick(&st1, &p)? {
                 return err("wet: a pastel stick's tip is dipped in water (pastel(pile))");
             }
+            // (a wet tip is a chalk soil held by its gum, wet_pastel.rs; a
+            // charcoal stick is porous char, or carbon in gum, with no
+            // measured plastic and liquid limits: its wet tip isn't modelled)
+            if p.raw_get::<Option<String>>("charcoal")?.is_some() {
+                return err("wet: a charcoal stick's wet tip isn't modelled (charcoal is no chalk soil); wet the charcoal on the paper with a brush instead (b:dip(share), b:wash)");
+            }
             let share = share.unwrap_or(1.0);
             if !(0.0..=1.0).contains(&share) {
                 return err("wet: share is how much water the tip takes up, 0 (dry) to 1 (soaked)");

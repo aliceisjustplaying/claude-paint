@@ -551,6 +551,11 @@ pub struct WashLoad {
     pub paste_mm3: f32,
     pub paste: Rgb,
     pub paste_n: f32,
+    /// The share of the paste that is bare carbon (charcoal it picked up
+    /// or was ground from) and that carbon's eraser lift: laid again as
+    /// charcoal (`pastel::Carried`).
+    pub paste_carbon: f32,
+    pub paste_lift: f32,
     pub lay_um: f32,
     pub pickup: f32,
     pub run_mm: f32,
@@ -565,14 +570,16 @@ impl WashLoad {
 }
 
 /// Wet `c` with `um` of water: its gum, if it has pastel, goes into
-/// solution (`Cell::gum` from never wet to all of it held).
+/// solution (`Cell::gum` from never wet to all of it held). Charcoal
+/// brought none (`Cell::carbon_share`): a cell of vine charcoal alone holds
+/// no gum, and dries as loose as it was.
 pub(crate) fn add_water(c: &mut Cell, um: f32) {
     if um <= 0.0 {
         return;
     }
     c.water += um;
     if c.gum == 0 {
-        c.gum = to_gum(1.0);
+        c.gum = to_gum(1.0 - c.carbon_share());
     }
 }
 
@@ -612,7 +619,7 @@ impl Canvas {
             let pores = POROSITY * (c.loose + c.bound);
             if c.gum == 0 && pores > 0.0 {
                 // (dry pastel over a damp sheet: it draws the water up)
-                c.gum = to_gum(1.0);
+                c.gum = to_gum(1.0 - c.carbon_share());
             }
             let wet_before = c.water > 0.0 || (pores > 0.0 && u > 0.0);
             let (w, u, g) = settle(c.water, u, pores, from_gum(c.gum), dt, e, a, sheet);
@@ -690,6 +697,7 @@ impl Canvas {
         let mut pxs = std::mem::take(&mut self.px);
         let mut d = self.drawing.take().expect("drawing_mut made it");
         let (mut paste, mut col, mut np) = (load.paste_mm3.max(0.0) / um_mm3, load.paste, n_paste);
+        let mut carried = crate::pastel::Carried::of_parts(load.paste_carbon, load.paste_lift);
         let mut laid = 0.0f32;
         for &(c, dir) in &steps {
             let e = (-dir.1, dir.0);
@@ -725,6 +733,7 @@ impl Canvas {
                     let filled = (cl.water / (POROSITY * (cl.loose + cl.bound)).max(1e-6)).min(1.0);
                     let take = cl.loose * pick * filled;
                     if take > 0.0 {
+                        carried.take(paste, take, cl);
                         let total = paste + take;
                         col = [0, 1, 2].map(|q| (col[q] * paste + cl.r[q] * take) / total.max(1e-9));
                         np = (np * paste + from_index(cl.index) * take) / total.max(1e-9);
@@ -746,12 +755,14 @@ impl Canvas {
                 for &i in &band {
                     let cl = &mut d.cells[i];
                     let before = (cl.a, cl.reflectance());
-                    crate::pastel::lay_into(cl, q, col, kept, crate::pastel::Grains { index: np, ..crate::pastel::Grains::PASTEL });
+                    crate::pastel::lay_into(cl, q, col, kept, crate::pastel::Grains { index: np, ..carried.grains() });
                     pxs[i] = cl.repaint(pxs[i], before);
                 }
                 paste -= give;
                 laid += give;
                 d.sticks = true;
+                // (charcoal laid again: its cells keep their carbon shares)
+                d.carbon |= carried.parts().0 > 0.0 && d.optics();
             }
             d.damp = true;
         }
@@ -761,6 +772,7 @@ impl Canvas {
         load.paste_mm3 = paste * um_mm3;
         load.paste = col;
         load.paste_n = np;
+        (load.paste_carbon, load.paste_lift) = carried.parts();
         let len_mm = (steps.len().max(1) - 1) as f32 * STEP_PX * s_mm;
         (laid * um_mm3, crate::tally::stroke_secs(len_mm as f64, (width * self.mm_per_unit) as f64) as f32)
     }
@@ -997,6 +1009,55 @@ mod tests {
         WashLoad { water_mm3: water.min(cap), ..WashLoad::for_tool(&tool, 0.15, cap) }
     }
 
+    /// Water over charcoal (`crate::charcoal`): charcoal brings no gum, so
+    /// vine charcoal wetted and dried is as loose as before, while pastel
+    /// under it binds, the charcoal bound with it counted as bound carbon.
+    /// A wet brush drawn out of a vine band carries the charcoal on as bare
+    /// carbon at vine's lift, not as pastel.
+    #[test]
+    fn water_over_charcoal_leaves_it_charcoal() {
+        let vine = |c: &mut Canvas, x0: f32| {
+            let mut st = Stick::vine(8.0);
+            for k in 0..6 {
+                let x = x0 + 8.0 * k as f32;
+                stroke(c, &mut st, x, 200.0, x, 800.0, 3.0);
+            }
+        };
+        let bound = |c: &Canvas| c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>();
+        // vine alone: no gum, nothing binds
+        let mut alone = paper(true);
+        vine(&mut alone, 300.0);
+        let d = alone.drawing.as_ref().unwrap();
+        assert!(d.cells.iter().any(|c| c.carbon > 0.99 && c.loose > 0.0));
+        assert!(d.cells.iter().filter(|c| c.loose > 0.0).all(|c| (c.carbon_share() - 1.0).abs() < 1e-4));
+        wet_all(&mut alone, 20.0);
+        assert!(alone.drawing.as_ref().unwrap().cells.iter().filter(|c| c.loose > 0.0).all(|c| from_gum(c.gum) == 0.0));
+        alone.dry();
+        assert_eq!(water(&alone), 0.0);
+        assert_eq!(bound(&alone), 0.0, "vine has no binder to set");
+        // vine over a pastel band: the pastel's gum binds the cell, and the
+        // carbon in what binds is bound carbon
+        let mut over = paper(true);
+        band(&mut over);
+        vine(&mut over, 300.0);
+        wet_all(&mut over, 20.0);
+        over.dry();
+        assert!(bound(&over) > 0.0);
+        let both: Vec<_> = over.drawing.as_ref().unwrap().cells.iter().filter(|c| c.carbon > 0.0 && c.bound > 0.0).collect();
+        assert!(!both.is_empty() && both.iter().all(|c| c.carbon_bound > 0.0 && c.carbon_bound < 1.0));
+        // a wet brush through vine lays it further on as charcoal
+        let mut c = paper(true);
+        vine(&mut c, 300.0);
+        let mut load = brush(f32::INFINITY);
+        c.wash_pastel(40.0, 0.5, &[(250.0, 500.0), (700.0, 500.0)], &mut load);
+        assert!(load.paste_carbon > 0.99 && (load.paste_lift - crate::charcoal::VINE_LIFT).abs() < 1e-3, "{} {}", load.paste_carbon, load.paste_lift);
+        let f = c.window();
+        let d = c.drawing.as_ref().unwrap();
+        let past: Vec<_> = (0..f.w).filter(|&x| f.ux(x) > 450.0 && f.ux(x) < 650.0).map(|x| &d.cells[(500.0 * f.scale) as usize * f.w + x]).filter(|c| c.loose > 0.0).collect();
+        assert!(!past.is_empty(), "carried past the band");
+        assert!(past.iter().all(|c| c.carbon > 0.99 && (c.lift - crate::charcoal::VINE_LIFT).abs() < 1e-3 && c.bare_carbon().is_some()));
+    }
+
     /// A wet brush drawn out of a band of loose pastel onto bare paper
     /// carries it along its path as a paste: the paper past the band
     /// darkens along the path (and not beside it), and all of it is wet.
@@ -1129,6 +1190,48 @@ mod tests {
         plain.write_state(&mut b, "").unwrap();
         assert!(!b.windows(8).any(|w| w == WET_MARK.to_le_bytes()));
         assert!(!Canvas::read_state(&mut std::io::Cursor::new(&b)).unwrap().0.wet_pastel());
+    }
+
+    /// A drawing with both charcoal (its carbon shares, the drawing's
+    /// layout 5) and wet pastel (the WETP section's water, index and gum,
+    /// and the sheet's water) on a gritted sheet on a strainer comes back
+    /// bit for bit, with its carbon, water and gum, and dries the same.
+    #[test]
+    fn a_checkpoint_keeps_charcoal_and_water_together() {
+        use crate::paper::{Binder, Grit, Mount};
+        let mut c = paper(true);
+        let mut p = c.paper.unwrap();
+        p.grit = Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Glue });
+        c.paper = Some(p.mounted(Mount::Strainer { bar_mm: 30.0, cross: 0 }));
+        band(&mut c);
+        let mut st = Stick::vine(8.0);
+        for k in 0..4 {
+            let x = 300.0 + 8.0 * k as f32;
+            stroke(&mut c, &mut st, x, 200.0, x, 800.0, 3.0);
+        }
+        wet_all(&mut c, 20.0);
+        c.wait(0.1);
+        {
+            let d = c.drawing.as_ref().unwrap();
+            assert!(d.carbon && d.damp && d.sheet.iter().any(|&u| u > 0.0));
+            assert!(d.cells.iter().any(|c| c.carbon > 0.0 && c.water > 0.0 && c.gum != 0 && c.index != 0));
+        }
+        let mut bytes = Vec::new();
+        c.write_state(&mut bytes, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut std::io::Cursor::new(&bytes)).unwrap();
+        let (a, b) = (c.drawing.as_ref().unwrap(), r.drawing.as_ref().unwrap());
+        assert!(b.carbon && b.damp && a.sheet == b.sheet);
+        assert!(a.cells.iter().zip(&b.cells).all(|(x, y)| x.carbon == y.carbon && x.carbon_bound == y.carbon_bound && x.water == y.water && x.index == y.index && x.gum == y.gum && x.lift == y.lift && x.loose == y.loose));
+        assert!(r.paper == c.paper && r.paper.unwrap().grit.is_some() && r.paper.unwrap().drum.is_some());
+        assert_eq!(r.pixels(), c.pixels());
+        let mut again = Vec::new();
+        r.write_state(&mut again, "").unwrap();
+        assert!(again == bytes, "rewritten as it was read");
+        c.dry();
+        r.dry();
+        assert_eq!(r.pixels(), c.pixels());
+        let (a, b) = (c.drawing.as_ref().unwrap(), r.drawing.as_ref().unwrap());
+        assert!(a.cells.iter().zip(&b.cells).all(|(x, y)| x.bound == y.bound && x.carbon_bound == y.carbon_bound));
     }
 
     /// "WETP", as checkpoint.rs marks the section.

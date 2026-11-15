@@ -872,6 +872,16 @@ b:wash(pts)                               -- lays it, wet; returns the pastel la
   paste (`amount=1`) fills the space between the hairs, and its solids
   push out the water. `b:wipe(1)` empties the brush. Not under a sheet,
   and not on wet paint.
+- **Water over charcoal.** Charcoal brings no gum: vine charcoal wetted
+  dries as loose as it was, and over pastel it is bound only by the
+  pastel's gum. A wet brush carries charcoal on as charcoal, and grinding a
+  charcoal stick into the water (`pastel=`) makes a charcoal wash. A
+  charcoal stick's own tip can't be wetted (`p:wet` refuses it): it is no
+  chalk soil, and its wet tip isn't modeled.
+- **On a sanded sheet** (`grit=`) an acrylic coat keeps the water off the
+  paper: a wash stands in the tooth until it dries, and binds. A glue coat
+  lets it through to the sheet. Japan paper (`paper="japan paper"`) is
+  unsized and drinks a wash at once.
 - Not modeled: water running sideways (backruns, blooms), the paper itself
   darkening while wet, cockling, steam.
 - Pastel with water is there in a painting begun since it came (its log's

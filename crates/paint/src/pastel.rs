@@ -140,6 +140,17 @@ pub(crate) struct Carried {
 }
 
 impl Carried {
+    /// What a brush's paste carried from an earlier pass: its carbon share
+    /// and that carbon's lift (`parts`).
+    pub(crate) fn of_parts(carbon: f32, lift: f32) -> Carried {
+        Carried { carbon: carbon.clamp(0.0, 1.0), lift }
+    }
+
+    /// Its carbon share and that carbon's lift, to keep between passes.
+    pub(crate) fn parts(&self) -> (f32, f32) {
+        (self.carbon, self.lift)
+    }
+
     /// `v` more picked up from cell `c` onto `held` already carried (both
     /// in the same units).
     pub(crate) fn take(&mut self, held: f32, v: f32, c: &crate::graphite::Cell) {
@@ -592,7 +603,7 @@ pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs:
 /// `Grains::PASTEL`, as it always was).
 pub(crate) fn lay_into(c: &mut crate::graphite::Cell, q: f32, color: Rgb, dv: f32, g: Grains) {
     c.add_grains(q, color, dv, g);
-    c.note_pastel(dv, g.index);
+    c.note_pastel(dv, g.index, g.carbon);
     c.loose += dv;
 }
 

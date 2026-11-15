@@ -235,6 +235,10 @@ impl Cell {
         let Some(mut optics) = self.optics else { return };
         let share = b / self.loose;
         optics.bound = [0, 1, 2].map(|k| (optics.bound[k] * self.bound + self.r[k] * b) / (self.bound + b));
+        // (the carbon bound with it is bound carbon, as fixing makes it)
+        if self.carbon > 0.0 || self.carbon_bound > 0.0 {
+            self.carbon_bound = (self.carbon_bound * self.bound + self.carbon * b) / (self.bound + b);
+        }
         let base = self.floor + self.non_pastel - self.non_pastel_floor;
         self.floor = (self.floor + (self.a - base).max(0.0) * share).min(self.a);
         self.bound += b;
@@ -242,11 +246,22 @@ impl Cell {
         self.optics = Some(optics);
     }
 
-    /// `added` µm of pastel of index `n` lands here (`crate::wet_pastel`):
-    /// the cell's mean index follows by volume, and once it has been wet,
-    /// its gum share too (the new pastel brings all of its own). Call
-    /// before adding it to `loose`. Nothing for `n` 0 (no switch).
-    pub(crate) fn note_pastel(&mut self, added: f32, n: f32) {
+    /// The share of the pastel here, loose and bound, that is bare carbon
+    /// (charcoal), by volume: it brought no gum (`crate::wet_pastel`).
+    pub(crate) fn carbon_share(&self) -> f32 {
+        let v = self.loose + self.bound;
+        if v <= 0.0 || (self.carbon <= 0.0 && self.carbon_bound <= 0.0) {
+            return 0.0;
+        }
+        ((self.carbon * self.loose + self.carbon_bound * self.bound) / v).clamp(0.0, 1.0)
+    }
+
+    /// `added` µm of pastel of index `n` lands here (`crate::wet_pastel`),
+    /// a share `carbon` of it bare carbon: the cell's mean index follows by
+    /// volume, and once it has been wet, its gum share too (the new pastel
+    /// brings all of its own, its carbon none: vine charcoal has no binder).
+    /// Call before adding it to `loose`. Nothing for `n` 0 (no switch).
+    pub(crate) fn note_pastel(&mut self, added: f32, n: f32, carbon: f32) {
         if n <= 0.0 || added <= 0.0 {
             return;
         }
@@ -256,7 +271,7 @@ impl Cell {
         self.index = crate::wet_pastel::to_index((n0 * old + n * added) / w);
         if self.gum > 0 {
             let g = crate::wet_pastel::from_gum(self.gum);
-            self.gum = crate::wet_pastel::to_gum((g * old + added) / w);
+            self.gum = crate::wet_pastel::to_gum((g * old + added * (1.0 - carbon.clamp(0.0, 1.0))) / w);
         }
     }
 

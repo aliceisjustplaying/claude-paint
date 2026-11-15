@@ -376,25 +376,56 @@ is not changed here.)
 
 **Cosentino 2014 FORS powders** (`CSV/powder.csv` of the CHSOS download, SHA-256
 86bb05f0…ae45; Kremer pigments, 360–1000 nm). This is the "pure powder" set §5 could
-not download. The raw spectra are on a probe scale. The four carbon blacks read
-0.14–0.17 flat and the white powders read 1.10–1.30. So each spectrum is mapped linearly
-between the blacks' mean, taken as 0.04 (a dry black powder's surface reflection, §3)
-[E], and a white powder's, taken as 0.93 [E]. The white is either chalk and gypsum or
-lead white, and the two are kept as the spread. `dry_lake_fit.py` does this. Corrected
-L\*a\*b\* (D65), chalk-and-gypsum white / lead-white white [M/E]:
+not download.
 
-| Powder | sRGB | L\* | a\* | b\* |
+**The instrument** (Cosentino 2014, *e-conservation* 2:54–65, §2.1; read from the CHSOS
+copy of the paper): an Ocean Optics USB4000 spectrometer (360–1000 nm, 1.5–2.3 nm FWHM)
+and an HL-2000-FHSA halogen lamp. Every spectrum in the database was taken with an
+**ISP-R integrating sphere**, the powders included. The sphere collects the diffuse and
+the specular reflection together, so the readings are total (specular-included)
+reflectance. The gum-arabic swatches were also measured with an **R400-7 reflection
+probe** (six illuminating fibers around one reading fiber) tilted to 45/45, which
+excludes the specular. The paper does not name the white standard or describe the
+reference. The raw powder spectra are not on an absolute scale: the four carbon blacks
+read 0.16–0.17 flat, and the whites read 1.10–1.31. So the reference was not taken in
+the samples' geometry (sample distance or seating).
+
+**The correction from physics** [C]. `dry_lake_fit.py`:
+- *The sphere is linear.* On the 54 gum-arabic swatches, each measured both ways,
+  sphere = 0.178 + 1.015 × probe (400–700 nm, rms 0.065). A quadratic term comes out at
+  −0.05, below the scatter. Chalk and gypsum are left out because, in gum (n 1.52–1.6),
+  their swatches are the paper seen through a clear film. A single-beam sphere's
+  substitution error would bend the curve upward, and it doesn't. So the raw reading is
+  offset + gain × reflectance.
+- *The offset* is set by the blacks. A carbon black powder's total reflectance is
+  0.03–0.05: its grains' facet reflections (§3), and carbon-based pigments measured at
+  3–5 % in the visible (SPIE *Photonics Focus*, May/June 2026, "In pursuit of the perfect
+  black"). Midpoint 0.04.
+- *The gain* is set by the whites, and **no powder can reflect more than 1**. The
+  earlier correction mapped chalk and gypsum to 0.93. That puts titanium white at 1.085,
+  so it is out. Rutile titanium white is the brightest powder and is flat from 550 to
+  700 nm. A dry rutile powder reflects 0.90–0.99 there: bulk rutile 0.90–0.91, and fine
+  pigment rutile 0.995 against a Spectralon WS-1-SL (Sanjeev et al., *Chalcogenide Lett.*
+  — chalcogen.ro/607_Sanjeev.pdf). Midpoint 0.945. Lead white has no visible absorption,
+  so it gives the gain's spectral shape. Its raw spectrum and titanium white's fall alike
+  from 430 to 700 nm (lead 1.36 → 1.27): that is the lamp and reference, not the
+  pigments. Corrected, lead white comes out at 0.92 (0.88–0.96), zinc white at L\* 96,
+  chalk 92 and gypsum 91. Natural chalk and gypsum are off-white, so these fit.
+
+Corrected L\*a\*b\* (D65) at black 0.04 and titanium white 0.945, with L\* over the bounds
+(black 0.03–0.05 × titanium white 0.90–0.99) [M/C]:
+
+| Powder | sRGB | L\* (range) | a\* | b\* |
 |---|---|---|---|---|
-| madder lake | 186 121 126 / 176 114 117 | 57.7 / 54.7 | 25.9 / 24.7 | 7.7 / 8.8 |
-| carmine lake | 138 34 64 / 131 38 62 | 31.6 / 30.8 | 45.2 / 41.4 | 8.1 / 7.8 |
-| yellow lake (reseda, weld) | 200 168 90 / 190 157 84 | 70.2 / 66.4 | 2.1 / 3.0 | 44.1 / 42.2 |
-| alizarin (synthetic, for context) | 204 34 47 / 194 37 48 | 44.6 / 42.8 | 63.9 / 60.1 | 37.6 / 34.2 |
-| lac dye lake (context) | 171 44 50 / 162 46 51 | 39.1 / 37.7 | 51.2 / 47.9 | 27.6 / 25.0 |
-| vermilion (check) | 191 96 96 / 181 91 90 | 52.2 / 49.7 | 38.2 / 36.3 | 17.6 / 17.5 |
+| madder lake | 175 114 116 | 54.5 (52.6–56.2) | 24.6 | 8.8 |
+| carmine lake | 130 39 62 | 30.7 (28.0–33.2) | 41.0 | 7.7 |
+| yellow lake (reseda, weld) | 189 157 84 | 66.1 (64.3–67.7) | 2.9 | 41.9 |
+| alizarin (synthetic, for context) | 193 38 48 | 42.6 (40.5–44.6) | 59.8 | 33.9 |
+| lac dye lake (context) | 162 46 51 | 37.6 (35.2–39.7) | 47.5 | 24.7 |
+| vermilion (check) | 180 91 90 | 49.4 (47.5–51.3) | 36.1 | 17.4 |
 
-The probe's geometry and white standard are not in the abstract, and the paper was not
-reachable from here. The correction is therefore a two-point estimate. The madder figure
-moves by about 3 L\* between the two whites.
+The earlier two-reference estimate gave madder 54.7–57.7. The correction now has its
+bounds from physics, and the energy check removed its lighter half.
 
 **Lab-made madder lakes measured as powder [M]:**
 - Sattar, "Lake Pigments and Thin-Layer Chromatography of Natural Dyes", *J. Chem. Educ.*
@@ -404,10 +435,22 @@ moves by about 3 L\* between the two whites.
 - "Pigment Synthesis and Analysis of Color in Art", *J. Chem. Educ.* 2020,
   doi:10.1021/acs.jchemed.9b01093: madder lake 62.6 / 23.9 / 16.7.
 
-So dry madder lake is L\* 55–66, a\* 24–26, b\* 8–17, a muted rose. Synthetic alizarin
-lake and lac lake are deeper and redder. Madder's FORS minimum is at 510 nm and it rises
-from 580 nm, as in the madder FORS literature (Coatings 2018, 8:171; Heritage 2023,
-6:192, absorption maxima 508–547 nm).
+**Cross-check.** Their a\* (23.9–25.5) and Sattar's b\* (9.4) match the corrected Kremer
+powder (24.6, 8.8). Their L\* is 8–12 higher (ΔE76 11.4–11.7). Both are classroom lakes:
+dye from silk shearings or a single extraction, laked once. That carries less dye than a
+commercial lake, and a lighter powder is what less dye gives (§6.3). So the lab lakes
+bracket the measured span from the light side and don't contradict the FORS powder. The
+fit stays on the Kremer powder, the commercial pigment the tube stands for.
+
+**"Seeing red"** (Fonseca et al., *Herit. Sci.* 7:92, 2019) measured madder and
+cochineal lakes made to the National Gallery's standardized recipes (Kirby et al.). It
+used an ASD FieldSpec 4 at 45/0 with a 4 mm spot, against a 99 % Spectralon. The samples
+were paint-outs in four binders, not powders. It confirms the band positions the fit
+relies on: madder λ_abs,1 500–509 nm with a shoulder at 538–548 nm; alumina-substrate
+cochineal lakes at 528–531 and 557–561 nm. The madder lake in gum arabic (M-Std-Al ex.,
+Fig. 1b) reflects about 0.14 at 500 nm and 0.75 at 700 nm. CHSOS's madder in gum arabic,
+by the probe, reads 0.03 at 510 nm and 0.68 at 700 nm. That is a deeper swatch, but
+these are different lakes and film thicknesses, so it checks the shape, not the level.
 
 No measured powder was found for a fuchsine (aniline, magenta) lake. CHSOS has a
 fuchsine dye (Basic Red 9), not a lake.
@@ -416,53 +459,168 @@ fuchsine dye (Basic Red 9), not a lake.
 
 For a lake, K_dry(λ) = a · K_oil(λ), and S_dry is the rule for n < 1.9 at the substrate's
 1.57. The factor a is the dye loading the oil tables leave unidentified. It is fitted per
-lake so the pure dry color matches the corrected powder's L\*a\*b\* (the midpoint of the
-two whites) [C]:
+lake so the pure dry color matches the corrected powder's L\*a\*b\* [C]:
 
-| Lake | a | ΔE76 to powder after (before) | Range of a over the corrections |
+| Lake | a (earlier) | ΔE76 to powder after (before) | Range of a over the correction's bounds |
 |---|---|---|---|
-| rose madder | 31.9 | 4.5 (37.6) | 26–39 |
-| carmine lake | 2.57 | 8.0 (11.9) | 1.7–3.8 |
-| yellow lake | 10.6 | 3.2 (28.2) | 8.5–13.4 |
-| magenta | 10.6, yellow lake's [E] | no data | — |
+| rose madder | **35.7** (31.9) | 5.0 (38.9) | 31.5–40.8 |
+| carmine lake | **3.01** (2.57) | 9.9 (13.5) | 1.9–4.1 |
+| yellow lake | **12.2** (10.6) | 3.5 (29.2) | 10.6–14.0 |
+| magenta | 12.2, yellow lake's [E] (10.6) | no data | — |
 
-The ranges cross black 0.03–0.05 with white 0.90–0.96 and both white references. Madder
-needs about thirty times the absorption the oil table gives it, however the powder is
-corrected. Magenta takes yellow lake's loading because its K is built the same way (a
-catalog-masstone proxy). That is an estimate.
+The physical correction moved the loadings up 12–17 %, because the energy check removed
+the lighter reference. Madder still needs about thirty-five times the absorption the oil
+table gives it, however the powder is corrected. Magenta takes yellow lake's loading
+because its K is built the same way (a catalog-masstone proxy). That is an estimate.
+Carmine's fit stops at ΔE 9.9 because of its oil K's own shape: b\* 13.9 against 7.7.
 
 A flat substrate S (lead white's mean, not its spectrum) fits madder and yellow lake as
-well, but carmine at ΔE 16. Revigo's carmine K and lead-white S share a dip near 510 nm
-(the fitting's, not the pigments'), and dividing by the white-shaped S cancels it. So the
-rule keeps that shape.
+well, but carmine only to ΔE 16. Revigo's carmine K and lead-white S share a dip near
+510 nm (the fitting's, not the pigments'), and dividing by the white-shaped S cancels
+it. So the rule keeps that shape.
 
 Before → after, engine 9, sRGB, pure and 1:1 by volume with lead white (the same in every
 box that has the tube):
 
-| Lake (boxes) | pure | 1:1 lead white |
+| Tube (boxes) | pure | 1:1 lead white |
 |---|---|---|
-| rose madder (friedrich, sargent, alma-tadema, giverny, impressionist, seurat, cezanne, every) | 242 218 223 → 178 117 128 | 247 230 233 → 203 147 158 |
-| carmine lake (giverny, impressionist, every) | 171 58 87 → 144 27 57 | 190 88 117 → 168 53 82 |
-| yellow lake (impressionist, every) | 232 221 175 → 187 162 85 | 239 232 198 → 208 188 117 |
-| magenta (sargent, every) | 239 142 211 → 180 54 140 | 248 170 224 → 206 81 169 |
-| permanent alizarin (tonn, every) | 213 200 219, unchanged | 225 217 230, unchanged |
+| rose madder (friedrich, sargent, alma-tadema, giverny, impressionist, seurat, cezanne, every) | 242 218 223 → 174 112 124 | 247 230 233 → 200 143 154 |
+| carmine lake (giverny, impressionist, every) | 171 58 87 → 139 22 52 | 190 88 117 → 163 47 77 |
+| yellow lake (impressionist, every) | 232 221 175 → 183 157 80 | 239 232 198 → 205 184 112 |
+| magenta (sargent, every) | 239 142 211 → 175 50 134 | 248 170 224 → 202 76 164 |
+| permanent alizarin (tonn, every) | 213 200 219 → 165 129 153 | 225 217 230 → 218 207 223 |
+| green earth | 213 205 184 → 228 225 218 | 233 231 223 → 236 234 229 |
+| copper green | 181 223 213 → 197 234 230 | 211 239 234 → 215 241 238 |
+| lead-tin yellow | 241 239 188 → 239 235 178 | 243 241 198 → 241 239 192 |
+| transparent oxide yellow | 227 196 154 → 222 189 143 | 242 226 208 → 242 225 207 |
 
-**Permanent alizarin is not a lake.** The catalog calls it a quinacridone, and its data
-are Kremer's PV19. Quinacridone violet PV19 has n 2.02–2.04 (CAMEO, MFA Boston;
-Natural Pigments quotes the same), not the 1.6 that `refractive_index` gives it. It has no
-substrate and no measured powder here, so the switch leaves it as it was. Its pale dry
-color has the same root as madder's (an unidentified K per volume). Calibrating it needs
-a PV19 powder spectrum. Open question.
+### 6.3 The loading against dye chemistry
 
-Sources for this section: Cosentino 2014 (below), the CHSOS download page
-https://chsopensource.org/new-free-pigments-fors-spectroscopy-database/ ; Sattar 2024,
+A loading is physical if the K it gives is what the lake's dye can absorb. Per volume of
+pigment, K = 2μ_a and S = ¾σ′ (§2.1), and μ_a = ln 10 · ε · c, with c = w ρ / M (dye
+mass fraction w, lake density ρ, dye molar mass M). The dye is packed in grains of about
+1 µm, so a strongly dyed grain shades its own interior. This package effect is taken
+from van de Hulst's absorption efficiency for a sphere,
+Q = 1 + 2e^(−x)/x + 2(e^(−x) − 1)/x² with x = μ_a d, which tends to the thin limit for
+small x. S is the Mie value for n 1.57 at 1 µm (0.71 µm⁻¹, table 2.2) times a packing
+factor of 0.5–1 (§2.3, an estimate). The inputs are:
+- **madder**: alizarin, M 240.2. ε of its Al chelate at 510 nm is 5×10³–1.7×10⁴ L mol⁻¹ cm⁻¹.
+  The upper value is alizarin red S–Al at 510 nm (aluminium spectrophotometry with PVP,
+  1.70×10⁴). The lower is neutral alizarin's visible band, log ε ≈ 3.7 [E].
+- **carmine**: carminic acid, M 492.4. ε is 6.84×10³ L mol⁻¹ cm⁻¹ at 494 nm, from
+  E¹%₁cm = 139 in dilute HCl (EU Reg. 231/2012, E 120), up to 1.0×10⁴ for the Al
+  chelate's bathochromic band [E].
+- ρ 2.0–2.4 g/cm³ (gibbsite 2.42, less organic).
+- dye content: lakes carry a few to about 20 wt % dye. Cochineal itself holds 10–19 wt %
+  carminic acid (Kirby, Spring & Higgitt, *NG Tech. Bull.* 26, 2005, and 28, 2007), and
+  carmine proper, the Al–Ca chelate, is ≥ 50 % carminic acid (E 120).
+
+K/S at the band [C]:
+
+| | madder, 510 nm | carmine, 530 nm |
+|---|---|---|
+| corrected powder (bounds) | 2.42 (2.13–2.76) | 15.9 (11.5–25.4) |
+| engine before (oil K) | 0.112 | 5.56 |
+| engine with the loading | 4.05 | 16.9 |
+| dye chemistry, 3 wt % | 0.97–5.9 | 0.67–2.2 |
+| dye chemistry, 20 wt % | 3.9–10.9 | 3.1–8.3 |
+| dye chemistry, pure dye | 5.5–11.2 | 5.4–11.1 |
+| **dye content the powder needs** | **0.9–9 wt %** | **beyond pure dye at d = 1 µm** |
+| dye content the oil K alone gives | 0.04–0.3 wt % | ≥ 10 wt % |
+| dye content the loading gives | 1.8–22 wt % | beyond pure dye |
+
+**Madder: consistent.** The powder's K/S needs 1–9 wt % alizarin on the alumina, a
+normal madder lake. The loaded engine needs 2–22 wt %, which is still a lake. The oil K
+alone would mean 0.04–0.3 wt %, a hundredth of any lake. That is the pale stick this
+switch fixes. The ×36 is the oil table's missing dye, not a fudge.
+
+**Carmine: K/S bounded only from below.** At 530 nm the corrected powder reflects about
+0.03, under the black anchor itself, so its K/S (11–25) is fixed by the floor more than
+by the dye. Even pure dye in 1 µm grains reaches only K/S ≈ 11, because the package
+effect caps it. Finer grains lift that cap but scatter more (σ′ 2.7 µm⁻¹ at 0.3 µm), so
+they gain little. What the numbers do say: Kremer's "carmine lake" is dark as a near-pure
+carmine is (≥ 50 % chelate), not as a 3 % lake is, and the engine's oil K already sits
+there (≥ 10 wt %). The loading of 3 is a small step and is fixed by the red side of the
+spectrum, which the floor doesn't touch.
+
+Yellow lake: no ε for the luteolin–Al chelate in the visible was found, so it is not
+checked.
+
+### 6.4 Pigments whose index the table had wrong
+
+`dry::refractive_index` falls back to 1.9 for any tube it doesn't list. Permanent
+alizarin it lists as a lake. With the switch, `dry::measured_index` gives these their
+measured index:
+
+| Tube | Pigment | Table | Measured (source) |
+|---|---|---|---|
+| permanent alizarin | quinacridone violet PV19 (catalog: "a quinacridone"; data Kremer PV19) | 1.6 | **2.03**: 2.02–2.04 (CAMEO "Quinacridone dyes"; Natural Pigments; β 2.02, γ 2.04) |
+| green earth | celadonite, glauconite | 1.9 | **1.62** (Gettens & Stout 1966, via CAMEO "Glauconite"; ranges 1.59–1.66) |
+| copper green | verdigris | 1.9 | **1.545**: α 1.53, γ 1.56 (CAMEO "Verdigris"; *Pigments through the Ages*) |
+| lead-tin yellow | Pb₂SnO₄ (type I) | 1.9 | **2.30**: 2.29/2.31 (CAMEO "Lead-tin yellow"; Natural Pigments 2.29–2.32) |
+| transparent oxide yellow | goethite (synthetic) | 1.9 | **2.35**: α 2.26, β 2.39, γ 2.40 (SSHADE; Natural Pigments) |
+
+Left as they are: Rinmann's green (cobalt-zinc oxide, ZnO host ≈ 2.0, near the
+fallback), bitumen (not a particulate pigment; no reliable index), and Mars yellow at
+2.2 (goethite, 7 % low; same branch).
+
+**The check against powders** (CHSOS powders, corrected as above; dry engine
+L\*a\*b\* before → after; ΔE76 to the powder) [M/C]:
+
+| Tube | Powder | Engine before → after | ΔE before → after |
+|---|---|---|---|
+| lead-tin yellow (powder: lead-tin yellow I) | 86.6/−8.8/36.1 | 93.4/−6.9/24.7 → 92.2/−7.6/28.2 | 13.3 → **9.8** |
+| green earth | 56.1/−1.9/11.3 | 82.4/−0.5/11.2 → 89.6/−0.3/3.9 | 26.3 → 34.4 |
+| copper green (powder: verdigris) | 33.6/−27.2/−13.6 | 85.8/−15.9/0.5 → 90.1/−12.5/−2.2 | 55.2 → 59.4 |
+| permanent alizarin | no PV19 powder spectrum found | 82.1/7.8/−7.7 → 58.2/17.8/−7.6 | — |
+| transparent oxide yellow | none | 80.9/4.7/25.3 → 78.5/5.4/27.6 | — |
+
+Lead-tin yellow comes nearer its powder. Green earth and verdigris move further away,
+and they were already 26 and 55 ΔE off. Their index is now right, and what remains is
+their K per volume. Both oil tables are made the way the lakes' were, and dry each
+powder is 30–50 L\* deeper than the engine. Coarse grains add to it: green earth and
+verdigris run 1–30 µm, and σ′ at 3 µm is a quarter of its 1 µm value (table 2.2). That
+is the lakes' problem again, for a later PR: a loading per pigment fitted to these same
+powders, or a size-aware S. PV19 has no powder spectrum. CHSOS shows a PV19 spectrum
+only as an image (Pigments Checker, Kremer 23402), and no CSV was found. Its pure dry
+color, L\* 58 and a dusky violet-rose, is the high-index rule over its estimated oil
+hiding. Its tint with white barely moves (225 217 230 → 218 207 223), because its K per
+volume is unidentified, as madder's was.
+
+### 6.5 Rose madder in oil (not changed here)
+
+Engine 9's oil table gives rose madder a K/S whose R∞ is sRGB 205 141 142 (L\* 65; the
+engine's decoded masstone is 211 126 125). Its 1:1 with lead white in oil is 240 212 217
+(L\* 87), a near-white. The cause is the one in §6.2:
+its K comes from a gum swatch read as an assumed 100 µm film. A physically grounded fix
+for a later PR [C]:
+- **K:** absorption per volume is the dye's in any medium (§2.4), so oil K takes the
+  dry loading, ×35.7. This is checked against dye chemistry in §6.3.
+- **S:** the substrate's S in oil is the dry S divided by the Mie air/oil ratio at n 1.57
+  (×43, table 2.2). That gives 0.107 per coat at 550 nm against the table's 0.159. They
+  agree to 1.5×, so the oil S is roughly physical and stays.
+- **Result:** masstone R∞ 80 29 30 (L\*a\*b\* 18.6/24.2/11.1), a deep crimson-brown as a
+  thick madder glaze is. 1:1 with lead white 163 100 110 (49.4/26.9/5.2). With the Mie S
+  as well, the masstone is 48 18 23 and the tint is unchanged (160 98 109).
+- **Check needed first:** a measured madder-in-oil tint with lead white. CHSOS's
+  linseed-oil swatches are on paper, not opaque, and come from another sphere session,
+  so they can't pin it. The fix would also move every oil painting's madder, so it needs
+  its own switch. Permanent alizarin has the same weak K in oil.
+
+Sources for this section: Cosentino 2014, *e-conservation* 2:54–65 (CHSOS copy of the
+paper; data download page
+https://chsopensource.org/new-free-pigments-fors-spectroscopy-database/) ; Sattar 2024,
 https://doi.org/10.1021/acs.jchemed.4c00752 ; J. Chem. Educ. 2020,
-https://doi.org/10.1021/acs.jchemed.9b01093 ; "Seeing red" (madder and cochineal lakes by FORS), *Herit.
-Sci.* (2019), https://doi.org/10.1186/s40494-019-0335-1 (lake FORS in four binders, band
-positions vary with recipe and pH; not read in full) ; Coatings 2018, 8:171,
-https://doi.org/10.3390/coatings8050171 ; Heritage 2023, 6:192,
-https://www.mdpi.com/2571-9408/6/4/192 ; CAMEO, quinacridone,
-https://cameo.mfa.org/wiki/Quinacridone_dye ; CHSOS fuchsine,
+https://doi.org/10.1021/acs.jchemed.9b01093 ; Fonseca, Schmidt Patterson, Ganio,
+MacLennan & Trentelman, "Seeing red", *Herit. Sci.* 7:92 (2019),
+https://doi.org/10.1186/s40494-019-0335-1 ; Kirby, Spring & Higgitt, *NG Tech. Bull.*
+26 (2005) 71–87 and 28 (2007) 69–95 (nationalgallery.org.uk) ; EU Reg. 231/2012, E 120
+carmines ; aluminium–alizarin red S spectrophotometry with PVP (ε 1.70×10⁴ at 510 nm) ;
+Sanjeev et al., size-dependent reflectance of TiO₂, chalcogen.ro/607_Sanjeev.pdf ;
+SPIE Photonics Focus May/June 2026, "In pursuit of the perfect black" ; Coatings 2018,
+8:171, https://doi.org/10.3390/coatings8050171 ; Heritage 2023, 6:192,
+https://www.mdpi.com/2571-9408/6/4/192 ; CAMEO (MFA Boston): Quinacridone dyes,
+Glauconite, Verdigris, Lead-tin yellow ; SSHADE, goethite ; CHSOS fuchsine,
 https://chsopensource.org/products/pigments-checker/pigments-checker-modern-and-contemporary-art-pigments-list/basic-red-9-fuchsine/ .
 Computation: `dry_lake_fit.py` (this folder).
 

@@ -234,6 +234,18 @@ const WET_PASTEL: u64 = 1 << 44;
 /// refuses the file instead of losing the water.
 const WET_PASTEL_MARK: u64 = 0x50544557;
 const WET_PASTEL_V: u64 = 2;
+/// A damp sheet (`crate::damp`, the damp-paper switch): the engine word has
+/// this bit, and its section follows the wet pastel section's place
+/// (`DAMP_MARK`). (Bit 44 is the wet pastel switch's, `WET_PASTEL`.)
+const DAMP_PAPER: u64 = 1 << 45;
+/// Marks the damp sheet's section ("DAMP"), and its version: written right
+/// after the engine word (and the wet pastel section, if any) exactly when
+/// it has `DAMP_PAPER`: the sheet's water, g/m² (f64 bits), and its open
+/// faces (0, 1 or 2). A reader that doesn't know the bit refuses the file
+/// instead of drying the sheet out; a section of another version, or a
+/// damp canvas that isn't paper, is refused.
+const DAMP_MARK: u64 = 0x504d4144;
+const DAMP_V: u64 = 1;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -690,7 +702,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.damp.is_some() { DAMP_PAPER } else { 0 })?;
         if self.wet_pastel {
             put_u64(w, WET_PASTEL_MARK)?;
             put_u64(w, WET_PASTEL_V)?;
@@ -703,6 +715,15 @@ impl Canvas {
             let cobb = self.paper.as_ref().map_or(crate::paper::Paper::drawing(0).cobb60, |p| p.cobb60);
             put_u64(w, u64::from(cobb.is_none()))?;
             put_f32(w, cobb.unwrap_or(0.0))?;
+        }
+        if let Some(d) = &self.damp {
+            if self.paper.is_none() || !(d.water.is_finite() && d.water >= 0.0) || d.faces > 2 {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("the damp sheet's state is invalid: {d:?}")));
+            }
+            put_u64(w, DAMP_MARK)?;
+            put_u64(w, DAMP_V)?;
+            put_u64(w, d.water.to_bits())?;
+            put_u64(w, d.faces as u64)?;
         }
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
@@ -963,6 +984,7 @@ impl Canvas {
             *v = get_u64(r)?;
         }
         c.tally = crate::tally::Tally::from_words(words).ok_or_else(|| bad("checkpoint hand-time ledger is invalid"))?;
+        let mut damp = false;
         c.engine = if version == 7 {
             1
         } else {
@@ -979,7 +1001,8 @@ impl Canvas {
             c.drawing_optics = word & DRAWING_OPTICS != 0;
             c.oils = word & OILS != 0;
             c.wet_pastel = word & WET_PASTEL != 0;
-            match u32::try_from(word & !(OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            damp = word & DAMP_PAPER != 0;
+            match u32::try_from(word & !(OILS | WET_PASTEL | DAMP_PAPER | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!(c.liquid_film_levels || c.oils) || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
@@ -1022,6 +1045,21 @@ impl Canvas {
                 1 => None,
                 _ => return Err(bad("checkpoint paper sizing is invalid")),
             });
+        }
+        if damp {
+            if get_u64(r)? != DAMP_MARK {
+                return Err(bad("checkpoint damp sheet section is invalid"));
+            }
+            match get_u64(r)? {
+                DAMP_V => {}
+                v => return Err(bad(&format!("checkpoint damp sheet section is version {v}; this easel reads version {DAMP_V} only"))),
+            }
+            let water = f64::from_bits(get_u64(r)?);
+            let faces = get_u64(r)?;
+            if !(water.is_finite() && water >= 0.0) || faces > 2 {
+                return Err(bad("checkpoint damp sheet's water is invalid"));
+            }
+            c.damp = Some(crate::damp::Damp { water, faces: faces as u8 });
         }
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
@@ -1273,6 +1311,9 @@ impl Canvas {
                 return Err(bad("checkpoint contains wet paint in an obsolete pigment representation; reopen it with the original engine build and export the painting, or replay its log with this build"));
             }
             c.wet.lat.fill(crate::wet::Latent::default());
+        }
+        if c.damp.is_some() && c.paper.is_none() {
+            return Err(bad("checkpoint damp sheet section on a canvas that isn't paper"));
         }
         Ok((c, header))
     }

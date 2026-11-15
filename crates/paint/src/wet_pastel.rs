@@ -254,6 +254,13 @@ fn h_mass() -> f64 {
 /// surface cooled until the latent heat it loses is what convection and
 /// the room's radiation bring it (about 16 °C; 0.71 µm/min) [D].
 pub fn evaporation_um_min() -> f32 {
+    evaporation_at(1.0) as f32
+}
+
+/// `evaporation_um_min` from a surface whose water is at activity `a`
+/// (its vapour at a times saturation: water held in a sheet's fiber walls,
+/// `crate::damp`), µm a minute; at 1, a wet surface's.
+pub(crate) fn evaporation_at(activity: f64) -> f64 {
     const M_R: f64 = 0.018_015 / 8.314_462;
     let ta = STUDIO.air_c;
     let tk = |t: f64| t + 273.15;
@@ -264,11 +271,11 @@ pub fn evaporation_um_min() -> f32 {
     let (mut lo, mut hi) = (ta - 25.0, ta);
     for _ in 0..50 {
         let ts = 0.5 * (lo + hi);
-        if 2.454e6 * hm * (rho(ts) - air) > (H_CONV + hr) * (ta - ts) { hi = ts } else { lo = ts }
+        if 2.454e6 * hm * (activity * rho(ts) - air) > (H_CONV + hr) * (ta - ts) { hi = ts } else { lo = ts }
     }
     let ts = 0.5 * (lo + hi);
     // kg/m²s of water over 1000 kg/m³, in µm a minute
-    (hm * (rho(ts) - air).max(0.0) * 1e3 * 60.0) as f32
+    hm * (activity * rho(ts) - air).max(0.0) * 1e3 * 60.0
 }
 
 /// The falling rate's coefficient, per µm of water gone from the pores:
@@ -597,6 +604,8 @@ impl Canvas {
             return;
         }
         let sheet = self.paper.as_ref().map(|p| (uptake_rate(p), sheet_capacity_um(p)));
+        // (a damp sheet, `crate::damp`: its pores already hold its own free water)
+        let sheet = if self.damp.is_some() { sheet.map(|(r, cap)| (r, (cap - self.damp_free()).max(0.0))) } else { sheet };
         let (e, a) = (evaporation_um_min(), falling());
         let d = self.drawing.as_deref_mut().expect("damp");
         if sheet.is_some() && d.sheet.len() != d.cells.len() {

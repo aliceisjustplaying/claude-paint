@@ -407,6 +407,7 @@ impl Canvas {
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_on_grid(dt);
             self.dry_pastel_water(dt);
+            self.dry_damp(dt);
             return;
         }
         let start = self.wet.clock.now;
@@ -415,6 +416,8 @@ impl Canvas {
         self.skin_advance(start, self.wet.clock.now);
         // (and the water in pastel: wet_pastel.rs)
         self.dry_pastel_water(dt);
+        // (and a damp sheet's own water: damp.rs)
+        self.dry_damp(dt);
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,
@@ -723,6 +726,9 @@ impl Canvas {
         if water > 0.0 {
             self.dry_pastel_water(left);
         }
+        // (a damp sheet dries over the time too, but isn't waited for: it
+        // comes to the room's moisture only by and by, damp.rs)
+        self.dry_damp(left);
     }
 
     /// Fold what was painted since the last `wait` into the drying state: a

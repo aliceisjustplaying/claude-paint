@@ -78,6 +78,12 @@ pub struct Studio {
     /// The running chunk is a live session's (not a replay's): its verbs report progress
     /// (session.rs `PROGRESS`).
     pub live: bool,
+    /// The surfaces besides the painting and which is current (surfaces.rs): none named
+    /// unless the switch's verbs name one. The current surface's state is the fields above.
+    pub surfaces: crate::surfaces::Surfaces,
+    /// Surfaces the running chunk handed off, written beside their files and put in place
+    /// when it is kept (surfaces.rs `commit`), or taken away if it fails.
+    pub handoffs: Vec<crate::surfaces::Pending>,
 }
 
 impl Studio {
@@ -86,7 +92,7 @@ impl Studio {
             #[cfg(test)]
             pass_feedback_disabled: false,
             drying_feedback: Default::default(),
-            width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false
+            width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false, surfaces: Default::default(), handoffs: Vec::new()
         }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -1135,7 +1141,7 @@ pub(crate) fn lua_src(v: &Value) -> Result<String> {
     })
 }
 
-fn fmt_num(v: f32) -> String {
+pub(crate) fn fmt_num(v: f32) -> String {
     if (v - v.round()).abs() < 1e-6 { format!("{}", v.round() as i64) } else { format!("{v}") }
 }
 
@@ -1287,9 +1293,46 @@ fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32, parts: &[
 #[derive(Clone)]
 pub struct M(pub Rc<Mask>);
 
+thread_local! {
+    /// The studio whose chunk is running on this thread (session.rs `run`), for `mask_of`.
+    static RUNNING: RefCell<Option<Weak<RefCell<Studio>>>> = const { RefCell::new(None) };
+}
+
+/// While a chunk runs: its studio is the one masks are checked against (`mask_of`). Puts back
+/// the one before when dropped.
+pub(crate) struct Running(Option<Weak<RefCell<Studio>>>);
+
+impl Running {
+    pub(crate) fn begin(st: &S) -> Self {
+        Running(RUNNING.with(|r| r.replace(Some(Rc::downgrade(st)))))
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        RUNNING.with(|r| *r.borrow_mut() = self.0.take());
+    }
+}
+
+/// With named surfaces (surfaces.rs): a mask is laid out on the pixels of the surface it was
+/// made on, and is refused on another. Nothing is checked while a session has none named.
+fn same_surface(m: &Mask) -> Result<()> {
+    let st = RUNNING.with(|r| r.borrow().as_ref().and_then(Weak::upgrade));
+    let Some(st) = st else { return Ok(()) };
+    let Ok(s) = st.try_borrow() else { return Ok(()) };
+    if s.surfaces.named() && s.canvas.as_ref().is_some_and(|c| c.frame() != m.f) {
+        return err(format!("this mask was made on another surface than the current one ({:?}): make it again on this one (masks are laid out on their surface's pixels)", s.surfaces.current_name()));
+    }
+    Ok(())
+}
+
 pub(crate) fn mask_of(v: &Value) -> Result<Rc<Mask>> {
     match v {
-        Value::UserData(u) if u.is::<M>() => Ok(u.borrow::<M>()?.0.clone()),
+        Value::UserData(u) if u.is::<M>() => {
+            let m = u.borrow::<M>()?.0.clone();
+            same_surface(&m)?;
+            Ok(m)
+        }
         o => err(format!("want a mask, got {}; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask", o.type_name())),
     }
 }
@@ -2032,7 +2075,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
 
 
 /// The longest `wait` (minutes): 10 years of 365.25 days.
-const MAX_WAIT_MIN: f64 = 10.0 * 365.25 * 24.0 * 60.0;
+pub(crate) const MAX_WAIT_MIN: f64 = 10.0 * 365.25 * 24.0 * 60.0;
 
 pub(crate) fn current_frame(lua: &Lua) -> Result<Frame> {
     let st = lua.app_data_ref::<S>().ok_or_else(|| mlua::Error::runtime("no studio"))?;
@@ -2747,7 +2790,7 @@ fn preset_names() -> String {
 /// canvas over a strainer (`Paper::mounted`; `{"strainer", bar=, cross=}`
 /// its bars' width and crossbars); without it both are unknown
 /// keys, as they were.
-fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb, String)> {
+pub(crate) fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb, String)> {
     use paint::paper::{Binder, Felt, Grit, Laid, Mount, Paper};
     const KEYS: [&str; 15] = ["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"];
     // (grit= only with the gritted-ground switch, preset= and mount= only
@@ -2946,7 +2989,7 @@ fn preset_tone(tubes: &Palette, pr: &paint::paper::Preset) -> paint::Rgb {
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
 /// bottom first: each the paste its tubes make (masstone, hiding, stiffness).
-fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
+pub(crate) fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
     let Value::Table(t) = v else {
         return err(format!("canvas: ground= (the layers, bottom first)\n{CANVAS_HELP}"));
     };

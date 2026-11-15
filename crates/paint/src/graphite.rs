@@ -724,6 +724,70 @@ pub fn hatch_marks_swung(m: &Mask, angle: f32, spacing: f32, length: f32, pressu
 }
 
 impl Drawing {
+    /// Every cell (with its carbon shares and wet pastel water, index and
+    /// gum), the guide and the sheet's water, bit for bit (a canvas put away packed keeps
+    /// its drawing on disk with it: checkpoint.rs `Aside::spill`), unlike the
+    /// checkpoint's layouts, which keep only what their reader needs.
+    pub(crate) fn spill(&self, w: &mut impl std::io::Write) -> std::io::Result<()> {
+        let mut b = Vec::with_capacity(1 << 16);
+        let put = |b: &mut Vec<u8>, v: f32| b.extend_from_slice(&v.to_bits().to_le_bytes());
+        b.extend_from_slice(&(self.cells.len() as u64).to_le_bytes());
+        b.extend_from_slice(&[self.sticks as u8, self.optics as u8, self.carbon as u8, self.damp as u8]);
+        for c in &self.cells {
+            for v in [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound, c.non_pastel, c.non_pastel_floor, c.carbon, c.carbon_bound, c.water] {
+                put(&mut b, v);
+            }
+            // (the wet pastel switch's index and gum, two u16s in a word)
+            b.extend_from_slice(&(u32::from(c.index) | u32::from(c.gum) << 16).to_le_bytes());
+            b.push(c.optics.is_some() as u8);
+            if let Some(o) = c.optics {
+                for v in [o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]] {
+                    put(&mut b, v);
+                }
+            }
+            if b.len() >= 1 << 16 {
+                w.write_all(&b)?;
+                b.clear();
+            }
+        }
+        w.write_all(&b)?;
+        crate::checkpoint::spill_vec(w, Some(&self.guide))?;
+        crate::checkpoint::spill_vec(w, self.guide_floor.as_deref())?;
+        crate::checkpoint::spill_vec(w, Some(&self.sheet))
+    }
+
+    /// `spill` read back.
+    pub(crate) fn unspill(r: &mut impl std::io::Read) -> std::io::Result<Drawing> {
+        let mut u = [0u8; 8];
+        r.read_exact(&mut u)?;
+        let n = u64::from_le_bytes(u) as usize;
+        let mut flags = [0u8; 4];
+        r.read_exact(&mut flags)?;
+        let at = |b: &[u8], i: usize| f32::from_bits(u32::from_le_bytes([b[4 * i], b[4 * i + 1], b[4 * i + 2], b[4 * i + 3]]));
+        let mut cells = Vec::with_capacity(n);
+        let (mut q, mut o) = ([0u8; 61], [0u8; 32]);
+        for _ in 0..n {
+            r.read_exact(&mut q)?;
+            let optics = if q[60] == 1 {
+                r.read_exact(&mut o)?;
+                Some(Optics { fixed: at(&o, 0), graphite: at(&o, 1), bound: [at(&o, 2), at(&o, 3), at(&o, 4)], under: [at(&o, 5), at(&o, 6), at(&o, 7)] })
+            } else {
+                None
+            };
+            cells.push(Cell { a: at(&q, 0), r: [at(&q, 1), at(&q, 2), at(&q, 3)], lift: at(&q, 4), floor: at(&q, 5), film: at(&q, 6), loose: at(&q, 7), bound: at(&q, 8), non_pastel: at(&q, 9), non_pastel_floor: at(&q, 10), carbon: at(&q, 11), carbon_bound: at(&q, 12), water: at(&q, 13), index: u16::from_le_bytes([q[56], q[57]]), gum: u16::from_le_bytes([q[58], q[59]]), optics });
+        }
+        let guide = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its guide"))?;
+        let guide_floor = crate::checkpoint::unspill_vec(r)?;
+        let sheet = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its sheet's water"))?;
+        Ok(Drawing { cells, guide, guide_floor, sticks: flags[0] == 1, optics: flags[1] == 1, carbon: flags[2] == 1, damp: flags[3] == 1, sheet })
+    }
+
+    /// The bytes its buffers hold (what a canvas put aside keeps of it in
+    /// memory: checkpoint.rs `Aside::heap_bytes`).
+    pub(crate) fn heap_bytes(&self) -> usize {
+        self.cells.capacity() * std::mem::size_of::<Cell>() + self.guide.capacity() * 4 + self.guide_floor.as_ref().map_or(0, |g| g.capacity() * 4) + self.sheet.capacity() * 4
+    }
+
     fn new(n: usize, whole: usize, optics: bool) -> Self {
         Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, carbon: false, optics, damp: false, sheet: Vec::new() }
     }

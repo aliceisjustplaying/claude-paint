@@ -402,6 +402,9 @@ impl Canvas {
         let mmu = self.mm_per_unit;
         let px = self.px_mm();
         let a_px_mm2 = px * px;
+        // a gritted ground's grains abrade the stick more than fibers do
+        // (`paper::GRIT_WEAR`); a fixed crust over them is pastel, as on paper
+        let grit_wear = if self.paper.is_some_and(|p| p.grit.is_some()) { crate::paper::GRIT_WEAR } else { 1.0 };
         // resample: one step per pixel of travel
         let mut s = vec![0.0f32];
         for w in pts.windows(2) {
@@ -515,7 +518,7 @@ impl Canvas {
                     let a_paper = bearing(o.min(fill_at), mu);
                     let a_fill = if o > fill_at { (-fill_at / mu).exp() * bearing(o - fill_at, CRUST_UM) } else { 0.0 };
                     let bound_share = if v > 0.0 { c.bound / v } else { 0.0 };
-                    let mut dv = ds_um * stick.wear * (a_paper + CRUST_WEAR * bound_share * a_fill);
+                    let mut dv = ds_um * stick.wear * (grit_wear * a_paper + CRUST_WEAR * bound_share * a_fill);
                     if dv <= 0.0 {
                         continue;
                     }
@@ -938,6 +941,8 @@ impl Canvas {
             format!("wet paint, {stage}")
         } else if paint {
             if self.gloss[i] > 0.5 { "dry paint, smooth".to_string() } else { "dry paint, lean and matte".to_string() }
+        } else if self.paper.is_some_and(|p| p.grit.is_some()) {
+            "sanded paper, gritty".to_string()
         } else if self.paper.is_some() {
             "paper".to_string()
         } else {
@@ -1605,6 +1610,53 @@ mod tests {
         assert!(after > 1.3 * v[7], "fixed takes more: {} vs {}", after, v[7]);
     }
 
+    /// The same hatching stroke at 1 N, twelve times over one place, on a
+    /// drawing paper and on the same sheet with a sanded coat of P400 grit
+    /// (35 µm, the grade most painters use). Thresholds from
+    /// notes/research/sanded_paper.md, not from this code: drawing paper
+    /// takes 2–3 layers and then refuses, so by its fifth pass it lays under
+    /// a quarter of its first; a gritted coat's open volume is 2–4 times the
+    /// paper's pores and painters find it holds many more layers, so over the
+    /// twelve passes it holds at least twice the pastel, its later passes
+    /// (the fifth on) lay at least 2.5 times what the paper's do, and its
+    /// sixth pass still lays more than that quarter.
+    #[test]
+    fn a_sanded_sheet_takes_layer_on_layer() {
+        use crate::paper::{Binder, Grit};
+        let passes = |grit: Option<Grit>| {
+            let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
+            let mut st = Stick::round([0.1, 0.1, 0.5], 0.8, 12.0);
+            (0..12).map(|_| line(&mut c, &mut st, 500.0, 1.0, 55.0).volume_mm3).collect::<Vec<f32>>()
+        };
+        let plain = passes(None);
+        let sanded = passes(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
+        let (sum, late) = (|v: &[f32]| v.iter().sum::<f32>(), |v: &[f32]| v[4..].iter().sum::<f32>());
+        let bar = 0.25 * plain[0];
+        assert!(plain[4] < bar, "drawing paper refuses: {plain:?}");
+        assert!(sanded[5] > bar, "the sanded sheet still takes it: {sanded:?} (bar {bar})");
+        assert!(sum(&sanded) > 2.0 * sum(&plain), "holds more: {sanded:?} vs {plain:?}");
+        assert!(late(&sanded) > 2.5 * late(&plain), "later layers lay: {sanded:?} vs {plain:?}");
+    }
+
+    /// The grains abrade the stick faster than the fibers do (painters:
+    /// sanded paper "eats" pastel; abrasive wear goes as the asperities'
+    /// slope, 2–4 times a fiber's: notes/research/sanded_paper.md): the
+    /// first stroke on a fresh sheet takes at least twice as much off the
+    /// same stick, and cuts its new facet deeper.
+    #[test]
+    fn grit_wears_the_stick_faster() {
+        use crate::paper::{Binder, Grit};
+        let stroke = |grit: Option<Grit>| {
+            let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
+            let mut st = Stick::round([0.5; 3], 0.8, 12.0);
+            let laid = line(&mut c, &mut st, 500.0, 1.5, 55.0).volume_mm3;
+            (laid, st.facets.last().unwrap()[3])
+        };
+        let (paper, sanded) = (stroke(None), stroke(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic })));
+        assert!(sanded.0 > 2.0 * paper.0, "worn {} on grit vs {} on paper", sanded.0, paper.0);
+        assert!(sanded.1 < paper.1, "its face cut further: {} vs {}", sanded.1, paper.1);
+    }
+
     /// The finger moves loose pastel: a dark band smeared along the path
     /// darkens what lies past it, and bound pastel doesn't move.
     #[test]
@@ -2008,3 +2060,4 @@ mod tests {
         assert_eq!(pad_area(10.0, Some(4.0)), 4.0);
     }
 }
+

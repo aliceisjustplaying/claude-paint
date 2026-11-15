@@ -2612,6 +2612,7 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
         felt,
         laid,
+        grit: None,
         seed,
     };
     // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...})

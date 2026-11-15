@@ -103,7 +103,12 @@
 //! and thickness, coarseness, porosity, flocs and their size, pressing,
 //! calendering, absorbency and z modulus, one f32 each), its seed, its felt
 //! and laid wires (each a 0/1 flag, then its numbers), and the pores' mean
-//! depth per buffer pixel (`Canvas::micro`). The section is there exactly
+//! depth per buffer pixel (`Canvas::micro`). A gritted sheet
+//! (`paper::Grit`) writes its section as version 2 (`PAPER_GRIT_V`): the
+//! same, with the grit (its size and cover, two f32, and its binder, a u64:
+//! 0 acrylic, 1 glue; any other refused) after the laid wires; a sheet
+//! without grit writes version 1, so a reader that doesn't know version 2
+//! refuses a gritted sheet instead of loading it as plain paper. The section is there exactly
 //! when the canvas has paper, whatever its engine: a canvas without paper
 //! is written as before, and a reader that doesn't know version 13 refuses
 //! a sheet instead of loading it as linen. A sheet of paper is engine 4's
@@ -154,6 +159,9 @@ const MAGIC13: &[u8; 8] = b"PAINTC13";
 /// Marks the paper's section ("PAPR"), and its version.
 const PAPER_MARK: u64 = 0x52504150;
 const PAPER_V: u64 = 1;
+/// The paper's section of a gritted sheet (`paper::Grit`): version 1's
+/// fields, then the grit's (size, cover, binder), before the pores.
+const PAPER_GRIT_V: u64 = 2;
 /// Version 11, 12 or 13 followed by the sheet's section (`crate::sheet`).
 const MAGIC15: &[u8; 8] = b"PAINTC15";
 /// Marks the sheet's section ("SHET"), and its version.
@@ -300,7 +308,8 @@ fn read_soak_body(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> 
 
 fn write_paper(w: &mut impl Write, p: &crate::paper::Paper, micro: &[f32]) -> io::Result<()> {
     put_u64(w, PAPER_MARK)?;
-    put_u64(w, PAPER_V)?;
+    // (a sheet without grit is written as before: version 1)
+    put_u64(w, if p.grit.is_some() { PAPER_GRIT_V } else { PAPER_V })?;
     for v in [p.grammage, p.fiber_mm, p.fiber_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender, p.absorbent, p.z_mpa] {
         put_f32(w, v)?;
     }
@@ -322,6 +331,14 @@ fn write_paper(w: &mut impl Write, p: &crate::paper::Paper, micro: &[f32]) -> io
             put_f32(w, l.deficit)?;
         }
     }
+    if let Some(g) = p.grit {
+        put_f32(w, g.size_um)?;
+        put_f32(w, g.cover)?;
+        put_u64(w, match g.binder {
+            crate::paper::Binder::Acrylic => 0,
+            crate::paper::Binder::Glue => 1,
+        })?;
+    }
     put_all(w, micro.iter().copied())
 }
 
@@ -334,11 +351,12 @@ fn read_paper(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, V
 
 /// The paper's section after its mark.
 fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, Vec<f32>)> {
-    use crate::paper::{Felt, Laid, Paper};
-    match get_u64(r)? {
-        PAPER_V => {}
-        v => return Err(bad(&format!("checkpoint paper section is version {v}; this easel reads version {PAPER_V} only"))),
-    }
+    use crate::paper::{Binder, Felt, Grit, Laid, Paper};
+    let gritted = match get_u64(r)? {
+        PAPER_V => false,
+        PAPER_GRIT_V => true,
+        v => return Err(bad(&format!("checkpoint paper section is version {v}; this easel reads versions {PAPER_V} and {PAPER_GRIT_V} only"))),
+    };
     let mut v = [0.0f32; 12];
     for x in v.iter_mut() {
         *x = get_f32(r)?;
@@ -354,6 +372,20 @@ fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Pap
         1 => Some(Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
         _ => return Err(bad("checkpoint paper laid flag is invalid")),
     };
+    let grit = if gritted {
+        let (size_um, cover) = (get_f32(r)?, get_f32(r)?);
+        let binder = match get_u64(r)? {
+            0 => Binder::Acrylic,
+            1 => Binder::Glue,
+            b => return Err(bad(&format!("checkpoint paper grit binder {b} is unknown"))),
+        };
+        if !(size_um.is_finite() && size_um > 0.0 && cover.is_finite() && (0.0..=1.0).contains(&cover)) {
+            return Err(bad("checkpoint paper grit is invalid"));
+        }
+        Some(Grit { size_um, cover, binder })
+    } else {
+        None
+    };
     let micro = get_all(r, n)?;
     // (a corrupt file is an error here, not a panic or NaN pixels later)
     let felt_ok = felt.is_none_or(|f| f.cell_mm.is_finite() && f.depth_um.is_finite());
@@ -363,7 +395,7 @@ fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Pap
     }
     let p = Paper {
         grammage: v[0], fiber_mm: v[1], fiber_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
-        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, grit, seed,
     };
     Ok((p, micro))
 }
@@ -1346,6 +1378,42 @@ mod tests {
             Ok(_) => panic!("{what}: accepted"),
             Err(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{what}: {e}"),
         }
+    }
+
+    /// A gritted sheet's paper section is version 2 and comes back with its
+    /// grit and tooth, bit for bit; the same sheet without grit writes
+    /// version 1. An unknown binder, a NaN grit or a section version this
+    /// reader doesn't know is refused.
+    #[test]
+    fn a_gritted_sheet_survives_a_checkpoint() {
+        use crate::paper::{Binder, Grit, Paper};
+        let grit = Grit { size_um: 46.2, cover: 0.55, binder: Binder::Glue };
+        let c = Canvas::new_window(64, 1.0, [0.5; 3], None).with_size_mm(40.0).with_paper(Paper { grit: Some(grit), ..Paper::drawing(3) });
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        assert_eq!(base_format(&b), 13);
+        let d = load(b.clone()).unwrap();
+        assert!(d.paper == c.paper && d.micro == c.micro && d.absorb == c.absorb && d.pixels() == c.pixels());
+        let mut again = Vec::new();
+        d.write_state(&mut again, "").unwrap();
+        assert!(again == b, "rewritten as it was read");
+        let n = c.f.w * c.f.h;
+        // (the section: mark, version, 12 numbers, seed, felt, laid, grit, then the pores)
+        let grit_at = b.len() - (2 * 4 + 8 + 4 * n);
+        let section = grit_at - (8 + 8 + 12 * 4 + 8 + (8 + 2 * 4) + 8);
+        assert_eq!(&b[section + 8..section + 16], &2u64.to_le_bytes());
+        let mut plain = Vec::new();
+        Canvas::new_window(64, 1.0, [0.5; 3], None).with_size_mm(40.0).with_paper(Paper::drawing(3)).write_state(&mut plain, "").unwrap();
+        assert_eq!(&plain[section + 8..section + 16], &1u64.to_le_bytes(), "no grit: version 1");
+        let mut binder = b.clone();
+        set(&mut binder, grit_at + 8, 7);
+        rejected(binder, "unknown binder");
+        let mut nan = b.clone();
+        nan[grit_at..grit_at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+        rejected(nan, "NaN grit");
+        let mut version = b.clone();
+        set(&mut version, section + 8, 3);
+        rejected(version, "paper section version 3");
     }
 
     /// A sheet of paper is written as version 13 and comes back bit for

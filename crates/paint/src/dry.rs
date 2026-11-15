@@ -83,6 +83,65 @@ fn mie_air(n: f32) -> (f32, f32) {
     (T[11].1, T[11].2)
 }
 
+/// The refractive index of a dye lake's substrate, alumina hydrate
+/// (gibbsite, 1.57; notes/research/dry_pigment_optics.md §6). With the
+/// dry-lakes switch (`Palette::dry_lakes`) a lake scatters dry as its
+/// substrate does, by the same rule as any pigment under 1.9.
+pub const LAKE_SUBSTRATE_INDEX: f32 = 1.57;
+
+/// A dye lake's absorption dry, in a pastel stick or a sheet's pulp, over
+/// its absorption in the engine-9 oil tables, with the dry-lakes switch
+/// (`Palette::dry_lakes`). The oil tables fix a lake's K/S in oil but not
+/// its absorption per volume of pigment (the researched tubes' K is set by
+/// an assumed film, the proxies' by a catalog masstone), and a lake's dry
+/// color depends on exactly that: its dye against its substrate's
+/// scattering in air. Each loading is fitted so the pure lake's dry color
+/// matches measured powder (Cosentino 2014 FORS powders, corrected for the
+/// integrating sphere's floor and gain, set by a carbon black powder's total
+/// reflectance and rutile's: dry_pigment_optics.md §6, dry_lake_fit.py).
+/// The loadings agree with dye chemistry: madder's K/S needs 2–9 wt% dye on
+/// its alumina, as lakes carry. Magenta (fuchsine on alumina) has no
+/// measured powder, so its loading comes from its dye: fuchsine's measured
+/// molar absorptivity (8.06×10⁴ L mol⁻¹ cm⁻¹ at 543 nm, PhotochemCAD) is so
+/// high that any lake of 3–20 wt% dye is held at the 1 µm grain's package
+/// limit, K/S 5.7 at 543 nm (4.9–5.8; dry_pigment_optics.md §6.3), and the
+/// loading gives the pure lake that K/S. None for a tube that isn't a dye
+/// lake.
+pub fn dye_loading(name: &str) -> Option<f32> {
+    match name {
+        "rose madder" => Some(35.7),
+        "carmine lake" => Some(3.01),
+        "yellow lake" => Some(12.2),
+        "magenta" => Some(MAGENTA_LOADING),
+        _ => None,
+    }
+}
+
+/// Magenta's dye loading: K/S 5.7 at 543 nm over the engine-9 K/S there
+/// with no loading (dry_lake_fit.py).
+const MAGENTA_LOADING: f32 = 6.26;
+
+/// The measured refractive index of a pigment that `refractive_index` has
+/// wrong, given with the dry-lakes switch (`Palette::dry_lakes`; the table
+/// stays for old paintings): permanent alizarin is quinacridone violet
+/// PV19, 2.02–2.04, not a lake; green earth (glauconite, celadonite) 1.62;
+/// verdigris 1.53/1.56; lead-tin yellow (type I) 2.29/2.31; transparent
+/// oxide yellow and Mars yellow are both synthetic goethite, α 2.26, β 2.39,
+/// γ 2.40 (the table has Mars yellow at 2.2); Rinmann's green is cobalt in
+/// zinc oxide, zincite nω 2.013, nε 2.029 (the table falls back to 1.9)
+/// (dry_pigment_optics.md §6.4). None where the table's index stands.
+pub fn measured_index(name: &str) -> Option<f32> {
+    match name {
+        "permanent alizarin" => Some(2.03),
+        "green earth" => Some(1.62),
+        "copper green" => Some(1.545),
+        "lead-tin yellow" => Some(2.30),
+        "transparent oxide yellow" | "Mars yellow" => Some(2.35),
+        "Rinmann's green" => Some(2.02),
+        _ => None,
+    }
+}
+
 /// The air/oil scattering ratio of a carbon black, whose
 /// absorption comes from carbon on (or in) its particles: bone black's
 /// apatite matrix ×9 at 1 µm (dry_pigment_optics.md, table 2.2), a carbon
@@ -134,9 +193,14 @@ pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
 /// Dry color retaining measured absorption and wavelength-dependent
 /// scattering. The air/oil rule is the same as `dry_color`.
 pub fn spectral_color(parts: &[(crate::spectral::SpectralPigment, f32, f32)], white: &crate::spectral::Spectrum) -> Rgb {
+    crate::spectral::to_rgb(&spectral_reflectance(parts, white))
+}
+
+/// The dry reflectance spectrum behind `spectral_color`.
+pub fn spectral_reflectance(parts: &[(crate::spectral::SpectralPigment, f32, f32)], white: &crate::spectral::Spectrum) -> crate::spectral::Spectrum {
     let total = parts.iter().map(|p| p.2).sum::<f32>().max(1e-9);
     let (sigma_white, r_white) = mie_air(2.0);
-    let reflectance = std::array::from_fn(|w| {
+    std::array::from_fn(|w| {
         let (mut k, mut s) = (0.0, 0.0);
         for (pigment, n, c) in parts {
             let s_dry = if *n < 0.0 {
@@ -149,8 +213,7 @@ pub fn spectral_color(parts: &[(crate::spectral::SpectralPigment, f32, f32)], wh
             s += c / total * s_dry;
         }
         crate::spectral::km(k / s.max(1e-9))
-    });
-    crate::spectral::to_rgb(&reflectance)
+    })
 }
 
 #[cfg(test)]

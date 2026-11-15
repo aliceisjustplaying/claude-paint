@@ -942,6 +942,13 @@ pub struct Palette {
     /// The easel's calls agree with each other (the easel's session.rs
     /// `CALLS_AGREE_MARK`): new paintings.
     pub calls_agree: bool,
+    /// Engine 9: a dye lake (rose madder, carmine, yellow lake, magenta) looks
+    /// dry as its dye loading and its alumina substrate make it, not as a
+    /// tint of its oil absorption (`dry::dye_loading`), and a pigment the
+    /// index table has wrong scatters dry by its measured index
+    /// (`dry::measured_index`; the easel's session.rs `DRY_LAKES_MARK`): new
+    /// paintings.
+    pub dry_lakes: bool,
     /// Engine 9's material revision (`Canvas::with_material`; an easel log's
     /// `--@ material`): 1 only where a log's head names it, whose baked
     /// films keep curing from the top down and wrinkle; 0, for new paintings,
@@ -967,7 +974,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, self.tubes.clone())}
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, dry_lakes: self.dry_lakes, name: self.name, ..Palette::new(self.stock, self.tubes.clone())}
     }
 }
 
@@ -989,7 +996,7 @@ impl Palette {
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
         let grind = tubes.iter().map(|t| grind_of(name, t.name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, oils: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, pastel_pencil_sharpen: false, material: 0, calls_agree: false, lat, lat9, scat, pack, grind, stock: name}
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, oils: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, pastel_pencil_sharpen: false, material: 0, calls_agree: false, dry_lakes: false, lat, lat9, scat, pack, grind, stock: name}
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -999,7 +1006,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, tubes)}
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, dry_lakes: self.dry_lakes, name: self.name, ..Palette::new(self.stock, tubes)}
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -1101,7 +1108,7 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, t)}
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, dry_lakes: self.dry_lakes, name: self.name, ..Palette::new(self.stock, t)}
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -1239,8 +1246,21 @@ impl Palette {
             );
             let list: Vec<_> = parts.iter().map(|&(i, f)| {
                 let name = self.tubes[i].name;
-                let n = crate::dry::carbon_ratio(name).map_or_else(|| crate::dry::refractive_index(name), |r| -r);
-                (pigment(i), n, f)
+                // with the switch, a pigment the index table had wrong scatters
+                // by its measured index (`dry::measured_index`)
+                let index = || crate::dry::measured_index(name).filter(|_| self.dry_lakes).unwrap_or_else(|| crate::dry::refractive_index(name));
+                let n = crate::dry::carbon_ratio(name).map_or_else(index, |r| -r);
+                // a lake as the box has it, with the switch: its dye's
+                // absorption at the loading measured powders show, scattering
+                // as its alumina does (`dry::dye_loading`)
+                let loading = crate::dry::dye_loading(name).filter(|_| self.dry_lakes && self.is_catalog_tube(i));
+                match loading {
+                    Some(a) => {
+                        let p = pigment(i);
+                        (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: p.s }, crate::dry::LAKE_SUBSTRATE_INDEX, f)
+                    }
+                    None => (pigment(i), n, f),
+                }
             }).collect();
             return crate::dry::spectral_color(&list, &white);
         }
@@ -1260,6 +1280,13 @@ impl Palette {
             })
             .collect();
         crate::dry::dry_color(&list, white)
+    }
+
+    /// Whether tube `i` is the catalog's own paint: its color and hiding as
+    /// the catalog gives them, so its pigment data are the catalog's.
+    fn is_catalog_tube(&self, i: usize) -> bool {
+        let t = &self.tubes[i];
+        catalog().iter().any(|o| o.name == t.name && o.color == t.color && o.hiding == t.hiding)
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
@@ -1641,5 +1668,160 @@ mod tests {
         assert!(pal.with(vec![]).drain && pal.clone().drain && pal.only(&["zinc white"]).drain, "a palette made from it keeps its switch");
         pal.drain = false;
         assert!((blotted(&pal, zinc) - 0.5).abs() < 1e-6 && (blotted(&pal, lead) - 0.5).abs() < 1e-6);
+    }
+
+    /// CIELAB (D65) of a linear sRGB color.
+    fn lab(c: crate::Rgb) -> [f32; 3] {
+        let m = [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]];
+        let white = [0.95047, 1.0, 1.08883];
+        let f = |i: usize| {
+            let t = (m[i][0] * c[0] + m[i][1] * c[1] + m[i][2] * c[2]) / white[i];
+            if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 }
+        };
+        [116.0 * f(1) - 16.0, 500.0 * (f(0) - f(1)), 200.0 * (f(1) - f(2))]
+    }
+
+    fn delta_e(a: [f32; 3], b: [f32; 3]) -> f32 {
+        (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt()
+    }
+
+    fn lakes_palette(dry_lakes: bool) -> Palette {
+        let mut palette = Palette::new("dry lakes study", catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.dry_lakes = dry_lakes;
+        palette
+    }
+
+    /// With the switch, pure rose madder dry is a rose, as madder lake powder
+    /// is, and carmine and yellow lake stay with theirs. The expected colors
+    /// are measurements, not this code's (dry_pigment_optics.md §6):
+    /// Cosentino's 2014 FORS powders, corrected for the integrating sphere's
+    /// floor and gain (madder lake L*a*b* 54.5/24.6/8.8, L* 52.6–56.2 over the
+    /// correction's bounds), and two lab-made madder lakes measured as powder
+    /// (Sattar 2024, J. Chem. Educ. 101:4983, 66.1/25.5/9.4; J. Chem. Educ.
+    /// 2020, doi:10.1021/acs.jchemed.9b01093, 62.6/23.9/16.7).
+    #[test]
+    fn dry_lakes_look_as_their_powders_do() {
+        let palette = lakes_palette(true);
+        let at = |name: &str| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        let white = at("lead white");
+        let madder = lab(palette.dry_color(&[(at("rose madder"), 1.0)]));
+        // within the three measurements' span, widened by 5 each way
+        assert!((47.6..71.1).contains(&madder[0]), "rose madder L* {madder:?}");
+        assert!((18.9..30.5).contains(&madder[1]), "rose madder a* {madder:?}");
+        assert!((3.8..21.7).contains(&madder[2]), "rose madder b* {madder:?}");
+        assert!(delta_e(madder, [54.5, 24.6, 8.8]) < 8.0, "rose madder {madder:?} against its FORS powder");
+        // carmine lake powder 30.7/41.0/7.7 (its oil K's own shape holds the fit
+        // to ΔE 9.9), yellow (weld) lake 66.1/2.9/41.9
+        let carmine = lab(palette.dry_color(&[(at("carmine lake"), 1.0)]));
+        assert!(delta_e(carmine, [30.7, 41.0, 7.7]) < 11.0, "carmine lake {carmine:?} against its FORS powder");
+        let yellow = lab(palette.dry_color(&[(at("yellow lake"), 1.0)]));
+        assert!(delta_e(yellow, [66.1, 2.9, 41.9]) < 8.0, "yellow lake {yellow:?} against its FORS powder");
+        // and madder with as much lead white is a pink, lighter than the lake
+        let tint = lab(palette.dry_color(&[(at("rose madder"), 0.5), (white, 0.5)]));
+        assert!(tint[0] > madder[0] + 5.0 && tint[0] < 80.0 && tint[1] > 15.0, "rose madder 1:1 lead white {tint:?}");
+    }
+
+    /// With the switch a pigment the index table had wrong scatters dry by its
+    /// measured index: permanent alizarin, quinacridone violet PV19 at 2.03,
+    /// takes the high-index rule (its oil scattering × the Mie air/oil ratio)
+    /// and is no longer a lake's near-white; lead-tin yellow at 2.30 comes
+    /// nearer its FORS powder (L*a*b* 86.6/−8.8/36.1, dry_lake_fit.py).
+    #[test]
+    fn dry_lakes_switch_gives_measured_indices() {
+        let (off, on) = (lakes_palette(false), lakes_palette(true));
+        let at = |name: &str| on.tubes.iter().position(|t| t.name == name).unwrap();
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+        let pv19 = crate::mixer::pigment9(&crate::mixer::tube9("permanent alizarin").unwrap()).scaled(crate::COAT_UM / 100.0);
+        let alizarin = at("permanent alizarin");
+        assert_eq!(on.dry_color(&[(alizarin, 1.0)]), crate::dry::spectral_color(&[(pv19, 2.03, 1.0)], &white));
+        let (was, now) = (lab(off.dry_color(&[(alizarin, 1.0)])), lab(on.dry_color(&[(alizarin, 1.0)])));
+        assert!(now[0] < was[0] - 15.0 && now[1] > was[1], "permanent alizarin {was:?} -> {now:?}");
+        let powder = [86.6, -8.8, 36.1];
+        let lty = at("lead-tin yellow");
+        let (was, now) = (lab(off.dry_color(&[(lty, 1.0)])), lab(on.dry_color(&[(lty, 1.0)])));
+        assert!(delta_e(now, powder) < delta_e(was, powder), "lead-tin yellow {was:?} -> {now:?}");
+    }
+
+    /// Without the switch every dry color is as engine 9 gave it before the
+    /// switch: the bits are main's at 4bbbbec3 (the unchanged code), and only
+    /// the lakes and the re-indexed pigments change with it.
+    #[test]
+    fn dry_lakes_switch_off_keeps_the_dry_colors() {
+        let (off, on) = (lakes_palette(false), lakes_palette(true));
+        let at = |name: &str| off.tubes.iter().position(|t| t.name == name).unwrap();
+        let white = at("lead white");
+        let bits = |c: crate::Rgb| c.map(f32::to_bits);
+        for (parts, expected) in [
+            (vec![(at("rose madder"), 1.0)], [0x3f640755, 0x3f3442f8, 0x3f3dc997]),
+            (vec![(at("rose madder"), 0.5), (white, 0.5)], [0x3f6d787c, 0x3f4a0aec, 0x3f508aed]),
+            (vec![(at("carmine lake"), 1.0)], [0x3ed1cb0d, 0x3d2cd632, 0x3dc3f15c]),
+            (vec![(at("carmine lake"), 0.5), (white, 0.5)], [0x3f03526e, 0x3dc5e9e9, 0x3e36ce78]),
+            (vec![(at("magenta"), 1.0)], [0x3f5d496f, 0x3e8a153f, 0x3f26437d]),
+            (vec![(at("yellow lake"), 1.0)], [0x3f4e932d, 0x3f39ec35, 0x3edc7f1e]),
+            (vec![(at("vermilion"), 1.0)], [0x3f2c8dff, 0x3da82a08, 0x3d61cf01]),
+        ] {
+            assert_eq!(bits(off.dry_color(&parts)), expected, "{parts:?}");
+        }
+        for (i, t) in off.tubes.iter().enumerate() {
+            let changed = crate::dry::dye_loading(t.name).is_some() || crate::dry::measured_index(t.name).is_some();
+            for parts in [vec![(i, 1.0)], vec![(i, 0.5), (white, 0.5)]] {
+                assert_eq!(off.dry_color(&parts) == on.dry_color(&parts), !changed, "{}", t.name);
+            }
+        }
+        // a lake the box has changed is its own paint: the loading is the catalog lake's
+        let mut custom = lakes_palette(true);
+        let madder = at("rose madder");
+        custom.tubes[madder].hiding *= 0.5;
+        // (a clone is rebuilt from its tubes as they are now)
+        let custom = custom.clone();
+        let mut plain = custom.clone();
+        plain.dry_lakes = false;
+        assert_eq!(custom.dry_color(&[(madder, 1.0)]), plain.dry_color(&[(madder, 1.0)]));
+    }
+
+    /// With the switch, pure magenta dry absorbs at its band as a fuchsine
+    /// lake does. The expected K/S is dye chemistry, not this code's
+    /// (dry_pigment_optics.md §6.3): basic fuchsin's ε 8.06×10⁴ L mol⁻¹ cm⁻¹
+    /// at 543 nm (PhotochemCAD L04, M 337.8 g/mol), at 10 wt% on alumina of
+    /// 2.2 g/cm³, μ_a = ln 10 · ε · w ρ / M; van de Hulst's package effect for
+    /// a 1 µm grain; S = ¾ σ′ with σ′ 0.712 µm⁻¹ (n 1.57, table 2.2) times the
+    /// Percus–Yevick packing factor 0.970. That is K/S 5.71.
+    #[test]
+    fn dry_magenta_absorbs_as_a_fuchsine_lake() {
+        let (eps, wt, rho, molar, d, sigma, packing) = (8.06e4f64, 0.10, 2200.0, 337.8, 1.0, 0.7122, 0.970);
+        let mu = 10f64.ln() * eps * wt * rho / molar * 1e-4;
+        let x = mu * d;
+        let q = 1.0 + 2.0 * (-x).exp() / x + 2.0 * ((-x).exp() - 1.0) / (x * x);
+        let expected = (2.0 * 1.5 * q / d / (0.75 * sigma * packing)) as f32;
+        assert!((expected - 5.71).abs() < 0.01, "dye chemistry K/S {expected}");
+        let on = lakes_palette(true);
+        let magenta = on.tubes.iter().position(|t| t.name == "magenta").unwrap();
+        // (a proxy tube: the catalog masstone at the catalog scattering)
+        let p = crate::spectral::SpectralPigment::masstone(on.tubes[magenta].color, on.scat[magenta]);
+        let a = crate::dry::dye_loading("magenta").unwrap();
+        let lake = (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: p.s }, crate::dry::LAKE_SUBSTRATE_INDEX, 1.0);
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+        // the palette's dry path is this list
+        assert_eq!(on.dry_color(&[(magenta, 1.0)]), crate::dry::spectral_color(&[lake], &white));
+        let r = crate::dry::spectral_reflectance(&[lake], &white);
+        let ks = |r: f32| (1.0 - r).powi(2) / (2.0 * r);
+        // 543 nm, between the 540 and 550 nm bands
+        let at_543 = 0.7 * ks(r[16]) + 0.3 * ks(r[17]);
+        assert!((at_543 / expected - 1.0).abs() < 0.02, "magenta dry K/S at 543 nm {at_543}, dye chemistry {expected}");
+    }
+
+    /// The fit behind `dry::dye_loading` reads each tube's dry-path K and S
+    /// per coat from here (notes/research/dry_lake_fit.py):
+    /// `DRY_LAKE_FIT_OUT=<file.json> cargo test -p paint --lib -- --ignored --exact palette::tests::dump_dry_lake_fit_input`.
+    #[test]
+    #[ignore]
+    fn dump_dry_lake_fit_input() {
+        let palette = lakes_palette(false);
+        let rows: Vec<String> = palette.tubes.iter().enumerate().map(|(i, t)| {
+            let p = crate::mixer::tube9(t.name).map_or_else(|| crate::spectral::SpectralPigment::masstone(t.color, palette.scat[i]), |lat| crate::mixer::pigment9(&lat).scaled(crate::COAT_UM / 100.0));
+            format!("{:?}: {{\"k\": {:?}, \"s\": {:?}, \"n\": {}}}", t.name, p.k, p.s, crate::dry::refractive_index(t.name))
+        }).collect();
+        std::fs::write(std::env::var("DRY_LAKE_FIT_OUT").expect("DRY_LAKE_FIT_OUT"), format!("{{{}}}", rows.join(", "))).unwrap();
     }
 }

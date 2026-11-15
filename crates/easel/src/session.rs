@@ -111,6 +111,13 @@ pub const DRAIN_MARK: &str = "--@ drain";
 /// with none of it. It names no engine of its own: it rides on engine 5
 /// and later (`box_for`).
 pub const PAPER_MARK: &str = "--@ paper";
+/// The paper-presets switch, in the head of a session file: a painting whose
+/// log has it may name its sheet (`paper="tan wove"` or `paper={preset=...}`,
+/// paint's `paper::PRESETS`) and mount it (`paper={mount="board"|"canvas"|
+/// "strainer"}`, paint's `paper::Mount`). A new painting has it; a log
+/// without it refuses both keys as unknown, as it did before. It rides on
+/// engine 5 and later, as paper does.
+pub const PAPER_PRESETS_MARK: &str = "--@ paper-presets";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
 /// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
@@ -837,6 +844,9 @@ impl Session {
         }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.paper_presets {
+            let _ = writeln!(s, "{PAPER_PRESETS_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1623,6 +1633,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.grit = true;
         b.calls_agree = true;
         b.dry_lakes = true;
+        b.paper_presets = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1702,6 +1713,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.dry_lakes = head(DRY_LAKES_MARK);
+    b.paper_presets = head(PAPER_PRESETS_MARK);
+    if b.paper_presets && engine < 5 {
+        return Err(format!("the log's {PAPER_PRESETS_MARK} line (the paper-presets switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

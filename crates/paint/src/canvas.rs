@@ -538,9 +538,9 @@ impl Canvas {
         self
     }
 
-    /// The sheet of paper the canvas is, if it is one.
-    pub fn paper(&self) -> Option<crate::paper::Paper> {
-        self.paper
+    /// The sheet of paper this canvas is, if it is one (its make and mount).
+    pub fn paper(&self) -> Option<&crate::paper::Paper> {
+        self.paper.as_ref()
     }
 
     /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the
@@ -563,9 +563,17 @@ impl Canvas {
 
     /// How stiffly the surface at pixel `i` gives under a point load, MPa
     /// per µm (a Winkler foundation: the sheet's z modulus over its
-    /// caliper). A canvas on its stretcher, or a board, is all but rigid.
-    pub(crate) fn give_mpa_per_um(&self, _i: usize) -> f32 {
-        match self.paper {
+    /// caliper; a sheet on a strainer drums between the bars,
+    /// `Paper::give_at`). A canvas on its stretcher, or a board, is all but
+    /// rigid.
+    pub(crate) fn give_mpa_per_um(&self, i: usize) -> f32 {
+        match &self.paper {
+            Some(p) if p.drum.is_some() => {
+                let f = &self.f;
+                let px = self.px_mm();
+                let (x, y) = ((i % f.w + f.x0) as f32 + 0.5, (i / f.w + f.y0) as f32 + 0.5);
+                p.give_at(x * px, y * px, f.full_w as f32 * px, f.full_h as f32 * px)
+            }
             Some(p) => p.z_mpa / p.caliper_um().max(10.0),
             None => 10.0,
         }

@@ -203,8 +203,7 @@ impl Cell {
         // (water in the pores darkens the pastel while it lasts, and the gum
         // it left once dry, a little: wet_pastel.rs)
         let (r, bound) = if self.water > 0.0 || self.gum > 0 {
-            let s = crate::wet_pastel::scatter_share(self);
-            (crate::wet_pastel::km_scatter(self.r, s), crate::wet_pastel::km_scatter(optics.bound, s))
+            (crate::wet_pastel::look(self, self.r), crate::wet_pastel::look(self, optics.bound))
         } else {
             (self.r, optics.bound)
         };
@@ -212,11 +211,12 @@ impl Cell {
     }
 
     /// The water here has dried (`crate::wet_pastel`): the gum it held
-    /// in solution sets again at the particles' contacts. The pastel is
-    /// bound in the share of its sticks' gum it still holds (`gum`), as a
-    /// stick is by all of it; what is bound already (by fixative, or by
-    /// the gum of an earlier wetting) stays bound. Its coverage in that
-    /// share raises the floor the eraser stops at. Only with drawing optics.
+    /// in solution sets again at the particles' contacts, binding the share
+    /// `held` of the pastel here (`wet_pastel::binds`: all of it where the
+    /// gum it kept holds against a finger, none where it doesn't); what is
+    /// bound already (by fixative, or by the gum of an earlier wetting)
+    /// stays bound. Its coverage in that share raises the floor the eraser
+    /// stops at. Only with drawing optics.
     pub(crate) fn gum_set(&mut self, held: f32) {
         self.water = 0.0;
         if self.optics.is_none() || self.loose <= 0.0 {
@@ -327,6 +327,9 @@ pub struct Drawing {
     /// Whether any cell holds water (`crate::wet_pastel`): a `wait` dries
     /// the drawing only then. Not written: read back from the cells.
     pub(crate) damp: bool,
+    /// The water the sheet has taken in under each cell, µm (empty until
+    /// water first sinks into it: `crate::wet_pastel`).
+    pub(crate) sheet: Vec<f32>,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -614,7 +617,7 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
 
 impl Drawing {
     fn new(n: usize, whole: usize, optics: bool) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, optics, damp: false }
+        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, optics, damp: false, sheet: Vec::new() }
     }
 
     /// The serialized layout (the checkpoint's drawing flag): 1 graphite
@@ -665,7 +668,7 @@ impl Drawing {
             && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0)
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
         let valid = valid && cells.iter().all(|c| c.optics.is_none_or(|o| ok(o.fixed) && ok(o.graphite) && o.bound.into_iter().all(ok) && o.under.into_iter().all(f32::is_finite) && c.non_pastel_floor <= c.non_pastel && c.non_pastel_floor <= c.floor && c.floor + c.non_pastel - c.non_pastel_floor <= c.a + 1e-5));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, optics: layout == 4, damp: false }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, optics: layout == 4, damp: false, sheet: Vec::new() }))
     }
 }
 

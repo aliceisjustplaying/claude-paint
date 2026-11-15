@@ -473,6 +473,11 @@ impl Canvas {
         self.wet_pastel
     }
 
+    /// The sheet of paper the picture is on, if it is on one.
+    pub fn paper(&self) -> Option<&crate::paper::Paper> {
+        self.paper.as_ref()
+    }
+
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {
         self.rag_lift = enabled && crate::engine7::active(self.engine);
         self

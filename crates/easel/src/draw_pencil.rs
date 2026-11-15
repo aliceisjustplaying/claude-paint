@@ -1509,6 +1509,17 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}) b = brush("round", 12) print(p.wet, b.dip, b.wash)"#)
         };
         assert_eq!(old.trim(), "nil\tnil\tnil", "an older log's stick and brush are as they were");
+        // a sheet's sizing against water (cobb=) only with the switch
+        let sized = r#"canvas{size=64, aspect=1.25, seed=3, paper={grammage=200, cobb=40}}"#;
+        let mut older_paper = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        assert!(older_paper.run(sized).unwrap_err().contains("cobb"));
+        let mut new_paper = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut new_paper, sized);
+        assert_eq!(new_paper.canvas().unwrap().paper().unwrap().cobb60, Some(40.0));
+        let mut unsized_paper = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut unsized_paper, r#"canvas{size=64, aspect=1.25, seed=3, paper={cobb=false}}"#);
+        assert_eq!(unsized_paper.canvas().unwrap().paper().unwrap().cobb60, None);
+        assert!(unsized_paper.run(r#"canvas{size=64, paper={cobb=1}}"#).is_err());
         let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
         run(&mut s, PAPER);
         let src = r#"p = pastel(pile{{"vermilion", 1}, {"lead white", 1}})

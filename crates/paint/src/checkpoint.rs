@@ -188,10 +188,12 @@ const WET_PASTEL: u64 = 1 << 44;
 /// drawing follows (0 or 1), then for each of its cells (one triple per
 /// buffer pixel) the water in it (µm), its particles' mean index and the
 /// share of its gum it holds, the last two as their stored u16s (each an
-/// f32). A reader that doesn't know the bit refuses the file instead of
-/// losing the water.
+/// f32), then whether the sheet has taken water (0 or 1) and, if it has,
+/// the water under each cell (µm); then the paper's sizing (0 sized, its
+/// Cobb60 as an f32; 1 unsized, 0.0). A reader that doesn't know the bit
+/// refuses the file instead of losing the water.
 const WET_PASTEL_MARK: u64 = 0x50544557;
-const WET_PASTEL_V: u64 = 1;
+const WET_PASTEL_V: u64 = 2;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -377,6 +379,8 @@ fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Pap
     let p = Paper {
         grammage: v[0], fiber_mm: v[1], fiber_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
         floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+        // (written in the wet pastel section, where only it is read)
+        cobb60: Paper::drawing(0).cobb60,
     };
     Ok((p, micro))
 }
@@ -597,7 +601,12 @@ impl Canvas {
             put_u64(w, u64::from(self.drawing.is_some()))?;
             if let Some(d) = &self.drawing {
                 put_all(w, d.cells.iter().flat_map(|c| [c.water, c.index as f32, c.gum as f32]))?;
+                put_u64(w, u64::from(!d.sheet.is_empty()))?;
+                put_all(w, d.sheet.iter().copied())?;
             }
+            let cobb = self.paper.as_ref().map_or(crate::paper::Paper::drawing(0).cobb60, |p| p.cobb60);
+            put_u64(w, u64::from(cobb.is_none()))?;
+            put_f32(w, cobb.unwrap_or(0.0))?;
         }
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
@@ -875,6 +884,8 @@ impl Canvas {
         if c.drawing.as_ref().is_some_and(|d| (d.layout() == 4) != c.drawing_optics) {
             return Err(bad("checkpoint drawing optics do not match its layout"));
         }
+        // (the paper's sizing, from the wet pastel section, once the paper is read)
+        let mut wet_cobb = None;
         if c.wet_pastel {
             if !c.drawing_optics || get_u64(r)? != WET_PASTEL_MARK || get_u64(r)? != WET_PASTEL_V {
                 return Err(bad("checkpoint wet pastel section is invalid"));
@@ -890,10 +901,24 @@ impl Canvas {
                     for (cell, q) in d.cells.iter_mut().zip(wet.chunks_exact(3)) {
                         (cell.water, cell.index, cell.gum) = (q[0], q[1] as u16, q[2] as u16);
                     }
-                    d.damp = d.cells.iter().any(|c| c.water > 0.0);
+                    d.sheet = match get_u64(r)? {
+                        0 => Vec::new(),
+                        1 => get_all(r, d.cells.len())?,
+                        _ => return Err(bad("checkpoint pastel sheet water flag is invalid")),
+                    };
+                    if !d.sheet.iter().all(|v| v.is_finite() && *v >= 0.0) {
+                        return Err(bad("checkpoint pastel sheet water is invalid"));
+                    }
+                    d.damp = d.cells.iter().any(|c| c.water > 0.0) || d.sheet.iter().any(|&v| v > 0.0);
                 }
                 _ => return Err(bad("checkpoint wet pastel section disagrees with its drawing")),
             }
+            let (kind, v) = (get_u64(r)?, get_f32(r)?);
+            wet_cobb = Some(match kind {
+                0 if v.is_finite() && v >= 0.0 => Some(v),
+                1 => None,
+                _ => return Err(bad("checkpoint paper sizing is invalid")),
+            });
         }
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
@@ -975,7 +1000,10 @@ impl Canvas {
         }
         // a sheet of paper's section, which ends the file
         if matches!(version, 13 | 16) {
-            let (p, micro) = read_paper(r, n)?;
+            let (mut p, micro) = read_paper(r, n)?;
+            if let Some(cobb) = wet_cobb {
+                p.cobb60 = cobb;
+            }
             c.paper = Some(p);
             c.micro = micro;
             if !pigments && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
@@ -993,7 +1021,10 @@ impl Canvas {
                 c.soak = Some(Box::new(read_soak_body(r, n)?));
                 mark = get_u64(r)?;
             } else if mark == PAPER_MARK {
-                let (p, micro) = read_paper_body(r, n)?;
+                let (mut p, micro) = read_paper_body(r, n)?;
+                if let Some(cobb) = wet_cobb {
+                    p.cobb60 = cobb;
+                }
                 c.paper = Some(p);
                 c.micro = micro;
                 mark = get_u64(r)?;

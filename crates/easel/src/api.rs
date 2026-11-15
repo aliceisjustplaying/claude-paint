@@ -2679,8 +2679,29 @@ const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<thr
 /// (`Paper::drawing`).
 fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
     use paint::paper::{Felt, Laid, Paper};
-    check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    // (cobb=: the sheet's sizing against water, only with the wet pastel
+    // switch, which alone reads it)
+    let wet = tubes.wet_pastel && tubes.drawing_optics;
+    if wet {
+        check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "cobb", "stiffness", "tone"], "paper")?;
+    } else {
+        check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    }
     let d = Paper::drawing(seed);
+    // cobb=: g/m² of water the sheet takes up in a minute (a sized sheet,
+    // 5 to 200), or false for an unsized one
+    let cobb = match t.get::<Value>("cobb")? {
+        Value::Nil => d.cobb60,
+        Value::Boolean(false) => None,
+        Value::Integer(_) | Value::Number(_) => {
+            let v = num(t, "cobb")?.unwrap_or(0.0);
+            if !(5.0..=200.0).contains(&v) {
+                return err("paper: cobb is the g/m² of water the sheet takes up in a minute (its sizing), 5 to 200, or false for an unsized sheet");
+            }
+            Some(v)
+        }
+        _ => return err("paper: cobb is the g/m² of water the sheet takes up in a minute (its sizing), 5 to 200, or false for an unsized sheet"),
+    };
     let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
         let v = num(t, k)?.unwrap_or(def);
         if !(lo..=hi).contains(&v) {
@@ -2726,6 +2747,7 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         press: get("press", d.press, 0.3, 1.0)?,
         calender: get("calender", d.calender, 0.0, 1.0)?,
         absorbent: get("absorbent", d.absorbent, 0.0, 1.0)?,
+        cobb60: cobb,
         z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
         felt,
         laid,

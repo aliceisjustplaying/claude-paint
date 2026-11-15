@@ -120,7 +120,7 @@ impl Stick {
     /// Hardness (MPa) and wear coefficient of a stick of softness `soft`
     /// (0 hard pastel .. 1 very soft): σp from 30 down to 2 MPa
     /// (log-spaced), K from 0.01 up to 0.06.
-    fn mechanics(soft: f32) -> (f32, f32) {
+    pub(crate) fn mechanics(soft: f32) -> (f32, f32) {
         let s = soft.clamp(0.0, 1.0);
         let h = 10f32.powf(crate::lerp(30f32.log10(), 2f32.log10(), s));
         (h, crate::lerp(0.01, 0.06, s))
@@ -472,27 +472,27 @@ impl Canvas {
         let crumb_max = (80.0 + 220.0 * soft) * (fmean / 2.0).clamp(0.25, 2.0).powf(0.25);
         let mut rng = crate::rng::Rng::new((pts[0].x.to_bits() as u64) << 32 ^ pts[0].y.to_bits() as u64 ^ (steps as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
         let px_um2 = (px * 1000.0) * (px * 1000.0);
-        // a wet tip (wet_pastel.rs): softer, wearing faster, shedding less,
-        // its paste spread thinner and laying the water it carries; the
-        // stick as it was dry, to come back to
+        // a wet tip (wet_pastel.rs): a chalk soil. Below its plastic limit
+        // as hard as dry; in its plastic range as soft as its remoulded
+        // strength, smearing rather than crumbling; past its liquid limit a
+        // slurry pressed into the tooth as a paste. Its paste spreads its
+        // particles and packs as it dries, and it lays its pores' water with
+        // what it lays. The stick as it was dry, to come back to
         let wet_tip = self.wet_pastel && stick.water > 0.0;
         // (the switch records the particles' index where they land)
         let n_lay = if self.wet_pastel { stick.index } else { 0.0 };
         let dry_hardness = stick.hardness;
-        let (wet_hardness, paste_thin) = (crate::wet_pastel::wet_hardness(dry_hardness), crate::wet_pastel::paste_thin());
-        let (mut shed, mut thick, mut paste_water) = (SHED, PARTICLE_UM, 0.0f32);
+        let paste_thin = crate::wet_pastel::paste_thin();
+        let (mut shed, mut thick, mut paste_water, mut slurry, mut keep) = (SHED, PARTICLE_UM, 0.0f32, 0.0f32, 1.0f32);
         for k in 0..=steps {
             if wet_tip {
-                // softer by the share of its pores the water fills (its
-                // capillary strength rises with the saturation, Rumpf); a
-                // saturated paste smears instead of crumbling [E: linear in
-                // the saturation]; its particles spread; it lays its pores'
-                // water with what it wears
                 let w = stick.wetness();
-                stick.hardness = dry_hardness + (wet_hardness - dry_hardness) * w;
-                shed = SHED * (1.0 - w);
-                thick = PARTICLE_UM * (1.0 - w * (1.0 - paste_thin));
+                slurry = crate::wet_pastel::paste_share(w);
+                stick.hardness = crate::wet_pastel::wet_hardness(dry_hardness, w);
+                shed = SHED * (1.0 - slurry);
+                thick = PARTICLE_UM * (1.0 - slurry * (1.0 - paste_thin));
                 paste_water = crate::wet_pastel::POROSITY * w;
+                keep = crate::wet_pastel::dried_share(slurry);
             }
             let t = k as f32 * ds;
             let mut sp = at(t);
@@ -554,6 +554,13 @@ impl Canvas {
                     let a_fill = if o > fill_at { (-fill_at / mu).exp() * bearing(o - fill_at, CRUST_UM) } else { 0.0 };
                     let bound_share = if v > 0.0 { c.bound / v } else { 0.0 };
                     let mut dv = ds_um * stick.wear * (a_paper + CRUST_WEAR * bound_share * a_fill);
+                    if slurry > 0.0 {
+                        // a slurry isn't worn off: pressed by the face, it
+                        // fills the open pores of the tooth it touches (the
+                        // micro-relief's µ per pixel, less what pastel
+                        // already fills), as paint does (wet_pastel.rs)
+                        dv = (1.0 - slurry) * dv + slurry * (mu - v).max(0.0);
+                    }
                     if dv <= 0.0 {
                         continue;
                     }
@@ -568,9 +575,11 @@ impl Canvas {
                     }
                     let q = 1.0 - (-dv / thick).exp();
                     let before = (c.a, c.reflectance());
-                    c.add_pastel(q, stick.color, dv);
-                    c.note_pastel(dv, n_lay);
-                    c.loose += dv;
+                    // (a paste's volume once it has packed dry)
+                    let kept = dv * keep;
+                    c.add_pastel(q, stick.color, kept);
+                    c.note_pastel(kept, n_lay);
+                    c.loose += kept;
                     if paste_water > 0.0 {
                         // the paste leaves its water where the tip wore
                         crate::wet_pastel::add_water(c, worn_here * paste_water);

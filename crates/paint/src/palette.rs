@@ -1081,17 +1081,20 @@ impl Palette {
         crate::dry::dry_color(&list, white)
     }
 
-    /// The mean refractive index of the parts (tube index, fraction by
-    /// volume), by volume (`dry::refractive_index`): a pastel stick's, for
-    /// how water in its pores darkens it (`crate::wet_pastel`). By volume,
-    /// not by scattering: dry, every particle scatters within about a
-    /// factor of 1.5 of any other per volume (dry_pigment_optics.md §2.2).
+    /// The particle index of a pastel stick of the parts (tube index,
+    /// fraction by volume), for how water in its pores darkens it
+    /// (`crate::wet_pastel`): its pigments' and the whiting its whites
+    /// stand for, weighted by their scattering (`dry::particle_index`).
+    /// Only the wet pastel switch reads it.
     pub fn dry_index(&self, parts: &[(usize, f32)]) -> f32 {
-        let total: f32 = parts.iter().map(|p| p.1.max(0.0)).sum();
-        if total <= 0.0 {
-            return crate::wet_pastel::DEFAULT_INDEX;
-        }
-        parts.iter().map(|&(i, f)| f.max(0.0) * crate::dry::refractive_index(self.tubes[i].name)).sum::<f32>() / total
+        let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(|| self.scat.iter().cloned().fold(0.0, f32::max), |i| self.scat[i]);
+        let list: Vec<_> = parts.iter().map(|&(i, f)| {
+            let name = self.tubes[i].name;
+            let n = crate::dry::refractive_index(name);
+            let s_n = crate::dry::carbon_ratio(name).map_or(n, |r| -r);
+            (self.tubes[i].color, self.scat[i], s_n, n, f, name.ends_with(" white"))
+        }).collect();
+        crate::dry::particle_index(&list, white)
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated

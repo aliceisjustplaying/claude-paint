@@ -2,61 +2,69 @@
 //! laid pastel, ground pastel laid as a paste or wash with a brush. Source:
 //! notes/research/wet_pastel.md (its sections cited as §n; [M] measured,
 //! [D] derived here from measured values, [P] a practitioner's or museum's
-//! account, [E] an estimate, each with the reason it is one).
+//! account, [E] an estimate, each with the reason it is one), and the
+//! estimates audit (notes/estimates-audit-2.md, W1–W23).
 //!
 //! - **Water in the pores** (`Cell::water`, µm in the pastel's pores and
 //!   standing on the paper) replaces the air between the particles. Their
-//!   scattering falls with the index contrast against the pore phase (Mie,
-//!   `dry::scatter_in`, at each cell's own mean particle index
-//!   `Cell::index`), the pore phase a Bruggeman mixture of air and water by
-//!   the share of the pores filled (§2). The dry colors are kept, so it
-//!   lightens again as the water goes.
-//! - **Where the water goes** (§4). The pastel's pores (r ≈ 1.5 µm, fully
-//!   wetted) draw harder than the paper's (r ≈ 6 µm, sized), so they fill
-//!   first and empty last. Water standing over them sinks into an
-//!   absorbent sheet at the Lucas–Washburn rate (the angle from its sizing,
-//!   `Paper::absorbent`), within milliseconds: on a hard-sized sheet
-//!   (contact angle over 90°) it stays and evaporates. Evaporation is a
-//!   still-air boundary layer's mass transfer of the vapour-pressure
-//!   deficit at the studio's temperature and humidity, with the wet
-//!   surface cooled to its energy balance (`evaporation_um_min`); once the
-//!   standing water is gone it slows as the evaporation front recedes into
-//!   the pastel (falling rate).
+//!   scattering falls with the index contrast against water (Mie,
+//!   `dry::scatter_in`, at each cell's particle index `Cell::index`, the
+//!   pigments' and their whiting's, weighted by scattering). The darkening
+//!   rises with the share of the pores filled as measured for soils,
+//!   exponentially, near its full value by half full (§2). The dry colors
+//!   are kept, so it lightens again as the water goes.
+//! - **Where the water goes** (§4). The pastel's pores draw harder than the
+//!   paper's, so they fill first and empty last. Water standing over them
+//!   sinks into the sheet as its sizing lets it (a sized sheet's measured
+//!   Cobb uptake, √t; an unsized one at its pores' measured Washburn rate),
+//!   until the share of the sheet's pores water reaches is full
+//!   (`Paper::absorbent`). Evaporation is a still-air boundary layer's mass
+//!   transfer of the vapour-pressure deficit in the studio
+//!   (`crate::climate::STUDIO`), the wet surface cooled to its energy
+//!   balance (`evaporation_um_min`): first what stands, then what the sheet
+//!   took in (drawn back up through the pastel's pores, which stay full),
+//!   then the pores themselves at a falling rate.
 //! - **The gum** (§1, §3): the stick's gum dissolves in the water and sets
-//!   again at the contacts as it dries. What sank into the sheet took its
-//!   share of the gum with it, so the pastel is bound in the share of its
-//!   gum it still holds (`Cell::gum`): repeated wettings redissolve and
-//!   reset the same gum, and never bind more than it can. The gum left in
-//!   the pores lowers their contrast a little once dry (Bruggeman again).
-//! - **A wet stick** (`Stick::water`): its gum bridges dissolved, the
-//!   soaked tip is held together by capillary pressure alone, so it is far
-//!   softer (`wet_hardness`) and lays more for the same force; as a paste it
-//!   smears rather than crumbles, and spreads its particles into the tooth.
-//!   Its water spreads up the dry stick by capillarity (`tip_water`).
-//! - **A wet brush** (`Canvas::wash_pastel`) holds water in the space a full
-//!   load of paint takes between its hairs, and lays it, picks up the
-//!   wetted loose pastel and lays it further on as it lays and picks up wet
-//!   paint (`Held::capacity_mm3`, the tool's `lay`, `pickup` and `run`).
+//!   again at the contacts as it dries. Water that sank took its share of
+//!   the gum with it (`Cell::gum`). The bridges the rest makes hold as their
+//!   volume^(2/3): the pastel is bound where they hold against a finger
+//!   (`binds`), and left loose where too little gum is left.
+//! - **A wet stick** (`Stick::water`). Its tip is a chalk soil: below its
+//!   plastic limit it is as hard as dry; in its plastic range it is as soft
+//!   as a remoulded soil's strength at its liquidity index
+//!   (`wet_hardness`) and smears instead of crumbling; past its liquid
+//!   limit it is a slurry, pressed into the tooth as a paste rather than
+//!   worn off (`paste_share`). Its water spreads up the dry stick by
+//!   capillarity (`tip_water`).
+//! - **A wet brush** (`Canvas::wash_pastel`) holds water in its belly
+//!   (`Held::capacity_mm3`), lays it as it lays paint, picks up the wetted
+//!   loose pastel and lays it further on as it lays and picks up wet paint
+//!   (the tool's `lay`, `pickup` and `run`).
 
 use crate::canvas::Canvas;
+use crate::climate::STUDIO;
 use crate::color::Rgb;
 use crate::graphite::Cell;
 use crate::pastel::{PARTICLE_UM, Section, Stick};
 
 /// A pastel stick's porosity, and so its deposit's (a deposit is counted in
-/// the stick's volume it wore off: `Cell::loose`). A Sennelier stick of
-/// about 8.5 cm³ weighs about 9 g, ρ ≈ 1.05 g/cm³, against solids of about
-/// 2.65 (calcite 2.71, kaolinite 2.6): 1 − 1.05/2.65 ≈ 0.6 [D]
-/// (pastel_stick_tribology.md §1).
-pub const POROSITY: f32 = 0.6;
-/// The particles' size, µm: the measured constituents run 0.2–20 µm
-/// (kaolin 0.2–5, whiting 1–20, earths 1–30; pastel media 1–20 µm measured,
-/// pastel_stick_tribology.md §3). 3 µm [E]: a typical size inside that
-/// range, since no size distribution of a stick was found.
-pub const PARTICLE_D_UM: f32 = 3.0;
+/// the stick's volume it wore off: `Cell::loose`): 0.55 [D, bounds
+/// 0.50–0.61]. A Sennelier stick listed at 9.07 g, at its listed 2.65 ×
+/// 0.45 in, is ρ 1.32 g/cm³: 0.50 against solids of 2.65 (calcite 2.71,
+/// kaolinite 2.6), 0.54 against 2.9; at the nominal ½ × 2½ in, 0.57–0.61
+/// (wet_pastel.md §1). The 9.07 g is a listing weight shared by several
+/// colors, so it may include the wrapper.
+pub const POROSITY: f32 = 0.55;
+/// The particles' size, µm: the Sauter (surface-weighted) mean d₃₂ of the
+/// historic filler, Champagne/Meudon whiting (d50 2.4–2.7 µm, D97 13–15
+/// µm, Art-Chimie; d50 3, d98 25, Omya): a volume lognormal through d50 and
+/// D97 has σ_ln 0.87–0.94 and d₃₂ 1.64–1.75 µm [D]. Capillary strength,
+/// the pores' hydraulic radius and coverage per volume all go with d₃₂.
+pub const PARTICLE_D_UM: f32 = 1.7;
 /// The stick's dry gum, a share of its mass: recipes dough 1 g of powder
 /// with 0.3–0.5 mL of a 1:30 tragacanth solution, 1–2 % [D]
-/// (pastel_stick_tribology.md §1; wet_pastel.md §1).
+/// (pastel_stick_tribology.md §1; wet_pastel.md §1). Bounds 0.3–3 %: no
+/// assay of a stick was found (a bench measurement: ash or TGA loss).
 pub const GUM_SHARE: f32 = 0.015;
 /// Densities, g/cm³: the solids (calcite 2.71, kaolinite 2.6 [M]) and dry
 /// gum arabic (1.35–1.49 [M], wet_pastel.md §1).
@@ -66,32 +74,76 @@ const GUM_DENSITY: f32 = 1.4;
 /// dry_pigment_optics.md §1) and of water.
 const GUM_INDEX: f32 = 1.52;
 const WATER_INDEX: f32 = 1.333;
-/// A particle index where none was recorded (as `dry::refractive_index`).
-pub const DEFAULT_INDEX: f32 = 1.9;
-/// Water at 20 °C: surface tension (N/m) and viscosity (Pa·s) [M,
-/// handbook].
-const GAMMA: f32 = 0.0728;
-const ETA: f32 = 1.002e-3;
-/// The studio (the engine has no room conditions of its own): 20 °C (the
-/// air sheet.rs assumes) and 50 % relative humidity, the middle of the
-/// 40–60 % held for works on paper (wet_pastel.md §4).
-pub const STUDIO_C: f64 = 20.0;
-pub const STUDIO_RH: f64 = 0.5;
+/// A particle index where none was recorded: whiting's (ground calcite,
+/// 1.59; ω 1.658 and ε 1.486 average 1.60), the bulk of a pastel
+/// (`dry::WHITING_INDEX`).
+pub const DEFAULT_INDEX: f32 = crate::dry::WHITING_INDEX;
+/// The pores' water, which has dissolved the stick's gum (3.3 % w/v at
+/// saturation, `gum_in_water`): its surface tension, N/m, that of gum
+/// arabic solutions above their aggregation concentration, 46.9 mN/m at
+/// 0.5 % (Huang, Kakuda & Cui 2001) to 53.7–57.4 (Al-Assaf et al.) [M];
+/// gum arabic is surface-active.
+const GAMMA: f32 = 0.050;
+/// Water's viscosity at 20 °C, Pa·s [M, handbook], and gum arabic's
+/// intrinsic viscosity, mL/g (18, Gómez-Díaz et al. 2008; A. senegal
+/// 14–23 [M]), with a Huggins constant of 0.4 [E: 0.3–0.6 for a compact
+/// branched polymer in a good solvent; none measured for the gum was
+/// found]: the pores' water at 1.74 mPa·s (`pore_viscosity`).
+const ETA_WATER: f32 = 1.002e-3;
+const GUM_INTRINSIC_ML_G: f32 = 18.0;
+const HUGGINS: f32 = 0.4;
 /// Convective heat transfer from a vertical surface (a sheet on an easel)
 /// to still room air, W/m²K: 2.5, ISO 6946's for horizontal heat flow
-/// [M]; and the water's emissivity, 0.95 [M], for the radiation it takes
-/// from the room.
+/// [M], and Churchill–Chu's 2.5–2.7 for a 0.3–0.5 m sheet 3.7 K below the
+/// air [D]; and the water's emissivity, 0.95 [M], for the radiation it
+/// takes from the room.
 const H_CONV: f64 = 2.5;
 const EMISSIVITY: f64 = 0.95;
-/// The water contact angle of a sheet's sizing (105°: a good AKD or rosin
-/// sizing of writing grades [M]) and of bare cellulose (0°: unsized paper
-/// takes water in before an angle can be read [M]); a sheet is the Cassie
-/// mixture of the two by `absorbent`, its unsized share (wet_pastel.md §4).
-const SIZED_DEG: f32 = 105.0;
-const CELLULOSE_DEG: f32 = 0.0;
-/// How far up its end a dipped stick is soaked, mm: 1 [E], how deep the
-/// hand dips it (`p:wet(share)` is the share of that soaked).
-pub const DIP_MM: f32 = 1.0;
+/// Whatman Grade 1 filter paper's measured Washburn coefficient, m/√s:
+/// 0.38 cm/s^½ (D = K² = 14 mm²/s; *Sci. Rep.* 2019, s41598-019-52202-9)
+/// [M], the rate of an unsized sheet (`Paper::cobb60` None).
+const UNSIZED_K: f32 = 0.38e-2;
+/// How the tip is dipped (gestures, not physics): 1 mm into the water, for
+/// half a second (`dip_mm`).
+pub const DIP_DEPTH_MM: f32 = 1.0;
+pub const DIP_S: f32 = 0.5;
+/// Remoulded chalk's Atterberg limits, water by mass of solids: plastic
+/// 0.244, liquid 0.310 (remoulded Margate chalk, Bialowas, Diambra & Nash
+/// 2016; crushed chalk 0.224 / 0.298, Bialowas, Nash & Diambra 2018) [M].
+const PLASTIC_LIMIT: f32 = 0.244;
+const LIQUID_LIMIT: f32 = 0.310;
+/// A remoulded soil's undrained strength at its liquid limit, kPa (1.7,
+/// 0.7–2.65 measured; Wroth & Wood 1978), and its rise to the plastic
+/// limit (×35: Vardanega & Haigh 2014, 641 fall-cone tests on 101 soils,
+/// in place of Wroth & Wood's ×100, which overpredicts) [M]: s_u = 1.7 ·
+/// 35^(1 − LI) kPa.
+const SU_LIQUID_KPA: f32 = 1.7;
+const SU_RANGE: f32 = 35.0;
+/// Prandtl's bearing factor for an undrained (purely cohesive) solid, 2 + π:
+/// the indentation hardness of a plastic soil, H = 5.14 s_u [D].
+const N_C: f32 = 2.0 + std::f32::consts::PI;
+/// A drying paste packs from the stick's porosity to near random close
+/// packing (0.36): gum arabic disperses it sterically, and the drying
+/// menisci pull at 2γ/r ≈ 100 kPa, above a dispersed bed's yield; 0.40
+/// [D, audit W15]. Its volume shrinks by (1 − ε)/(1 − 0.40), its coverage
+/// stays (`dried_share`).
+const PASTE_DRIED_POROSITY: f32 = 0.40;
+/// The dried gum's bridges against the finger (`binds`): a dry stick's
+/// friction angle, remoulded chalk's 29–34° (Clayton 1978; Razoaki 2000;
+/// Bundy 2013) [M], 31.5°; the finger's friction on paper, 0.5 (a dry
+/// finger pad under 0–10 N; 0.2–1.75 across surfaces) [M]; pressed at the
+/// knee of its pad's growth (`pastel::FINGER_KNEE_N`, 2 N, a firm press),
+/// and a soft stick's hardness (soft 0.75, `Stick::mechanics`).
+const PHI_DEG: f32 = 31.5;
+const FINGER_MU: f32 = 0.5;
+const SOFT_STICK: f32 = 0.75;
+/// Soil reflectance falls exponentially with water and fits one curve in
+/// the degree of saturation (Lobell & Asner 2002); in the visible it is
+/// near its wet value by about 20 % water by volume, S ≈ 0.4 at ε 0.45–0.5
+/// [M]. So the darkening's share at saturation S is (1 − e^(−S/S₀))/(1 −
+/// e^(−1/S₀)), S₀ = 0.2 [E: set by that saturation point, as their fitted
+/// constant wasn't retrieved; bounds 0.1–0.3] (`wet_share`).
+const WET_S0: f32 = 0.2;
 /// The walk's step along a path, pixels (`Canvas::walk`).
 const STEP_PX: f32 = 0.7;
 
@@ -118,26 +170,26 @@ pub fn pore_index(f: f32, n: f32) -> f32 {
     ((b + (b * b + 8.0 * e1 * e2).sqrt()) / 4.0).sqrt()
 }
 
-/// The share of a stick's pores its dry gum fills: gum mass over the
-/// solids' (`GUM_SHARE`), by the densities, over the pores (about 0.02).
-pub fn gum_pore_share() -> f32 {
-    GUM_SHARE / (1.0 - GUM_SHARE) * (1.0 - POROSITY) * SOLID_DENSITY / (GUM_DENSITY * POROSITY)
+/// The gum in a stick's volume, g/cm³: its share of the solids' mass.
+fn gum_g_cm3() -> f32 {
+    GUM_SHARE / (1.0 - GUM_SHARE) * (1.0 - POROSITY) * SOLID_DENSITY
 }
 
-/// The scattering of the pastel in `c` as a share of its dry scattering:
-/// while wet, its pores the Bruggeman mixture of air and water by the share
-/// filled (water fills the pastel's fine pores before the paper's); once
-/// dry again, of air and the gum it still holds. Mie at the cell's mean
-/// particle index (`dry::scatter_in`).
-pub(crate) fn scatter_share(c: &Cell) -> f32 {
-    let n = from_index(c.index);
-    let med = if c.water > 0.0 {
-        let pores = POROSITY * (c.loose + c.bound);
-        pore_index(if pores > 0.0 { c.water / pores } else { 1.0 }, WATER_INDEX)
-    } else {
-        pore_index(from_gum(c.gum) * gum_pore_share(), GUM_INDEX)
-    };
-    crate::dry::scatter_in(n, med)
+/// The share of a stick's pores its dry gum fills (about 0.024).
+pub fn gum_pore_share() -> f32 {
+    gum_g_cm3() / (GUM_DENSITY * POROSITY)
+}
+
+/// The gum dissolved in saturated pores, g/mL (about 0.033).
+pub fn gum_in_water() -> f32 {
+    gum_g_cm3() / POROSITY
+}
+
+/// The pores' gum solution's viscosity, Pa·s: Huggins, η_w (1 + [η]c +
+/// k_H ([η]c)²) (about 1.74 mPa·s).
+pub fn pore_viscosity() -> f32 {
+    let x = GUM_INTRINSIC_ML_G * gum_in_water();
+    ETA_WATER * (1.0 + x + HUGGINS * x * x)
 }
 
 /// `r` (linear RGB, a reflectance at infinite thickness) with its
@@ -151,6 +203,31 @@ pub fn km_scatter(r: Rgb, s: f32) -> Rgb {
         let ks = (1.0 - r) * (1.0 - r) / (2.0 * r) / s.max(1e-3);
         1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
     })
+}
+
+/// The share of its full darkening pastel whose pores are filled to `s`
+/// shows (`WET_S0`).
+pub fn wet_share(s: f32) -> f32 {
+    let s = s.clamp(0.0, 1.0);
+    (1.0 - (-s / WET_S0).exp()) / (1.0 - (-1.0 / WET_S0).exp())
+}
+
+/// How pastel of dry reflectance `r` in cell `c` looks: while wet,
+/// darkened by the water in its pores (Mie at the cell's particle index
+/// against water, by the share of the pores filled, `wet_share`); once dry
+/// again, by the gum it still holds in its pores (Bruggeman of air and
+/// dry gum, then Mie).
+pub(crate) fn look(c: &Cell, r: Rgb) -> Rgb {
+    let n = from_index(c.index);
+    if c.water > 0.0 {
+        let pores = POROSITY * (c.loose + c.bound);
+        let s = if pores > 0.0 { (c.water / pores).min(1.0) } else { 1.0 };
+        let wet = km_scatter(r, crate::dry::scatter_in(n, WATER_INDEX));
+        let f = wet_share(s);
+        [0, 1, 2].map(|k| r[k] + (wet[k] - r[k]) * f)
+    } else {
+        km_scatter(r, crate::dry::scatter_in(n, pore_index(from_gum(c.gum) * gum_pore_share(), GUM_INDEX)))
+    }
 }
 
 /// Water's saturated vapour pressure, Pa, at `t` °C (Buck 1981).
@@ -167,7 +244,7 @@ fn d_vapour(t: f64) -> f64 {
 /// `H_CONV` by the Chilton–Colburn analogy, h/(ρ c_p) · Le^(−2/3) (air at
 /// 20 °C: ρ c_p 1211 J/m³K, thermal diffusivity 2.15e-5 m²/s).
 fn h_mass() -> f64 {
-    let le = 2.15e-5 / d_vapour(STUDIO_C);
+    let le = 2.15e-5 / d_vapour(STUDIO.air_c);
     H_CONV / (1.204 * 1006.0) * le.powf(-2.0 / 3.0)
 }
 
@@ -178,10 +255,10 @@ fn h_mass() -> f64 {
 /// the room's radiation bring it (about 16 °C; 0.71 µm/min) [D].
 pub fn evaporation_um_min() -> f32 {
     const M_R: f64 = 0.018_015 / 8.314_462;
-    let ta = STUDIO_C;
+    let ta = STUDIO.air_c;
     let tk = |t: f64| t + 273.15;
     let rho = |t: f64| p_sat(t) * M_R / tk(t);
-    let air = STUDIO_RH * rho(ta);
+    let air = STUDIO.rh * rho(ta);
     let hm = h_mass();
     let hr = 4.0 * EMISSIVITY * 5.670_374e-8 * tk(ta).powi(3);
     let (mut lo, mut hi) = (ta - 25.0, ta);
@@ -200,7 +277,7 @@ pub fn evaporation_um_min() -> f32 {
 /// tortuosity) besides the boundary layer: flux = E/(1 + a·u), u the water
 /// missing from the pores (µm).
 fn falling() -> f32 {
-    let d_eff = d_vapour(STUDIO_C) * (POROSITY as f64).powf(1.5);
+    let d_eff = d_vapour(STUDIO.air_c) * (POROSITY as f64).powf(1.5);
     (h_mass() * 1e-6 / (POROSITY as f64 * d_eff)) as f32
 }
 
@@ -236,53 +313,185 @@ fn time_to_dry(w: f32, pores: f32, e: f32, a: f32) -> f32 {
     over / e + t(u0 + p) - t(u0)
 }
 
-/// The cosine of the water contact angle of a sheet whose unsized share is
-/// `absorbent` (Cassie: the sized and bare fiber surface by their shares).
-pub fn cos_contact(absorbent: f32) -> f32 {
-    let a = absorbent.clamp(0.0, 1.0);
-    a * CELLULOSE_DEG.to_radians().cos() + (1.0 - a) * SIZED_DEG.to_radians().cos()
+/// How fast a sheet takes water in, µm (g/m²) over √s: a sized sheet its
+/// Cobb60 over √60 s (uptake C₆₀ √(t/60 s): the size's slow wetting, which
+/// Cobb measures); an unsized one its porosity times Whatman's measured
+/// Washburn coefficient (`UNSIZED_K`).
+pub fn uptake_rate(p: &crate::paper::Paper) -> f32 {
+    match p.cobb60 {
+        Some(c) => c.max(0.0) / 60f32.sqrt(),
+        None => p.porosity.clamp(0.05, 0.95) * UNSIZED_K * 1e6,
+    }
 }
 
-/// The water a sheet draws in over `dt` minutes, µm: Lucas–Washburn, its
-/// pores' radius their mean height t·ε/(1 − ε) (paper.rs), the depth
-/// √(r γ cosθ t / 2η), times its porosity. None at 90° or more.
-pub fn sink_um(p: &crate::paper::Paper, dt: f32) -> f32 {
-    let c = cos_contact(p.absorbent);
-    if c <= 0.0 || dt <= 0.0 {
+/// The water a sheet's pores can take, µm: the share of its pore volume a
+/// liquid reaches (`absorbent`, as for oil: `Canvas::with_paper`) times its
+/// porosity and caliper (120 µm for the default sheet).
+pub fn sheet_capacity_um(p: &crate::paper::Paper) -> f32 {
+    p.absorbent.clamp(0.0, 1.0) * p.porosity * p.caliper_um()
+}
+
+/// The water a sheet holding `held` µm takes in over `dt` minutes from
+/// what stands on it: √t uptake (`uptake_rate`) from where it is, to its
+/// capacity (`sheet_capacity_um`).
+pub fn sink_um(p: &crate::paper::Paper, held: f32, dt: f32) -> f32 {
+    sink_by(held, (uptake_rate(p), sheet_capacity_um(p)), dt)
+}
+
+fn sink_by(held: f32, (rate, cap): (f32, f32), dt: f32) -> f32 {
+    if dt <= 0.0 || held >= cap {
         return 0.0;
     }
-    let eps = p.porosity.clamp(0.05, 0.95);
-    let r = p.thick_um * 1e-6 * eps / (1.0 - eps);
-    let d = r * GAMMA * c / (2.0 * ETA);
-    eps * (d * dt * 60.0).sqrt() * 1e6
+    ((held * held + rate * rate * 60.0 * dt).sqrt().min(cap) - held).max(0.0)
 }
 
-/// The soaked tip's hardness, MPa, of a stick `dry` MPa hard: its gum
-/// bridges dissolved, it holds together by the capillary pressure of its
-/// saturated pores alone, σ = 6 (1 − ε)/ε · γ/d (Schubert's capillary
-/// state), and yields at about three times that (Tabor) [D]; never harder
-/// than dry.
-pub fn wet_hardness(dry: f32) -> f32 {
-    let sigma = 6.0 * (1.0 - POROSITY) / POROSITY * GAMMA / (PARTICLE_D_UM * 1e-6);
-    (3.0 * sigma * 1e-6).min(dry)
+/// `dt` minutes for a cell's water (`w` µm in and over its pastel, whose
+/// pores hold `pores`) and the water the sheet took in under it (`u`), the
+/// pastel holding `g` of its gum: the sheet's water rises into pores that
+/// aren't full (they draw harder); what stands over the pores sinks into
+/// the sheet (`sheet`: its rate and capacity) as it evaporates, taking
+/// its share of the dissolved gum; then the sheet's water evaporates
+/// through the full pores, then the pores at the falling rate. Returns the
+/// water, the sheet's water and the gum held.
+#[allow(clippy::too_many_arguments)]
+fn settle(w: f32, u: f32, pores: f32, g: f32, dt: f32, e: f32, a: f32, sheet: Option<(f32, f32)>) -> (f32, f32, f32) {
+    let (mut w, mut u, mut g, mut t) = (w.max(0.0), u.max(0.0), g, dt.max(0.0));
+    let up = (pores - w).max(0.0).min(u);
+    w += up;
+    u -= up;
+    let s0 = (w - pores).max(0.0);
+    if s0 > 0.0 && t > 0.0 {
+        let sh = sheet.unwrap_or((0.0, 0.0));
+        let left = |t: f32| s0 - e * t - sink_by(u, sh, t);
+        let t1 = if left(t) > 0.0 {
+            t
+        } else {
+            let (mut lo, mut hi) = (0.0f32, t);
+            for _ in 0..48 {
+                let m = 0.5 * (lo + hi);
+                if left(m) > 0.0 { lo = m } else { hi = m }
+            }
+            hi
+        };
+        let sunk = sink_by(u, sh, t1).min(s0);
+        let evap = (e * t1).min(s0 - sunk);
+        if sunk > 0.0 {
+            // the gum leaves with what sinks, at the solution's strength as
+            // evaporation concentrates it: (V₁/V₀)^(sunk/(sunk + evaporated))
+            let v1 = (w - sunk - evap).max(1e-9);
+            g *= (v1 / w).powf(sunk / (sunk + evap));
+        }
+        w = if left(t1) > 0.0 { w - sunk - evap } else { pores.min(w) };
+        u += sunk;
+        t -= t1;
+    }
+    if t > 0.0 && u > 0.0 && e > 0.0 {
+        let take = u.min(e * t);
+        u -= take;
+        t -= take / e;
+    }
+    if t > 0.0 && u <= 0.0 {
+        w = water_after(w, pores, t, e, a);
+    }
+    (w, if u < 1e-6 { 0.0 } else { u }, g)
+}
+
+/// Minutes until the water of `settle` is gone: what stands and what the
+/// sheet holds evaporate at the full rate whichever holds it (sinking
+/// only moves it between them), the pores' last at the falling rate.
+fn settle_minutes(w: f32, u: f32, pores: f32, e: f32, a: f32) -> f32 {
+    let up = (pores - w).max(0.0).min(u);
+    time_to_dry(w + up, pores, e, a) + (u - up) / e
+}
+
+/// The threshold share of its gum dried pastel must keep to be bound: the
+/// gum left in solution dries into bridges at every contact, each as the
+/// share `g` of a stick's, holding as their volume^(2/3) (a bridge's neck
+/// area): g^(2/3) σ_t against the finger's shear τ. σ_t is a dry soft
+/// stick's tensile strength, by Prandtl's bearing capacity of a
+/// cohesive-frictional solid from its hardness (H = c N_c, c = σ_t tan φ,
+/// so H = σ_t (N_q − 1); about 0.19 MPa); τ the finger's friction under a
+/// firm press (about 5.6 kPa). g* = (τ/σ_t)^(3/2), about 0.005 [D; σ_t's
+/// bench bounds 0.1–1 MPa put it at 0.001–0.1].
+pub fn gum_threshold() -> f32 {
+    let phi = PHI_DEG.to_radians();
+    let nq = (std::f32::consts::PI * phi.tan()).exp() * (std::f32::consts::FRAC_PI_4 + 0.5 * phi).tan().powi(2);
+    let sigma_t = Stick::mechanics(SOFT_STICK).0 / (nq - 1.0);
+    let f = crate::pastel::FINGER_KNEE_N;
+    let tau = FINGER_MU * f / crate::pastel::pad_area(f, None);
+    (tau / sigma_t).powf(1.5)
+}
+
+/// The share of a cell's pastel its dried gum binds, holding `g` of it:
+/// all where the bridges hold against the finger, none where they don't
+/// (`gum_threshold`).
+pub fn binds(g: f32) -> f32 {
+    if g >= gum_threshold() { 1.0 } else { 0.0 }
+}
+
+/// A tip's water content, by mass of its solids, at saturation `s`.
+fn water_content(s: f32) -> f32 {
+    s.clamp(0.0, 1.0) * POROSITY / ((1.0 - POROSITY) * SOLID_DENSITY)
+}
+
+/// A wet tip's liquidity index at saturation `s` (0 at chalk's plastic
+/// limit, about S 0.53; 1 at its liquid limit, about S 0.67).
+pub fn liquidity(s: f32) -> f32 {
+    (water_content(s) - PLASTIC_LIMIT) / (LIQUID_LIMIT - PLASTIC_LIMIT)
+}
+
+/// The tip's hardness, MPa, of a stick `dry` MPa hard, its pores filled to
+/// `s`. Wetted, its gum bridges dissolve and it is a chalk soil: below its
+/// plastic limit brittle, its dry hardness; above it plastic, the
+/// indentation hardness of its remoulded undrained strength at its
+/// liquidity index, N_c s_u (0.31 MPa at the plastic limit, 9 kPa at the
+/// liquid limit) [D]; never harder than dry.
+pub fn wet_hardness(dry: f32, s: f32) -> f32 {
+    let li = liquidity(s);
+    if li < 0.0 {
+        return dry;
+    }
+    (N_C * SU_LIQUID_KPA * SU_RANGE.powf(1.0 - li) * 1e-3).min(dry)
+}
+
+/// The share of what a wet tip lays that it lays as a slurry, pressed into
+/// the tooth as a paste (`Canvas::stick_stroke`), rather than worn off by
+/// Archard: none below the plastic limit, all past the liquid limit,
+/// between them by the liquidity index (audit W17). Its crumbs go the
+/// other way (W8): brittle fracture makes them, the plastic range smears.
+pub fn paste_share(s: f32) -> f32 {
+    liquidity(s).clamp(0.0, 1.0)
 }
 
 /// A paste's particles, dispersed by the water, lie this share of a dry
 /// deposit's thickness (`PARTICLE_UM`): primary particles of
 /// `PARTICLE_D_UM` cover 1.5/d of area per volume of solids, and a stick's
 /// volume holds 1 − ε of solids, so a paste covers as particles
-/// d/(1.5 (1 − ε)) thick, against the crumbs' 6 µm [D].
+/// d/(1.5 (1 − ε)) thick, against the crumbs' 6 µm (0.42) [D].
 pub fn paste_thin() -> f32 {
     PARTICLE_D_UM / (1.5 * (1.0 - POROSITY)) / PARTICLE_UM
 }
 
+/// The volume a deposit takes in the tooth once dry, as a share of the
+/// stick volume laid, `paste` of it a paste: a paste packs closer as it
+/// dries (`PASTE_DRIED_POROSITY`; 0.75 of its volume), crumbs don't.
+pub fn dried_share(paste: f32) -> f32 {
+    1.0 - paste.clamp(0.0, 1.0) * (1.0 - (1.0 - POROSITY) / (1.0 - PASTE_DRIED_POROSITY))
+}
+
 /// The water a dipped tip spreads up the stick by: Lucas–Washburn in its
-/// pores, mm²/s (their radius twice the hydraulic radius ε d / 6(1 − ε);
-/// the gum solution taken as water: a 3 % gum arabic solution is nearly
-/// as fluid, a tragacanth gel far less, which is not modelled).
+/// pores, mm²/s (their radius twice the hydraulic radius ε d / 6(1 − ε),
+/// the gum solution's γ and η: about 10 mm²/s).
 fn tip_spread_mm2_s() -> f32 {
     let r = 2.0 * POROSITY * PARTICLE_D_UM * 1e-6 / (6.0 * (1.0 - POROSITY));
-    r * GAMMA / (2.0 * ETA) * 1e6
+    r * GAMMA / (2.0 * pore_viscosity()) * 1e6
+}
+
+/// How far up its end a dipped tip is soaked, mm: the depth it is dipped
+/// to and as far as the water wicks up while it is in the jar, 1 mm +
+/// √(D t) for half a second (3.2 mm) [D; the depth and time are gestures].
+pub fn dip_mm() -> f32 {
+    DIP_DEPTH_MM + (tip_spread_mm2_s() * DIP_S).sqrt()
 }
 
 impl Stick {
@@ -293,9 +502,9 @@ impl Stick {
         }
     }
 
-    /// The water a soaked tip holds, mm³: its pores over `DIP_MM` of it.
+    /// The water a soaked tip holds, mm³: its pores over `dip_mm` of it.
     pub fn tip_capacity_mm3(&self) -> f32 {
-        POROSITY * self.section_mm().0 * DIP_MM
+        POROSITY * self.section_mm().0 * dip_mm()
     }
 
     /// How wet the tip is, 0 (dry) to 1 (soaked).
@@ -312,10 +521,11 @@ impl Stick {
             return 0.0;
         }
         let t = minutes.max(0.0) as f32;
-        let l = (DIP_MM * DIP_MM + tip_spread_mm2_s() * t * 60.0).sqrt();
+        let l0 = dip_mm();
+        let l = (l0 * l0 + tip_spread_mm2_s() * t * 60.0).sqrt();
         let (area, rim) = self.section_mm();
         let gone = evaporation_um_min() * 1e-3 * t * (area + rim * l);
-        ((water - gone).max(0.0) * DIP_MM / l).max(0.0)
+        ((water - gone).max(0.0) * l0 / l).max(0.0)
     }
 }
 
@@ -358,60 +568,71 @@ pub(crate) fn add_water(c: &mut Cell, um: f32) {
 }
 
 impl Canvas {
-    /// `dt` minutes pass for the water in the pastel (`wait`): what stands
-    /// over the pastel's pores sinks into an absorbent sheet (`sink_um`),
-    /// taking its share of the dissolved gum; the rest evaporates
-    /// (`water_after`); where it is gone the gum sets (`Cell::gum_set`).
-    /// Pastel painted over since is sealed: its water is forgotten.
-    /// Nothing without the switch or water.
+    /// `dt` minutes pass for the water in the pastel (`wait`, `settle`):
+    /// what stands over the pastel's pores sinks into the sheet as its
+    /// sizing lets it, to what its pores take (`sink_um`), taking its share
+    /// of the dissolved gum, as it evaporates; then the sheet's water
+    /// evaporates up through the pastel's pores, then the pores. Where it
+    /// is all gone the gum sets, binding the pastel where enough of it is
+    /// left (`binds`, `Cell::gum_set`). Pastel painted over since is
+    /// sealed: its water is forgotten. Nothing without the switch or water.
     pub(crate) fn dry_pastel_water(&mut self, dt: f32) {
         if !self.wet_pastel || !(dt > 0.0) || !self.drawing.as_ref().is_some_and(|d| d.damp) {
             return;
         }
-        let sink = self.paper.as_ref().map_or(0.0, |p| sink_um(p, dt));
+        let sheet = self.paper.as_ref().map(|p| (uptake_rate(p), sheet_capacity_um(p)));
         let (e, a) = (evaporation_um_min(), falling());
         let d = self.drawing.as_deref_mut().expect("damp");
+        if sheet.is_some() && d.sheet.len() != d.cells.len() {
+            d.sheet = vec![0.0; d.cells.len()];
+        }
         let mut damp = false;
         for (i, c) in d.cells.iter_mut().enumerate() {
-            if c.water <= 0.0 {
+            let u = d.sheet.get(i).copied().unwrap_or(0.0);
+            if c.water <= 0.0 && u <= 0.0 {
                 continue;
             }
             if self.film[i] > c.film + 1e-4 {
                 c.water = 0.0;
+                if let Some(s) = d.sheet.get_mut(i) {
+                    *s = 0.0;
+                }
                 continue;
             }
             let before = (c.a, c.reflectance());
             let pores = POROSITY * (c.loose + c.bound);
-            let sunk = (c.water - pores).max(0.0).min(sink);
-            if sunk > 0.0 {
-                let held = from_gum(c.gum) * (1.0 - sunk / c.water);
-                c.gum = to_gum(held);
-                c.water -= sunk;
+            if c.gum == 0 && pores > 0.0 {
+                // (dry pastel over a damp sheet: it draws the water up)
+                c.gum = to_gum(1.0);
             }
-            let w = water_after(c.water, pores, dt, e, a);
-            if w > 0.0 {
+            let wet_before = c.water > 0.0 || (pores > 0.0 && u > 0.0);
+            let (w, u, g) = settle(c.water, u, pores, from_gum(c.gum), dt, e, a, sheet);
+            c.gum = to_gum(g);
+            if let Some(s) = d.sheet.get_mut(i) {
+                *s = u;
+            }
+            if w > 0.0 || u > 0.0 {
                 c.water = w;
                 damp = true;
-            } else {
-                c.gum_set(from_gum(c.gum));
+            } else if wet_before {
+                c.gum_set(binds(g));
             }
             self.px[i] = c.repaint(self.px[i], before);
         }
         d.damp = damp;
     }
 
-    /// Minutes until the last water in the pastel is gone (`dry`).
+    /// Minutes until the last water in the pastel and the sheet under it
+    /// is gone (`dry`, `settle_minutes`).
     pub(crate) fn pastel_water_minutes(&self) -> f32 {
         if !self.wet_pastel {
             return 0.0;
         }
         let Some(d) = self.drawing.as_ref().filter(|d| d.damp) else { return 0.0 };
         let (e, a) = (evaporation_um_min(), falling());
-        // (what sinks does so within a second: a minute's capacity)
-        let sink = self.paper.as_ref().map_or(0.0, |p| sink_um(p, 1.0));
-        let t = d.cells.iter().map(|c| {
+        let t = d.cells.iter().enumerate().map(|(i, c)| {
             let pores = POROSITY * (c.loose + c.bound);
-            time_to_dry(c.water - (c.water - pores).max(0.0).min(sink), pores, e, a)
+            settle_minutes(c.water, d.sheet.get(i).copied().unwrap_or(0.0), pores, e, a)
         }).fold(0.0, f32::max);
         // (rounding: a little past the last)
         t * 1.0001 + 1e-4
@@ -434,7 +655,7 @@ impl Canvas {
     /// pastel it wets turns to a paste the bristles pick up (`load.pickup`
     /// of it a pass, as far as the water fills its pores) and, with the
     /// paste they already held, lay down along the path within about
-    /// `load.run_mm`, as a paste (`paste_thin`). Bound pastel stays. Not
+    /// `load.run_mm`, as a paste (`paste_thin`, `dried_share`). Bound pastel stays. Not
     /// under a sheet or on wet paint. Returns (the pastel it laid, mm³; the
     /// hand time, s, as a brush stroke's); what it still holds stays in
     /// `load`. Nothing without the switch.
@@ -447,10 +668,9 @@ impl Canvas {
         // (µm over a pixel to mm³)
         let um_mm3 = s_mm * s_mm * 1e-3;
         let half = width * s * 0.5;
-        // (pressed harder, the belly gives more: 0.5 to 1.5 of a middling
-        // press's [E], as no measurement of a brush's water against its
-        // pressure was found)
-        let press = 0.5 + pressure.clamp(0.0, 1.0);
+        // (pressed harder, the belly gives more: the bristle model's own
+        // law for the film a touch squeezes out, 0.4 + 0.6 p, `bristle::touch`)
+        let press = 0.4 + 0.6 * pressure.clamp(0.0, 1.0);
         let steps = self.walk(pts);
         let lay = (STEP_PX * s_mm / load.run_mm.max(1e-3)).min(1.0);
         let pick = (load.pickup * STEP_PX).min(1.0);
@@ -512,12 +732,14 @@ impl Canvas {
             if give > 0.0 {
                 let per = give / n;
                 let q = 1.0 - (-per / thin).exp();
+                // (counted at its dried packing: `dried_share`)
+                let kept = per * dried_share(1.0);
                 for &i in &band {
                     let cl = &mut d.cells[i];
                     let before = (cl.a, cl.reflectance());
-                    cl.add_pastel(q, col, per);
-                    cl.note_pastel(per, np);
-                    cl.loose += per;
+                    cl.add_pastel(q, col, kept);
+                    cl.note_pastel(kept, np);
+                    cl.loose += kept;
                     pxs[i] = cl.repaint(pxs[i], before);
                 }
                 paste -= give;
@@ -546,6 +768,16 @@ mod tests {
     /// and (or not) the switch.
     fn paper(wet: bool) -> Canvas {
         crate::tests::drawing_paper(160).with_drawing_optics(true).with_wet_pastel(wet)
+    }
+
+    /// The same sheet with another sheet's sizing and share of its pores
+    /// water reaches.
+    fn sheet(c: Canvas, cobb60: Option<f32>, absorbent: f32) -> Canvas {
+        let mut p = *c.paper.as_ref().unwrap();
+        (p.cobb60, p.absorbent) = (cobb60, absorbent);
+        let mut c = c;
+        c.paper = Some(p);
+        c
     }
 
     fn stroke(c: &mut Canvas, st: &mut Stick, x0: f32, y0: f32, x1: f32, y1: f32, force: f32) -> f32 {
@@ -589,12 +821,8 @@ mod tests {
         c.drawing.as_ref().map_or(0.0, |d| d.cells.iter().map(|c| c.water).sum())
     }
 
-    fn sized(c: Canvas) -> Canvas {
-        let mut p = *c.paper.as_ref().unwrap();
-        p.absorbent = 0.1;
-        let mut c = c;
-        c.paper = Some(p);
-        c
+    fn bound(c: &Canvas) -> f32 {
+        c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum()
     }
 
     /// A stick dipped in water lays more than the dry stick at the same
@@ -619,15 +847,42 @@ mod tests {
         // darker for its volume: the same deposit dry against wet
         let db = darkening(&wet, 200.0, 800.0, 450.0, 550.0);
         let mut dried = wet.clone();
-        dried.wait(1.0);
-        assert!(water(&dried) > 0.0, "still damp after a minute");
+        dried.wait(0.05);
+        assert!(water(&dried) > 0.0, "still damp after three seconds");
         dried.wait(120.0);
         assert_eq!(water(&dried), 0.0, "dry after two hours");
         assert!(!dried.drawing.as_ref().unwrap().damp);
         let dd = darkening(&dried, 200.0, 800.0, 450.0, 550.0);
         assert!(dd < 0.9 * db, "lighter dry than wet: {dd} vs {db}");
-        // the tip's water spreads up the stick within seconds
-        assert!(b.tip_water(1.0, 0.0) == 1.0 && b.tip_water(1.0, 1.0 / 60.0) < 0.2);
+        // the tip's water spreads up the stick: l₀/√(l₀² + D t), l₀ 3.23 mm
+        // and D 10.0 mm²/s from γ 50 mN/m, η 1.74 mPa·s, r 0.69 µm
+        assert_eq!(b.tip_water(1.0, 0.0), 1.0);
+        let (one, ten) = (b.tip_water(1.0, 1.0 / 60.0), b.tip_water(1.0, 10.0 / 60.0));
+        assert!((0.68..0.75).contains(&one) && (0.28..0.34).contains(&ten), "{one} {ten}");
+    }
+
+    /// The tip by its water: below chalk's plastic limit (S 0.53) it draws
+    /// as the dry stick, lays its water with it and sheds as many crumbs;
+    /// soaked past its liquid limit (S 0.67) it is a slurry pressed into
+    /// the tooth, with no crumbs.
+    #[test]
+    fn a_wet_tip_is_dry_below_its_plastic_limit_and_a_slurry_past_its_liquid_limit() {
+        let mut st = Stick::round([0.05, 0.05, 0.3], 0.8, 12.0);
+        let (mut dry, mut damp) = (paper(true), paper(true));
+        let mut d = st.clone();
+        st.water = 0.5 * st.tip_capacity_mm3();
+        assert_eq!(stroke(&mut dry, &mut d, 100.0, 500.0, 900.0, 500.0, 2.0), stroke(&mut damp, &mut st, 100.0, 500.0, 900.0, 500.0, 2.0), "below the plastic limit");
+        assert!(water(&damp) > 0.0);
+        // soaked: a slurry with no strength, the face conforms to the tooth
+        // (it carries the force over far more of it) and fills its pores
+        let mut slurry = paper(true);
+        let mut s = Stick::round([0.05, 0.05, 0.3], 0.8, 12.0);
+        s.water = s.tip_capacity_mm3();
+        assert_eq!(paste_share(s.wetness()), 1.0);
+        let vs = stroke(&mut slurry, &mut s, 100.0, 500.0, 900.0, 500.0, 2.0);
+        let cells = |c: &Canvas| c.drawing.as_ref().unwrap().cells.iter().filter(|c| c.loose > 0.0).count();
+        assert!(cells(&slurry) > cells(&dry), "a slurry meets more of the tooth: {} vs {}", cells(&slurry), cells(&dry));
+        assert!(vs > 0.0 && s.water < s.tip_capacity_mm3());
     }
 
     /// The same pastel wetted (without moving it) reads darker while wet,
@@ -636,7 +891,7 @@ mod tests {
     #[test]
     fn wetted_pastel_darkens_by_its_index_and_dries_back_nearly_to_dry() {
         let run = |n: f32| {
-            let mut c = sized(paper(true));
+            let mut c = paper(true);
             let mut st = Stick::round([0.05, 0.05, 0.3], 0.8, 12.0);
             st.index = n;
             for k in 0..6 {
@@ -656,13 +911,31 @@ mod tests {
         assert!((wet3 - dry3) < 0.5 * (wet - dry), "vermilion's index darkens less: {} vs {}", wet3 - dry3, wet - dry);
     }
 
-    /// Dried wet pastel on a sized sheet keeps its gum and is bound by it:
-    /// the finger moves less of it than of dry pastel, and none of fixed;
-    /// a stick takes to it more, as to a fixed crust. On an absorbent sheet
-    /// the water that sank took gum with it, so less is bound.
+    /// A stick's particle index is its pigments' and its whiting's by
+    /// scattering: a pure pigment's own, a white pile whiting's, and a
+    /// tint's between, so a pale tint darkens in water by its chalk.
     #[test]
-    fn dried_wet_pastel_is_bound_by_the_gum_it_kept() {
-        let mut dry = sized(paper(true));
+    fn a_tint_is_its_pigment_let_down_with_whiting() {
+        let pal = crate::Palette::new("wet pastel tints", crate::palette::catalog());
+        let at = |name: &str| pal.tubes.iter().position(|t| t.name == name).unwrap();
+        let (v, w) = (at("vermilion"), at("lead white"));
+        assert!((pal.dry_index(&[(v, 1.0)]) - 3.0).abs() < 1e-4);
+        assert!((pal.dry_index(&[(w, 1.0)]) - crate::dry::WHITING_INDEX).abs() < 1e-4);
+        let tint = pal.dry_index(&[(v, 1.0), (w, 3.0)]);
+        assert!(tint > crate::dry::WHITING_INDEX && tint < 3.0, "{tint}");
+        let paler = pal.dry_index(&[(v, 1.0), (w, 10.0)]);
+        assert!(paler < tint, "{paler} {tint}");
+        assert!(crate::dry::scatter_in(tint, 1.333) < crate::dry::scatter_in(3.0, 1.333));
+    }
+
+    /// Dried wet pastel keeps enough of its gum to be bound where little of
+    /// its water sank: the finger moves less of it than of dry pastel, and
+    /// none of fixed; a stick takes to it more, as to a fixed crust. A
+    /// flood the sheet takes in carries its gum away below the threshold
+    /// the bridges need, and leaves the pastel loose.
+    #[test]
+    fn dried_wet_pastel_is_bound_where_it_kept_its_gum() {
+        let mut dry = paper(true);
         band(&mut dry);
         let mut gummed = dry.clone();
         wet_all(&mut gummed, 40.0);
@@ -677,20 +950,29 @@ mod tests {
         };
         let (md, mg, mf) = (moved(&mut dry.clone()), moved(&mut gummed.clone()), moved(&mut fixed));
         assert!(md > 3.0 * mg && mf == 0.0, "dry {md}, dried wet {mg}, fixed {mf}");
-        // on the absorbent sheet the sunk water carried most of the gum away
-        let mut soaked = paper(true);
-        band(&mut soaked);
-        wet_all(&mut soaked, 40.0);
-        soaked.dry();
-        let bound = |c: &Canvas| c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>();
-        assert!(bound(&soaked) < 0.7 * bound(&gummed), "{} vs {}", bound(&soaked), bound(&gummed));
-        // wetting again binds no more than the gum it holds
+        // a light veil flooded with 150 µm: an unsized sheet whose pores all
+        // take water drinks it at once, gum and all (g ≈ 0.55 µm of pores
+        // over 150 µm, under the threshold); one whose pores take 3 µm
+        // keeps most of it standing until it evaporates, and its gum
+        let veil = |c: Canvas| {
+            let mut c = c;
+            let mut st = Stick::round([0.05, 0.05, 0.3], 0.8, 12.0);
+            stroke(&mut c, &mut st, 100.0, 500.0, 900.0, 500.0, 0.3);
+            wet_all(&mut c, 150.0);
+            c.dry();
+            c
+        };
+        let (drunk, kept) = (veil(sheet(paper(true), None, 1.0)), veil(sheet(paper(true), Some(25.0), 0.02)));
+        let left_loose = |c: &Canvas| c.drawing.as_ref().unwrap().cells.iter().filter(|c| c.loose > 0.0 && c.bound == 0.0).count();
+        assert!(bound(&kept) > 0.0 && left_loose(&kept) == 0, "{}", left_loose(&kept));
+        assert!(left_loose(&drunk) > 0 && bound(&drunk) < bound(&kept), "{} {} vs {}", left_loose(&drunk), bound(&drunk), bound(&kept));
+        // wetting again binds no more than it holds
         let once = bound(&gummed);
         wet_all(&mut gummed, 40.0);
         gummed.dry();
         assert!((bound(&gummed) - once).abs() <= 1e-3 * once, "{} vs {once}", bound(&gummed));
         // over a full tooth, the dried wet passage takes more pastel than the dry one
-        let (mut dry, mut gummed) = (sized(paper(true)), sized(paper(true)));
+        let (mut dry, mut gummed) = (paper(true), paper(true));
         let mut st = Stick::round([0.05, 0.05, 0.3], 0.8, 12.0);
         for _ in 0..8 {
             stroke(&mut dry, &mut st.clone(), 100.0, 500.0, 900.0, 500.0, 3.0);
@@ -711,7 +993,8 @@ mod tests {
     /// A wet brush drawn out of a band of loose pastel onto bare paper
     /// carries it along its path as a paste: the paper past the band
     /// darkens along the path (and not beside it), and all of it is wet.
-    /// Water alone on bare paper shows nothing.
+    /// Water alone on bare paper shows nothing; a sized sheet takes it in
+    /// over seconds, an unsized one at once.
     #[test]
     fn a_wet_brush_moves_loose_pastel_along_its_path() {
         let mut c = paper(true);
@@ -732,23 +1015,34 @@ mod tests {
         assert!(row(&c, 400.0, 650.0, 500.0) > 0.05, "carried past the band: {}", row(&c, 400.0, 650.0, 500.0));
         assert!(row(&c, 400.0, 650.0, 300.0).abs() < 1e-4, "not beside the path");
         assert!(c.pastel_water_at(500.0, 500.0) > 0.0 && c.pastel_water_at(500.0, 300.0) == 0.0);
-        // water alone over bare paper
+        // water alone over bare paper: the sized sheet takes it in over
+        // seconds (Cobb 25 g/m²: 3.2 µm in the first second, 1.6 in a
+        // quarter of one)
         let mut bare = paper(true);
         let before = bare.pixels().to_vec();
         bare.wash_pastel(40.0, 0.5, &[(250.0, 500.0), (700.0, 500.0)], &mut brush(50.0));
         assert_eq!(bare.pixels(), &before[..]);
-        assert!(bare.pastel_water_at(500.0, 500.0) > 0.0);
-        // (an absorbent sheet takes it at once)
-        bare.wait(0.01);
-        assert_eq!(bare.pastel_water_at(500.0, 500.0), 0.0);
+        let laid = bare.pastel_water_at(500.0, 500.0);
+        assert!(laid > 2.0, "{laid}");
+        let mut bare_unsized = sheet(bare.clone(), None, 0.8);
+        bare.wait(1.0 / 240.0);
+        assert!(bare.pastel_water_at(500.0, 500.0) > 0.0, "still standing after a quarter second");
+        bare.wait(10.0);
+        assert_eq!(bare.pastel_water_at(500.0, 500.0), 0.0, "in the sheet");
         assert_eq!(bare.pixels(), &before[..]);
+        bare_unsized.wait(1.0 / 60.0);
+        assert_eq!(bare_unsized.pastel_water_at(500.0, 500.0), 0.0, "an unsized sheet drinks it at once");
+        // (and it dries out of the sheet on the clock)
+        assert!(bare.drawing.as_ref().unwrap().damp);
+        bare.dry();
+        assert!(!bare.drawing.as_ref().unwrap().damp);
     }
 
     /// Ground pastel mixed with water on the brush (a paste) lays its color
-    /// over bare paper, wet, and partly bound once dry.
+    /// over bare paper, wet, and bound once dry.
     #[test]
     fn a_paste_on_the_brush_lays_its_color_wet() {
-        let mut c = sized(paper(true));
+        let mut c = paper(true);
         let mut load = WashLoad { paste_mm3: 4.0, paste: [0.6, 0.05, 0.03], paste_n: 3.0, ..brush(f32::INFINITY) };
         let (laid, _) = c.wash_pastel(40.0, 0.5, &[(200.0, 500.0), (800.0, 500.0)], &mut load);
         // (what it lays it partly picks up again further on: laid counts it each time)
@@ -784,18 +1078,23 @@ mod tests {
         assert!(!crate::tests::drawing_paper(160).with_wet_pastel(true).wet_pastel(), "needs the drawing's optics");
     }
 
-    /// The water, index and gum in the pastel are saved and read back, and
-    /// dry the same after; a file whose section is damaged is refused.
+    /// The water, index and gum in the pastel, the water the sheet took in
+    /// and the sheet's sizing are saved and read back, and dry the same
+    /// after; a file whose section is damaged is refused.
     #[test]
     fn a_checkpoint_keeps_the_water() {
-        let mut c = sized(paper(true));
+        let mut c = sheet(paper(true), Some(40.0), 0.8);
         band(&mut c);
         wet_all(&mut c, 20.0);
+        c.wait(0.1);
+        assert!(c.drawing.as_ref().unwrap().sheet.iter().any(|&u| u > 0.0), "the sheet took some");
         let mut bytes = Vec::new();
         c.write_state(&mut bytes, "").unwrap();
         let (mut r, _) = Canvas::read_state(&mut std::io::Cursor::new(&bytes)).unwrap();
         assert!(r.wet_pastel() && r.drawing.as_ref().unwrap().damp);
+        assert_eq!(r.paper.as_ref().unwrap().cobb60, Some(40.0));
         assert_eq!(water(&r), water(&c));
+        assert_eq!(r.drawing.as_ref().unwrap().sheet, c.drawing.as_ref().unwrap().sheet);
         assert_eq!(r.pixels(), c.pixels());
         c.wait(3.0);
         r.wait(3.0);
@@ -810,6 +1109,12 @@ mod tests {
         let mut bad = bytes.clone();
         bad[at] ^= 1;
         assert!(Canvas::read_state(&mut std::io::Cursor::new(&bad)).is_err());
+        // an unsized sheet reads back unsized
+        let mut u = sheet(paper(true), None, 0.8);
+        band(&mut u);
+        let mut b = Vec::new();
+        u.write_state(&mut b, "").unwrap();
+        assert_eq!(Canvas::read_state(&mut std::io::Cursor::new(&b)).unwrap().0.paper.unwrap().cobb60, None);
         // a canvas without the switch writes no section
         let mut plain = paper(false);
         band(&mut plain);
@@ -822,20 +1127,34 @@ mod tests {
     /// "WETP", as checkpoint.rs marks the section.
     const WET_MARK: u64 = 0x50544557;
 
-    /// The derived rates: evaporation in still studio air under a
-    /// millimeter a day to a few; a sized sheet takes no water, an
-    /// absorbent one millimeters within a second; a soaked tip far softer.
+    /// The derived rates and constants, against the arithmetic of the
+    /// research note (wet_pastel.md; estimates_audit_2.py).
     #[test]
     fn the_rates_follow_from_the_physics() {
         let e = evaporation_um_min();
         assert!((0.6..0.8).contains(&e), "{e} µm/min");
+        // the default sheet: Cobb 25 g/m², √t, to 0.8 × 0.5 × 300 µm
         let mut p = crate::paper::Paper::drawing(1);
-        assert!(sink_um(&p, 1.0 / 60.0) > 1000.0);
-        p.absorbent = 0.1;
-        assert_eq!(sink_um(&p, 10.0), 0.0);
-        assert!(wet_hardness(3.9) < 0.1 * 3.9 && wet_hardness(0.1) == 0.1);
-        assert!((0.018..0.022).contains(&gum_pore_share()));
-        assert!((0.8..0.9).contains(&paste_thin()));
+        let (s1, s60, cap) = (sink_um(&p, 0.0, 1.0 / 60.0), sink_um(&p, 0.0, 1.0), sink_um(&p, 0.0, 1e4));
+        assert!((3.1..3.4).contains(&s1) && (24.5..25.5).contains(&s60) && (119.0..121.0).contains(&cap), "{s1} {s60} {cap}");
+        assert_eq!(sink_um(&p, cap, 10.0), 0.0, "full");
+        // unsized: Whatman's 0.38 cm/√s fills it within a second
+        p.cobb60 = None;
+        assert!((sink_um(&p, 0.0, 1.0 / 60.0) - cap).abs() < 1.0);
+        // the wet tip: chalk's plastic limit at S 0.53, liquid limit at 0.67
+        assert_eq!(wet_hardness(3.9, 0.5), 3.9);
+        let half = (0.244 + 0.033) * (0.45 * 2.65) / 0.55;
+        let h = wet_hardness(3.9, half);
+        assert!((0.049..0.054).contains(&h), "5.14 × 1.7 kPa × √35 = 51.7 kPa: {h}");
+        assert!(wet_hardness(3.9, 1.0) < 0.001);
+        assert!(paste_share(0.5) == 0.0 && paste_share(1.0) == 1.0);
+        assert!((0.022..0.025).contains(&gum_pore_share()));
+        assert!((0.40..0.44).contains(&paste_thin()));
+        assert!((1.70e-3..1.78e-3).contains(&pore_viscosity()), "{}", pore_viscosity());
+        assert!((3.1..3.35).contains(&dip_mm()), "{}", dip_mm());
+        let g = gum_threshold();
+        assert!((0.004..0.006).contains(&g), "{g}");
+        assert!((dried_share(1.0) - 0.75).abs() < 1e-6 && dried_share(0.0) == 1.0);
     }
 
     #[test]
@@ -854,19 +1173,43 @@ mod tests {
         assert!(time_to_dry(10.0, 10.0, e, a) < 10.05);
     }
 
+    /// Standing water sinks as it evaporates: what sinks takes its share of
+    /// the gum, and the sheet's water then dries up through the full pores
+    /// before they do.
+    #[test]
+    fn water_sinks_with_its_gum_and_dries_out_of_the_sheet_first() {
+        let (e, a) = (0.71, falling());
+        // a fast sheet: 36 of 40 µm go in at once, 4/40 of the gum stays
+        let fast = Some((1900.0, 1000.0));
+        let (w, u, g) = settle(40.0, 0.0, 4.0, 1.0, 10.0, e, a, fast);
+        assert!((w - 4.0).abs() < 1e-4 && (g - 0.1).abs() < 1e-3 && (u - (36.0 - 7.1)).abs() < 0.05, "{w} {u} {g}");
+        // no sheet: it all evaporates, and keeps its gum
+        let (w, u, g) = settle(40.0, 0.0, 4.0, 1.0, 10.0, e, a, None);
+        assert!((w - 32.9).abs() < 1e-3 && u == 0.0 && g == 1.0, "{w} {u} {g}");
+        // a full sheet takes no more
+        let (_, u, g) = settle(40.0, 10.0, 4.0, 1.0, 1.0, e, a, Some((1900.0, 10.0)));
+        assert!(u == 10.0 && g == 1.0, "{u} {g}");
+        // the time it takes is what settle needs
+        for (w, u, sh) in [(40.0, 0.0, fast), (40.0, 5.0, Some((3.2, 120.0))), (2.0, 30.0, Some((3.2, 120.0)))] {
+            let t = settle_minutes(w, u, 4.0, e, a);
+            let wet = settle(w, u, 4.0, 1.0, t * 0.999, e, a, sh);
+            let dry = settle(w, u, 4.0, 1.0, t * 1.001, e, a, sh);
+            assert!(wet.0 + wet.1 > 0.0 && dry.0 + dry.1 == 0.0, "{w} {u}: {wet:?} {dry:?}");
+        }
+        // the sheet's water rises into pores that aren't full
+        let (w, u, _) = settle(1.0, 5.0, 4.0, 1.0, 1e-6, e, a, None);
+        assert!((w - 4.0).abs() < 1e-3 && (u - 2.0).abs() < 1e-3, "{w} {u}");
+    }
+
     #[test]
     fn water_darkens_by_the_share_of_the_pores_it_fills() {
         assert!((pore_index(1.0, 1.333) - 1.333).abs() < 1e-4 && (pore_index(0.0, 1.333) - 1.0).abs() < 1e-6);
-        let mid = pore_index(0.5, 1.333);
-        assert!(mid > 1.12 && mid < 1.2, "{mid}");
-        let r = [0.6, 0.4, 0.2];
-        let s = |f: f32| crate::dry::scatter_in(1.5, pore_index(f, 1.333));
-        let (half, full) = (km_scatter(r, s(0.5)), km_scatter(r, s(1.0)));
-        for k in 0..3 {
-            assert!(full[k] < half[k] && half[k] < r[k], "{k}");
-        }
-        // ultramarine in water keeps about a seventh of its scattering, vermilion most
-        assert!((crate::dry::scatter_in(1.5, 1.333) - 0.137).abs() < 0.01);
-        assert!(crate::dry::scatter_in(3.0, 1.333) > 0.8);
+        // (1 − e^−2.5)/(1 − e^−5): half full shows 0.924 of its darkening
+        assert!(wet_share(0.0) == 0.0 && (wet_share(1.0) - 1.0).abs() < 1e-6 && (wet_share(0.5) - 0.9241).abs() < 1e-3);
+        // Mie at 1.7 µm: ultramarine in water keeps 0.214 of its
+        // scattering, whiting 0.414, vermilion 0.817
+        assert!((crate::dry::scatter_in(1.5, 1.333) - 0.214).abs() < 0.002);
+        assert!((crate::dry::scatter_in(1.59, 1.333) - 0.414).abs() < 0.002);
+        assert!((crate::dry::scatter_in(3.0, 1.333) - 0.817).abs() < 0.002);
     }
 }

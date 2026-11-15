@@ -554,10 +554,19 @@ impl Held {
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
     }
 
-    /// What the brush holds between its hairs, mm³: a full load of paint
-    /// on every bristle (`full`, coats × square units), on a canvas of
-    /// `mm_per_unit`. Water fills the same space (`crate::wet_pastel`).
+    /// The water the brush holds between its hairs, mm³, on a canvas of
+    /// `mm_per_unit` (`crate::wet_pastel`). A round's belly is a cone of its
+    /// width and a hair length 4.7 times that (Rosemary & Co Series 33
+    /// sable rounds: 15.7/3.4, 20/3.9 and 24.2/5.2 mm for sizes 4, 6, 8
+    /// [M]), the liquid filling 0.6 of it [E: the hairs' packing in a wet
+    /// bundle; no gravimetric measurement of a sable's load was found]:
+    /// about 0.16 mL for a 6 mm round. Other shapes hold a full load of
+    /// paint on every bristle (`full`, coats × square units).
     pub fn capacity_mm3(&self, mm_per_unit: f32) -> f32 {
+        if self.tool.kind == Kind::Round {
+            let d = self.tool.width * mm_per_unit;
+            return 0.6 * std::f32::consts::PI / 12.0 * d * d * (4.7 * d);
+        }
         self.full() * self.bristles.len() as f32 * crate::surface::COAT_UM * 1e-3 * mm_per_unit * mm_per_unit
     }
 

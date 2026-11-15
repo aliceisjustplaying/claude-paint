@@ -759,6 +759,68 @@ feel(x, y)                     -- what a fingertip feels there
 - Pastel skips wet paint, as graphite does; let the paint set first. Paint
   laid over pastel seals it, as it seals a drawing.
 
+**Strokes over an area.** A stick's `hatch` covers a passage as a
+pastellist does, each mark one stroke of the stick (it wears and sheds as
+`stroke` does). By default its marks are Cassatt's open strokes, 8 mm apart
+and 50 mm long; a pencil's `hatch` keeps its 1.5 mm and 12 mm:
+
+```lua
+p:hatch(m, {angle=function(x, y) return -0.9 - x / 2000 end})  -- strokes along a direction field (radians), or a form's field
+p:hatch(m, {angle=-1.0, zigzag=true})                           -- each mark one back-and-forth stroke
+p:hatch(m, {zigzag={amplitude=30, period=50, round=0}})         -- its swing to either side and per swing there and back (units), sharp corners
+p:hatch(m, {angle=-1.0, length=600, spacing=120, jitter=true, open=0.3})  -- slashing diagonals, loose, the paper between
+p:hatch(m, {open=bare})                                         -- open in proportion to a mask: 1 bare paper, 0 covered
+p:hatch(m, {alt=30, azimuth=45, speed=250})                     -- how the hand holds and moves the stick
+```
+
+- `angle` is radians (as for a pencil: 0 along x, positive turning down the
+  canvas), or a `function(x, y)` returning them, or a form's field, as
+  `work` takes. Along a field the strokes follow it: lines a `spacing` apart
+  traced through the mask, each cut into strokes of up to `length`, so the
+  hatching turns with the form and stays evenly spaced as the field fans.
+- `zigzag` turns each mark into one continuous stroke swinging back and forth
+  across its line: `amplitude` to either side, `period` along the line per
+  swing there and back, `round` 0 for sharp corners to 1 for a sine (the
+  default: a hand oscillating across the line; at 5 mm and 8 mm its turns are
+  0.3 mm across, sharp under a stick's line). The
+  marks run along `angle` and the legs cross it, the more squarely the larger
+  `amplitude` is against `period` (by default at about 68° to it): for legs
+  slanting one way, run the zigzag across the slant. A swing that would leave
+  the mask is cut short at its edge.
+  With a zigzag, marks are 40 mm long and bands sit a swing's width apart
+  unless `length` and `spacing` say otherwise; `zigzag=true` swings 5 mm to
+  either side and 8 mm per swing.
+- `jitter={length=, angle=}` stretches each mark by up to ± the share
+  `length` (a mark that would grow out of the mask keeps its length) and turns
+  it by up to ± `angle` radians about its middle; `jitter=true` is ±30% and
+  ±0.17 rad. Seeded: the same `seed=` lays the same strokes.
+- `open` leaves that share of the marks out, the paper (or what is under)
+  showing between the rest: a number 0..1, or a mask whose value at each
+  mark's middle is its chance to be left out. The same marks are left out
+  whatever the jitter.
+- `alt`, `azimuth` and `speed` hold the stick for every mark as `stroke`
+  takes them. By default it is held at 50° (a held pen's measured altitude)
+  with its upper end to the lower right (45°), and each stroke goes as fast as
+  its length asks: 80 mm/s for 12 mm (150 ms), as L^0.53 for others (171 mm/s
+  for 50 mm; a straight line's drawing time goes as L^0.469), a zigzag at its
+  legs' speed. A `speed=` holds every mark at that.
+- Each mark bows as the hand swings it: an arc about the wrist (the hand's
+  189 mm), its middle away from the hand, L²/(8R) for a mark across the
+  wrist's swing (1.7 mm for 50 mm), less as the mark turns toward the hand,
+  none along it; a sweep longer than the wrist turns (132 mm) swings from the
+  elbow (467 mm). The hand is where `azimuth` points.
+- The defaults for zigzags and jitter are estimates from Cassatt's pastels
+  of 1895–1908, as are the lengths and angles of her passages:
+  backgrounds of diagonals 30–80 mm long at 40–65°, 5–15 mm apart; dresses
+  of long strokes along the folds; zigzag legs 6–20 mm
+  (notes/research/cassatt_pastel_strokes.md, which also sources the hold,
+  speed and bow). In a new painting a plain `p:hatch` with a stick (none of
+  these options) lays these strokes, not the pencil's as before.
+- A painting begun before these came (its log's head has no
+  `--@ pastel-area-strokes`) refuses them, as it did, and replays as painted:
+  its plain stick hatching lays the pencil's marks, 1.5 mm apart, 12 mm long,
+  at 60° and 80 mm/s, as it did. A pencil's `hatch` doesn't take them.
+
 ```lua
 lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
 lift_sheet()                                              -- taken away, with what it caught

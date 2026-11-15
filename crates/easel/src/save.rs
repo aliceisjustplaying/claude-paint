@@ -93,6 +93,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.paper_presets {
         kv("paper_presets", "1".to_string());
     }
+    if st.tubes.pastel_area_strokes {
+        kv("area_strokes", "1".to_string());
+    }
     if st.tubes.drain {
         kv("drain", "1".to_string());
     }
@@ -280,6 +283,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.calls_agree = h.get("calls_agree") == Some(&"1");
     tubes.dry_lakes = h.get("dry_lakes") == Some(&"1");
     tubes.paper_presets = h.get("paper_presets") == Some(&"1");
+    tubes.pastel_area_strokes = h.get("area_strokes") == Some(&"1");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {

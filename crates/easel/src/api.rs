@@ -257,7 +257,7 @@ pub(crate) fn scalar_field(st: &S, v: &Value, b: (f32, f32, f32, f32), what: &st
 
 /// Angles are interpolated as directions (cos, sin), so a field that wraps
 /// through ±π stays smooth.
-fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f32>> {
+pub(crate) fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f32>> {
     // a form's own field (f:field("fall")): read natively, no grid
     if let Value::UserData(u) = v
         && let Ok(fu) = u.borrow::<crate::form::FieldU>()

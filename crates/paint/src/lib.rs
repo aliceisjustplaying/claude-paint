@@ -20,6 +20,7 @@ pub mod edge;
 pub mod fence;
 pub mod form;
 pub mod graphite;
+pub mod area_strokes;
 pub mod rag;
 pub mod scene;
 pub mod palette;

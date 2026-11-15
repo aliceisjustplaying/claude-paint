@@ -96,6 +96,12 @@ pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// scatters by its measured index (`paint::Palette::dry_lakes`): every new painting. Only engine 9's dry colors have it (below, the line changes nothing). A log
 /// without it replays its lakes' dry colors as painted.
 pub const DRY_LAKES_MARK: &str = "--@ dry-lakes";
+/// Marks a painting whose pastel sticks' `p:hatch` covers an area as a
+/// pastellist does: its `angle` may be a direction field (a function(x, y) or
+/// a form's field), and it takes `zigzag=`, `jitter=`, `open=`, `alt=`,
+/// `azimuth=` and `speed=` (paint's `area_strokes`): every new painting. A
+/// log without it refuses them, as it was painted.
+pub const PASTEL_AREA_STROKES_MARK: &str = "--@ pastel-area-strokes";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -826,6 +832,9 @@ impl Session {
         }
         if self.st.borrow().tubes.dry_lakes {
             let _ = writeln!(s, "{DRY_LAKES_MARK}");
+        }
+        if self.st.borrow().tubes.pastel_area_strokes {
+            let _ = writeln!(s, "{PASTEL_AREA_STROKES_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1609,8 +1618,9 @@ fn box_list() -> String {
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise for sharpening a pastel
-/// pencil (`PASTEL_SHARPEN_MARK`), their lakes' dry colors (`DRY_LAKES_MARK`) and a
-/// gritted ground on paper (`GRIT_MARK`). New paintings are of
+/// pencil (`PASTEL_SHARPEN_MARK`), their lakes' dry colors (`DRY_LAKES_MARK`), a
+/// gritted ground on paper (`GRIT_MARK`) and a stick's hatching over an area
+/// (`PASTEL_AREA_STROKES_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`). The drain and oils switches (`DRAIN_MARK`,
 /// `OILS_MARK`): a new one's on, an existing one's its log's.
@@ -1634,6 +1644,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.calls_agree = true;
         b.dry_lakes = true;
         b.paper_presets = true;
+        b.pastel_area_strokes = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1717,6 +1728,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     if b.paper_presets && engine < 5 {
         return Err(format!("the log's {PAPER_PRESETS_MARK} line (the paper-presets switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }
+    b.pastel_area_strokes = head(PASTEL_AREA_STROKES_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

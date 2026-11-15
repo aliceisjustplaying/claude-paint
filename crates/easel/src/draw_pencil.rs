@@ -200,6 +200,12 @@ fn along(o: Option<&Table>, key: &str, n: usize, default: f32) -> Result<Vec<f32
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Strokes of a stick drawn on this thread (tests count a hatching's).
+    static STICK_STROKES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// One stroke of a stick along `pts` (units), each point's force (N), alt,
 /// azimuth and roll (degrees) and speed (mm/s); the hand lands and lifts
 /// as a hand does (pastel.rs `LAND_S`, `LIFT_S`). Returns the volume laid, mm³.
@@ -211,6 +217,8 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
         let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         validate_pastel_path(c, pts, None)?;
     }
+    #[cfg(test)]
+    STICK_STROKES.with(|n| n.set(n.get() + 1));
     let mut stick = stick_of(p)?;
     let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
     // (a NaN angle finds no contact and lays nothing, without saying so)
@@ -245,16 +253,217 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
 /// pencil's pressure as force (`FORCE_AT_FULL` at full), the stick held at
 /// 60° with its upper end to the lower right (a right hand), at 80 mm/s.
 fn stick_marks(lua: &Lua, st: &S, p: &Table, marks: &[Mark]) -> Result<f32> {
+    // (a mark is dense, every 0.25 units: every eighth point will do)
+    stick_marks_held(lua, st, p, marks, HAND, |_| HAND_SPEED, |_| 8)
+}
+
+/// How a hand holds a stick for a pencil's marks: alt and azimuth
+/// (degrees), as `p:stroke` takes them.
+#[derive(Clone, Copy)]
+struct Held {
+    alt: f32,
+    azimuth: f32,
+}
+/// A pencil's marks laid with a stick: as logs before the area strokes
+/// were painted.
+const HAND: Held = Held { alt: 60.0, azimuth: 45.0 };
+/// Their speed, mm/s.
+const HAND_SPEED: f32 = 80.0;
+
+/// `stick_marks` held as `held` at `speed(mark)` mm/s, keeping every
+/// `every(mark)`th of a mark's dense points.
+fn stick_marks_held(lua: &Lua, st: &S, p: &Table, marks: &[Mark], held: Held, speed: impl Fn(&Mark) -> f32, every: impl Fn(&Mark) -> usize) -> Result<f32> {
     let mut v = 0.0;
     for m in marks {
-        // (a mark is dense, every 0.25 units: every eighth point will do)
-        let idx: Vec<usize> = (0..m.pts.len()).step_by(8).chain(std::iter::once(m.pts.len() - 1)).collect();
+        let speed = speed(m);
+        let every = every(m).max(1);
+        let idx: Vec<usize> = (0..m.pts.len()).step_by(every).chain(std::iter::once(m.pts.len() - 1)).collect();
         let pts: Vec<(f32, f32)> = idx.iter().map(|&i| m.pts[i]).collect();
         let force: Vec<f32> = idx.iter().map(|&i| m.pressure[i] * FORCE_AT_FULL).collect();
         let n = pts.len();
-        v += stick_stroke(lua, st, p, &pts, &force, &vec![60.0; n], &vec![45.0; n], &vec![0.0; n], &vec![80.0; n])?;
+        v += stick_stroke(lua, st, p, &pts, &force, &vec![held.alt; n], &vec![held.azimuth; n], &vec![0.0; n], &vec![speed; n])?;
     }
     Ok(v)
+}
+
+// The area hatching's defaults (mm and radians): estimates measured on
+// reproductions of Cassatt's pastels of 1895–1908
+// (notes/research/cassatt_pastel_strokes.md, §3).
+/// A zigzag's swing to either side of its line: legs about 10 mm long.
+const ZIGZAG_AMPLITUDE_MM: f32 = 5.0;
+/// A zigzag's swing there and back, along its line: legs about 4 mm apart.
+const ZIGZAG_PERIOD_MM: f32 = 8.0;
+/// A zigzag's corners: a sine, as a hand oscillating across its line while
+/// it drifts along swings (Hollerbach 1981). At the defaults its turns'
+/// radius, P²/(4π²A) = 0.32 mm, is far under the stick's 1.5–3 mm line, so
+/// they look sharp, as the "ladder" does.
+const ZIGZAG_ROUND: f32 = 1.0;
+/// How far one zigzag stroke runs along its line.
+const ZIGZAG_LENGTH_MM: f32 = 40.0;
+/// `jitter=true`: marks' lengths up to ±30%, their angles up to ±0.17 rad (±10°).
+const JITTER_LENGTH: f32 = 0.3;
+const JITTER_ANGLE: f32 = 0.17;
+/// A plain stick hatching's spacing and length (mm), from Cassatt's open
+/// backgrounds (cassatt_pastel_strokes.md §3): distinct strokes 5–15 mm
+/// apart (8 mm, near the range's geometric middle, 8.7), 30–80 mm long (50,
+/// its middle). A pencil's hatching keeps its own, 1.5 mm and 12 mm.
+const STICK_HATCH_SPACING_MM: f32 = 8.0;
+const STICK_HATCH_LENGTH_MM: f32 = 50.0;
+/// The hand over an area: the stick at 50°, the measured altitude of a held
+/// pen (Schomaker & Plamondon 1990), and paper.rs's reference hold; its upper
+/// end to the lower right (a right hand).
+const AREA_HAND: Held = Held { alt: 50.0, azimuth: 45.0 };
+/// A stroke's speed, mm/s, for one of `STROKE_REF_MM`: 12 mm in 150 ms, a
+/// single stroke's measured duration (100–150 ms; Thomassen & Van Galen,
+/// J. Forensic Doc. Exam.).
+const STROKE_REF_SPEED: f32 = 80.0;
+const STROKE_REF_MM: f32 = 12.0;
+/// A straight line's drawing time goes as Lⁿ: n = 0.469 (Cao & Zhai, CHI
+/// 2007, T = 68.8 L^0.469 ms, L mm; as quoted by Zhai, Kristensson & Appert,
+/// FnT HCI 5(2), 2012, §5.3.2), so its speed as L^(1-n).
+const LINE_TIME_EXP: f32 = 0.469;
+/// The hand's length, mm: ANSUR II's mean, men and women (6068 people;
+/// men 193.3, women 181.1): the radius a wrist swings a mark about.
+const HAND_LENGTH_MM: f32 = 189.3;
+/// Forearm and hand, mm (ANSUR II's mean, the same people): the radius for
+/// a sweep longer than the wrist turns.
+const FOREARM_HAND_MM: f32 = 467.0;
+/// The wrist's turn across a stroke: 40° of radial and ulnar deviation
+/// together serve most tasks (Ryu et al., J. Hand Surg. 16A, 1991).
+const WRIST_TURN_DEG: f32 = 40.0;
+
+/// How fast a stroke of `mm` goes (mm/s): longer ones faster, in more time.
+fn stroke_speed(mm: f32) -> f32 {
+    (STROKE_REF_SPEED * (mm.max(0.1) / STROKE_REF_MM).powf(1.0 - LINE_TIME_EXP)).clamp(1.0, 2000.0)
+}
+
+/// A right hand's pivot for a stick held at `azimuth` (degrees: the upper
+/// end, and the hand, that way), in units of `mmu` mm.
+fn hand_pivot(azimuth: f32, mmu: f32) -> paint::area_strokes::Pivot {
+    let a = azimuth.to_radians();
+    paint::area_strokes::Pivot {
+        wrist: HAND_LENGTH_MM / mmu,
+        reach: HAND_LENGTH_MM * WRIST_TURN_DEG.to_radians() / mmu,
+        elbow: FOREARM_HAND_MM / mmu,
+        toward: (a.cos(), a.sin()),
+    }
+}
+
+const AREA_HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "graded", "seed", "zigzag", "jitter", "open", "alt", "azimuth", "speed"];
+
+/// A stick's `p:hatch` over an area, with the area-strokes switch
+/// (session.rs `PASTEL_AREA_STROKES_MARK`): the pencil's hatching, and an
+/// `angle` that may be a direction field, `zigzag=`, `jitter=`, `open=` and
+/// the hand's `alt=`, `azimuth=` and `speed=`. Without them it lays
+/// Cassatt's open strokes (`STICK_HATCH_SPACING_MM`), each bowed by the
+/// wrist's swing (`hand_pivot`) and as fast as its length asks
+/// (`stroke_speed`), the stick at 50° (`AREA_HAND`). Each mark is one
+/// stroke of the stick (`stick_stroke`), so it wears and sheds as a stroke does.
+fn area_hatch(lua: &Lua, st: &S, p: &Table, m: &Value, o: Option<&Table>) -> Result<f32> {
+    use paint::area_strokes::{AreaHatch, Direction, Jitter, Open, Zigzag};
+    if let Some(o) = o {
+        check_keys(o, AREA_HATCH_KEYS, "hatch")?;
+    }
+    let m = paint_mask_of(st, m)?;
+    let get = |k: &str| -> Result<Option<f32>> { o.map(|o| num(o, k)).transpose().map(Option::flatten) };
+    let value = |k: &str| -> Result<Value> { Ok(o.map(|o| o.get::<Value>(k)).transpose()?.unwrap_or(Value::Nil)) };
+    let mmu = {
+        let s = st.borrow();
+        mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
+    };
+    let finite = |k: &str, v: f32| if v.is_finite() { Ok(v) } else { err(format!("hatch: {k} is a number")) };
+    let zigzag = match value("zigzag")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Boolean(true) => Some(Zigzag { amplitude: ZIGZAG_AMPLITUDE_MM / mmu, period: ZIGZAG_PERIOD_MM / mmu, round: ZIGZAG_ROUND }),
+        Value::Table(z) => {
+            check_keys(&z, &["amplitude", "period", "round"], "hatch zigzag")?;
+            let amplitude = finite("zigzag amplitude", num(&z, "amplitude")?.unwrap_or(ZIGZAG_AMPLITUDE_MM / mmu))?;
+            let period = finite("zigzag period", num(&z, "period")?.unwrap_or(ZIGZAG_PERIOD_MM / mmu))?;
+            let round = finite("zigzag round", num(&z, "round")?.unwrap_or(ZIGZAG_ROUND))?;
+            if !(amplitude > 0.0 && period > 0.0 && (0.0..=1.0).contains(&round)) {
+                return err("hatch: zigzag={amplitude=, period=} want > 0 (units), round= 0 (sharp corners) to 1 (a sine)");
+            }
+            Some(Zigzag { amplitude, period, round })
+        }
+        o => return err(format!("hatch: zigzag is true or {{amplitude=, period=, round=}}, got {}", o.type_name())),
+    };
+    let jitter = match value("jitter")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Boolean(true) => Some(Jitter { length: JITTER_LENGTH, angle: JITTER_ANGLE }),
+        Value::Table(j) => {
+            check_keys(&j, &["length", "angle"], "hatch jitter")?;
+            let length = finite("jitter length", num(&j, "length")?.unwrap_or(0.0))?;
+            let angle = finite("jitter angle", num(&j, "angle")?.unwrap_or(0.0))?;
+            if !(0.0..=1.0).contains(&length) || !(0.0..=1.5).contains(&angle) {
+                return err("hatch: jitter={length=, angle=}: length a share 0..1 of each mark's, angle radians 0..1.5");
+            }
+            Some(Jitter { length, angle })
+        }
+        o => return err(format!("hatch: jitter is true or {{length=, angle=}}, got {}", o.type_name())),
+    };
+    let open_mask;
+    let open = match value("open")? {
+        Value::Nil => None,
+        Value::Integer(_) | Value::Number(_) => {
+            let share = finite("open", get("open")?.unwrap_or(0.0))?;
+            if !(0.0..=1.0).contains(&share) {
+                return err("hatch: open is the share left to the paper, 0..1, or a mask of it");
+            }
+            Some(Open::Share(share))
+        }
+        v @ Value::UserData(_) => {
+            open_mask = paint_mask_of(st, &v)?;
+            Some(Open::Mask(&open_mask))
+        }
+        o => return err(format!("hatch: open is the share left to the paper, 0..1, or a mask of it, got {}", o.type_name())),
+    };
+    // by default Cassatt's open strokes; a zigzag's bands side by side
+    let spacing = get("spacing")?.unwrap_or(match zigzag {
+        Some(z) => 2.0 * z.amplitude,
+        None => STICK_HATCH_SPACING_MM / mmu,
+    });
+    let length = get("length")?.unwrap_or(if zigzag.is_some() { ZIGZAG_LENGTH_MM / mmu } else { STICK_HATCH_LENGTH_MM / mmu });
+    let pressure = get("pressure")?.unwrap_or(0.45);
+    if !(spacing > 0.0 && length > 0.0) {
+        return err("hatch: spacing and length want > 0 (units)");
+    }
+    let held = Held { alt: get("alt")?.unwrap_or(AREA_HAND.alt), azimuth: get("azimuth")?.unwrap_or(AREA_HAND.azimuth) };
+    let speed = get("speed")?;
+    if !(0.0..=90.0).contains(&held.alt) || !held.azimuth.is_finite() || !speed.is_none_or(|v| (1.0..=2000.0).contains(&v)) || !pressure.is_finite() {
+        return err("hatch: alt is degrees 0 to 90, azimuth degrees, speed mm/s 1 to 2000 (hatching 60–400), pressure a number");
+    }
+    let seed = match o {
+        Some(o) => seed_of(st, o)?,
+        None => seed_of(st, &lua.create_table()?)?,
+    };
+    let graded = o.map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false);
+    let field;
+    let direction = match value("angle")? {
+        Value::Nil => Direction::Fixed(-0.9),
+        v @ (Value::Function(_) | Value::UserData(_)) => {
+            let f = crate::api::frame(st)?;
+            let b = crate::api::support(Some(&m), f, spacing);
+            // (each unit of line traced is tested against its neighbors: bound the work)
+            if (b.2 - b.0) * (b.3 - b.1) / spacing > 4.0e6 {
+                return err("hatch: too many strokes along a field; a wider spacing or a smaller area");
+            }
+            field = crate::api::angle_field(st, &v, b)?;
+            Direction::Field(&*field)
+        }
+        _ => Direction::Fixed(finite("angle", get("angle")?.unwrap_or(-0.9))?),
+    };
+    let pivot = Some(hand_pivot(held.azimuth, mmu));
+    let h = AreaHatch { direction, spacing, length, pressure, graded, zigzag, jitter, open, pivot };
+    let marks = paint::area_strokes::area_marks(&m, &h, seed);
+    // each stroke as fast as its length asks: a zigzag's a leg's, there or back
+    let speed = |mk: &Mark| {
+        speed.unwrap_or_else(|| match zigzag {
+            Some(z) => stroke_speed(mmu * (4.0 * z.amplitude * z.amplitude + 0.25 * z.period * z.period).sqrt()),
+            None => stroke_speed(mmu * paint::path::arclen(&mk.pts).last().copied().unwrap_or(0.0)),
+        })
+    };
+    // (a zigzag's corners want its points closer than a straight mark's)
+    stick_marks_held(lua, st, p, &marks, held, speed, |mk| if zigzag.is_some() { 2usize.max(mk.pts.len().div_ceil(4000)) } else { 8usize.max(mk.pts.len().div_ceil(4000)) })
 }
 
 /// Millimeters per canvas unit.
@@ -411,6 +620,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         methods.set("hatch", lua.create_function(move |lua, (p, m, o): (Table, Value, Option<Table>)| {
+            // (a stick's hatching over an area: only with its switch, so an
+            // older log refuses what it refused)
+            if st1.borrow().tubes.pastel_area_strokes && is_stick(&st1, &p)? {
+                return area_hatch(lua, &st1, &p, &m, o.as_ref());
+            }
             if let Some(o) = &o {
                 check_keys(o, if st1.borrow().paper { &["angle", "spacing", "length", "pressure", "graded", "seed"] } else { HATCH_KEYS }, "hatch")?;
             }
@@ -1664,5 +1878,262 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             r.run(&chunk).unwrap();
         }
         assert!(state(&r) == state(&s), "the log replays bit for bit");
+    }
+
+    // ------------------------------------------------ hatching over an area (--@ pastel-area-strokes)
+
+    const AREA_W: usize = 320;
+    const AREA_PAPER: &str = r#"canvas{size=64, aspect=1.25, seed=3, paper={grammage=200, tone={{"lead white", 4}, {"raw umber", 0.3}}}}
+        p = pastel(pile{{"bone black", 1}}, {kind="soft"})"#;
+
+    /// A session of a new painting (the switch on) or, with `on` false, the same box with it off.
+    fn area_session(on: bool) -> Session {
+        area_session_of(on, AREA_PAPER)
+    }
+
+    fn area_session_of(on: bool, setup: &str) -> Session {
+        let mut tubes = crate::session::box_for(None).unwrap();
+        tubes.pastel_area_strokes = on;
+        let mut s = Session::with_box(AREA_W, tubes).unwrap().with_paper(true).unwrap();
+        run(&mut s, setup);
+        s
+    }
+
+    fn strokes() -> usize {
+        super::STICK_STROKES.with(|n| n.get())
+    }
+
+    /// Luminance at each pixel and the frame's width and height (px).
+    fn lum(s: &Session) -> (Vec<f32>, usize, usize) {
+        let c = s.canvas().unwrap();
+        let f = c.frame();
+        (c.pixels().iter().map(|p| 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2]).collect(), f.w, f.h)
+    }
+
+    /// How much a box's (in units) column means vary across x, and its row
+    /// means across y: strokes along x make the rows differ, along y the columns.
+    fn profiles(s: &Session, x0: f32, y0: f32, x1: f32, y1: f32) -> (f32, f32) {
+        let (l, w, _) = lum(s);
+        let k = w as f32 / 1000.0;
+        let (i0, i1, j0, j1) = ((x0 * k) as usize, (x1 * k) as usize, (y0 * k) as usize, (y1 * k) as usize);
+        let var = |v: Vec<f32>| {
+            let m = v.iter().sum::<f32>() / v.len() as f32;
+            v.iter().map(|x| (x - m).powi(2)).sum::<f32>() / v.len() as f32
+        };
+        let cols = var((i0..i1).map(|i| (j0..j1).map(|j| l[j * w + i]).sum::<f32>() / (j1 - j0) as f32).collect());
+        let rows = var((j0..j1).map(|j| (i0..i1).map(|i| l[j * w + i]).sum::<f32>() / (i1 - i0) as f32).collect());
+        (cols, rows)
+    }
+
+    /// A stick's hatching follows an angle function across the area: strokes
+    /// along x in its left half, along y in its right half.
+    #[test]
+    fn a_sticks_hatching_follows_an_angle_function() {
+        let mut s = area_session_of(true, &AREA_PAPER.replace("size=64", "size=200"));
+        run(&mut s, "p:hatch(rect(100, 100, 800, 600), {angle=function(x, y) if x < 500 then return 0 else return math.pi / 2 end end, spacing=50, pressure=0.6, seed=4})");
+        let (lc, lr) = profiles(&s, 150.0, 150.0, 450.0, 650.0);
+        let (rc, rr) = profiles(&s, 550.0, 150.0, 850.0, 650.0);
+        assert!(lr > 2.0 * lc, "left half (strokes along x): columns {lc}, rows {lr}");
+        assert!(rc > 2.0 * rr, "right half (strokes along y): columns {rc}, rows {rr}");
+        // a number goes too; anything else is refused
+        run(&mut s, "p:hatch(rect(100, 100, 300, 300), {angle=0.5, seed=4})");
+        let e = s.run("p:hatch(rect(100, 100, 300, 300), {angle='steep'})").unwrap_err();
+        assert!(e.contains("angle"), "{e}");
+        let e = s.run("p:hatch(rect(100, 100, 300, 300), {angle=function() return 'up' end})").unwrap_err();
+        assert!(e.contains("angle function returned string"), "{e}");
+    }
+
+    /// A zigzag mark is one stroke of the stick, back and forth over a band
+    /// as wide as its swing, where a plain mark covers a stroke's width.
+    #[test]
+    fn a_zigzag_mark_is_one_stroke_over_a_band() {
+        // a band 160 units (10 mm) high: one row of marks, one mark along it
+        let band = "rect(150, 320, 700, 160)";
+        let covered_rows = |s: &Session| {
+            let (l, w, h) = lum(s);
+            let (blank, _, _) = lum(&area_session(true));
+            (0..h).filter(|&j| (0..w).filter(|&i| blank[j * w + i] - l[j * w + i] > 0.05).count() > w / 20).count() as f32 * 1000.0 / w as f32
+        };
+        let mut z = area_session(true);
+        let before = strokes();
+        run(&mut z, &format!("p:hatch({band}, {{angle=0, length=800, zigzag={{amplitude=70, period=60, round=0.3}}, pressure=0.6, seed=2}})"));
+        assert_eq!(strokes() - before, 1, "one zigzag, one stroke");
+        let zig = covered_rows(&z);
+        let mut p = area_session(true);
+        let before = strokes();
+        run(&mut p, &format!("p:hatch({band}, {{angle=0, length=800, spacing=160, pressure=0.6, seed=2}})"));
+        assert_eq!(strokes() - before, 1, "one plain mark, one stroke");
+        let straight = covered_rows(&p);
+        assert!(zig > 110.0 && zig > 2.0 * straight, "zigzag band {zig} units high, a straight stroke's {straight}");
+        // its defaults: bands side by side over a bigger area, each a stroke
+        let before = strokes();
+        run(&mut z, "p:hatch(rect(100, 100, 800, 600), {zigzag=true, seed=3})");
+        let n = strokes() - before;
+        assert!(n > 2 && n < 200, "{n} zigzag strokes");
+        for bad in ["zigzag={amplitude=-1}", "zigzag={round=2}", "zigzag={wide=1}", "zigzag=3"] {
+            assert!(z.run(&format!("p:hatch({band}, {{{bad}}})")).is_err(), "{bad} accepted");
+        }
+    }
+
+    /// Jitter turns and stretches each mark from the seed: the same seed lays
+    /// the same strokes, another seed others, and without it the marks lie as before.
+    #[test]
+    fn area_jitter_is_deterministic_per_seed() {
+        let hatch = |opts: &str| {
+            let mut s = area_session(true);
+            run(&mut s, &format!("p:hatch(rect(100, 100, 800, 600), {{spacing=50, {opts}}})"));
+            s.canvas().unwrap().pixels().to_vec()
+        };
+        let a = hatch("jitter={length=0.4, angle=0.3}, seed=5");
+        assert!(a == hatch("jitter={length=0.4, angle=0.3}, seed=5"), "same seed, same strokes");
+        assert!(a != hatch("jitter={length=0.4, angle=0.3}, seed=6"), "another seed, other strokes");
+        assert!(a != hatch("seed=5"), "jitter changed nothing");
+        assert!(hatch("jitter=true, seed=5") == hatch("jitter=true, seed=5"));
+        assert!(hatch("jitter=false, seed=5") == hatch("seed=5"));
+    }
+
+    /// `open=` leaves the paper bare in proportion: a share, or a mask's value.
+    #[test]
+    fn open_leaves_more_bare_paper() {
+        let (blank, w, h) = lum(&area_session(true));
+        let bare = |opts: &str| {
+            let mut s = area_session(true);
+            run(&mut s, &format!("p:hatch(rect(100, 100, 800, 600), {{spacing=40, pressure=0.7, seed=8{opts}}})"));
+            let (l, _, _) = lum(&s);
+            let k = w as f32 / 1000.0;
+            let (mut n, mut b) = (0, 0);
+            for j in (150.0 * k) as usize..(650.0 * k) as usize {
+                for i in (150.0 * k) as usize..(850.0 * k) as usize {
+                    n += 1;
+                    if blank[j * w + i] - l[j * w + i] < 0.01 {
+                        b += 1;
+                    }
+                }
+            }
+            assert!(h > 0);
+            b as f32 / n as f32
+        };
+        let closed = bare("");
+        let half = bare(", open=0.5");
+        let most = bare(", open=0.85");
+        assert!(half > closed + 0.15 && most > half + 0.1, "bare paper: {closed} {half} {most}");
+        // a mask: open on the left only
+        let left = bare(", open=rect(0, 0, 500, 800)");
+        assert!(left > closed + 0.2, "{closed} {left}");
+        assert_eq!(bare(", open=0"), closed);
+        for bad in ["open=2", "open='half'", "open=-0.1"] {
+            assert!(area_session(true).run(&format!("p:hatch(rect(100, 100, 300, 300), {{{bad}}})")).is_err(), "{bad} accepted");
+        }
+    }
+
+    /// Without the switch (an older log) a stick's hatching refuses what it
+    /// refused and lays what it laid (its path is the pencil's marks, as
+    /// before); with it, a plain hatching lays Cassatt's open strokes, and a
+    /// pencil's hatching is the pencil's still.
+    #[test]
+    fn without_the_switch_a_sticks_hatching_is_as_it_was() {
+        for (opts, says) in [
+            ("{zigzag=true}", "hatch: unknown option \"zigzag\""),
+            ("{jitter=true}", "hatch: unknown option \"jitter\""),
+            ("{open=0.5}", "hatch: unknown option \"open\""),
+            ("{speed=200}", "hatch: unknown option \"speed\""),
+            ("{angle=function(x, y) return 0 end}", "angle: want a number, got function"),
+        ] {
+            let e = area_session(false).run(&format!("p:hatch(rect(100, 100, 300, 300), {opts})")).unwrap_err();
+            assert!(e.contains(says), "{opts}: {e}");
+            run(&mut area_session(true), &format!("p:hatch(rect(100, 100, 300, 300), {opts})"));
+            let e = area_session(true).run(&format!("pencil():hatch(rect(100, 100, 300, 300), {opts})")).unwrap_err();
+            assert!(e.contains(says), "a pencil, {opts}: {e}");
+        }
+        // a pencil's hatching: the same with the switch as without
+        let pencil = "q = pencil() q:hatch(rect(100, 100, 800, 600), {angle=-0.7, spacing=30, pressure=0.6, graded=true, seed=4}) q:hatch(rect(300, 300, 200, 200))";
+        let mut off = area_session(false);
+        run(&mut off, pencil);
+        let mut on = area_session(true);
+        run(&mut on, pencil);
+        assert!(off.canvas().unwrap().pixels() == on.canvas().unwrap().pixels());
+        // a stick's: with the switch, 8 mm apart and 50 mm long (the pencil's
+        // 1.5 and 12 without), so about (8·50)/(1.5·12) = 22 times fewer strokes
+        // (over the pencil's, the same in both)
+        let plain = "p:hatch(rect(100, 100, 800, 600), {seed=4})";
+        let mmu = super::mm_per_unit(&on.canvas().unwrap());
+        let before = strokes();
+        run(&mut off, plain);
+        let n_off = strokes() - before;
+        let before = strokes();
+        run(&mut on, plain);
+        let n_on = strokes() - before;
+        assert!(off.canvas().unwrap().pixels() != on.canvas().unwrap().pixels());
+        // strokes over an area A, a spacing d apart, each up to L long: about
+        // A/(d·L), and half a stroke more per row for the rows' ends
+        let expect = |d: f32, l: f32| {
+            let (w, h) = (800.0 * mmu, 600.0 * mmu);
+            let across = w * 0.9f32.sin() + h * 0.9f32.cos();
+            w * h / (d * l) + 0.5 * across / d
+        };
+        let (e_off, e_on) = (expect((1.5f32).max(2.5 * mmu), 12.0), expect(8.0, 50.0));
+        assert!((0.7..1.4).contains(&(n_on as f32 / e_on)), "{n_on} strokes, about {e_on}");
+        assert!((0.7..1.4).contains(&(n_off as f32 / e_off)), "{n_off} strokes, about {e_off}");
+    }
+
+    /// A stroke takes longer the longer it is, but less than in proportion:
+    /// 12 mm at 80 mm/s (150 ms), 50 mm at 80·(50/12)^0.531 = 170.7 mm/s
+    /// (293 ms); a default zigzag's leg, √(10² + 4²) = 10.77 mm, at 75.5.
+    #[test]
+    fn a_strokes_speed_goes_with_its_length() {
+        assert!((super::stroke_speed(12.0) - 80.0).abs() < 0.01);
+        assert!((super::stroke_speed(50.0) - 170.69).abs() < 0.05, "{}", super::stroke_speed(50.0));
+        assert!((super::stroke_speed(10.770_33) - 75.54).abs() < 0.05);
+        // the wrist's reach: 189.3 mm turned 40°, 132.2 mm
+        let pv = super::hand_pivot(45.0, 2.0);
+        assert!((pv.wrist - 94.65).abs() < 1e-3 && (pv.reach - 66.08).abs() < 0.01 && (pv.elbow - 233.5).abs() < 1e-3);
+        assert!((pv.toward.0 - pv.toward.1).abs() < 1e-6 && pv.toward.0 > 0.7);
+    }
+
+    /// Over an area the stick is held at 50° and each stroke goes at its
+    /// length's speed; `alt=` and `speed=` still say otherwise.
+    #[test]
+    fn an_area_hatchings_hand_is_held_at_fifty_degrees() {
+        let hatch = |opts: &str| {
+            let mut s = area_session(true);
+            run(&mut s, &format!("p:hatch(rect(100, 100, 500, 400), {{seed=4{opts}}})"));
+            s.canvas().unwrap().pixels().to_vec()
+        };
+        let plain = hatch("");
+        assert!(plain == hatch(", alt=50, azimuth=45"));
+        assert!(plain != hatch(", alt=60"));
+        assert!(plain != hatch(", speed=80"));
+    }
+
+    /// The switch is a new painting's and comes from a log's head: a log
+    /// without it replays without it, and a save keeps it.
+    #[test]
+    fn the_area_strokes_switch_comes_from_the_log_head() {
+        use crate::session::{PASTEL_AREA_STROKES_MARK, box_for};
+        assert!(box_for(None).unwrap().pastel_area_strokes);
+        let older = "--@ engine 9\n--@ paper\n--@ calls-agree\n";
+        assert!(!box_for(Some(older)).unwrap().pastel_area_strokes);
+        // only in the head: a chunk's line is a chunk's
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_AREA_STROKES_MARK}\n"))).unwrap().pastel_area_strokes);
+        for enabled in [false, true] {
+            let mut s = Session::with_box(64, box_for(if enabled { None } else { Some(older) }).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, AREA_PAPER);
+            let zig = s.run("p:hatch(rect(100, 100, 300, 300), {zigzag=true, seed=1})");
+            assert_eq!(zig.is_ok(), enabled, "{zig:?}");
+            let program = s.program("area");
+            assert_eq!(program.lines().any(|l| l == PASTEL_AREA_STROKES_MARK), enabled);
+            let tubes = box_for(Some(&program)).unwrap();
+            assert_eq!(tubes.pastel_area_strokes, enabled);
+            let mut replay = Session::replay_with(64, tubes).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&program) {
+                run(&mut replay, &chunk);
+            }
+            assert!(replay.canvas().unwrap().pixels() == s.canvas().unwrap().pixels(), "the log replays bit for bit");
+            let path = std::env::temp_dir().join(format!("easel-area-strokes-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.pastel_area_strokes, enabled);
+        }
     }
 }

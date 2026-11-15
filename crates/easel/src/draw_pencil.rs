@@ -113,7 +113,13 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     let ft: Table = p.get("facets")?;
     let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
     let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?] })
+    // (a pastel's table has no lift or grip: a charcoal's has, `charcoal()`)
+    let lift = p.raw_get::<Option<f32>>("lift")?.unwrap_or(paint::pastel::PASTEL_LIFT);
+    let grip = p.raw_get::<Option<f32>>("grip")?.unwrap_or(0.0);
+    if !((0.0..=1.0).contains(&lift) && (0.0..=1.0).contains(&grip)) {
+        return err("a charcoal stick's lift and grip are 0 to 1");
+    }
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], lift, grip })
 }
 
 /// Write a stick's wear back into its table (a part of the Lua heap: a
@@ -437,6 +443,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
         Ok(if kind == "chalk" {
             format!("black chalk (worn {worn:.0} mm)")
+        } else if is_stick(&st1, &p)? && p.raw_get::<Option<String>>("charcoal")?.is_some() {
+            let s = stick_of(&p)?;
+            let name: String = p.raw_get("charcoal")?;
+            format!("{name} charcoal ({} MPa, {:.1} mm long, {} facets)", (s.hardness * 10.0).round() / 10.0, s.length_mm, s.facets.len())
         } else if is_stick(&st1, &p)? {
             let s = stick_of(&p)?;
             let name: String = p.get::<Option<String>>("name")?.unwrap_or_default();
@@ -570,6 +580,10 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     let g = lua.globals();
     let meta: Table = lua.named_registry_value(PENCIL_META)?;
     let methods: Table = meta.raw_get("__index")?;
+    // (the charcoal switch's `charcoal()`: a stick of the same kind)
+    if st.borrow().tubes.charcoal {
+        install_charcoal(lua, meta.clone())?;
+    }
     // p:side(pts, {force=, pressure=, speed=, roll=}): the stick laid nearly
     // flat across the stroke, a piece `length` mm long (p:snap breaks one off)
     {
@@ -907,6 +921,77 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
+const CHARCOAL_KEYS: &[&str] = &["kind", "diameter", "length"];
+
+/// The charcoal switch's verb (session.rs `CHARCOAL_MARK`), installed with
+/// the paper-and-pastel switch's: `charcoal{kind="vine"|"compressed",
+/// diameter=, length=}` (or `charcoal()`, a vine stick; `charcoal("compressed")`),
+/// a pastel stick of charcoal (paint's `charcoal`): it draws with the
+/// stick's methods and the pencil's, and the finger, the eraser, a puff and
+/// fixative work on it as on pastel. Vine is all loose and lifts readily;
+/// compressed is darker and its binder holds part of what it lays.
+fn install_charcoal(lua: &Lua, meta: Table) -> Result<()> {
+    lua.globals().set("charcoal", lua.create_function(move |lua, a: Value| {
+        let o = match a {
+            Value::Nil => None,
+            Value::String(k) => {
+                let t = lua.create_table()?;
+                t.set("kind", k)?;
+                Some(t)
+            }
+            Value::Table(o) => {
+                check_keys(&o, CHARCOAL_KEYS, "charcoal")?;
+                Some(o)
+            }
+            o => return err(format!("charcoal: want {{kind=\"vine\"}} or \"compressed\", got {}", o.type_name())),
+        };
+        let kind: String = o.as_ref().map(|o| o.get::<Option<String>>("kind")).transpose()?.flatten().unwrap_or_else(|| "vine".into());
+        let dia = o.as_ref().map(|o| num(o, "diameter")).transpose()?.flatten();
+        if dia.is_some_and(|d| !d.is_finite()) {
+            return err("charcoal: diameter is the stick's width in mm, a number");
+        }
+        let stick = match kind.as_str() {
+            "vine" | "willow" => paint::pastel::Stick::vine(dia.unwrap_or(6.0).clamp(2.0, 16.0)),
+            "compressed" => paint::pastel::Stick::compressed(dia.unwrap_or(7.0).clamp(3.0, 15.0)),
+            k => return err(format!("charcoal: kind {k:?}: vine (willow: a charred twig, loose and light) or compressed (charcoal pressed with a binder: darker, it holds)")),
+        };
+        let p = lua.create_table()?;
+        p.set("kind", "stick")?;
+        p.set("charcoal", if kind == "compressed" { "compressed" } else { "vine" })?;
+        p.set("section", match stick.section {
+            paint::pastel::Section::Square { .. } => "square",
+            _ => "round",
+        })?;
+        p.set("size", match stick.section {
+            paint::pastel::Section::Round { d_mm } => d_mm,
+            paint::pastel::Section::Square { side_mm } => side_mm,
+        })?;
+        p.set("hardness", stick.hardness)?;
+        p.set("wear", stick.wear)?;
+        p.set("lift", stick.lift)?;
+        p.set("grip", stick.grip)?;
+        p.set("r", stick.color[0])?;
+        p.set("g", stick.color[1])?;
+        p.set("b", stick.color[2])?;
+        p.set("name", format!("{} charcoal", if kind == "compressed" { "compressed" } else { "vine" }))?;
+        p.set("worn", 0.0)?;
+        match o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
+            Some(l) if !(5.0..=200.0).contains(&l) => return err("charcoal: length is the stick's length in mm, 5 to 200"),
+            Some(l) => p.set("length", l)?,
+            None => p.set("length", stick.length_mm)?,
+        }
+        let ft = lua.create_table()?;
+        for f in &stick.facets {
+            for v in f {
+                ft.push(*v)?;
+            }
+        }
+        p.set("facets", ft)?;
+        p.set_metatable(Some(meta.clone()))?;
+        Ok(p)
+    })?)
+}
+
 // every test here paints from the default box
 #[cfg(test)]
 mod tests {
@@ -1082,6 +1167,90 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         // the easel's own: not the painting's
         assert!(!on.globals().contains("pastel"));
         assert!(Session::new(W).unwrap().with_paper(true).unwrap().with_paper(false).is_err());
+    }
+
+    /// The charcoal switch: a new painting's log names it and has `charcoal`;
+    /// an older log (paper, no charcoal line) has no `charcoal` and its walk of
+    /// the globals is as it was; the line needs paper and the drawing's
+    /// optics; a save keeps it, and the stick tables round-trip.
+    #[test]
+    fn charcoal_comes_with_its_switch_in_the_log_s_head() {
+        use crate::session::{CHARCOAL_MARK, box_for};
+        let older = "--@ engine 9\n--@ drawing-optics\n--@ paper\n";
+        let mut old = Session::with_box(64, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        assert!(!old.st.borrow().tubes.charcoal);
+        run(&mut old, PAPER);
+        assert_eq!(run(&mut old, "print(type(charcoal))").trim(), "nil");
+        let (g_old, _) = names(&mut old);
+        assert!(!old.program("old").lines().any(|l| l == CHARCOAL_MARK));
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let (g_new, _) = names(&mut s);
+        let added: Vec<&String> = g_new.iter().filter(|n| !g_old.contains(n)).collect();
+        assert_eq!(added, ["charcoal"]);
+        assert!(!s.globals().contains("charcoal"));
+        run(&mut s, r#"v = charcoal() k = charcoal{kind="compressed", diameter=8}
+            v:line({{100, 300}, {900, 300}}, {pressure=0.6})
+            k:stroke({{100, 600}, {900, 600}}, {force=2})
+            print(v) print(k)"#);
+        let out = run(&mut s, "print(tostring(v), v.lift, v.grip, k.lift, k.grip)");
+        assert!(out.starts_with("vine charcoal ("), "{out}");
+        assert!(run(&mut s, "print(k)").starts_with("compressed charcoal ("));
+        assert!(s.run(r#"charcoal{kind="conte"}"#).unwrap_err().contains("vine"));
+        assert!(s.run(r#"charcoal{grade="2B"}"#).is_err());
+        let program = s.program("charcoal");
+        assert!(program.lines().any(|l| l == CHARCOAL_MARK), "{program}");
+        assert!(box_for(Some(&program)).unwrap().charcoal);
+        // the line needs paper and the drawing's optics
+        for head in ["--@ engine 9\n--@ drawing-optics\n--@ charcoal\n", "--@ engine 9\n--@ paper\n--@ charcoal\n"] {
+            let e = box_for(Some(head)).unwrap_err();
+            assert!(e.contains(CHARCOAL_MARK), "{e}");
+        }
+        // a line after the first chunk isn't the head's
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{CHARCOAL_MARK}\n"))).unwrap().charcoal);
+        // replay and a save
+        let mut replay = Session::replay_with(64, box_for(Some(&program)).unwrap()).unwrap().with_paper(logged_paper(&program)).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+        let path = std::env::temp_dir().join(format!("easel-charcoal-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.charcoal);
+        assert!(restored.program("charcoal").lines().any(|l| l == CHARCOAL_MARK));
+        // (a save keeps the canvas, not the Lua heap: a fresh stick on both)
+        let more = "w = charcoal{kind=\"compressed\"} w:line({{100, 450}, {900, 450}}, {pressure=0.5}) smudge({{500, 250}, {500, 700}}) erase({{300, 280}, {300, 620}}) print(w.length, w.grip)";
+        let (a, b) = (run(&mut s, more), run(&mut restored, more));
+        assert_eq!(a, b);
+        assert_eq!(restored.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+    }
+
+    /// Through the easel: one eraser pass takes most of a vine line, less of
+    /// a compressed one; after `fix()` it takes neither.
+    #[test]
+    fn the_eraser_takes_vine_compressed_less_and_fixed_neither() {
+        let mut out = Vec::new();
+        for (kind, fixed) in [("vine", false), ("compressed", false), ("vine", true), ("compressed", true)] {
+            let mut s = Session::with_box(64, crate::session::box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, &format!(r#"c = charcoal("{kind}") c:stroke({{{{100, 500}}, {{900, 500}}}}, {{force=2}})"#));
+            if fixed {
+                run(&mut s, "fix()");
+            }
+            let dark = |s: &Session| s.canvas().unwrap().pixels().iter().map(|p| 1.0 - p[1]).sum::<f32>();
+            let blank = {
+                let mut b = Session::with_box(64, crate::session::box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+                run(&mut b, PAPER);
+                dark(&b)
+            };
+            let d0 = dark(&s) - blank;
+            run(&mut s, "erase(everywhere(), {strength=0.9})");
+            out.push(1.0 - (dark(&s) - blank) / d0);
+        }
+        assert!(out[0] > 0.5 && out[0] > 1.5 * out[1], "vine {}, compressed {}", out[0], out[1]);
+        assert!(out[2].abs() < 1e-4 && out[3].abs() < 1e-4, "fixed: {} {}", out[2], out[3]);
     }
 
     #[test]

@@ -543,7 +543,7 @@ shore = outline{{0, 500}, {500, 480}, {1000, 550}, open=true}
 land = shore:below()
 ```
 
-## Drawing: pencil, chalk, pastel and eraser
+## Drawing: pencil, chalk, pastel, charcoal and eraser
 
 ```lua
 h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
@@ -691,6 +691,39 @@ has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 `tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
 fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
+
+**Charcoal.** Vine (willow) charcoal is a charred twig with no binder;
+compressed charcoal is charcoal powder pressed with a gum or wax binder.
+Both are sticks in the tooth, as pastel is: they draw with a stick's calls
+and a pencil's, and the finger, the eraser, a dry brush, a puff and fixative
+work on them as on pastel.
+
+```lua
+v = charcoal()                          -- vine, a round stick Ø6 mm (charcoal{kind="vine", diameter=4, length=})
+k = charcoal("compressed")              -- compressed, a square stick 7 mm (charcoal{kind="compressed", diameter=})
+v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v:roll, v:snap as a pastel's
+```
+
+- **Vine** is soft and grey-black, and all of it lies loose on the tooth:
+  the kneaded eraser takes it more readily than graphite (an erased
+  passage is nearly clean), a finger smears it far, a dry brush or a puff
+  lifts it. It is for laying in and correcting.
+- **Compressed** is darker and denser, and its binder holds about half of
+  what it lays: the finger moves less of it, the eraser lightens it and
+  leaves a stain, a puff leaves the held part.
+- Charcoal is matte: no graphite sheen. **Fixative** (`fix()`) binds it and
+  darkens it a little, as pastel; the eraser and the finger then leave it.
+  Paint over it seals it.
+- **Pastel over charcoal.** Pastel laid over loose charcoal mixes with it in
+  the tooth and comes out greyer; over fixed charcoal it lies clean. Fix a
+  charcoal drawing before laying pastel on it. (The stick itself doesn't
+  pick up charcoal and dirty: only the tooth mixes.)
+- Graphite doesn't smear with the finger here at all; charcoal does.
+
+Charcoal is there in a painting begun since it came, with paper (its log's
+head says `--@ charcoal` with `--@ paper`); an older painting replays as it
+was painted and has no `charcoal`. Its numbers are estimates
+(notes/research/charcoal.md).
 
 ## The rag
 

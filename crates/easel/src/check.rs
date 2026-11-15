@@ -78,6 +78,15 @@ pub struct Input {
     pub tubes: paint::Palette,
     pub chunks: Vec<String>,
     pub live: Option<(Vec<u32>, Vec<u32>)>,
+    /// With named surfaces (surfaces.rs): the current one's name, and every other surface's
+    /// name and canvas as it rests, as `live` is the current one's.
+    pub current: String,
+    pub resting: Vec<(String, (Vec<u32>, Vec<u32>))>,
+}
+
+/// A canvas as a check compares it: bits of what's seen and of the surface.
+pub fn bits_of(c: &paint::Canvas) -> (Vec<u32>, Vec<u32>) {
+    (c.seen().iter().flat_map(|p| p.map(f32::to_bits)).collect(), c.surface_um().iter().map(|x| x.to_bits()).collect())
 }
 
 /// A check running on its own thread.
@@ -154,11 +163,26 @@ fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bo
             if give_up(stop, conn) { format!("{STOPPED} in chunk {} of {}", i + 1, input.chunks.len()) } else { format!("replay failed at chunk {}: {e}", i + 1) }
         })?;
     }
-    Ok(match (&input.live, fresh.canvas()) {
+    let same = match (&input.live, fresh.canvas()) {
         (Some((seen, surface)), Some(b)) => matches(seen, surface, &b.seen(), b.surface_um()),
         (None, None) => true,
         _ => false,
-    })
+    };
+    // every other surface, as it rests, one in memory at a time (the replay's current one goes first)
+    let mut st = fresh.st.borrow_mut();
+    st.canvas = None;
+    let resting: Vec<_> = st.surfaces.slots.iter().filter_map(|s| s.rest.as_ref().map(|r| (s.name.clone(), r.canvas.clone()))).collect();
+    if !same || st.surfaces.current_name() != input.current || resting.len() != input.resting.len() {
+        return Ok(false);
+    }
+    for ((name, packed), (live_name, (seen, surface))) in resting.into_iter().zip(&input.resting) {
+        let Some(packed) = packed else { return Ok(false) };
+        let c = packed.restore().map_err(|e| format!("the replay's surface {name:?} couldn't be brought back: {e}"))?;
+        if name != *live_name || !matches(seen, surface, &c.seen(), c.surface_um()) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn matches(seen: &[u32], surface: &[u32], replay_seen: &[paint::Rgb], replay_surface: &[f32]) -> bool {

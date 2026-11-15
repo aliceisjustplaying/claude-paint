@@ -102,6 +102,13 @@ pub const PAPER_MARK: &str = "--@ paper";
 /// paints the single-cure film engine 9 was released with. It requires
 /// engine 9.
 pub const MATERIAL_MARK: &str = "--@ material";
+/// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
+/// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
+/// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
+/// current (`use`). A new painting has it; a log without it replays as it was painted, with
+/// none of it. Its verbs are a sheet of paper's, so it installs them only beside the
+/// paper-and-pastel switch (`PAPER_MARK`): without that it is accepted and installs nothing.
+pub const SURFACES_MARK: &str = "--@ surfaces";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -231,39 +238,9 @@ pub struct Chunk {
     pub mark_effects: u64,
 }
 
-/// The canvas as it was before a chunk, to put back if the chunk fails: its
-/// state packed (`Canvas::pack`) and compressed into an anonymous temporary
-/// file, not a copy of the canvas in memory. A copy of a painted 2400 px
-/// engine-9 canvas is some 4 GiB beside the canvas itself; packed and
-/// compressed it is a few hundred MiB, in the page cache, which the kernel
-/// writes out under memory pressure instead of swapping the painting.
-struct CanvasSnapshot {
-    file: std::fs::File,
-    aside: paint::checkpoint::Aside,
-}
-
-impl CanvasSnapshot {
-    fn take(canvas: &Canvas) -> std::io::Result<Self> {
-        let t0 = Instant::now();
-        let mut packer = zstd::stream::write::Encoder::new(tempfile::tempfile()?, 1)?;
-        // (a painted 2400 px canvas packs to a gigabyte: compressed on every core the
-        // painting has, it is a second or two before each chunk, not six)
-        packer.multithread(rayon::current_num_threads() as u32)?;
-        let aside = canvas.pack(&mut packer)?;
-        let file = packer.finish()?;
-        eprintln!("canvas put aside: {} bytes, {:.2}s", file.metadata()?.len(), t0.elapsed().as_secs_f64());
-        Ok(Self { file, aside })
-    }
-
-    fn restore(mut self) -> std::io::Result<Canvas> {
-        use std::io::Seek;
-        let t0 = Instant::now();
-        self.file.rewind()?;
-        let c = Canvas::unpack(&mut zstd::stream::read::Decoder::new(&self.file)?, self.aside)?;
-        eprintln!("canvas put back: {:.2}s", t0.elapsed().as_secs_f64());
-        Ok(c)
-    }
-}
+/// The canvas as it was before a chunk, to put back if the chunk fails: packed
+/// (`surfaces::Packed`), not a copy of it in memory.
+type CanvasSnapshot = crate::surfaces::Packed;
 
 /// Everything a failed chunk could have changed, taken before it runs.
 struct Snap {
@@ -285,6 +262,9 @@ struct Snap {
     knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
     /// The rags in the hand, as the brushes.
     rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
+    /// The surfaces besides the current one (surfaces.rs): each resting one's packed canvas
+    /// is shared, not copied, so a surface the chunk takes up is put back from where it rested.
+    surfaces: crate::surfaces::Surfaces,
 }
 
 pub struct Session {
@@ -331,6 +311,12 @@ pub struct Session {
     resting: Option<CanvasSnapshot>,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
+}
+
+/// What `Session::show` set aside.
+pub struct Shown {
+    own: crate::surfaces::Own,
+    name: String,
 }
 
 #[derive(Debug)]
@@ -459,6 +445,10 @@ impl Session {
             (false, true) => {
                 self.st.borrow_mut().paper = true;
                 api::install_paper(&self.lua, self.st.clone())?;
+                // the named-surfaces switch's verbs make sheets of paper: only beside this one
+                if self.st.borrow().tubes.surfaces {
+                    crate::surfaces::install(&self.lua, self.st.clone())?;
+                }
                 // (no chunk has run: every global is the easel's own)
                 self.own = global_values(&self.lua)?;
                 self.globals = self.own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
@@ -500,7 +490,7 @@ impl Session {
             (r, v)
         }).collect();
         let canvas = s.canvas.as_ref().map(CanvasSnapshot::take).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put aside before the chunk: {e}")))?;
-        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags, surfaces: s.surfaces.clone() })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -524,7 +514,9 @@ impl Session {
         let mut s = self.st.borrow_mut();
         // the failed chunk's canvas goes before the snapshot's is unpacked: one canvas in memory, not two
         s.canvas = None;
-        s.canvas = snap.canvas.map(CanvasSnapshot::restore).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put back from where it was put aside: {e}")))?;
+        s.canvas = snap.canvas.map(|c| c.restore()).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put back from where it was put aside: {e}")))?;
+        // every other surface as it rested before the chunk (the chunk's own packs go)
+        s.surfaces = snap.surfaces;
         s.style = snap.style;
         s.setup = snap.setup;
         s.canvas_src = snap.canvas_src;
@@ -551,7 +543,8 @@ impl Session {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
         };
-        let mut fresh = Session::with_box(width, tubes).and_then(|s| s.with_paper(self.st.borrow().paper)).map_err(|e| e.to_string())?;
+        let paper = self.st.borrow().paper;
+        let mut fresh = Session::with_box(width, tubes).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -590,6 +583,8 @@ impl Session {
             PROGRESS.begin(src.lines().count(), &self.st.borrow());
         }
         let t0 = Instant::now();
+        // masks are checked against this session's current surface (api.rs `mask_of`)
+        let _running = api::Running::begin(&self.st);
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
         let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
@@ -630,6 +625,14 @@ impl Session {
         let globals = if self._serials.capped.get() { None } else { globals };
         if fail.is_none() && self._serials.capped.get() {
             fail = Some(format!("the chunk asked for more memory than a painting may hold ({} GiB), so nothing it did was kept", LUA_MAX_BYTES >> 30));
+        }
+        // the surfaces the chunk handed off leave once it is kept (surfaces.rs), and never if not
+        if fail.is_none() {
+            if let Err(e) = crate::surfaces::commit(&self.st, self.replay) {
+                fail = Some(format!("{e}\n(the surfaces the chunk handed off couldn't be put in their files, so nothing it did was kept)"));
+            }
+        } else {
+            crate::surfaces::discard(&self.st);
         }
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
@@ -682,6 +685,13 @@ impl Session {
         std::cell::Ref::filter_map(self.st.borrow(), |s| s.canvas.as_ref()).ok()
     }
 
+    /// The painting's canvas while it is the current surface (surfaces.rs), for what records
+    /// the painting (its hand-time frames and timelapse): None while a sheet beside it is in
+    /// hand.
+    pub fn painting(&self) -> Option<std::cell::Ref<'_, Canvas>> {
+        std::cell::Ref::filter_map(self.st.borrow(), |s| s.canvas.as_ref().filter(|_| s.surfaces.main_current())).ok()
+    }
+
     /// Pack the canvas away on disk (`CanvasSnapshot`) while the sitting's other canvas
     /// is used, so that the painting and the scratch canvas are never both in memory.
     /// Nothing reads a resting session's canvas until `wake` (`run` wakes it).
@@ -709,6 +719,57 @@ impl Session {
             }
         }
         Ok(())
+    }
+
+    /// Show the surface `name` for a look (main.rs: `look`, `probe`, `status`, `save` with
+    /// `--surface`): the current surface rests packed (`rest`) and a copy of `name`'s canvas,
+    /// waited up to the studio clock, stands in for it with its own fields, until `unshow`.
+    /// The surface itself stays as it rests, so a look changes nothing a replay of the log
+    /// wouldn't. None: `name` is current, and is shown as it is.
+    pub fn show(&mut self, name: &str) -> Result<Option<Shown>, String> {
+        let (i, r, clock) = {
+            let st = self.st.borrow();
+            let sf = &st.surfaces;
+            if name == sf.current_name() {
+                return Ok(None);
+            }
+            let Some(i) = sf.find(name) else {
+                return Err(format!("--surface {name}: there is no surface of that name (there are: {})", sf.names().join(", ")));
+            };
+            (i, sf.slots[i].rest.clone().expect("a surface not current rests"), st.clock)
+        };
+        self.rest().map_err(|e| format!("the current surface couldn't be put aside: {e}"))?;
+        let canvas = r.canvas.as_ref().map(|p| p.restore()).transpose();
+        let mut canvas = match canvas {
+            Ok(c) => c,
+            Err(e) => {
+                self.wake().map_err(|e| format!("the current surface couldn't be brought back: {e}"))?;
+                return Err(format!("the surface {name:?} couldn't be brought back: {e}"));
+            }
+        };
+        if let Some(c) = canvas.as_mut() && clock > r.since {
+            c.wait((clock - r.since) as f32);
+        }
+        let mut st = self.st.borrow_mut();
+        let own = crate::surfaces::Own::take(&mut st);
+        r.own.put(&mut st);
+        // (its clock read against the studio's, as a surface taken up has it: surfaces.rs `wake_up`)
+        if let Some(c) = canvas.as_ref() {
+            st.clock0 = c.clock() - clock;
+        }
+        st.canvas = canvas;
+        Ok(Some(Shown { own, name: st.surfaces.slots[i].name.clone() }))
+    }
+
+    /// Put back what `show` showed: the current surface again, as it was.
+    pub fn unshow(&mut self, shown: Option<Shown>) -> Result<(), String> {
+        let Some(shown) = shown else { return Ok(()) };
+        {
+            let mut st = self.st.borrow_mut();
+            st.canvas = None;
+            shown.own.put(&mut st);
+        }
+        self.wake().map_err(|e| format!("the current surface couldn't be brought back after showing {:?}: {e}", shown.name))
     }
 
     /// The session as a replayable program.
@@ -789,6 +850,9 @@ impl Session {
         }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.surfaces {
+            let _ = writeln!(s, "{SURFACES_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -929,7 +993,7 @@ impl Session {
 
     pub fn status(&self) -> String {
         let s = self.st.borrow();
-        format!("{} chunks · {}px · {}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"))
+        format!("{} chunks · {}px · {}{}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"), s.surfaces.status())
     }
 }
 
@@ -1565,6 +1629,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
         b.calls_agree = true;
+        b.surfaces = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1633,6 +1698,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.calls_agree = head(CALLS_AGREE_MARK);
+    b.surfaces = head(SURFACES_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
@@ -1878,7 +1944,7 @@ mod tests {
         let before = bits(&s);
         s.rest().unwrap();
         assert!(s.canvas().is_none());
-        s.resting.as_ref().unwrap().file.set_len(0).unwrap();
+        s.resting.as_ref().unwrap().damage();
         assert!(s.wake().is_err());
         assert!(s.stale && s.canvas().is_none(), "a session without its canvas must be stale");
         s.run("x = 1").unwrap();

@@ -107,14 +107,17 @@ as a sanded pastel paper or board is, or a ground of pumice in glue or
 gesso painted onto paper. `size` is the grains' median size (by grade:
 P240 58 µm, P320 46, P400 35, P600 26, P800 22). `cover` is the share of the
 sheet the grains cover, seen from above (an open coat 0.5–0.7; a closed one
-near 1 holds less). The binder is `"acrylic"` (modern sanded papers, or
+holds a little less). The binder is `"acrylic"` (modern sanded papers, or
 pumice in acrylic gesso) or `"glue"` (glue or starch, the older pumice
-grounds). The tooth is then the open room between the grains and the lean
-coat's pores, two to four times a drawing paper's, more on the coarse
-grades. So the sheet takes layer on layer of pastel where drawing paper
-goes slick after two or three. The hard, sharp grains also wear a stick
-about two and a half times as fast ("sanded paper eats pastel"). The
-sheet's grain shows through the coat. An acrylic coat seals the paper
+grounds; leaner, so more of the coat is open). The tooth is then the open
+room between the grains, under the tallest ones the stick rests on: at P400
+3.5 times a drawing paper's in acrylic and 5 times in glue, more on the
+coarse grades (P240 6–8 times), less on the fine (P800 2–3). The hard, sharp
+grains also wear a stick about four and a half times as fast ("sanded paper
+eats pastel"), so at the same force it fills in about as many strokes as
+paper does. Laid with a lighter hand, a pass at a time as thick as one on
+fresh paper, it takes 10–15 layers where drawing paper goes slick after
+two or three. The sheet's grain shows through the coat. An acrylic coat seals the paper
 against oil, so only the coat's own pores take it; a glue coat lets oil
 through to the paper. A ground laid over the grit fills its tooth as thick
 paint would. A knife rides the grains: it neither burnishes the tooth nor
@@ -630,8 +633,9 @@ feel(x, y)                     -- what a fingertip feels there
 - **The tooth fills.** Loose pastel in the pores is a third body the stick
   slides on: the more there is, the less a stroke lays, until the paper
   refuses it. A drawing paper takes two or three layers. A sanded sheet
-  (`paper={grit=...}`) holds two to four times as much, so later strokes
-  still lay; its grains file the stick faster too.
+  (`paper={grit=...}`) holds three to five times as much at P400, and its
+  grains file the stick about four and a half times as fast, so a light
+  hand lays layer on layer there.
   Fixative binds it into a rough crust that files the stick again,
   so a fixed passage takes more pastel; and darkens it a little, as the resin
   wets the particles.

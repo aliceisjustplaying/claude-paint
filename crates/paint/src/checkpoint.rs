@@ -224,7 +224,7 @@ const OILS: u64 = 1 << 43;
 /// (Bit 43 is the tube oils switch's, `OILS`.)
 const WET_PASTEL: u64 = 1 << 44;
 /// The pastel lift switch (`Canvas::with_pastel_lift`).
-const PASTEL_LIFT: u64 = 1 << 45;
+const PASTEL_LIFT: u64 = 1 << 49;
 /// Marks the wet pastel section ("WETP"), and its version: written right
 /// after the engine word exactly when it has `WET_PASTEL`: whether a
 /// drawing follows (0 or 1), then for each of its cells (one triple per
@@ -2423,7 +2423,7 @@ mod tests {
     }
 
     /// The pastel lift switch round-trips in the engine word, and a canvas
-    /// without it writes the word as it always did (no bit 45).
+    /// without it writes the word as it always did (no bit 49).
     #[test]
     fn the_pastel_lift_switch_round_trips() {
         for on in [false, true] {

@@ -99,7 +99,7 @@ cotton drawing paper with a felt grain):
 | `porosity`, `floc`, `floc_size`, `press`, `calender` | the sheet's pore share; the share of fibers in flocs and their size (mm); how much of the thickness variation the press turns into density (0.5–0.8); calendering 0..1 |
 | `felt` | `{cell=mm, depth=µm}`, or `false` for none |
 | `laid` | `{per_cm=, chain=mm, deficit=}`: a laid mold's wires |
-| `absorbent`, `stiffness` | how much of the pores take oil (0..1); the sheet's give under a stick (MPa) |
+| `absorbent`, `stiffness` | how much of the pores take a liquid, oil or water (0..1); the sheet's give under a stick (MPa) |
 | `grit` | a gritted ground: `{size=µm, cover=0.3..1, binder="acrylic"\|"glue"}`, `true` for a P400 sanded paper (35 µm, cover 0.6, acrylic), or `false` for none |
 
 **Sanded paper.** `grit=` coats the sheet with grains held in a binder,
@@ -124,6 +124,7 @@ paint would. A knife rides the grains: it neither burnishes the tooth nor
 raises a nap. Pumice grounds are 18th century and on; pumice papers were
 sold by about 1890; acrylic sanded papers are late 20th century. Sources,
 and which numbers are estimates: notes/research/sanded_paper.md.
+| `cobb` | with pastel and water (below): the sheet's sizing, the g/m² of water it takes up in its first minute (its Cobb60, 5 to 200; 25 by default, a sized drawing paper), or `false` for an unsized sheet, which drinks water at once |
 
 A ground is optional on paper. Thin oil paint on it goes lean and matte, as
 on an absorbent ground. The numbers come from paper physics and, where no
@@ -820,6 +821,64 @@ p:hatch(m, {alt=30, azimuth=45, speed=250})                     -- how the hand 
   `--@ pastel-area-strokes`) refuses them, as it did, and replays as painted:
   its plain stick hatching lays the pencil's marks, 1.5 mm apart, 12 mm long,
   at 60° and 80 mm/s, as it did. A pencil's `hatch` doesn't take them.
+
+**Pastel with water.** A stick dipped in water, a wet brush through laid pastel, ground pastel as a paste:
+
+```lua
+p:wet(1)                                  -- dip the tip (share 0..1 of what it soaks up); returns how wet it is
+p:stroke(pts, {force=2})                  -- a creamy line: lays more, darker while wet, fewer crumbs
+b = brush("round", 20)
+b:dip(0.8)                                -- water only (a clean brush: no oil paint on it)
+b:wash(pts, {pressure=0.5})               -- through laid pastel: the loose pastel turns to paste and moves along
+b:dip(1, {pastel=p, amount=0.5})          -- ground pastel in the water: a paste (or, with little of it, a wash)
+b:wash(pts)                               -- lays it, wet; returns the pastel laid, mm³
+```
+
+- **While wet** the water fills the air between the particles and the
+  pastel darkens, by how much of its pores the water fills and by its
+  pigments' refractive index: an ultramarine or a lake goes nearly as deep
+  as in oil, a vermilion or an earth hardly changes. `feel` says `, wet`.
+- **It dries on the painting's clock** (strokes' hand time and `wait`).
+  The pastel's fine pores hold their water; what stands over them sinks
+  into the sheet as its sizing lets it (`paper={cobb=25}`, the default:
+  about 3 µm in the first second, 25 µm in a minute; `cobb=false`, an
+  unsized sheet, at once), until the sheet's pores are full (`absorbent`).
+  The studio (20 °C, 50 % RH) evaporates about 0.7 µm of water a minute,
+  first what stands, then what the sheet took in, up through the pastel,
+  which stays dark until the sheet under it is dry: a wet stick's line
+  dries in minutes, a brushed wash in about an hour.
+- **Dry again** its gum has set: the pastel is bound where it kept enough
+  of its gum to hold against a firm finger (about half a percent of it).
+  Water that sank into the sheet took its share of the gum with it, so a
+  thin veil flooded with many times its own water on a sheet that drinks
+  it stays loose; a wetted passage that kept its pores' water binds.
+  Wetting it again binds no more. Bound,
+  the finger, a dry brush and the eraser move it no more than fixed
+  pastel, and a stick takes to it as to a fixed crust. Its color comes
+  back almost to dry: the gum in its pores darkens it a little.
+- **A dipped tip** has lost its gum's hold and is a wet chalk: barely
+  damp (under about half full) it draws as dry; wetter, it is plastic,
+  far softer, laying more for the same force and smearing instead of
+  crumbling; soaked (past about two thirds full) it is a slurry the face
+  presses into the tooth as a paste, a creamy line with no crumbs. A dip
+  soaks about 3 mm of the end, and its water spreads up the dry stick (a
+  third of it left at the tip after ten seconds), so a dip serves a few
+  strokes; dip it again (`p:wet`, a reach to the jar's hand time).
+- **A wet brush** holds water in its belly (a round about 0.16 mL for a
+  6 mm brush), lays it as it lays paint (more for a harder press), and picks up the wetted paste as it picks up wet paint,
+  laying it on along its run, with what it already held: drawn out of a
+  passage, it drags its color across the paper. Bound and fixed pastel
+  stays. Grinding a stick into the water (`pastel=`) shortens it; a full
+  paste (`amount=1`) fills the space between the hairs, and its solids
+  push out the water. `b:wipe(1)` empties the brush. Not under a sheet,
+  and not on wet paint.
+- Not modeled: water running sideways (backruns, blooms), the paper itself
+  darkening while wet, cockling, steam.
+- Pastel with water is there in a painting begun since it came (its log's
+  head says `--@ wet-pastel`, with `--@ paper` and `--@ drawing-optics`);
+  an older painting replays as it was painted and has no `p:wet`, `b:dip`
+  or `b:wash`. The numbers and the few estimates left are in
+  notes/research/wet_pastel.md.
 
 ```lua
 lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask

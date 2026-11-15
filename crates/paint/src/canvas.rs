@@ -251,6 +251,8 @@ pub struct Canvas {
     pub(crate) liquid_film_levels: bool,
     pub(crate) sealed_drawing_guide: bool,
     pub(crate) drawing_optics: bool,
+    /// Pastel takes water (`with_wet_pastel`, `crate::wet_pastel`).
+    pub(crate) wet_pastel: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -340,6 +342,7 @@ impl Canvas {
             liquid_film_levels: false,
             sealed_drawing_guide: false,
             drawing_optics: false,
+            wet_pastel: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -474,6 +477,19 @@ impl Canvas {
 
     pub fn drawing_optics(&self) -> bool {
         self.drawing_optics
+    }
+
+    /// Pastel takes water (`crate::wet_pastel`): a wet stick lays a wet
+    /// deposit, a wet brush moves loose pastel as a paste, and the water
+    /// dries on the painting's clock. It needs the drawing's separate
+    /// optics (`with_drawing_optics`); without them it stays off.
+    pub fn with_wet_pastel(mut self, enabled: bool) -> Self {
+        self.wet_pastel = enabled && self.drawing_optics;
+        self
+    }
+
+    pub fn wet_pastel(&self) -> bool {
+        self.wet_pastel
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

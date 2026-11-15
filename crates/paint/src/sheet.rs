@@ -385,7 +385,7 @@ impl Canvas {
     }
 
     /// (pixels of the whole canvas) and direction.
-    fn walk(&self, pts: &[(f32, f32)]) -> Vec<((f32, f32), (f32, f32))> {
+    pub(crate) fn walk(&self, pts: &[(f32, f32)]) -> Vec<((f32, f32), (f32, f32))> {
         let s = self.f.scale;
         let p: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
         let path = if p.len() >= 2 { crate::path::densify(&p) } else { vec![p[0], p[0]] };
@@ -416,7 +416,7 @@ impl Canvas {
     }
 
     /// Window pixel at whole-canvas pixel (x, y).
-    fn win_px(&self, x: f32, y: f32) -> Option<usize> {
+    pub(crate) fn win_px(&self, x: f32, y: f32) -> Option<usize> {
         let f = self.f;
         let (xi, yi) = (x.floor() as isize - f.x0 as isize, y.floor() as isize - f.y0 as isize);
         if xi < 0 || yi < 0 || xi >= f.w as isize || yi >= f.h as isize {

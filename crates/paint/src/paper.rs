@@ -250,6 +250,12 @@ pub struct Paper {
     /// How much of the sheet's pore volume takes oil (sizing slows water,
     /// barely oil): 0..1.
     pub absorbent: f32,
+    /// How the sheet's sizing slows water: its Cobb60 (ISO 535, TAPPI
+    /// T 441), the water a square meter takes up in its first 60 s, g/m²
+    /// (µm of water); `None` for an unsized sheet (filter or blotting
+    /// paper), which takes water as fast as its pores draw it. Only the wet
+    /// pastel switch reads it (`crate::wet_pastel::sink_um`).
+    pub cobb60: Option<f32>,
     /// Through-thickness (z) modulus, MPa: how the sheet gives under a
     /// stick (39 MPa measured on board, Mann, Baum & Habeger 1979; a soft
     /// drawing paper lower). A mount's backing (`Paper::mounted`) is folded
@@ -603,6 +609,10 @@ impl Paper {
             felt: Some(Felt { cell_mm: 0.8, depth_um: 20.0 }),
             laid: None,
             absorbent: 0.8,
+            // a gelatin-sized drawing paper: sized writing and bond grades
+            // measure 22–30 g/m², unsized sheets 50 and more (paperonweb,
+            // "Properties of paper"); no artist's paper's Cobb was found
+            cobb60: Some(25.0),
             z_mpa: 39.0,
             grit: None,
             drum: None,

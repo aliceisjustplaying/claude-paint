@@ -406,12 +406,15 @@ impl Canvas {
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_on_grid(dt);
+            self.dry_pastel_water(dt);
             return;
         }
         let start = self.wet.clock.now;
         self.age_from(dt, false, start + dt as f64);
         self.wet.clock.now += dt as f64;
         self.skin_advance(start, self.wet.clock.now);
+        // (and the water in pastel: wet_pastel.rs)
+        self.dry_pastel_water(dt);
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,
@@ -710,10 +713,16 @@ impl Canvas {
                 }
             }
         }
+        // (and until the water in pastel is gone: wet_pastel.rs)
+        let water = self.pastel_water_minutes();
+        let left = left.max(water);
         let start = self.wet.clock.now;
         self.bake(true, start);
         self.wet.clock.now += left as f64;
         self.skin_advance(start, self.wet.clock.now);
+        if water > 0.0 {
+            self.dry_pastel_water(left);
+        }
     }
 
     /// Fold what was painted since the last `wait` into the drying state: a

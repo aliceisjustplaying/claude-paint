@@ -86,6 +86,13 @@ pub struct Stick {
     /// Whether what it lays is a bare bed of carbon (charcoal), seen with
     /// no first-surface veil (`Cell::bare_carbon`).
     pub carbon: bool,
+    /// Water in its tip, mm³ (dipped: `crate::wet_pastel`; 0 dry). A wet
+    /// tip draws only on a canvas with the switch (`Canvas::with_wet_pastel`).
+    pub water: f32,
+    /// The mean refractive index of its particles, by volume (its pile's
+    /// tubes, `Palette::dry_index`): how much water in the pores of what
+    /// it lays darkens it (`crate::wet_pastel`). Only with the switch.
+    pub index: f32,
 }
 
 /// How readily a kneaded eraser takes a pastel stick's pastel.
@@ -104,16 +111,19 @@ pub(crate) struct Grains {
     pub(crate) lift: f32,
     pub(crate) carbon: f32,
     pub(crate) lies: f32,
+    /// The particles' mean refractive index, recorded where they land
+    /// (`Cell::note_pastel`, the wet pastel switch); 0 records none.
+    pub(crate) index: f32,
 }
 
 impl Grains {
     /// A pastel stick's pastel, as it always was.
-    pub(crate) const PASTEL: Grains = Grains { lift: PASTEL_LIFT, carbon: 0.0, lies: 1.0 };
+    pub(crate) const PASTEL: Grains = Grains { lift: PASTEL_LIFT, carbon: 0.0, lies: 1.0, index: 0.0 };
 
     /// What `stick` lays.
     pub(crate) fn of(stick: &Stick) -> Grains {
         let lies = if stick.cover_um == PARTICLE_UM { 1.0 } else { PARTICLE_UM / stick.cover_um };
-        Grains { lift: stick.lift, carbon: if stick.carbon { 1.0 } else { 0.0 }, lies }
+        Grains { lift: stick.lift, carbon: if stick.carbon { 1.0 } else { 0.0 }, lies, index: 0.0 }
     }
 }
 
@@ -150,7 +160,7 @@ impl Carried {
         if self.carbon <= 0.0 {
             return Grains::PASTEL;
         }
-        Grains { lift: PASTEL_LIFT + (self.lift - PASTEL_LIFT) * self.carbon, carbon: self.carbon, lies: 1.0 }
+        Grains { lift: PASTEL_LIFT + (self.lift - PASTEL_LIFT) * self.carbon, carbon: self.carbon, lies: 1.0, index: 0.0 }
     }
 }
 
@@ -229,7 +239,7 @@ impl Stick {
     /// Hardness (MPa) and wear coefficient of a stick of softness `soft`
     /// (0 hard pastel .. 1 very soft): σp from 30 down to 2 MPa
     /// (log-spaced), K from 0.01 up to 0.06.
-    fn mechanics(soft: f32) -> (f32, f32) {
+    pub(crate) fn mechanics(soft: f32) -> (f32, f32) {
         let s = soft.clamp(0.0, 1.0);
         let h = 10f32.powf(crate::lerp(30f32.log10(), 2f32.log10(), s));
         (h, crate::lerp(0.01, 0.06, s))
@@ -247,13 +257,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7; Stabilo's CarbOthello is
@@ -261,7 +271,7 @@ impl Stick {
     /// (`PencilPoint::cut`): the pencil that `Stick::sharpen` sharpens.
     pub fn pencil(color: Rgb, soft: f32, d_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: PENCIL_LENGTH_MM, facets: Stick::pencil_point(PencilPoint::cut(hardness)), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
+        Stick { section: Section::Round { d_mm }, length_mm: PENCIL_LENGTH_MM, facets: Stick::pencil_point(PencilPoint::cut(hardness)), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     /// A pastel pencil as a log without the easel's `--@ pastel-pencil-sharpen`
@@ -269,7 +279,7 @@ impl Stick {
     /// up (`PencilPoint::BEFORE`). Such a log never sharpens it.
     pub fn pencil_as_before(color: Rgb, soft: f32, d_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets: Stick::pencil_point(PencilPoint::BEFORE), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets: Stick::pencil_point(PencilPoint::BEFORE), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     /// The blade's cuts of a pastel pencil's point: the blunt end
@@ -582,6 +592,7 @@ pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs:
 /// `Grains::PASTEL`, as it always was).
 pub(crate) fn lay_into(c: &mut crate::graphite::Cell, q: f32, color: Rgb, dv: f32, g: Grains) {
     c.add_grains(q, color, dv, g);
+    c.note_pastel(dv, g.index);
     c.loose += dv;
 }
 
@@ -693,8 +704,29 @@ impl Canvas {
         let crumb_max = (80.0 + 220.0 * soft) * (fmean / 2.0).clamp(0.25, 2.0).powf(0.25);
         let mut rng = crate::rng::Rng::new((pts[0].x.to_bits() as u64) << 32 ^ pts[0].y.to_bits() as u64 ^ (steps as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
         let px_um2 = (px * 1000.0) * (px * 1000.0);
-        let grains = Grains::of(stick);
+        // a wet tip (wet_pastel.rs): a chalk soil. Below its plastic limit
+        // as hard as dry; in its plastic range as soft as its remoulded
+        // strength, smearing rather than crumbling; past its liquid limit a
+        // slurry pressed into the tooth as a paste. Its paste spreads its
+        // particles and packs as it dries, and it lays its pores' water with
+        // what it lays. The stick as it was dry, to come back to
+        let wet_tip = self.wet_pastel && stick.water > 0.0;
+        // (the switch records the particles' index where they land)
+        let n_lay = if self.wet_pastel { stick.index } else { 0.0 };
+        let dry_hardness = stick.hardness;
+        let paste_thin = crate::wet_pastel::paste_thin();
+        let (mut shed, mut thick, mut paste_water, mut slurry, mut keep) = (SHED, PARTICLE_UM, 0.0f32, 0.0f32, 1.0f32);
+        let grains = Grains { index: n_lay, ..Grains::of(stick) };
         for k in 0..=steps {
+            if wet_tip {
+                let w = stick.wetness();
+                slurry = crate::wet_pastel::paste_share(w);
+                stick.hardness = crate::wet_pastel::wet_hardness(dry_hardness, w);
+                shed = SHED * (1.0 - slurry);
+                thick = PARTICLE_UM * (1.0 - slurry * (1.0 - paste_thin));
+                paste_water = crate::wet_pastel::POROSITY * w;
+                keep = crate::wet_pastel::dried_share(slurry);
+            }
             let t = k as f32 * ds;
             let mut sp = at(t);
             out.secs += if k == 0 { 0.0 } else { ds / sp.speed };
@@ -716,6 +748,8 @@ impl Canvas {
             let mut caught: Vec<(usize, f32)> = Vec::new();
             let mut worn_um3 = 0.0f32;
             let mut wet_um3 = 0.0f32;
+            // (the water a wet tip laid, µm over a pixel)
+            let mut water_um3 = 0.0f32;
             {
                 let d = self.drawing_mut();
                 // (a stick drawing's layout once pastel lands in the tooth:
@@ -735,8 +769,8 @@ impl Canvas {
                             continue;
                         }
                         worn_um3 += dv;
-                        carried += dv * SHED;
-                        dv *= 1.0 - SHED;
+                        carried += dv * shed;
+                        dv *= 1.0 - shed;
                         caught.push((i, dv));
                         continue;
                     }
@@ -753,22 +787,37 @@ impl Canvas {
                     let a_fill = if o > fill_at { (-fill_at / mu).exp() * bearing(o - fill_at, CRUST_UM) } else { 0.0 };
                     let bound_share = if v > 0.0 { c.bound / v } else { 0.0 };
                     let mut dv = ds_um * stick.wear * (grit_wear * a_paper + CRUST_WEAR * bound_share * a_fill);
+                    if slurry > 0.0 {
+                        // a slurry isn't worn off: pressed by the face, it
+                        // fills the open pores of the tooth it touches (the
+                        // micro-relief's µ per pixel, less what pastel
+                        // already fills), as paint does (wet_pastel.rs)
+                        dv = (1.0 - slurry) * dv + slurry * (mu - v).max(0.0);
+                    }
                     if dv <= 0.0 {
                         continue;
                     }
                     worn_um3 += dv;
+                    let worn_here = dv;
                     // most of it comes away as crumbs under the face
-                    carried += dv * SHED;
-                    dv *= 1.0 - SHED;
+                    carried += dv * shed;
+                    dv *= 1.0 - shed;
                     if wetv[j] {
                         wet_um3 += dv;
                         continue;
                     }
                     // (as it lies in the tooth: what that volume covers)
                     let dv = dv * grains.lies;
-                    let q = 1.0 - (-dv / PARTICLE_UM).exp();
+                    let q = 1.0 - (-dv / thick).exp();
                     let before = (c.a, c.reflectance());
-                    lay_into(c, q, stick.color, dv, grains);
+                    // (a paste's volume once it has packed dry)
+                    let kept = dv * keep;
+                    lay_into(c, q, stick.color, kept, grains);
+                    if paste_water > 0.0 {
+                        // the paste leaves its water where the tip wore
+                        crate::wet_pastel::add_water(c, worn_here * paste_water);
+                        water_um3 += worn_here * paste_water;
+                    }
                     laid = true;
                     pxs[i] = c.repaint(pxs[i], before);
                 }
@@ -800,6 +849,10 @@ impl Canvas {
                 carried -= give;
                 d.sticks |= laid;
                 d.carbon |= laid && stick.carbon && d.optics();
+                d.damp |= water_um3 > 0.0;
+            }
+            if water_um3 > 0.0 {
+                stick.water = (stick.water - water_um3 * a_px_mm2 * 1e-3).max(0.0);
             }
             self.px = pxs;
             self.film = film;
@@ -843,6 +896,9 @@ impl Canvas {
         }
         if out.volume_mm3 + out.on_wet > 0.0 {
             out.on_wet /= out.volume_mm3 + out.on_wet;
+        }
+        if wet_tip {
+            stick.hardness = dry_hardness;
         }
         out
     }
@@ -1197,6 +1253,9 @@ impl Canvas {
                 let tooth = if full >= 0.95 { "the tooth full" } else if full > 0.5 { "the tooth half full and more" } else if full > 0.2 { "the tooth taking it" } else { "a little in the tooth" };
                 let fixed = if c.loose <= 0.0 { "fixed" } else if c.bound > 0.0 { "loose over fixed" } else { "loose" };
                 out += &format!(": pastel, {fixed}, {tooth}");
+                if c.water > 0.0 {
+                    out += ", wet";
+                }
             } else {
                 out += ": the tooth open";
             }

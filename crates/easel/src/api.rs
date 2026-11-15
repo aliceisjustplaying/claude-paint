@@ -894,6 +894,7 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
             }
         }
         let mmu = b.st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.mm_per_unit();
+        let km = b.st.borrow().canvas.as_ref().is_some_and(|c| c.pastel_km_mix());
         let cap = b.held.borrow().capacity_mm3(mmu);
         let mut h = b.held.borrow_mut();
         let eps = paint::wet_pastel::POROSITY;
@@ -912,7 +913,17 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
             let v = (amount * cap).min(room).min((st.length_mm - 5.0).max(0.0) * area);
             if v > 0.0 {
                 let total = h.paste_mm3 + v;
-                h.paste = [0, 1, 2].map(|k| (h.paste[k] * h.paste_mm3 + st.color[k] * v) / total);
+                if km {
+                    // (ground together, the sticks' particles mix by
+                    // Kubelka–Munk, each by its scattering × volume: paint's
+                    // `Canvas::with_pastel_km_mix`)
+                    let s_new = st.scatter.max(0.0);
+                    let s_old = if h.paste_s > 0.0 { h.paste_s } else { s_new };
+                    h.paste = paint::dry::km_mix(h.paste, h.paste_mm3 * s_old, st.color, v * s_new);
+                    h.paste_s = (h.paste_mm3 * s_old + v * s_new) / total;
+                } else {
+                    h.paste = [0, 1, 2].map(|k| (h.paste[k] * h.paste_mm3 + st.color[k] * v) / total);
+                }
                 h.paste_n = (h.paste_n * h.paste_mm3 + st.index * v) / total;
                 // (ground charcoal is bare carbon in the paste, at its own lift)
                 if st.carbon || h.paste_carbon > 0.0 {
@@ -967,9 +978,9 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
             let mmu = c.mm_per_unit();
             let mut h = b.held.borrow_mut();
             let cap = h.capacity_mm3(mmu);
-            let mut load = paint::wet_pastel::WashLoad { water_mm3: h.water_mm3, paste_mm3: h.paste_mm3, paste: h.paste, paste_n: h.paste_n, paste_carbon: h.paste_carbon, paste_lift: h.paste_lift, ..paint::wet_pastel::WashLoad::for_tool(&h.tool, mmu, cap) };
+            let mut load = paint::wet_pastel::WashLoad { water_mm3: h.water_mm3, paste_mm3: h.paste_mm3, paste: h.paste, paste_n: h.paste_n, paste_carbon: h.paste_carbon, paste_lift: h.paste_lift, paste_s: h.paste_s, ..paint::wet_pastel::WashLoad::for_tool(&h.tool, mmu, cap) };
             let (v, secs) = c.wash_pastel(width, p, &pts, &mut load);
-            (h.water_mm3, h.paste_mm3, h.paste, h.paste_n, h.paste_carbon, h.paste_lift) = (load.water_mm3, load.paste_mm3, load.paste, load.paste_n, load.paste_carbon, load.paste_lift);
+            (h.water_mm3, h.paste_mm3, h.paste, h.paste_n, h.paste_carbon, h.paste_lift, h.paste_s) = (load.water_mm3, load.paste_mm3, load.paste, load.paste_n, load.paste_carbon, load.paste_lift, load.paste_s);
             c.tally_mut().secs += secs as f64;
             Ok(v)
         })

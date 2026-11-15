@@ -93,6 +93,13 @@ pub struct Stick {
     /// tubes, `Palette::dry_index`): how much water in the pores of what
     /// it lays darkens it (`crate::wet_pastel`). Only with the switch.
     pub index: f32,
+    /// The Kubelka–Munk scattering of its particles per unit volume of the
+    /// stick, gray, µm⁻¹: their S (`dry::dry_scatter` of its pile; a
+    /// charcoal's `CarbonBed`) times the share of the stick that is
+    /// particles. What it lays mixes by it in the tooth, with the pastel
+    /// K–M switch (`Canvas::with_pastel_km_mix`); 0 if not recorded
+    /// (`Stick::lying_scatter` then takes whiting's).
+    pub scatter: f32,
 }
 
 /// How readily a kneaded eraser takes a pastel stick's pastel.
@@ -114,16 +121,24 @@ pub(crate) struct Grains {
     /// The particles' mean refractive index, recorded where they land
     /// (`Cell::note_pastel`, the wet pastel switch); 0 records none.
     pub(crate) index: f32,
+    /// Their Kubelka–Munk scattering per µm as they lie (`Cell::s`), with
+    /// the pastel K–M switch: they mix with the loose pastel by Kubelka–
+    /// Munk; 0 mixes reflectances, as it always did.
+    pub(crate) s: f32,
+    /// Whether they are laid over the loose pastel as a layer (a stroke's
+    /// face deposit: `Cell::add_grains`) rather than mixed into it (crumbs,
+    /// the finger, a brush, a paste). Only with `s`.
+    pub(crate) layer: bool,
 }
 
 impl Grains {
     /// A pastel stick's pastel, as it always was.
-    pub(crate) const PASTEL: Grains = Grains { lift: PASTEL_LIFT, carbon: 0.0, lies: 1.0, index: 0.0 };
+    pub(crate) const PASTEL: Grains = Grains { lift: PASTEL_LIFT, carbon: 0.0, lies: 1.0, index: 0.0, s: 0.0, layer: false };
 
     /// What `stick` lays.
     pub(crate) fn of(stick: &Stick) -> Grains {
         let lies = if stick.cover_um == PARTICLE_UM { 1.0 } else { PARTICLE_UM / stick.cover_um };
-        Grains { lift: stick.lift, carbon: if stick.carbon { 1.0 } else { 0.0 }, lies, index: 0.0 }
+        Grains { lift: stick.lift, carbon: if stick.carbon { 1.0 } else { 0.0 }, lies, index: 0.0, s: 0.0, layer: false }
     }
 }
 
@@ -133,17 +148,30 @@ impl Grains {
 /// weighted by their carbon), so that charcoal moved is laid as charcoal.
 /// A pastel's pastel carries no carbon and is laid at `PASTEL_LIFT`, as it
 /// always was.
+///
+/// With the pastel K–M switch (`km`) it carries its load's scattering
+/// too (`s`, per its volume, the mean of what it took: `Cell::s`), and what
+/// it picks up mixes on it by Kubelka–Munk (`mixed`): a finger, a brush or
+/// a blade rubs particles together.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Carried {
     carbon: f32,
     lift: f32,
+    s: f32,
+    km: bool,
 }
 
 impl Carried {
+    /// An empty tool, mixing by Kubelka–Munk with the switch (`km`).
+    pub(crate) fn new(km: bool) -> Carried {
+        Carried { km, ..Carried::default() }
+    }
+
     /// What a brush's paste carried from an earlier pass: its carbon share
-    /// and that carbon's lift (`parts`).
-    pub(crate) fn of_parts(carbon: f32, lift: f32) -> Carried {
-        Carried { carbon: carbon.clamp(0.0, 1.0), lift }
+    /// and that carbon's lift (`parts`), and its scattering (0 without the
+    /// switch).
+    pub(crate) fn of_parts(carbon: f32, lift: f32, s: f32, km: bool) -> Carried {
+        Carried { carbon: carbon.clamp(0.0, 1.0), lift, s: if km { s } else { 0.0 }, km }
     }
 
     /// Its carbon share and that carbon's lift, to keep between passes.
@@ -151,9 +179,30 @@ impl Carried {
         (self.carbon, self.lift)
     }
 
+    /// Its load's scattering per its volume (0 without the switch).
+    pub(crate) fn scatter(&self) -> f32 {
+        self.s
+    }
+
+    /// With the switch, the color of `held` carried of color `col` once `v`
+    /// more of color `r` and scattering `s` joins it, mixed by Kubelka–Munk
+    /// (call before `take`); None without it (the caller mixes reflectances,
+    /// as it always did).
+    pub(crate) fn mixed(&self, col: Rgb, held: f32, r: Rgb, v: f32, s: f32) -> Option<Rgb> {
+        if !self.km {
+            return None;
+        }
+        let (s_held, s_new) = (if self.s > 0.0 { self.s } else { s }, if s > 0.0 { s } else { self.s });
+        Some(crate::dry::km_mix(col, held * s_held, r, v * s_new))
+    }
+
     /// `v` more picked up from cell `c` onto `held` already carried (both
     /// in the same units).
     pub(crate) fn take(&mut self, held: f32, v: f32, c: &crate::graphite::Cell) {
+        if self.km && held + v > 0.0 {
+            let (s_held, s_new) = (if self.s > 0.0 { self.s } else { c.s }, if c.s > 0.0 { c.s } else { self.s });
+            self.s = (s_held * held + s_new * v) / (held + v);
+        }
         if c.carbon <= 0.0 && self.carbon <= 0.0 {
             return;
         }
@@ -169,9 +218,9 @@ impl Carried {
     /// The grains it lays: carbon at its own lift, the rest as pastel.
     pub(crate) fn grains(&self) -> Grains {
         if self.carbon <= 0.0 {
-            return Grains::PASTEL;
+            return Grains { s: self.s, ..Grains::PASTEL };
         }
-        Grains { lift: PASTEL_LIFT + (self.lift - PASTEL_LIFT) * self.carbon, carbon: self.carbon, lies: 1.0, index: 0.0 }
+        Grains { lift: PASTEL_LIFT + (self.lift - PASTEL_LIFT) * self.carbon, carbon: self.carbon, lies: 1.0, index: 0.0, s: self.s, layer: false }
     }
 }
 
@@ -247,6 +296,22 @@ impl PencilPoint {
 }
 
 impl Stick {
+    /// A pastel stick's `scatter` from its particles' Kubelka–Munk S per
+    /// unit particle volume (`dry::dry_scatter`): the stick is particles
+    /// but for its pores (`wet_pastel::POROSITY`).
+    pub fn pastel_scatter(s_particles: f32) -> f32 {
+        s_particles * (1.0 - crate::wet_pastel::POROSITY)
+    }
+
+    /// Its particles' scattering per µm of what it lays, as it lies in the
+    /// tooth (`Cell::s`): `scatter`, per stick volume, over the volume a
+    /// worn volume lies at (`Grains::lies`, `PARTICLE_UM / cover_um`).
+    /// Whiting's (`dry::whiting_scatter`) for a stick with none recorded.
+    pub fn lying_scatter(&self) -> f32 {
+        let s = if self.scatter > 0.0 { self.scatter } else { Stick::pastel_scatter(crate::dry::whiting_scatter()) };
+        s * self.cover_um / PARTICLE_UM
+    }
+
     /// Hardness (MPa) and wear coefficient of a stick of softness `soft`
     /// (0 hard pastel .. 1 very soft): σp from 30 down to 2 MPa
     /// (log-spaced), K from 0.01 up to 0.06.
@@ -268,13 +333,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX, scatter: 0.0 }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX, scatter: 0.0 }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7; Stabilo's CarbOthello is
@@ -282,7 +347,7 @@ impl Stick {
     /// (`PencilPoint::cut`): the pencil that `Stick::sharpen` sharpens.
     pub fn pencil(color: Rgb, soft: f32, d_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: PENCIL_LENGTH_MM, facets: Stick::pencil_point(PencilPoint::cut(hardness)), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
+        Stick { section: Section::Round { d_mm }, length_mm: PENCIL_LENGTH_MM, facets: Stick::pencil_point(PencilPoint::cut(hardness)), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX, scatter: 0.0 }
     }
 
     /// A pastel pencil as a log without the easel's `--@ pastel-pencil-sharpen`
@@ -290,7 +355,7 @@ impl Stick {
     /// up (`PencilPoint::BEFORE`). Such a log never sharpens it.
     pub fn pencil_as_before(color: Rgb, soft: f32, d_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets: Stick::pencil_point(PencilPoint::BEFORE), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets: Stick::pencil_point(PencilPoint::BEFORE), hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX, scatter: 0.0 }
     }
 
     /// The blade's cuts of a pastel pencil's point: the blunt end
@@ -727,7 +792,12 @@ impl Canvas {
         let dry_hardness = stick.hardness;
         let paste_thin = crate::wet_pastel::paste_thin();
         let (mut shed, mut thick, mut paste_water, mut slurry, mut keep) = (SHED, PARTICLE_UM, 0.0f32, 0.0f32, 1.0f32);
-        let grains = Grains { index: n_lay, ..Grains::of(stick) };
+        // (and with the K–M switch, its particles' scattering as they lie:
+        // its face deposit lies over the loose pastel as a layer, its crumbs
+        // mix into it)
+        let s_lay = if self.pastel_km { stick.lying_scatter() } else { 0.0 };
+        let grains = Grains { index: n_lay, s: s_lay, layer: s_lay > 0.0, ..Grains::of(stick) };
+        let crumbs = Grains { layer: false, ..grains };
         for k in 0..=steps {
             if wet_tip {
                 let w = stick.wetness();
@@ -823,7 +893,9 @@ impl Canvas {
                     let before = (c.a, c.reflectance());
                     // (a paste's volume once it has packed dry)
                     let kept = dv * keep;
-                    lay_into(c, q, stick.color, kept, grains);
+                    // (a paste packs as it dries: its particles closer)
+                    let g = if keep < 1.0 && grains.s > 0.0 { Grains { s: grains.s / keep.max(1e-3), ..grains } } else { grains };
+                    lay_into(c, q, stick.color, kept, g);
                     if paste_water > 0.0 {
                         // the paste leaves its water where the tip wore
                         crate::wet_pastel::add_water(c, worn_here * paste_water);
@@ -853,7 +925,7 @@ impl Canvas {
                 let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
                 laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, grains, &mut rng, crumb_max, px_um2);
+                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, crumbs, &mut rng, crumb_max, px_um2);
                 for &(i, g) in &last_sheet_bed {
                     caught.push((i, to_sheet * g / gs));
                 }
@@ -893,7 +965,7 @@ impl Canvas {
             let a_px_mm2 = px * px;
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
-            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, grains, &mut rng, crumb_max, px_um2);
+            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, crumbs, &mut rng, crumb_max, px_um2);
             self.px = pxs;
             self.film = film;
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
@@ -1062,7 +1134,7 @@ impl Canvas {
         }
         // (the pad starts clean, and what it still carries at the end goes
         // with the finger)
-        let mut pad = Pad::new(area, pad_mm2.is_none());
+        let mut pad = Pad::new(area, pad_mm2.is_none(), self.pastel_km);
         self.rubbing(|r| {
             for w in path.windows(2) {
                 let (a, b) = ((w[0].0 * mmu, w[0].1 * mmu), (w[1].0 * mmu, w[1].1 * mmu));
@@ -1196,7 +1268,7 @@ impl Canvas {
         if self.drawing.is_none() {
             return Ok(Rubbed { secs: walk(&mut |_, _| {}), strokes: pieces.len(), carried_mm3: 0.0, pattern });
         }
-        let mut pad = Pad::new(full_area, pad_mm2.is_none());
+        let mut pad = Pad::new(full_area, pad_mm2.is_none(), self.pastel_km);
         let secs = self.rubbing(|r| walk(&mut |c, r_mm| r.press(&mut pad, c, r_mm)));
         Ok(Rubbed { secs, strokes: pieces.len(), carried_mm3: pad.load * 1e-3, pattern })
     }
@@ -1437,8 +1509,8 @@ struct Pad {
 
 impl Pad {
     /// A clean pad of `area` mm², skin (`skin`) or a stump's paper.
-    fn new(area: f32, skin: bool) -> Pad {
-        Pad { holds: if skin { SKIN_HOLDS_UM * area } else { 0.0 }, ..Pad::default() }
+    fn new(area: f32, skin: bool, km: bool) -> Pad {
+        Pad { holds: if skin { SKIN_HOLDS_UM * area } else { 0.0 }, carry: Carried::new(km), ..Pad::default() }
     }
 }
 
@@ -1487,10 +1559,16 @@ impl Rubbing<'_> {
                 continue;
             }
             let take = cell.loose * pick * share;
+            let km = pad.carry.mixed(pad.col, pad.load, cell.r, take * a_px, cell.s);
             pad.carry.take(pad.load, take * a_px, cell);
             let total = pad.load + take * a_px;
-            for q in 0..3 {
-                pad.col[q] = (pad.col[q] * pad.load + cell.r[q] * take * a_px) / total.max(1e-9);
+            match km {
+                Some(col) => pad.col = col,
+                None => {
+                    for q in 0..3 {
+                        pad.col[q] = (pad.col[q] * pad.load + cell.r[q] * take * a_px) / total.max(1e-9);
+                    }
+                }
             }
             pad.load = total;
             let before = (cell.a, cell.reflectance());

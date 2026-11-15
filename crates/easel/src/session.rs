@@ -159,6 +159,16 @@ pub const OILS_MARK: &str = "--@ oils";
 /// adds to, and the drawing's optics (`DRAWING_OPTICS_MARK`): without
 /// either it does nothing (paint's `Canvas::with_wet_pastel`).
 pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
+/// The pastel K–M switch, in the head of a session file: pastel in the
+/// tooth mixes as particles do, by Kubelka–Munk (paint's
+/// `Canvas::with_pastel_km_mix`): two sticks' pastel rubbed together by the
+/// finger, crumbs, a dry brush or a paste takes K/S weighted by each one's
+/// scattering × volume, and a stroke laid over loose pastel lies over it as
+/// a layer (Kubelka's two-layer formula), where an older log averaged
+/// their reflectances. A new painting has it; a log without it replays as
+/// it was painted. It rides on the drawing's optics (`DRAWING_OPTICS_MARK`):
+/// without them it does nothing.
+pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
 /// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
@@ -944,6 +954,9 @@ impl Session {
         }
         if self.st.borrow().tubes.wet_pastel {
             let _ = writeln!(s, "{WET_PASTEL_MARK}");
+        }
+        if self.st.borrow().tubes.pastel_km_mix {
+            let _ = writeln!(s, "{PASTEL_KM_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1743,6 +1756,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.oils = true;
         b.charcoal = true;
         b.wet_pastel = true;
+        b.pastel_km_mix = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1834,6 +1848,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.oils = oils;
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
+    b.pastel_km_mix = head(PASTEL_KM_MARK);
     Ok(b)
 }
 

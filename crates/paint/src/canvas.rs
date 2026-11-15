@@ -253,6 +253,8 @@ pub struct Canvas {
     pub(crate) drawing_optics: bool,
     /// Pastel takes water (`with_wet_pastel`, `crate::wet_pastel`).
     pub(crate) wet_pastel: bool,
+    /// Pastel in the tooth mixes by Kubelka–Munk (`with_pastel_km_mix`).
+    pub(crate) pastel_km: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -343,6 +345,7 @@ impl Canvas {
             sealed_drawing_guide: false,
             drawing_optics: false,
             wet_pastel: false,
+            pastel_km: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -490,6 +493,22 @@ impl Canvas {
 
     pub fn wet_pastel(&self) -> bool {
         self.wet_pastel
+    }
+
+    /// Pastel in the tooth mixes as particles do, by Kubelka–Munk, not by
+    /// averaging reflectances (`Cell::s`, `Cell::add_grains`): what a
+    /// finger, crumbs, a brush or a paste mixes intimately takes K/S
+    /// weighted by scattering × volume, and a stroke laid over loose pastel
+    /// lies over it as a layer (Kubelka's two-layer formula). Coverage
+    /// below 1 stays an area mix with the paper. It needs the drawing's
+    /// separate optics (`with_drawing_optics`); without them it stays off.
+    pub fn with_pastel_km_mix(mut self, enabled: bool) -> Self {
+        self.pastel_km = enabled && self.drawing_optics;
+        self
+    }
+
+    pub fn pastel_km_mix(&self) -> bool {
+        self.pastel_km
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

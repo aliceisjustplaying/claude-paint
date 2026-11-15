@@ -320,6 +320,115 @@ pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
     out
 }
 
+/// The Kubelka–Munk scattering S of lead white dry, per unit particle
+/// volume, µm⁻¹: 0.75 σ' (S = 0.75 σs(1 − g), dry_pigment_optics.md §2.1)
+/// of `mie_air`'s transport scattering at n 2.0 and d 1 µm, 0.88 µm⁻¹. It
+/// is the absolute scale of `dry_color`'s relative scattering, which is set
+/// to lead white's dry (its oil S × 1.9).
+fn s_lead_white_um() -> f32 {
+    0.75 * mie_air(2.0).0
+}
+
+/// The Kubelka–Munk scattering, per unit volume of particles (µm⁻¹, gray),
+/// of pigments dry in a pastel stick: `dry_color`'s scattering by volume,
+/// on lead white's absolute scale (`s_lead_white_um`). Parts as
+/// `dry_color`'s. Pastel's S is nearly flat over the visible (chalk and
+/// pigments in air scatter by index contrast, not by color), so one gray
+/// value stands for it. With the pastel K–M switch (`Cell::s`), it weights
+/// how two sticks' pastel mixes in the tooth.
+pub fn dry_scatter(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> f32 {
+    let total: f32 = parts.iter().map(|p| p.3).sum::<f32>().max(1e-9);
+    let (sigma_white, r_white) = mie_air(2.0);
+    let s_dry_white = r_white * s_oil_white;
+    if !(s_dry_white > 0.0) {
+        return 0.0;
+    }
+    let s: f32 = parts.iter().map(|&(_, s_oil, n, c)| c / total * s_dry(s_oil, n, s_dry_white, sigma_white)).sum();
+    s_lead_white_um() * s / s_dry_white
+}
+
+/// `dry_scatter` of `spectral_color`'s parts: the mean over the spectrum of
+/// the parts' dry scattering over lead white's, on lead white's absolute
+/// scale.
+pub fn spectral_scatter(parts: &[(crate::spectral::SpectralPigment, f32, f32)], white: &crate::spectral::Spectrum) -> f32 {
+    let total = parts.iter().map(|p| p.2).sum::<f32>().max(1e-9);
+    let (sigma_white, r_white) = mie_air(2.0);
+    let (mut sum, mut n_w) = (0.0f32, 0.0f32);
+    for w in 0..white.len() {
+        let s_dry_white = r_white * white[w];
+        if !(s_dry_white > 0.0) {
+            continue;
+        }
+        let mut s = 0.0;
+        for (pigment, n, c) in parts {
+            let s_dry = if *n < 0.0 {
+                -n * pigment.s[w]
+            } else {
+                let (sigma, ratio) = mie_air(*n);
+                if *n >= 1.9 { ratio * pigment.s[w] } else { s_dry_white * sigma / sigma_white }
+            };
+            s += c / total * s_dry;
+        }
+        sum += s / s_dry_white;
+        n_w += 1.0;
+    }
+    if n_w > 0.0 { s_lead_white_um() * sum / n_w } else { 0.0 }
+}
+
+/// Whiting's Kubelka–Munk scattering per unit particle volume, µm⁻¹: 0.75 ×
+/// its σ'_air 0.331 at d₃₂ 1.7 µm (`WHITING_S_REL` × lead white's), the S of
+/// a pastel stick whose own isn't recorded.
+pub fn whiting_scatter() -> f32 {
+    WHITING_S_REL * s_lead_white_um()
+}
+
+/// R∞ → K/S (Kubelka–Munk), for R clamped into (0, 1).
+#[inline]
+pub(crate) fn ks_of(r: f32) -> f32 {
+    let r = r.clamp(1e-4, 0.9999);
+    (1.0 - r) * (1.0 - r) / (2.0 * r)
+}
+
+/// K/S → R∞ (Kubelka–Munk).
+#[inline]
+pub(crate) fn r_of(ks: f32) -> f32 {
+    1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
+}
+
+/// Two intimately mixed particle beds by Kubelka–Munk: K and S add by
+/// volume, so (K/S) of the mix is each one's K/S weighted by its S ×
+/// volume (`vs1`, `vs2`), per channel. `r1` where neither scatters.
+pub fn km_mix(r1: Rgb, vs1: f32, r2: Rgb, vs2: f32) -> Rgb {
+    let t = vs1.max(0.0) + vs2.max(0.0);
+    if !(t > 0.0) {
+        return r1;
+    }
+    let (w1, w2) = (vs1.max(0.0) / t, vs2.max(0.0) / t);
+    std::array::from_fn(|q| r_of(w1 * ks_of(r1[q]) + w2 * ks_of(r2[q])))
+}
+
+/// A layer of particles of R∞ `top` (its K/S) and optical thickness `sx`
+/// (its S × its thickness) lying over a ground of reflectance `under`:
+/// Kubelka's two-layer formula, R = R₁ + T₁² R₂ / (1 − R₁ R₂), with the
+/// layer's own R₁ and T₁ from Kubelka–Munk's hyperbolic solution
+/// (a = 1 + K/S, b = √(a² − 1): R₁ = sinh(bSX)/(a sinh + b cosh), T₁ =
+/// b/(a sinh + b cosh)). A thin layer shows what is under it; a thick one,
+/// its own R∞.
+pub(crate) fn km_layer(top: Rgb, sx: f32, under: Rgb) -> Rgb {
+    let sx = f64::from(sx.max(0.0));
+    std::array::from_fn(|q| {
+        let ks = f64::from(ks_of(top[q]));
+        let a = 1.0 + ks;
+        let b = (a * a - 1.0).sqrt();
+        let x = (b * sx).min(40.0);
+        let (sh, ch) = (x.sinh(), x.cosh());
+        let den = a * sh + b * ch;
+        let (r1, t1) = (sh / den, b / den);
+        let r2 = f64::from(under[q].clamp(0.0, 1.0));
+        (r1 + t1 * t1 * r2 / (1.0 - r1 * r2)) as f32
+    })
+}
+
 /// A bed of carbon particles in air, the way a charcoal stick lays it:
 /// Kubelka–Munk absorption K = 2σa and scattering S = 0.75σs(1−g) per unit
 /// particle volume (µm⁻¹), per channel (R, G, B at 610, 550, 460 nm), from

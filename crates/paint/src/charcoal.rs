@@ -114,6 +114,22 @@ pub fn wet_share(resin_um: f32, loose_um: f32) -> f32 {
 /// a particle of n ≈ 2, would turn carbon to soot.
 pub const WET_KS: [f32; 3] = [1.523, 1.298, 0.959];
 
+/// The share of a vine stick's volume that is char, its splinters' (the
+/// particles `crate::dry::VINE_CHARCOAL` counts): willow charcoal's apparent
+/// density 0.27–0.35 g/cm³ (0.30) over its walls' 1.44 (`VINE_COVER_UM`).
+pub const VINE_SOLIDS: f32 = 0.30 / 1.44;
+/// And a compressed stick's: it gives up crumbs of the compact, the
+/// particles `crate::dry::COMPRESSED_CHARCOAL` counts (their K and S are per
+/// crumb, its pores within them), so all of it.
+pub const COMPRESSED_SOLIDS: f32 = 1.0;
+
+/// A carbon bed's gray Kubelka–Munk scattering per unit particle volume,
+/// µm⁻¹: the mean of its channels' in air (carbon's facets reflect alike
+/// across the visible).
+pub fn bed_scatter(bed: &crate::dry::CarbonBed) -> f32 {
+    bed.s_air.iter().sum::<f32>() / 3.0
+}
+
 impl Stick {
     /// A stick of vine (willow) charcoal, Ø `d_mm` (thin 5, medium 8, thick
     /// 10: Winsor & Newton's), 140 mm long, its end cut flat: soft and
@@ -127,6 +143,7 @@ impl Stick {
         s.lift = VINE_LIFT;
         s.cover_um = VINE_COVER_UM;
         s.carbon = true;
+        s.scatter = bed_scatter(&crate::dry::VINE_CHARCOAL) * VINE_SOLIDS;
         s
     }
 
@@ -142,6 +159,7 @@ impl Stick {
         s.lift = COMPRESSED_LIFT;
         s.cover_um = COMPRESSED_COVER_UM;
         s.carbon = true;
+        s.scatter = bed_scatter(&crate::dry::COMPRESSED_CHARCOAL) * COMPRESSED_SOLIDS;
         s
     }
 }

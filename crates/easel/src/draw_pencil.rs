@@ -166,7 +166,7 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
         return err("a charcoal stick's cover is 1 to 50 (µm)");
     }
     let carbon = p.raw_get::<Option<String>>("charcoal")?.is_some();
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], water: 0.0, index: p.raw_get::<Option<f32>>("n")?.unwrap_or(paint::wet_pastel::DEFAULT_INDEX), lift, cover_um, carbon })
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], water: 0.0, index: p.raw_get::<Option<f32>>("n")?.unwrap_or(paint::wet_pastel::DEFAULT_INDEX), lift, cover_um, carbon, scatter: p.raw_get::<Option<f32>>("s")?.filter(|s| s.is_finite() && *s > 0.0).unwrap_or(0.0) })
 }
 
 /// The water in a stick's tip now (mm³), `now` minutes on the painting's
@@ -876,7 +876,8 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     let methods: Table = meta.raw_get("__index")?;
     // (the charcoal switch's `charcoal()`: a stick of the same kind)
     if st.borrow().tubes.charcoal {
-        install_charcoal(lua, meta.clone())?;
+        let km = st.borrow().tubes.pastel_km_mix && st.borrow().tubes.drawing_optics;
+        install_charcoal(lua, meta.clone(), km)?;
     }
     // p:side(pts, {force=, pressure=, speed=, roll=}): the stick laid nearly
     // flat across the stroke, a piece `length` mm long (p:snap breaks one off)
@@ -1067,6 +1068,10 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             // (with the wet pastel switch: its particles' mean index)
             if tubes.wet_pastel && tubes.drawing_optics {
                 p.set("n", tubes.dry_index(&pile.mix.parts))?;
+            }
+            // (with the K–M switch: its particles' scattering per stick volume)
+            if tubes.pastel_km_mix && tubes.drawing_optics {
+                p.set("s", paint::pastel::Stick::pastel_scatter(tubes.dry_scatter(&pile.mix.parts)))?;
             }
             if let Some(l) = o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
                 if !(5.0..=200.0).contains(&l) {
@@ -1262,7 +1267,7 @@ const CHARCOAL_KEYS: &[&str] = &["kind", "diameter", "length"];
 /// stick's methods and the pencil's, and the finger, the eraser, a puff and
 /// fixative work on it as on pastel. Vine lifts readily; compressed is
 /// darker and lays fine particles the eraser takes less readily.
-fn install_charcoal(lua: &Lua, meta: Table) -> Result<()> {
+fn install_charcoal(lua: &Lua, meta: Table, km: bool) -> Result<()> {
     lua.globals().set("charcoal", lua.create_function(move |lua, a: Value| {
         let o = match a {
             Value::Nil => None,
@@ -1303,6 +1308,10 @@ fn install_charcoal(lua: &Lua, meta: Table) -> Result<()> {
         p.set("wear", stick.wear)?;
         p.set("lift", stick.lift)?;
         p.set("cover", stick.cover_um)?;
+        // (with the K–M switch: its splinters' or crumbs' scattering per stick volume)
+        if km {
+            p.set("s", stick.scatter)?;
+        }
         p.set("r", stick.color[0])?;
         p.set("g", stick.color[1])?;
         p.set("b", stick.color[2])?;
@@ -2466,5 +2475,60 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         assert!(run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains("pastel"));
         let lum = |p: &[[f32; 3]]| p.iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
         assert!(lum(s.canvas().unwrap().pixels()) > lum(&wet_px), "lighter once dry");
+    }
+
+    /// The pastel K–M switch: a new painting's log has it, its sticks carry
+    /// their particles' scattering (`s`) and charcoal its own, a far
+    /// smaller one; a log without the line has none, and mixes as it was
+    /// painted, and the same marks mix otherwise with it. The log replays bit for
+    /// bit, and a save keeps the switch and the cells' scattering, so a
+    /// restored painting mixes on as the live one does.
+    #[test]
+    fn pastel_km_mix_comes_with_its_log_head_line() {
+        use crate::session::{PASTEL_KM_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n--@ charcoal\n";
+        assert!(!box_for(Some(older)).unwrap().pastel_km_mix);
+        assert!(box_for(Some(&format!("{older}{PASTEL_KM_MARK}\n"))).unwrap().pastel_km_mix);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_KM_MARK}\n"))).unwrap().pastel_km_mix, "only in the head");
+        assert!(box_for(None).unwrap().pastel_km_mix, "a new painting has it");
+        let src = r#"y = pastel(pile{{"chrome yellow", 1}, {"lead white", 1}})
+            c = charcoal()
+            print(y.s, c.s)
+            c:stroke({{150, 400}, {850, 400}}, {force=1})
+            y:stroke({{150, 400}, {850, 400}}, {force=2})
+            smudge({{150, 400}, {850, 400}}, {force=1.5})"#;
+        let mut old = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut old, PAPER);
+        assert_eq!(run(&mut old, src).lines().next().unwrap().trim(), "nil\tnil", "an older log's sticks are as they were");
+        assert!(!old.canvas().unwrap().pastel_km_mix());
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let out = run(&mut s, src);
+        let ss: Vec<f32> = out.lines().next().unwrap().split('\t').map(|v| v.trim().parse().unwrap()).collect();
+        // (a tint's particles scatter a few tenths per µm of stick; charcoal's
+        // facets a hundredth: paint's dry.rs and charcoal.rs)
+        assert!(ss[0] > 0.05 && ss[0] < 0.5 && ss[1] > 0.001 && ss[1] < 0.01, "{out}");
+        assert!(s.canvas().unwrap().pastel_km_mix());
+        // (the same marks mix otherwise: paint's graphite.rs tests say how)
+        assert_ne!(s.canvas().unwrap().pixels(), old.canvas().unwrap().pixels());
+        let px = s.canvas().unwrap().pixels().to_vec();
+        let program = s.program("km");
+        assert!(program.lines().any(|l| l == PASTEL_KM_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), &px[..]);
+        let path = std::env::temp_dir().join(format!("easel-pastel-km-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.pastel_km_mix);
+        assert!(restored.canvas().unwrap().pastel_km_mix());
+        let more = "smudge({{850, 420}, {150, 380}}, {force=1})";
+        for session in [&mut s, &mut restored] {
+            run(session, more);
+        }
+        assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
     }
 }

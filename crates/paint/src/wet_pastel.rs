@@ -556,6 +556,10 @@ pub struct WashLoad {
     /// charcoal (`pastel::Carried`).
     pub paste_carbon: f32,
     pub paste_lift: f32,
+    /// The paste's Kubelka–Munk scattering per its volume (µm⁻¹, its
+    /// sticks' `Stick::scatter`), with the pastel K–M switch: what it picks
+    /// up mixes into it by Kubelka–Munk (`pastel::Carried`). 0 without.
+    pub paste_s: f32,
     pub lay_um: f32,
     pub pickup: f32,
     pub run_mm: f32,
@@ -697,7 +701,7 @@ impl Canvas {
         let mut pxs = std::mem::take(&mut self.px);
         let mut d = self.drawing.take().expect("drawing_mut made it");
         let (mut paste, mut col, mut np) = (load.paste_mm3.max(0.0) / um_mm3, load.paste, n_paste);
-        let mut carried = crate::pastel::Carried::of_parts(load.paste_carbon, load.paste_lift);
+        let mut carried = crate::pastel::Carried::of_parts(load.paste_carbon, load.paste_lift, load.paste_s, self.pastel_km);
         let mut laid = 0.0f32;
         for &(c, dir) in &steps {
             let e = (-dir.1, dir.0);
@@ -733,9 +737,10 @@ impl Canvas {
                     let filled = (cl.water / (POROSITY * (cl.loose + cl.bound)).max(1e-6)).min(1.0);
                     let take = cl.loose * pick * filled;
                     if take > 0.0 {
+                        let km = carried.mixed(col, paste, cl.r, take, cl.s);
                         carried.take(paste, take, cl);
                         let total = paste + take;
-                        col = [0, 1, 2].map(|q| (col[q] * paste + cl.r[q] * take) / total.max(1e-9));
+                        col = km.unwrap_or_else(|| [0, 1, 2].map(|q| (col[q] * paste + cl.r[q] * take) / total.max(1e-9)));
                         np = (np * paste + from_index(cl.index) * take) / total.max(1e-9);
                         paste = total;
                         let base = cl.floor + cl.non_pastel - cl.non_pastel_floor;
@@ -755,7 +760,11 @@ impl Canvas {
                 for &i in &band {
                     let cl = &mut d.cells[i];
                     let before = (cl.a, cl.reflectance());
-                    crate::pastel::lay_into(cl, q, col, kept, crate::pastel::Grains { index: np, ..carried.grains() });
+                    // (with the K–M switch, its scattering as it lies once
+                    // packed: the same particles in `dried_share` of the volume)
+                    let g = carried.grains();
+                    let g = crate::pastel::Grains { index: np, s: g.s / dried_share(1.0), ..g };
+                    crate::pastel::lay_into(cl, q, col, kept, g);
                     pxs[i] = cl.repaint(pxs[i], before);
                 }
                 paste -= give;
@@ -773,6 +782,7 @@ impl Canvas {
         load.paste = col;
         load.paste_n = np;
         (load.paste_carbon, load.paste_lift) = carried.parts();
+        load.paste_s = carried.scatter();
         let len_mm = (steps.len().max(1) - 1) as f32 * STEP_PX * s_mm;
         (laid * um_mm3, crate::tally::stroke_secs(len_mm as f64, (width * self.mm_per_unit) as f64) as f32)
     }

@@ -985,6 +985,21 @@ v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v
   pick up charcoal and dirty: only the tooth mixes.)
 - Graphite doesn't smear with the finger here at all; charcoal does.
 
+**How pastels mix in the tooth.** Pastel is a powder, and powders mix by
+Kubelka–Munk, not by averaging their colors: rubbed together (the finger,
+the crumbs under a stick, a dry brush, a knife, a puff, a paste), each
+pigment absorbs in proportion to how much it scatters, so a little of a
+dark pastel or of charcoal darkens a pale one far more than its share (5 %
+of vine charcoal takes a yellow's green from 0.60 to 0.549, where the
+average was 0.571). A stroke laid over loose pastel lies over it as a
+layer: a thin stroke lets what is under it show, a heavy one hides it, so
+pastel over loose charcoal keeps more of its color than the same pastel
+rubbed into it. Where a stroke lands beside the pastel already there,
+not on it, the two lie side by side and average, as on the paper. A
+painting begun before this came (its head has no `--@ pastel-km-mix`)
+replays its mixing as it was painted, averaging the colors
+(notes/research/pastel_mixing.md).
+
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it
 was painted and has no `charcoal`. Its color, how much a stroke covers and

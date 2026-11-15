@@ -93,7 +93,7 @@ Research notes for the easel's `charcoal()` (paint's `charcoal.rs`, and the carb
   | 5 % | (0.714, 0.571, 0.096) | (0.649, 0.549, 0.099) |
   | 10 % | (0.677, 0.542, 0.092) | (0.578, 0.504, 0.098) |
 
-  The loss from the pastel's own color is 1.5–2.5× larger by KM in red and green. In blue, where the yellow already absorbs, it is about none. The test's small margin (0.2370 over loose against 0.2351 over fixed) comes from this and from the thin charcoal line's small share of the volume. Fixing it means KM mixing in `add_pastel`, which every pastel shares. Behind a switch it is its own change, not this one's.
+  The loss from the pastel's own color is 1.5–2.5× larger by KM in red and green. In blue, where the yellow already absorbs, it is about none. The test's small margin (0.2370 over loose against 0.2351 over fixed) comes from this and from the thin charcoal line's small share of the volume. Fixing it means KM mixing in `add_pastel`, which every pastel shares. Behind a switch it is its own change, not this one's. (It is now the pastel K–M switch, `--@ pastel-km-mix`: notes/research/pastel_mixing.md.)
 - **Partial fixing.** "A drawing may be only partially fixed, the lower layer being fixed before the last application of charcoal" (PCC ch. 3). The easel does this with `fix(mask)` or a fix between passes.
 
 ## 7. Deposit

@@ -402,6 +402,11 @@ pub struct Held {
     pub paste_carbon: f32,
     #[cfg_attr(feature = "replay-effects", serde(default))]
     pub paste_lift: f32,
+    /// The paste's scattering per its volume, with the pastel K–M switch
+    /// (`crate::wet_pastel::WashLoad::paste_s`). Printed only when there is
+    /// some.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_s: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
@@ -467,6 +472,9 @@ impl std::fmt::Debug for Held {
             d.field("paste_mm3", &self.paste_mm3).field("paste", &self.paste).field("paste_n", &self.paste_n);
             if self.paste_carbon > 0.0 {
                 d.field("paste_carbon", &self.paste_carbon).field("paste_lift", &self.paste_lift);
+            }
+            if self.paste_s > 0.0 {
+                d.field("paste_s", &self.paste_s);
             }
         }
         d.finish()
@@ -538,7 +546,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3], paste_n: 0.0, paste_carbon: 0.0, paste_lift: 0.0 }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3], paste_n: 0.0, paste_carbon: 0.0, paste_lift: 0.0, paste_s: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`

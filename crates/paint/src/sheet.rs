@@ -496,7 +496,7 @@ impl Canvas {
         let mut heights = std::mem::take(&mut self.height);
         let (mut taken, mut pushed) = (0.0f32, 0.0f32);
         let mut col = [0.0f32; 3];
-        let mut carry = crate::pastel::Carried::default();
+        let mut carry = crate::pastel::Carried::new(self.pastel_km);
         let mut last_band: Vec<usize> = Vec::new();
         let mut dent: Vec<(usize, f32)> = Vec::new();
         let mut napped: Vec<(usize, f32)> = Vec::new();
@@ -575,9 +575,10 @@ impl Canvas {
                     let r = cl.r;
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
+                        let km = carry.mixed(col, pushed, r, ex * 0.35, cl.s);
                         carry.take(pushed, ex * 0.35, cl);
                         let tot = pushed + ex * 0.35;
-                        col = [0, 1, 2].map(|j| (col[j] * pushed + r[j] * ex * 0.35) / tot.max(1e-9));
+                        col = km.unwrap_or_else(|| [0, 1, 2].map(|j| (col[j] * pushed + r[j] * ex * 0.35) / tot.max(1e-9)));
                         pushed = tot;
                         taken += ex;
                     }
@@ -663,7 +664,7 @@ impl Canvas {
         let total_px = (steps.len().max(1) - 1) as f32 * 0.7;
         let mut kept_um = 0.0f32;
         let (mut ahead, mut col) = (0.0f32, [0.0f32; 3]);
-        let mut carry = crate::pastel::Carried::default();
+        let mut carry = crate::pastel::Carried::new(self.pastel_km);
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
@@ -708,9 +709,10 @@ impl Canvas {
                 let kept = ex * room;
                 *held_mg += kept * um_to_mg;
                 kept_um += kept;
+                let km = carry.mixed(col, ahead, r, ex - kept, cl.s);
                 carry.take(ahead, ex - kept, cl);
                 let tot = ahead + (ex - kept);
-                col = [0, 1, 2].map(|j| (col[j] * ahead + r[j] * (ex - kept)) / tot.max(1e-9));
+                col = km.unwrap_or_else(|| [0, 1, 2].map(|j| (col[j] * ahead + r[j] * (ex - kept)) / tot.max(1e-9)));
                 ahead = tot;
             }
             if !front.is_empty() && ahead > 0.0 {
@@ -842,10 +844,11 @@ impl Canvas {
         let mut ccol = vec![(0.0f32, [0.0f32; 3]); nsec];
         let mut fcol = vec![(0.0f32, [0.0f32; 3]); nsec];
         // (and what of them is charcoal)
-        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::default(); nsec], vec![crate::pastel::Carried::default(); nsec]);
-        let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb| {
+        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::new(self.pastel_km); nsec], vec![crate::pastel::Carried::new(self.pastel_km); nsec]);
+        // (by Kubelka–Munk with the K–M switch: `Carried::mixed`)
+        let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb, km: Option<Rgb>| {
             let t = acc.0 + v;
-            acc.1 = [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9));
+            acc.1 = km.unwrap_or_else(|| [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9)));
             acc.0 = t;
         };
         let sector = |wx: f32, wy: f32| (((wy.atan2(wx) + std::f32::consts::PI) / std::f32::consts::TAU * nsec as f32) as usize).min(nsec - 1);
@@ -876,8 +879,9 @@ impl Canvas {
                     let k = sector(wx, wy);
                     let crumbs = (heap * heap_goes).min(ex);
                     if crumbs > 0.0 {
+                        let km = ccarry[k].mixed(ccol[k].1, ccol[k].0, r, crumbs, cl.s);
                         ccarry[k].take(ccol[k].0, crumbs, cl);
-                        mix(&mut ccol[k], crumbs, r);
+                        mix(&mut ccol[k], crumbs, r, km);
                         let flights = hop_at(rr);
                         for (j, roll) in rolled[k].iter_mut().enumerate() {
                             // (the crumbs of this band that the shear here set going)
@@ -903,8 +907,9 @@ impl Canvas {
                     }
                     let fv = ex - crumbs;
                     if fv > 0.0 {
+                        let km = fcarry[k].mixed(fcol[k].1, fcol[k].0, r, fv, cl.s);
                         fcarry[k].take(fcol[k].0, fv, cl);
-                        mix(&mut fcol[k], fv, r);
+                        mix(&mut fcol[k], fv, r, km);
                         fines_from[k][bin(rr).min(nb - 1)] += fv;
                     }
                 }

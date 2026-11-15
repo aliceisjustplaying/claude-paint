@@ -234,6 +234,13 @@ const WET_PASTEL: u64 = 1 << 44;
 /// refuses the file instead of losing the water.
 const WET_PASTEL_MARK: u64 = 0x50544557;
 const WET_PASTEL_V: u64 = 2;
+/// Pastel in the tooth mixes by Kubelka–Munk (`Canvas::with_pastel_km_mix`):
+/// the engine word has this bit, and its section follows the wet pastel
+/// section (or the word): its mark ("PKMX") and version, whether a drawing
+/// follows (0 or 1), then each cell's loose scattering (`Cell::s`, µm⁻¹).
+const PASTEL_KM: u64 = 1 << 46;
+const PASTEL_KM_MARK: u64 = 0x584d4b50;
+const PASTEL_KM_V: u64 = 1;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -690,7 +697,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.pastel_km { PASTEL_KM } else { 0 })?;
         if self.wet_pastel {
             put_u64(w, WET_PASTEL_MARK)?;
             put_u64(w, WET_PASTEL_V)?;
@@ -703,6 +710,14 @@ impl Canvas {
             let cobb = self.paper.as_ref().map_or(crate::paper::Paper::drawing(0).cobb60, |p| p.cobb60);
             put_u64(w, u64::from(cobb.is_none()))?;
             put_f32(w, cobb.unwrap_or(0.0))?;
+        }
+        if self.pastel_km {
+            put_u64(w, PASTEL_KM_MARK)?;
+            put_u64(w, PASTEL_KM_V)?;
+            put_u64(w, u64::from(self.drawing.is_some()))?;
+            if let Some(d) = &self.drawing {
+                put_all(w, d.cells.iter().map(|c| c.s))?;
+            }
         }
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
@@ -979,7 +994,8 @@ impl Canvas {
             c.drawing_optics = word & DRAWING_OPTICS != 0;
             c.oils = word & OILS != 0;
             c.wet_pastel = word & WET_PASTEL != 0;
-            match u32::try_from(word & !(OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            c.pastel_km = word & PASTEL_KM != 0;
+            match u32::try_from(word & !(PASTEL_KM | OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!(c.liquid_film_levels || c.oils) || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
@@ -1022,6 +1038,24 @@ impl Canvas {
                 1 => None,
                 _ => return Err(bad("checkpoint paper sizing is invalid")),
             });
+        }
+        if c.pastel_km {
+            if !c.drawing_optics || get_u64(r)? != PASTEL_KM_MARK || get_u64(r)? != PASTEL_KM_V {
+                return Err(bad("checkpoint pastel mixing section is invalid"));
+            }
+            match (get_u64(r)?, c.drawing.as_deref_mut()) {
+                (0, None) => {}
+                (1, Some(d)) => {
+                    let s = get_all(r, d.cells.len())?;
+                    if !s.iter().all(|v| v.is_finite() && *v >= 0.0) {
+                        return Err(bad("checkpoint pastel scattering is invalid"));
+                    }
+                    for (cell, v) in d.cells.iter_mut().zip(s) {
+                        cell.s = v;
+                    }
+                }
+                _ => return Err(bad("checkpoint pastel mixing section disagrees with its drawing")),
+            }
         }
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
@@ -2419,6 +2453,44 @@ mod tests {
         x.dry();
         y.dry();
         assert!(state(&x) == state(&y) && x.pixels() == y.pixels(), "and they dry the same");
+    }
+
+    /// The pastel K–M switch's state: a checkpoint and a spill keep the
+    /// switch and each cell's scattering (`Cell::s`) bit for bit, and a
+    /// checkpoint of a canvas without the switch has no section for it.
+    #[test]
+    fn a_checkpoint_keeps_pastel_scattering() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = crate::tests::drawing_paper(160).with_drawing_optics(true).with_pastel_km_mix(true);
+        assert!(c.pastel_km_mix());
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        let mut tint = Stick::round([0.7, 0.6, 0.1], 0.8, 12.0);
+        tint.scatter = 0.25;
+        c.stick_stroke(&mut Stick::vine(8.0), &line(400.0));
+        c.stick_stroke(&mut tint, &line(405.0));
+        assert!(c.drawing.as_deref().unwrap().cells.iter().any(|q| q.s > 0.0 && q.carbon > 0.0 && q.carbon < 1.0));
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (back, _) = Canvas::read_state(&mut Cursor::new(&b)).unwrap();
+        assert!(back.pastel_km_mix());
+        let (x, y) = (c.drawing.as_deref().unwrap(), back.drawing.as_deref().unwrap());
+        assert!(x.cells.iter().zip(&y.cells).all(|(p, q)| p.s.to_bits() == q.s.to_bits()));
+        let mut packed = Vec::new();
+        let aside = c.pack(&mut packed).unwrap();
+        let mut spilled = aside.clone();
+        let mut disk = Vec::new();
+        spilled.spill(&mut disk).unwrap();
+        spilled.unspill(&mut Cursor::new(&disk)).unwrap();
+        let (p, q) = (aside.drawing.as_deref().unwrap(), spilled.drawing.as_deref().unwrap());
+        assert!(p.cells.iter().zip(&q.cells).all(|(p, q)| p.s.to_bits() == q.s.to_bits()));
+        // (a canvas without the switch writes what it wrote before)
+        let mut off = crate::tests::drawing_paper(160).with_drawing_optics(true);
+        off.stick_stroke(&mut Stick::vine(8.0), &line(400.0));
+        let mut b0 = Vec::new();
+        off.write_state(&mut b0, "").unwrap();
+        assert!(!b0.windows(8).any(|w| w == PASTEL_KM_MARK.to_le_bytes()));
+        assert!(!Canvas::read_state(&mut Cursor::new(&b0)).unwrap().0.pastel_km_mix());
     }
 
     /// Another version of the section, a damaged frame, a canvas cut short, a

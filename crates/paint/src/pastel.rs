@@ -1598,7 +1598,6 @@ mod tests {
         for i in 0..20 {
             line(&mut c, &mut worn, 100.0 + 40.0 * i as f32, 2.5, 60.0);
         }
-        // how far up the axis the worn end now lies
         // how far up the axis the worn end now lies, back of the fresh one
         let end = |s: &Stick| s.ray([0.0; 3], [0.0, 0.0, 1.0]).unwrap();
         let back = end(&worn) - end(&fresh);

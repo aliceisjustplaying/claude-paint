@@ -67,11 +67,14 @@ pub fn compressed_color() -> Rgb {
 /// charcoal.md §4).
 pub const VINE_LIFT: f32 = 0.85;
 /// And compressed charcoal's deposit, a share f of fines (sub-0.3 µm, held
-/// to the fibre as smooth spheres, taken 0.42) and the rest crumbs taken as
-/// vine's (0.98, dry): 0.42 f + 0.98 (1 − f) with f = 0.5, a half-soot
-/// stick (estimates-audit-2 C4, bounds 0.42–0.98). f is unmeasured: an SEM
-/// of a mark would set it.
-pub const COMPRESSED_LIFT: f32 = 0.70;
+/// to the fibre as smooth spheres) and the rest crumbs held as vine's
+/// splinters, both with the water bridge `VINE_LIFT` has at `STUDIO_RH`:
+/// fines taken 0.10, crumbs 0.85, so 0.10 f + 0.85 (1 − f) = 0.48 with
+/// f = 0.5, a half-soot stick (bounds 0.10–0.85 over f; charcoal_optics.py
+/// §3). The audit's 0.70 (estimates-audit-2 C4) is the same mix dry, which
+/// contradicts vine's own water term. f is unmeasured: an SEM of a mark
+/// would set it.
+pub const COMPRESSED_LIFT: f32 = 0.48;
 
 /// The area a volume worn from a vine stick covers, as a layer's
 /// thickness, µm: willow charcoal is about 80 % pores (apparent density

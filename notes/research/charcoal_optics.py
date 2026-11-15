@@ -278,8 +278,9 @@ if __name__ == "__main__":
     print(f"VINE_LIFT (splinters R {VINE_D / 2} µm, bridge at a {A_ASP * 1e6:.1f} µm) {vine_lift:.3f}; a 0.05–0.2 µm asperity: {P(Fv / (F_rough + bridge(0.2e-6)), sigma):.2f}–{P(Fv / (F_rough + bridge(0.05e-6)), sigma):.2f}; dry {P(Fv / F_rough, sigma):.3f}")
     fine_dry = P(1.5 * math.pi * W_ec / (A_pc / (6 * D0 ** 2)), sigma)
     print(f"a fine particle (below the asperity scale), dry: {fine_dry:.3f} (independent of R); with water at R 0.1 µm: {P(1.5 * math.pi * W_ec * 0.1e-6 / (A_pc * 0.1e-6 / (6 * D0 ** 2) + bridge(0.1e-6)), sigma):.3f}")
-    print(f"COMPRESSED_LIFT, the share of fines f = C_FINES {C_FINES}: dry 0.42 f + 0.98 (1 − f) = {fine_dry * C_FINES + P(Fv / F_rough, sigma) * (1 - C_FINES):.2f} (estimates-audit-2 C4, bounds 0.42–0.98)")
-    print(f"  (with water on both: {P(1.5 * math.pi * W_ec * 0.1e-6 / (A_pc * 0.1e-6 / (6 * D0 ** 2) + bridge(0.1e-6)), sigma) * C_FINES + vine_lift * (1 - C_FINES):.2f}; the audit's 0.70 is the dry mix)")
+    fine_wet = P(1.5 * math.pi * W_ec * 0.1e-6 / (A_pc * 0.1e-6 / (6 * D0 ** 2) + bridge(0.1e-6)), sigma)
+    print(f"COMPRESSED_LIFT, the share of fines f = C_FINES {C_FINES}, water on both as for vine: {fine_wet:.2f} f + {vine_lift:.2f} (1 − f) = {fine_wet * C_FINES + vine_lift * (1 - C_FINES):.2f} (bounds {fine_wet:.2f}–{vine_lift:.2f} over f)")
+    print(f"  (the same mix dry, estimates-audit-2 C4: {fine_dry * C_FINES + P(Fv / F_rough, sigma) * (1 - C_FINES):.2f}; inconsistent with vine's water term, not used)")
     print("pastel (chalk and pigment 1–20 µm, rough, dry): ", f"{P(1.5 * math.pi * W_ec * 0.5e-6 / F_rough, sigma):.2f}–{P(1.5 * math.pi * W_ec * 10e-6 / F_rough, sigma):.2f}", "(the engine's 0.55, an engine-wide question)")
     # Gum arabic's glass transition, pure gum: 62 °C at aw 0.33, 42.6 °C at
     # aw 0.54 (Righetto & Netto 2005, Int. J. Food Prop. 8:337); sticky only

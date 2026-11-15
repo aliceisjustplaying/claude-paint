@@ -2208,7 +2208,7 @@ mod tests {
 
         /// The practitioners' order: vine erases most readily, then
         /// graphite, then compressed. The take per pass goes as the lift, so
-        /// vine over compressed is about their lifts' ratio, 0.85/0.70 = 1.2.
+        /// vine over compressed is about their lifts' ratio, 0.85/0.48 = 1.8.
         #[test]
         fn vine_lifts_more_with_the_eraser_than_compressed_and_graphite() {
             let (v, k, g) = (erased(&Medium::Vine), erased(&Medium::Compressed), erased(&Medium::Graphite));

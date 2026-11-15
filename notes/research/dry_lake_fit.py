@@ -39,6 +39,12 @@ geometry. Physics fixes the correction:
 The fit then finds, per lake, the factor on its oil K that makes its dry color
 (two-constant KM, its scattering as the engine's rule for n < 1.9 at the
 substrate's 1.57) match the corrected powder's CIELAB.
+
+Magenta (fuchsine on alumina) has no powder. Its loading is set by its dye
+instead: the K/S a fuchsine lake has at 543 nm, from fuchsine's measured molar
+absorptivity, the package effect of a 1 um grain, and the substrate's Mie
+scattering times the dependent-scattering (packing) factor. That factor is
+computed here (Mie for the grain, Percus-Yevick for the powder's structure).
 """
 import ast
 import csv
@@ -67,7 +73,7 @@ CONTEXT = {"alizarin (Kremer)": "alizarin", "lac dye lake": "lacdye", "vermilion
 MADDER_LAB = {"Sattar 2024": (66.1, 25.5, 9.4), "J. Chem. Educ. 2020": (62.6, 23.9, 16.7)}
 # the indices `dry::measured_index` gives with the switch, and the CHSOS powder to check each against
 INDEX_NOW = {"permanent alizarin": 2.03, "green earth": 1.62, "copper green": 1.545, "lead-tin yellow": 2.30,
-             "transparent oxide yellow": 2.35}
+             "transparent oxide yellow": 2.35, "Mars yellow": 2.35, "Rinmann's green": 2.02}
 INDEX_POWDER = {"green earth": "greenearth", "copper green": "verdigris", "lead-tin yellow": "leadtinyellowI"}
 
 root, csv_dir, tubes_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
@@ -245,7 +251,70 @@ for b in BLACK_TRUE:
 # lowered by the package effect of a d = 1 um particle (van de Hulst's absorption efficiency).
 D_UM = 1.0
 SIGMA_LAKE = mie(SUBSTRATE_N)[0]  # um^-1 per volume, d = 1 um
-PACKING = (0.5, 1.0)  # dense-packing factor on S (§2.3), an estimate
+
+
+def bhmie(x, m, theta):
+    """Mie amplitudes S1, S2 of a sphere (Bohren & Huffman's BHMIE)."""
+    nstop = int(x + 4 * x ** (1 / 3) + 2)
+    y = m * x
+    nmx = int(max(nstop, abs(y)) + 15)
+    d = np.zeros(nmx + 1, dtype=complex)
+    for n in range(nmx, 0, -1):
+        d[n - 1] = n / y - 1 / (d[n] + n / y)
+    mu = np.cos(theta)
+    pi0, pi1 = np.zeros_like(mu), np.ones_like(mu)
+    s1, s2 = np.zeros_like(mu, dtype=complex), np.zeros_like(mu, dtype=complex)
+    psi0, psi1, chi0, chi1 = np.cos(x), np.sin(x), -np.sin(x), np.cos(x)
+    xi1 = complex(psi1, -chi1)
+    for n in range(1, nstop + 1):
+        psi, chi = (2 * n - 1) * psi1 / x - psi0, (2 * n - 1) * chi1 / x - chi0
+        xi = complex(psi, -chi)
+        an = ((d[n] / m + n / x) * psi - psi1) / ((d[n] / m + n / x) * xi - xi1)
+        bn = ((m * d[n] + n / x) * psi - psi1) / ((m * d[n] + n / x) * xi - xi1)
+        tau = n * mu * pi1 - (n + 1) * pi0
+        f = (2 * n + 1) / (n * (n + 1))
+        s1, s2 = s1 + f * (an * pi1 + bn * tau), s2 + f * (an * tau + bn * pi1)
+        pi0, pi1 = pi1, ((2 * n + 1) * mu * pi1 - (n + 1) * pi0) / n
+        psi0, psi1, chi0, chi1, xi1 = psi1, psi, chi1, chi, xi
+    return s1, s2
+
+
+def structure_py(u, phi):
+    """Percus-Yevick hard-sphere structure factor S(q), u = q d, at volume fraction phi."""
+    a = (1 + 2 * phi) ** 2 / (1 - phi) ** 4
+    b = -6 * phi * (1 + phi / 2) ** 2 / (1 - phi) ** 4
+    g = phi * a / 2
+    u = np.maximum(u, 0.05)  # the closed form cancels below this; S(q) is flat there
+    sn, cs = np.sin(u), np.cos(u)
+    G = (a / u ** 2 * (sn - u * cs) + b / u ** 3 * (2 * u * sn + (2 - u ** 2) * cs - 2)
+         + g / u ** 5 * (-u ** 4 * cs + 4 * ((3 * u ** 2 - 6) * cs + (u ** 3 - 6 * u) * sn + 6)))
+    return 1 / (1 + 24 * phi * G / u)
+
+
+def packing_factor(phi, n=SUBSTRATE_N, lam=0.545, d50=D_UM, sigma_ln=0.5):
+    """Transport scattering in a powder of volume fraction phi over the independent grains'.
+
+    Each grain's Mie phase function, weighted by (1 - cos theta), is multiplied by the
+    Percus-Yevick S(q) at q = 2k sin(theta/2) (the quasi-crystalline approximation, host air),
+    over a lognormal of sizes as table 2.2's."""
+    theta = np.linspace(0, np.pi, 2001)
+    k = 2 * np.pi / lam
+    z = np.linspace(-3, 3, 41)
+    num = den = 0.0
+    for d, w in zip(d50 * np.exp(sigma_ln * z), np.exp(-z ** 2 / 2)):
+        s1, s2 = bhmie(k * d / 2, complex(n, 0), theta)
+        t = (abs(s1) ** 2 + abs(s2) ** 2) * (1 - np.cos(theta)) * np.sin(theta)
+        num += w * np.trapezoid(t * structure_py(2 * k * np.sin(theta / 2) * d, phi), theta)
+        den += w * np.trapezoid(t, theta)
+    return num / den
+
+
+PHI = (0.40, 0.55)  # a loose powder's solids by volume
+FACTORS = {phi: packing_factor(phi) for phi in (0.40, 0.45, 0.50, 0.55)}
+PACKING = (min(FACTORS.values()), max(FACTORS.values()))
+print(f"\npacking factor on S, n {SUBSTRATE_N} at 1 um (lognormal sigma_ln 0.5), 545 nm, Mie x Percus-Yevick: "
+      + ", ".join(f"phi {phi:.2f} {v:.3f}" for phi, v in FACTORS.items())
+      + f"; at 0.5 um, phi 0.45: {packing_factor(0.45, d50=0.5):.3f}")
 RHO = (2000, 2400)  # g/L, a lake (organic on gibbsite, 2.42 g/cm3)
 DYES = {  # band nm, molar mass g/mol, molar absorptivity L/mol/cm (low, high)
     "rose madder": ("madderlake", 510, 240.2, (5.0e3, 1.7e4)),  # alizarin; alizarin red S-Al 1.7e4 at 510 nm
@@ -302,7 +371,9 @@ for tube, (name, band, M, eps) in DYES.items():
 print("\nindex with the switch: tube, n before -> now, dry sRGB and L*a*b* before -> now; the corrected powder")
 for tube, n in INDEX_NOW.items():
     was, now = dry([(tube, 1)]), dry([(tube, 1)], index={tube: n})
-    line = f"  {tube:24s} {tubes[tube]['n']} -> {n}: {srgb8(was)} {np.round(lab(was), 1)} -> {srgb8(now)} {np.round(lab(now), 1)}"
+    tint = [srgb8(dry([(tube, .5), ("lead white", .5)], index=ix)) for ix in ({}, {tube: n})]
+    line = (f"  {tube:24s} {tubes[tube]['n']} -> {n}: {srgb8(was)} {np.round(lab(was), 1)} -> {srgb8(now)} {np.round(lab(now), 1)}"
+            f" (1:1 lead white {tint[0]} -> {tint[1]})")
     if tube in INDEX_POWDER:
         target = lab(corrected(INDEX_POWDER[tube]))
         line += (f"; powder {srgb8(corrected(INDEX_POWDER[tube]))} {np.round(target, 1)}, dE76 "
@@ -321,3 +392,51 @@ print(f"\nrose madder in oil: S at 550 nm per coat, oil table {s[NM == 550][0]:.
 for label, kk, ss in (("now", k, s), (f"K x {a:.3g}", a * k, s), (f"K x {a:.3g}, S from Mie", a * k, s_mie)):
     mass, tint = km(kk / ss), km((kk + kw) / (ss + sw))
     print(f"  {label:22s} masstone R_inf {srgb8(mass)} {np.round(lab(mass), 1)}; 1:1 lead white {srgb8(tint)} {np.round(lab(tint), 1)}")
+
+# --- magenta: fuchsine on alumina has no powder; its K/S at the band comes from its dye
+# Basic fuchsin (rosaniline hydrochloride, CAS 632-99-5, M 337.8): eps 8.06e4 at 543 nm (PhotochemCAD L04, PBS).
+M_FUCHSINE, EPS_FUCHSINE, BAND_FUCHSINE = 337.8, 8.06e4, 543
+WT_LAKE = (0.03, 0.10, 0.20)  # a lake's dye content: low, middle, high (§6.3)
+pk_mid = sum(PACKING) / 2
+print(f"\nmagenta (fuchsine lake) at {BAND_FUCHSINE} nm, dye chemistry, packing {PACKING[0]:.3f}-{PACKING[1]:.3f}:")
+for wt in (0.005, 0.01, 0.03, 0.05, 0.10, 0.20, 1.0):
+    v = [ks_dye(wt, EPS_FUCHSINE, r, pk, M_FUCHSINE) for r in RHO for pk in PACKING]
+    mu_d = np.log(10) * EPS_FUCHSINE * wt * sum(RHO) / 2 / M_FUCHSINE * 1e-4 * D_UM
+    print(f"  dye {wt * 100:4.1f} wt%: K/S {min(v):.2f}-{max(v):.2f} (mu_a d {mu_d:.1f})")
+target = ks_dye(WT_LAKE[1], EPS_FUCHSINE, sum(RHO) / 2, pk_mid, M_FUCHSINE)
+span = [ks_dye(wt, EPS_FUCHSINE, r, pk, M_FUCHSINE) for wt in (WT_LAKE[0], WT_LAKE[2]) for r in RHO for pk in PACKING]
+cap = 2 * 1.5 / D_UM / (0.75 * SIGMA_LAKE * pk_mid)
+print(f"  a lake's K/S: {target:.2f} at {WT_LAKE[1] * 100:.0f} wt% (over {WT_LAKE[0] * 100:.0f}-{WT_LAKE[2] * 100:.0f} wt%: "
+      f"{min(span):.2f}-{max(span):.2f}); the 1 um grain's package limit {cap:.2f}")
+u = (BAND_FUCHSINE - 540) / 10
+
+
+def ks_at_band(tube, a):
+    K, S = dry_ks([(tube, 1)], {tube: a})
+    r = K / S
+    return (1 - u) * r[NM == 540][0] + u * r[NM == 550][0]
+
+
+ks_unit = ks_at_band("magenta", 1.0)
+a_magenta = target / ks_unit
+was = dry([("magenta", 1)])
+now = dry([("magenta", 1)], {"magenta": a_magenta})
+tint_was, tint_now = dry([("magenta", .5), ("lead white", .5)]), dry([("magenta", .5), ("lead white", .5)], {"magenta": a_magenta})
+print(f"  engine K/S at {BAND_FUCHSINE} nm with no loading {ks_unit:.4f}: loading {a_magenta:.4g} "
+      f"(over the span {min(span) / ks_unit:.3g}-{max(span) / ks_unit:.3g}; yellow lake's {LOADING['yellow lake']:.3g} gives "
+      f"K/S {ks_at_band('magenta', LOADING['yellow lake']):.2f})")
+print(f"  magenta dry {srgb8(was)} {np.round(lab(was), 1)} -> {srgb8(now)} {np.round(lab(now), 1)}; "
+      f"1:1 lead white {srgb8(tint_was)} -> {srgb8(tint_now)}")
+
+# --- for a later PR (not applied): green earth and verdigris dry, a loading on their oil K fitted to
+# their corrected powders exactly as for the lakes, at their measured index (their S as the engine has it)
+print("\nlater PR, not applied: a loading on the oil K of green earth and verdigris, at their measured index")
+for tube, name in (("green earth", "greenearth"), ("copper green", "verdigris")):
+    target_lab = lab(corrected(name))
+    n = INDEX_NOW[tube]
+    f = lambda la: np.linalg.norm(lab(km(np.exp(la) * dry_ks([(tube, 1)], index={tube: n})[0]
+                                         / dry_ks([(tube, 1)], index={tube: n})[1])) - target_lab)
+    r = minimize_scalar(f, bounds=(-8, 8), method="bounded")
+    a = float(np.exp(r.x))
+    K, S = dry_ks([(tube, 1)], index={tube: n})
+    print(f"  {tube:13s} loading {a:.3g}, dE76 {r.fun:.1f} to the powder {np.round(target_lab, 1)}; dry {srgb8(km(a * K / S))}")

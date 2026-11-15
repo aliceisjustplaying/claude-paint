@@ -81,8 +81,8 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// Marks a painting whose dye lakes (rose madder, carmine, yellow lake, magenta) look
 /// dry, as a pastel stick or a sheet's tone, as their measured powders do: their dye at its
-/// loading over their alumina's scattering (`paint::Palette::dry_lakes`): every new
-/// painting. Only engine 9's dry colors have it (below, the line changes nothing). A log
+/// loading over their alumina's scattering, and a pigment the index table had wrong
+/// scatters by its measured index (`paint::Palette::dry_lakes`): every new painting. Only engine 9's dry colors have it (below, the line changes nothing). A log
 /// without it replays its lakes' dry colors as painted.
 pub const DRY_LAKES_MARK: &str = "--@ dry-lakes";
 /// The drain switch, in the head of a session file: a painting whose log

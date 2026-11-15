@@ -631,7 +631,10 @@ feel(x, y)                     -- what a fingertip feels there
   vermilion and the chromes). Dry blacks are a little grayer than in oil.
   A dye lake (rose madder, carmine, yellow lake, magenta) is its dye on a
   white alumina, as its measured powder is: rose madder a muted rose,
-  carmine a deep crimson, and with white they make clear pinks.
+  carmine a deep crimson, and with white they make clear pinks. Permanent
+  alizarin (a quinacridone, not a lake) is a dusky violet-rose dry, and green
+  earth, verdigris, lead-tin yellow and transparent oxide yellow scatter by
+  their measured indices.
 - **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
@@ -693,8 +696,8 @@ head says `--@ paper`); an older painting replays as it was painted, and
 has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 `tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. A painting
 begun before the lakes' dry colors came (its head has no `--@ dry-lakes`)
-replays its lake sticks and paper tones in the paler colors it was painted
-with. The numbers (how hard a stick is, how fast it wears, what dry pigment
+replays its lake sticks and paper tones, and those of the pigments whose
+index was corrected, in the colors it was painted with. The numbers (how hard a stick is, how fast it wears, what dry pigment
 looks like) are estimates, not measurements (notes/pastel.md); the lakes'
 dry colors are fitted to measured powders
 (notes/research/dry_pigment_optics.md §6).

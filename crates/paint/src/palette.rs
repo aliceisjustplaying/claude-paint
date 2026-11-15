@@ -1081,6 +1081,19 @@ impl Palette {
         crate::dry::dry_color(&list, white)
     }
 
+    /// The mean refractive index of the parts (tube index, fraction by
+    /// volume), by volume (`dry::refractive_index`): a pastel stick's, for
+    /// how water in its pores darkens it (`crate::wet_pastel`). By volume,
+    /// not by scattering: dry, every particle scatters within about a
+    /// factor of 1.5 of any other per volume (dry_pigment_optics.md §2.2).
+    pub fn dry_index(&self, parts: &[(usize, f32)]) -> f32 {
+        let total: f32 = parts.iter().map(|p| p.1.max(0.0)).sum();
+        if total <= 0.0 {
+            return crate::wet_pastel::DEFAULT_INDEX;
+        }
+        parts.iter().map(|&(i, f)| f.max(0.0) * crate::dry::refractive_index(self.tubes[i].name)).sum::<f32>() / total
+    }
+
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
     /// piles of one recipe vary.
     pub fn remix(&self, m: &Mixture, amount: f32, rng: &mut Rng) -> Mixture {

@@ -78,6 +78,10 @@ pub struct Stick {
     /// Water in its tip, mm³ (dipped: `crate::wet_pastel`; 0 dry). A wet
     /// tip draws only on a canvas with the switch (`Canvas::with_wet_pastel`).
     pub water: f32,
+    /// The mean refractive index of its particles, by volume (its pile's
+    /// tubes, `Palette::dry_index`): how much water in the pores of what
+    /// it lays darkens it (`crate::wet_pastel`). Only with the switch.
+    pub index: f32,
 }
 
 /// Thickness of the particles a stroke leaves (µm): what turns a volume of
@@ -134,13 +138,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, water: 0.0 }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, water: 0.0 }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7), sharpened by a blade to a
@@ -156,7 +160,7 @@ impl Stick {
             facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, water: 0.0 }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, water: 0.0, index: crate::wet_pastel::DEFAULT_INDEX }
     }
 
     fn radius(&self) -> f32 {
@@ -311,6 +315,13 @@ pub struct Laid {
 /// returns how much.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
+    lay_crumbs_of(d, film, pxs, bed, vol, (color, 0.0), rng, dmax, px_um2)
+}
+
+/// `lay_crumbs`, the crumbs' particles of mean index `color.1` (the wet
+/// pastel switch's `Cell::index`; 0 none recorded).
+#[allow(clippy::too_many_arguments)]
+fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, (color, n): (Rgb, f32), rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
     let mut cum = Vec::with_capacity(bed.len());
     let mut total = 0.0f32;
     for &(_, g, _) in bed {
@@ -349,6 +360,7 @@ pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &m
         let q = 1.0 - (-dv / PARTICLE_UM).exp();
         let before = (c.a, c.reflectance());
         c.add_pastel(q, color, dv);
+        c.note_pastel(dv, n);
         c.loose += dv;
         pxs[i] = c.repaint(pxs[i], before);
     }
@@ -464,16 +476,23 @@ impl Canvas {
         // its paste spread thinner and laying the water it carries; the
         // stick as it was dry, to come back to
         let wet_tip = self.wet_pastel && stick.water > 0.0;
-        let (dry_hardness, dry_wear) = (stick.hardness, stick.wear);
+        // (the switch records the particles' index where they land)
+        let n_lay = if self.wet_pastel { stick.index } else { 0.0 };
+        let dry_hardness = stick.hardness;
+        let (wet_hardness, paste_thin) = (crate::wet_pastel::wet_hardness(dry_hardness), crate::wet_pastel::paste_thin());
         let (mut shed, mut thick, mut paste_water) = (SHED, PARTICLE_UM, 0.0f32);
         for k in 0..=steps {
             if wet_tip {
+                // softer by the share of its pores the water fills (its
+                // capillary strength rises with the saturation, Rumpf); a
+                // saturated paste smears instead of crumbling [E: linear in
+                // the saturation]; its particles spread; it lays its pores'
+                // water with what it wears
                 let w = stick.wetness();
-                stick.hardness = dry_hardness * (1.0 - w * (1.0 - crate::wet_pastel::WET_SOFT));
-                stick.wear = dry_wear * (1.0 + w * (crate::wet_pastel::WET_WEAR - 1.0));
-                shed = SHED * (1.0 - w * crate::wet_pastel::WET_SHED);
-                thick = PARTICLE_UM * (1.0 - w * (1.0 - crate::wet_pastel::PASTE_THIN));
-                paste_water = crate::wet_pastel::PASTE_WATER * w;
+                stick.hardness = dry_hardness + (wet_hardness - dry_hardness) * w;
+                shed = SHED * (1.0 - w);
+                thick = PARTICLE_UM * (1.0 - w * (1.0 - paste_thin));
+                paste_water = crate::wet_pastel::POROSITY * w;
             }
             let t = k as f32 * ds;
             let mut sp = at(t);
@@ -550,10 +569,11 @@ impl Canvas {
                     let q = 1.0 - (-dv / thick).exp();
                     let before = (c.a, c.reflectance());
                     c.add_pastel(q, stick.color, dv);
+                    c.note_pastel(dv, n_lay);
                     c.loose += dv;
                     if paste_water > 0.0 {
                         // the paste leaves its water where the tip wore
-                        c.water += worn_here * paste_water;
+                        crate::wet_pastel::add_water(c, worn_here * paste_water);
                         water_um3 += worn_here * paste_water;
                     }
                     laid = true;
@@ -580,7 +600,7 @@ impl Canvas {
                 let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
                 laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
+                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, (stick.color, n_lay), &mut rng, crumb_max, px_um2);
                 for &(i, g) in &last_sheet_bed {
                     caught.push((i, to_sheet * g / gs));
                 }
@@ -619,7 +639,7 @@ impl Canvas {
             let a_px_mm2 = px * px;
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
-            let lost = lay_crumbs(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, &mut rng, crumb_max, px_um2);
+            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, (stick.color, n_lay), &mut rng, crumb_max, px_um2);
             self.px = pxs;
             self.film = film;
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
@@ -636,7 +656,6 @@ impl Canvas {
         }
         if wet_tip {
             stick.hardness = dry_hardness;
-            stick.wear = dry_wear;
         }
         out
     }

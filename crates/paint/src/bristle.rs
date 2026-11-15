@@ -391,6 +391,9 @@ pub struct Held {
     pub paste_mm3: f32,
     #[cfg_attr(feature = "replay-effects", serde(default))]
     pub paste: [f32; 3],
+    /// The paste's mean particle index (`crate::wet_pastel::WashLoad::paste_n`).
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_n: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
@@ -453,7 +456,7 @@ impl std::fmt::Debug for Held {
             d.field("water_mm3", &self.water_mm3);
         }
         if self.paste_mm3 > 0.0 {
-            d.field("paste_mm3", &self.paste_mm3).field("paste", &self.paste);
+            d.field("paste_mm3", &self.paste_mm3).field("paste", &self.paste).field("paste_n", &self.paste_n);
         }
         d.finish()
     }
@@ -524,7 +527,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3] }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3], paste_n: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -549,6 +552,13 @@ impl Held {
         // neighboring bristles overlap by ~hair², so each lays lay / hair²
         let track = 2.0 * self.tool.hair_radius();
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
+    }
+
+    /// What the brush holds between its hairs, mm³: a full load of paint
+    /// on every bristle (`full`, coats × square units), on a canvas of
+    /// `mm_per_unit`. Water fills the same space (`crate::wet_pastel`).
+    pub fn capacity_mm3(&self, mm_per_unit: f32) -> f32 {
+        self.full() * self.bristles.len() as f32 * crate::surface::COAT_UM * 1e-3 * mm_per_unit * mm_per_unit
     }
 
     /// Whether any bristle holds solvent (a thinned load, or solvent

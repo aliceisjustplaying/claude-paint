@@ -855,8 +855,9 @@ fn add_dust<M: UserDataMethods<Brush>>(m: &mut M) {
 /// switch). `b:dip` takes up water, `share` of what its belly holds (a
 /// clean brush only: no oil paint on it), and with `pastel=` a stick, ground
 /// pastel of its color too, `amount` (0..1, default 0.5) of the paste the
-/// brush can hold, worn off the stick's length: a paste, or with little of
-/// it, a wash. `b:wash` draws the brush through the picture: it lays water
+/// brush can hold (a paste at the stick's own packing filling the space
+/// between its hairs, the water it displaces dripping off), worn off the
+/// stick's length: a paste, or with little of it, a wash. `b:wash` draws the brush through the picture: it lays water
 /// along its path, and the loose pastel it wets turns to a paste it carries
 /// on and lays further along, with the paste it held. Returns the pastel
 /// it laid, mm³. Only with the switch (`install_paper`).
@@ -886,33 +887,38 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
                 amount = 0.5;
             }
         }
-        let w_mm = {
-            let s = b.st.borrow();
-            b.held.borrow().tool.width * s.canvas.as_ref().ok_or_else(no_canvas)?.mm_per_unit()
-        };
-        let cap = paint::wet_pastel::brush_water_mm3(w_mm);
+        let mmu = b.st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.mm_per_unit();
+        let cap = b.held.borrow().capacity_mm3(mmu);
         let mut h = b.held.borrow_mut();
+        let eps = paint::wet_pastel::POROSITY;
         h.water_mm3 = h.water_mm3.max(share * cap);
         if let Some(t) = stick {
-            // ground off the stick: its length shortens by the volume over its section
+            // ground off the stick: its length shortens by the volume over
+            // its section. A paste at the stick's packing fills the space
+            // between the hairs: at most `cap` of stick volume, its solids
+            // (1 − ε of it) displacing water
             let st = draw_pencil::stick_of(&t)?;
             let area = match st.section {
                 paint::pastel::Section::Round { d_mm } => std::f32::consts::FRAC_PI_4 * d_mm * d_mm,
                 paint::pastel::Section::Square { side_mm } => side_mm * side_mm,
             };
-            let room = (paint::wet_pastel::BRUSH_PASTE_SHARE * cap - h.paste_mm3).max(0.0);
-            let v = (amount * paint::wet_pastel::BRUSH_PASTE_SHARE * cap).min(room).min((st.length_mm - 5.0).max(0.0) * area);
+            let room = (cap - h.paste_mm3).max(0.0);
+            let v = (amount * cap).min(room).min((st.length_mm - 5.0).max(0.0) * area);
             if v > 0.0 {
                 let total = h.paste_mm3 + v;
                 h.paste = [0, 1, 2].map(|k| (h.paste[k] * h.paste_mm3 + st.color[k] * v) / total);
+                h.paste_n = (h.paste_n * h.paste_mm3 + st.index * v) / total;
                 h.paste_mm3 = total;
                 t.set("length", st.length_mm - v / area)?;
             }
         }
-        // (dipping and grinding: a few seconds of the hand's)
+        // (what the solids leave room for)
+        h.water_mm3 = h.water_mm3.min(cap - (1.0 - eps) * h.paste_mm3).max(0.0);
+        // (dipping: a reach to the jar, as to the palette; grinding pastel
+        // into the water: mixing a pile)
         drop(h);
         if let Some(c) = b.st.borrow_mut().canvas.as_mut() {
-            c.tally_mut().secs += if amount > 0.0 { 10.0 } else { 2.0 };
+            c.tally_mut().secs += if amount > 0.0 { paint::tally::pace::RELOAD + paint::tally::pace::REMIX } else { paint::tally::pace::RELOAD };
         }
         let h = b.held.borrow();
         Ok((h.water_mm3 / cap, h.paste_mm3))
@@ -939,17 +945,17 @@ fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
             return err("b:wash: the brush is dry; dip it in water first (b:dip(share))");
         }
         let width = b.held.borrow().tool.mark_width(p);
-        let full_w = b.held.borrow().tool.width;
         time::verb(&b.st, Verb::Pass, |s| {
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
             if let Err(e) = paint::Knife::check_path(&pts, c.frame().scale) {
                 return err(format!("b:wash: {e}"));
             }
-            let cap = paint::wet_pastel::brush_water_mm3(full_w * c.mm_per_unit());
+            let mmu = c.mm_per_unit();
             let mut h = b.held.borrow_mut();
-            let mut load = paint::wet_pastel::WashLoad { water_mm3: h.water_mm3, cap_mm3: cap, paste_mm3: h.paste_mm3, paste: h.paste };
+            let cap = h.capacity_mm3(mmu);
+            let mut load = paint::wet_pastel::WashLoad { water_mm3: h.water_mm3, paste_mm3: h.paste_mm3, paste: h.paste, paste_n: h.paste_n, ..paint::wet_pastel::WashLoad::for_tool(&h.tool, mmu, cap) };
             let (v, secs) = c.wash_pastel(width, p, &pts, &mut load);
-            (h.water_mm3, h.paste_mm3, h.paste) = (load.water_mm3, load.paste_mm3, load.paste);
+            (h.water_mm3, h.paste_mm3, h.paste, h.paste_n) = (load.water_mm3, load.paste_mm3, load.paste, load.paste_n);
             c.tally_mut().secs += secs as f64;
             Ok(v)
         })

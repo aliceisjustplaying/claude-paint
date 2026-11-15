@@ -185,9 +185,11 @@ const DRAWING_OPTICS: u64 = 1 << 42;
 const WET_PASTEL: u64 = 1 << 44;
 /// Marks the wet pastel section ("WETP"), and its version: written right
 /// after the engine word exactly when it has `WET_PASTEL`: whether a
-/// drawing follows (0 or 1), then the water standing in each of its cells,
-/// µm (one f32 per buffer pixel). A reader that doesn't know the bit
-/// refuses the file instead of losing the water.
+/// drawing follows (0 or 1), then for each of its cells (one triple per
+/// buffer pixel) the water in it (µm), its particles' mean index and the
+/// share of its gum it holds, the last two as their stored u16s (each an
+/// f32). A reader that doesn't know the bit refuses the file instead of
+/// losing the water.
 const WET_PASTEL_MARK: u64 = 0x50544557;
 const WET_PASTEL_V: u64 = 1;
 
@@ -594,7 +596,7 @@ impl Canvas {
             put_u64(w, WET_PASTEL_V)?;
             put_u64(w, u64::from(self.drawing.is_some()))?;
             if let Some(d) = &self.drawing {
-                put_all(w, d.cells.iter().map(|c| c.water))?;
+                put_all(w, d.cells.iter().flat_map(|c| [c.water, c.index as f32, c.gum as f32]))?;
             }
         }
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
@@ -880,12 +882,13 @@ impl Canvas {
             match (get_u64(r)?, c.drawing.as_deref_mut()) {
                 (0, None) => {}
                 (1, Some(d)) => {
-                    let water = get_all(r, d.cells.len())?;
-                    if !water.iter().all(|v| v.is_finite() && *v >= 0.0) {
+                    let wet = get_all(r, 3 * d.cells.len())?;
+                    let u16_ok = |v: f32| v >= 0.0 && v <= u16::MAX as f32 && v.fract() == 0.0;
+                    if !wet.chunks_exact(3).all(|q| q[0].is_finite() && q[0] >= 0.0 && u16_ok(q[1]) && u16_ok(q[2])) {
                         return Err(bad("checkpoint pastel water is invalid"));
                     }
-                    for (cell, v) in d.cells.iter_mut().zip(water) {
-                        cell.water = v;
+                    for (cell, q) in d.cells.iter_mut().zip(wet.chunks_exact(3)) {
+                        (cell.water, cell.index, cell.gum) = (q[0], q[1] as u16, q[2] as u16);
                     }
                     d.damp = d.cells.iter().any(|c| c.water > 0.0);
                 }

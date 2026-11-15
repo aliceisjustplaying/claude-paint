@@ -83,6 +83,41 @@ fn mie_air(n: f32) -> (f32, f32) {
     (T[11].1, T[11].2)
 }
 
+/// The indices of the media `scatter_in` is tabled for: air to water.
+const MEDIA: [f32; 10] = [1.0, 1.01, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.333];
+
+/// A particle's transport scattering with its pores full of a medium of
+/// index `n_med` (1 air .. 1.333 water), as a share of its scattering in
+/// air: Mie, size-averaged as `mie_air` (d = 1 µm, λ 550 nm), its contrast
+/// m = n/n_med and its size parameter π d n_med/λ both moving with the
+/// medium (notes/research/dry_pigment_mie.py `media`; wet_pastel.md §2).
+/// Interpolated in both; at most 1 (the table's Mie ripples aside).
+pub fn scatter_in(n: f32, n_med: f32) -> f32 {
+    // (n, the share at each of MEDIA)
+    const T: [(f32, [f32; 10]); 12] = [
+        (1.50, [1.0, 0.9812, 0.9588, 0.8910, 0.7588, 0.6294, 0.4854, 0.3403, 0.2080, 0.1371]),
+        (1.56, [1.0, 0.9728, 0.9549, 0.8924, 0.8251, 0.7285, 0.6022, 0.4608, 0.3269, 0.2445]),
+        (1.65, [1.0, 0.9862, 0.9779, 0.9507, 0.9199, 0.7980, 0.6900, 0.6144, 0.5118, 0.4345]),
+        (1.70, [1.0, 0.9976, 0.9683, 0.8901, 0.8105, 0.7859, 0.7171, 0.6447, 0.5438, 0.4713]),
+        (1.74, [1.0, 0.9942, 0.9904, 0.9944, 0.9629, 0.8592, 0.7955, 0.7054, 0.6185, 0.5616]),
+        (1.84, [1.0, 1.0108, 0.9542, 0.9171, 0.8745, 0.7975, 0.7857, 0.7183, 0.6860, 0.6437]),
+        (2.00, [1.0, 0.9778, 0.9613, 0.9156, 0.8688, 0.8274, 0.7859, 0.7325, 0.6949, 0.6926]),
+        (2.15, [1.0, 1.0025, 0.9830, 0.9659, 0.9167, 0.8353, 0.8087, 0.7639, 0.7155, 0.7081]),
+        (2.30, [1.0, 0.9889, 0.9776, 0.9517, 0.9447, 0.9679, 0.8982, 0.8493, 0.7760, 0.7758]),
+        (2.40, [1.0, 0.9844, 0.9620, 0.9278, 0.8714, 0.7956, 0.7584, 0.7329, 0.7020, 0.6963]),
+        (2.45, [1.0, 0.9868, 0.9773, 0.9565, 0.9769, 0.9225, 0.8437, 0.8060, 0.7945, 0.7785]),
+        (3.00, [1.0, 1.0055, 0.9979, 0.9696, 0.9510, 0.9312, 0.9215, 0.8984, 0.8783, 0.8361]),
+    ];
+    let m = n_med.clamp(MEDIA[0], MEDIA[9]);
+    let j = MEDIA.windows(2).position(|w| m <= w[1]).unwrap_or(8);
+    let v = (m - MEDIA[j]) / (MEDIA[j + 1] - MEDIA[j]);
+    let at = |row: &[f32; 10]| row[j] + (row[j + 1] - row[j]) * v;
+    let n = n.clamp(T[0].0, T[11].0);
+    let i = T.windows(2).position(|w| n <= w[1].0).unwrap_or(10);
+    let u = (n - T[i].0) / (T[i + 1].0 - T[i].0);
+    (at(&T[i].1) + (at(&T[i + 1].1) - at(&T[i].1)) * u).min(1.0)
+}
+
 /// The air/oil scattering ratio of a carbon black, whose
 /// absorption comes from carbon on (or in) its particles: bone black's
 /// apatite matrix ×9 at 1 µm (dry_pigment_optics.md, table 2.2), a carbon

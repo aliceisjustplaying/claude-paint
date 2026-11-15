@@ -113,17 +113,20 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     let ft: Table = p.get("facets")?;
     let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
     let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], water: 0.0 })
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], water: 0.0, index: p.raw_get::<Option<f32>>("n")?.unwrap_or(paint::wet_pastel::DEFAULT_INDEX) })
 }
 
 /// The water in a stick's tip now (mm³), `now` minutes on the painting's
 /// clock: what `p:wet` gave it (its table's `water`, at `wet_at`), less what
-/// has dried off it since (paint's `wet_pastel::tip_water`). 0 for a stick
-/// never dipped.
+/// has spread up the stick and dried off it since (paint's
+/// `Stick::tip_water`). 0 for a stick never dipped.
 fn tip_water(p: &Table, now: f64) -> Result<f32> {
     let water: f32 = p.raw_get::<Option<f32>>("water")?.unwrap_or(0.0);
+    if water <= 0.0 {
+        return Ok(0.0);
+    }
     let at: f64 = p.raw_get::<Option<f64>>("wet_at")?.unwrap_or(now);
-    Ok(paint::wet_pastel::tip_water(water, now - at))
+    Ok(stick_of(p)?.tip_water(water, now - at))
 }
 
 /// Write a stick's wear back into its table (a part of the Lua heap: a
@@ -708,7 +711,13 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if !(0.0..=1.0).contains(&share) {
                 return err("wet: share is how much water the tip takes up, 0 (dry) to 1 (soaked)");
             }
-            let now = st1.borrow().canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?.now_min();
+            // (a reach to the water jar and back, as a trip to the palette)
+            {
+                let mut s = st1.borrow_mut();
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                c.tally_mut().secs += paint::tally::pace::RELOAD;
+            }
+            let now = st1.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
             // (a tip still wet from before keeps what it has, if more)
             let cap = stick_of(&p)?.tip_capacity_mm3();
             let water = tip_water(&p, now)?.max(share * cap);
@@ -764,6 +773,10 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             p.set("b", stick.color[2])?;
             p.set("name", pile.recipe())?;
             p.set("worn", 0.0)?;
+            // (with the wet pastel switch: its particles' mean index)
+            if tubes.wet_pastel && tubes.drawing_optics {
+                p.set("n", tubes.dry_index(&pile.mix.parts))?;
+            }
             if let Some(l) = o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
                 if !(5.0..=200.0).contains(&l) {
                     return err("pastel: length is the stick's length in mm, 5 to 200");

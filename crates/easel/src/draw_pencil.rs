@@ -2531,4 +2531,45 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         }
         assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
     }
+
+    /// The pastel veil switch: a new painting's log has it and its pastel
+    /// is seen with no veil, darker than an older log's (whose pastel keeps
+    /// it) by the veil over the bed; it replays bit for bit and a save keeps
+    /// it.
+    #[test]
+    fn pastel_veil_comes_with_its_log_head_line() {
+        use crate::session::{PASTEL_VEIL_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n";
+        assert!(!box_for(Some(older)).unwrap().pastel_veil);
+        assert!(box_for(Some(&format!("{older}{PASTEL_VEIL_MARK}\n"))).unwrap().pastel_veil);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_VEIL_MARK}\n"))).unwrap().pastel_veil, "only in the head");
+        assert!(box_for(None).unwrap().pastel_veil, "a new painting has it");
+        let src = r#"p = pastel(pile{{"bone black", 1}})
+            p:stroke({{150, 400}, {850, 400}}, {force=2})"#;
+        let seen = |log: Option<&str>| {
+            let mut s = Session::with_box(W, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, src);
+            s
+        };
+        let (old, mut s) = (seen(Some(older)), seen(None));
+        assert!(!old.canvas().unwrap().pastel_veil() && s.canvas().unwrap().pastel_veil());
+        let lum = |c: &paint::Canvas| c.seen().iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
+        assert!(lum(&s.canvas().unwrap()) < lum(&old.canvas().unwrap()), "no veil: darker");
+        let program = s.program("veil");
+        assert!(program.lines().any(|l| l == PASTEL_VEIL_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().seen(), s.canvas().unwrap().seen());
+        let path = std::env::temp_dir().join(format!("easel-pastel-veil-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.pastel_veil && restored.canvas().unwrap().pastel_veil());
+        assert_eq!(restored.canvas().unwrap().seen(), s.canvas().unwrap().seen());
+        run(&mut s, "fix()");
+        assert!(s.canvas().unwrap().pastel_veil());
+    }
 }

@@ -2822,6 +2822,62 @@ mod tests {
             assert_eq!(c.seen()[i], crate::canvas::haze(c.look_px(i), c.gloss[i]));
         }
 
+        /// With the pastel veil switch every particle bed is seen as charcoal
+        /// is, with no first-surface veil: where pastel covers a cell, pale
+        /// or dark, loose or fixed, the picture takes the veil off its share,
+        /// exactly k·(1 − R) of its area; charcoal is seen as before; paint
+        /// over it brings the veil back. A sheet laid over the picture keeps
+        /// its own paper's veil, but not over the pastel it caught.
+        #[test]
+        fn with_the_switch_no_pastel_is_veiled() {
+            let k = crate::canvas::SURFACE_REFLECTANCE;
+            for (color, fixed) in [([0.1f32, 0.1, 0.1], false), ([0.85, 0.8, 0.7], false), ([0.1, 0.3, 0.6], true)] {
+                let mut c = paper().with_pastel_veil(true);
+                assert!(c.pastel_veil());
+                stroke(&mut c, &mut Stick::round(color, 0.8, 8.0), 400.0);
+                if fixed {
+                    fix(&mut c);
+                }
+                let seen = c.seen();
+                let d = c.drawing.as_ref().unwrap();
+                assert!(!d.carbon);
+                let mut n = 0;
+                for i in centre(&c) {
+                    let veiled = crate::canvas::haze(c.px[i], c.gloss[i]);
+                    let Some((share, r)) = d.cells[i].bare_bed() else {
+                        assert_eq!(seen[i], veiled);
+                        continue;
+                    };
+                    n += 1;
+                    for q in 0..3 {
+                        let want = veiled[q] - share * k * (1.0 - c.gloss[i]) * (1.0 - r[q]);
+                        assert!((seen[i][q] - want).abs() < 1e-6 && seen[i][q] < veiled[q], "{i}: {:?} {veiled:?} {share}", seen[i]);
+                        assert!((r[q] - color[q]).abs() < 0.08, "{r:?} {color:?}");
+                    }
+                }
+                assert!(n > 20, "{n} pastel cells");
+                let i = centre(&c).into_iter().find(|&i| c.drawing.as_ref().unwrap().cells[i].bare_bed().is_some()).unwrap();
+                c.film[i] += 1.0;
+                assert_eq!(c.seen()[i], crate::canvas::haze(c.look_px(i), c.gloss[i]), "painted over: the veil is back");
+            }
+            // charcoal: the rule it had, the same picture with the switch or without
+            let (mut on, mut off) = (paper().with_pastel_veil(true), paper());
+            stroke(&mut on, &mut Stick::vine(8.0), 400.0);
+            stroke(&mut off, &mut Stick::vine(8.0), 400.0);
+            assert_eq!(on.seen(), off.seen());
+            // a sheet's caught pastel: its paper veiled, the pastel not
+            let mut c = paper().with_pastel_veil(true);
+            let f = c.frame();
+            let mask = Mask::full(f);
+            c.lay_sheet(&mask, 100.0, 5.0, [0.7; 3]).unwrap();
+            stroke(&mut c, &mut Stick::round([0.1; 3], 0.8, 8.0), 400.0);
+            let sheet = c.sheet.as_ref().unwrap();
+            let i = (0..sheet.a.len()).find(|&i| sheet.over[i] && sheet.a[i] > 0.3).expect("the sheet caught pastel");
+            let (a, r) = (sheet.a[i], sheet.r[i]);
+            let want = crate::graphite::cover(crate::canvas::haze([0.7; 3], 0.0), a, r);
+            assert_eq!(c.seen()[i], want);
+        }
+
         /// What the finger moves of vine is laid again as vine: at vine's
         /// lift and as bare carbon, not at pastel's 0.55 (the lift is the
         /// particles', not the gesture's); pastel moved is laid at 0.55, as

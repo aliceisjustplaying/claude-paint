@@ -169,6 +169,15 @@ pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// it was painted. It rides on the drawing's optics (`DRAWING_OPTICS_MARK`):
 /// without them it does nothing.
 pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
+/// The pastel veil switch, in the head of a session file: no first-surface
+/// veil over pastel, loose or fixed, as there was none over charcoal
+/// (`CHARCOAL_MARK`): a bed of chalk and pigment particles returns its R∞,
+/// its particles' surface reflection already in it (paint's
+/// `Canvas::with_pastel_veil`). Paint, paper and graphite keep the veil. A
+/// new painting has it; a log without it replays as it was painted. It
+/// rides on the drawing's optics (`DRAWING_OPTICS_MARK`): without them it
+/// does nothing.
+pub const PASTEL_VEIL_MARK: &str = "--@ pastel-veil";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
 /// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
@@ -957,6 +966,9 @@ impl Session {
         }
         if self.st.borrow().tubes.pastel_km_mix {
             let _ = writeln!(s, "{PASTEL_KM_MARK}");
+        }
+        if self.st.borrow().tubes.pastel_veil {
+            let _ = writeln!(s, "{PASTEL_VEIL_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1757,6 +1769,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.charcoal = true;
         b.wet_pastel = true;
         b.pastel_km_mix = true;
+        b.pastel_veil = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1849,6 +1862,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.pastel_km_mix = head(PASTEL_KM_MARK);
+    b.pastel_veil = head(PASTEL_VEIL_MARK);
     Ok(b)
 }
 

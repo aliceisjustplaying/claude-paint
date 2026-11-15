@@ -255,6 +255,8 @@ pub struct Canvas {
     pub(crate) wet_pastel: bool,
     /// Pastel in the tooth mixes by Kubelka–Munk (`with_pastel_km_mix`).
     pub(crate) pastel_km: bool,
+    /// No first-surface veil over any particle bed (`with_pastel_veil`).
+    pub(crate) pastel_veil: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -346,6 +348,7 @@ impl Canvas {
             drawing_optics: false,
             wet_pastel: false,
             pastel_km: false,
+            pastel_veil: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -509,6 +512,22 @@ impl Canvas {
 
     pub fn pastel_km_mix(&self) -> bool {
         self.pastel_km
+    }
+
+    /// No first-surface veil (`haze`) over pastel, loose or fixed: a bed
+    /// of chalk and pigment particles returns what Mie and Kubelka–Munk
+    /// give it, its particles' surface reflection already in it, as
+    /// charcoal's does (`Cell::bare_bed`, `unveiled`). The veil stays over
+    /// paint and paper, over graphite, and comes back where paint covers
+    /// the pastel. It needs the drawing's separate optics
+    /// (`with_drawing_optics`); without them it stays off.
+    pub fn with_pastel_veil(mut self, enabled: bool) -> Self {
+        self.pastel_veil = enabled && self.drawing_optics;
+        self
+    }
+
+    pub fn pastel_veil(&self) -> bool {
+        self.pastel_veil
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

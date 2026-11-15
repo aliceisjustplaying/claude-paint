@@ -280,6 +280,9 @@ pub struct Canvas {
     pub(crate) drain: bool,
     /// A sheet of paper laid over part of the picture (`sheet.rs`).
     pub(crate) sheet: Option<crate::sheet::Sheet>,
+    /// The oils switch (`with_oils`): paint carries its tubes' wax, which
+    /// dulls its gloss (`bake`).
+    pub(crate) oils: bool,
 }
 
 impl Canvas {
@@ -347,6 +350,7 @@ impl Canvas {
             soak: None,
             drain: false,
             sheet: None,
+            oils: false,
         }
     }
 
@@ -388,6 +392,21 @@ impl Canvas {
     /// The drain switch (`with_drain`).
     pub fn drain(&self) -> bool {
         self.drain
+    }
+
+    /// Turn on the oils switch (an easel log's `--@ oils`, engine 5 and
+    /// later): the tubes come in their colormen's oils, with their wax
+    /// (`palette::grind_of`, read by the box: `Palette::oils`), so a pile
+    /// dries at its oils' and wax's rate; on the canvas a film's wax dulls
+    /// its gloss as it bakes (`palette::WAX_MATTE`). Without it a painting
+    /// is as it always was. A checkpoint keeps it (its oils section).
+    pub fn with_oils(mut self, on: bool) -> Self {
+        self.oils = on;
+        self
+    }
+    /// The oils switch (`with_oils`).
+    pub fn oils(&self) -> bool {
+        self.oils
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {

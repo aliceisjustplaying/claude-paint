@@ -151,8 +151,11 @@ line scrapes the oldest off instead.)
 evaporates as the paint is laid, so it leaves a film that much thinner, of
 the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
 is the other way to thin a pile: its solvent stays in the film for a while
-and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
-little slower) or `"poppy"` (dries much slower, yellows least).
+and leaves over painting time.) Your tubes come ground in the oils your
+box's colormen used, some with a little wax (it dries slower and more
+matte). `oil` grinds the pile's pigments again in another, without wax:
+`"linseed"`, `"walnut"` (dries a little slower) or `"poppy"` (dries slower
+still, yellows least).
 
 `blot` is the opposite of medium: the paint laid out on blotting paper
 first, which draws out that share of its own oil (0 to 0.5):
@@ -175,8 +178,9 @@ line, the paper draws the full share.) A pile takes either medium or blot.
   heap, in the units its recipe was given in (a pile knifed as
   `{"<tube A>", 4}, {"<tube B>", 0.35}` takes `{"<tube B>", 0.1}`
   as a tenth of a part more): look, adjust, look again. It returns the pile,
-  its recipe with the added parts. The added paint is tube paint (linseed,
-  unthinned), so it dilutes the heap's turpentine, its `thinner` and its oil;
+  its recipe with the added parts. The added paint is tube paint (in its
+  tube's own oil, unthinned), so it dilutes the heap's turpentine, its
+  `thinner` and its oil;
   a scraped heap is knifed fresh first.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.

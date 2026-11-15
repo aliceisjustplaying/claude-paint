@@ -159,7 +159,7 @@ impl Mount {
     }
 
     /// What the sheet is laid on gives under the reference contact, MPa per
-    /// µm, in series with the sheet's own: board about 0.014, canvas cloth
+    /// µm, in series with the sheet's own: board about 0.015, canvas cloth
     /// about 0.0005 (also over a strainer's bars and, under the drum, in
     /// its bay).
     pub fn backing_mpa_per_um(self) -> f32 {
@@ -170,9 +170,10 @@ impl Mount {
     }
 }
 
-/// A strainer's bars, mm, by default (estimate: 3–5 cm bars on 60–80 cm
-/// strainers; `mount={"strainer", bar=}` sets it).
-pub const STRAINER_BAR_MM: f32 = 40.0;
+/// A strainer's bars, mm, by default (measured: the original rectangular
+/// strainers of Jens Juel's portraits had bars 4–6 cm wide, Slotsgaard,
+/// Arts 11 (2022) 55; `mount={"strainer", bar=}` sets it).
+pub const STRAINER_BAR_MM: f32 = 50.0;
 /// The most crossbars a strainer is given here.
 pub const MAX_CROSS: u32 = 8;
 
@@ -203,25 +204,35 @@ fn ref_pressure_mpa() -> f32 {
 /// Paper's in-plane modulus per density, MPa per kg/m³ (MN·m/kg): the
 /// geometric mean of the measured E₁₁ ≈ 190 × 39 MPa and E₂₂ = 3.47 GPa
 /// (Mann, Baum & Habeger 1979, ultrasonic, board), 5.07 GPa, over a
-/// board's density of about 700 kg/m³ (estimate: linerboard).
-const PAPER_SPECIFIC_MODULUS: f32 = 5070.0 / 700.0;
-/// A well-tensioned canvas painting, N/mm (measured: 0.12–0.24 kN/m, 0.2 kN/m
-/// the working value; Heritage Science 2022).
-pub const CANVAS_TENSION_N_PER_MM: f32 = 0.2;
+/// board's density of about 700 kg/m³ (estimate: linerboard), brought to a
+/// stroke's time scale: paper's ultrasonic modulus is 25–40% above its
+/// mechanical one (viscoelastic; Waterhouse, IPST TPS 495, 1993), and a
+/// stroke loads the sheet over tens of ms, so ÷1.3: about 5.6.
+const PAPER_SPECIFIC_MODULUS: f32 = 5070.0 / 700.0 / 1.3;
+/// A canvas tacked days before it is worked, N/mm: hand-stretched at about
+/// 200 N/m, it loses 30–50% of that in the first 48 h (measured, Berger &
+/// Russell, JAIC 29 (1990)), so 0.2 × 0.65 (inside paintings' measured
+/// 0.12–0.24 kN/m, Heritage Science 2022).
+pub const CANVAS_TENSION_N_PER_MM: f32 = 0.13;
 /// A painting canvas's thickness, mm (measured range 0.3–0.6).
 const CLOTH_MM: f32 = 0.4;
 /// A woven fabric's compaction: its thickness goes as p^(−B) (measured: a
 /// single woven flax ply, 1.345 mm at 1 kPa and 0.946 mm at 100 kPa, B =
 /// ln(1.345/0.946)/ln 100; Rayyaan et al., arXiv 2110.06110; the other three
-/// flax structures lost the same ≈30%).
+/// flax structures lost the same ≈30%). This is the soft bound: a weave
+/// filled with dried paste and size compacts at most like board (E_z ≥ 17
+/// MPa over 0.4 mm, k ≤ 0.04 MPa/µm), and a thin paste layer leaves most
+/// of the interstices open, so the true value is near this end; it needs
+/// a bench test (notes/research/cassatt_papers.md §1).
 const CLOTH_COMPACTION_EXP: f32 = 0.0764;
-/// Pasteboard and millboard: thickness, mm (Degas's 5–7 mm boards,
-/// illustration board 1.5–2.5 mm: estimate within them); through-thickness
-/// modulus and shear modulus, MPa (measured on board: E_z 39 MPa, Mann,
-/// Baum & Habeger 1979; G_xz 30–85 MPa, Nygårds 2008).
-const BOARD_MM: f32 = 3.0;
-const BOARD_EZ_MPA: f32 = 39.0;
-const BOARD_GXZ_MPA: f32 = 50.0;
+/// Her board mounts ("illustration board", "cardboard": Met 10424, 10404):
+/// thickness, mm (a heavyweight illustration board, Crescent No. 100,
+/// 0.09 in); through-thickness modulus and shear modulus, MPa (measured,
+/// quasi-static, on paperboard: E_initial 34 and G_initial 32 MPa,
+/// Stenberg, Int. J. Solids Struct. 2003; G_xz 30–85 MPa, Nygårds 2008).
+const BOARD_MM: f32 = 2.3;
+const BOARD_EZ_MPA: f32 = 34.0;
+const BOARD_GXZ_MPA: f32 = 32.0;
 
 /// The cloth's give, MPa per µm: a thin layer (0.4 mm against a patch of
 /// 7 mm, so a Winkler spring E/t), whose tangent modulus at pressure p is
@@ -236,7 +247,7 @@ pub fn cloth_mpa_per_um() -> f32 {
 /// plane than through the thickness, so they barely stretch and the board
 /// is a shear-coupled (Pasternak) layer on the table: k = E_z/t, shear
 /// G_xz·t/3, spreading length L = t√(G_xz/3E_z). Under a uniform patch of
-/// radius a its middle sinks (p/k)(1 − (a/L)K₁(a/L)): about 0.014 MPa/µm.
+/// radius a its middle sinks (p/k)(1 − (a/L)K₁(a/L)): about 0.015 MPa/µm.
 /// (The sheet's bending on it changes that under 1%: left out.)
 pub fn board_mpa_per_um() -> f32 {
     let k = BOARD_EZ_MPA / BOARD_MM; // N/mm³
@@ -383,12 +394,13 @@ pub const PRESETS: &[Preset] = &[
     // a handmade or mold-made rag laid sheet (her print and drawing papers)
     Preset { name: "cream laid", grammage: 110.0, fiber_mm: 2.2, calender: 0.2, felt: Some(Felt { cell_mm: 0.8, depth_um: 15.0 }), laid: Some(Laid { per_cm: 9.0, chain_mm: 25.0, deficit: 0.15 }), tone: &[("lead white", 1.0), ("yellow ochre", 0.15), ("raw sienna", 0.02), ("green earth", 3.0)], ..WOVE },
     // Japan paper: long kozo fibers, thin, open, well formed, smooth
-    Preset { name: "japan", grammage: 45.0, fiber_mm: 10.0, fiber_um: 30.0, thick_um: 5.0, coarseness: 0.1, porosity: 0.6, floc: 0.15, floc_mm: 2.0, press: 0.7, calender: 0.6, felt: None, laid: None, tone: &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)] },
+    Preset { name: "japan paper", grammage: 45.0, fiber_mm: 10.0, fiber_um: 30.0, thick_um: 5.0, coarseness: 0.1, porosity: 0.6, floc: 0.15, floc_mm: 2.0, press: 0.7, calender: 0.6, felt: None, laid: None, tone: &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)] },
 ];
 
 impl Preset {
     /// The sheet of this make (a drawing paper's give and absorbency: the
-    /// sources give none for these sheets).
+    /// sources give none for these sheets; the absorbency, 0.8, lies between
+    /// a hard-sized sheet's and a waterleaf's 1, and wants a bench test).
     pub fn paper(&self, seed: u64) -> Paper {
         Paper {
             grammage: self.grammage,
@@ -456,8 +468,8 @@ impl Paper {
     /// The sheet's bending stiffness, N·mm: E t³/12, its in-plane modulus
     /// from its density (`PAPER_SPECIFIC_MODULUS`) and t its caliper. A
     /// canvas carries little bending (it is soft in plane and slackens in
-    /// compression), so the laminate's is the sheet's: about 9 N·mm for the
-    /// drawing paper (300 µm, 530 kg/m³).
+    /// compression), so the laminate's is the sheet's: about 6.7 N·mm for
+    /// the drawing paper (300 µm, 530 kg/m³).
     pub fn bending_nmm(&self) -> f32 {
         let t_mm = self.caliper_um().max(10.0) * 1e-3;
         // g/m² over µm is g/cm³, ×1000 kg/m³
@@ -917,7 +929,7 @@ mod tests {
             ("green wove", w, wove, None, &[("lead white", 1.0), ("yellow ochre", 0.65), ("viridian", 0.45), ("bone black", 0.45)]),
             ("brown wove", [150.0, 1.4, 25.0, 6.0, 0.2, 0.5, 0.6, 1.5, 0.65, 0.25], felt(0.8, 18.0), None, &[("raw sienna", 1.0), ("bitumen", 3.0)]),
             ("cream laid", [110.0, 2.2, 25.0, 6.0, 0.16, 0.5, 0.5, 1.5, 0.65, 0.2], felt(0.8, 15.0), Some(Laid { per_cm: 9.0, chain_mm: 25.0, deficit: 0.15 }), &[("lead white", 1.0), ("yellow ochre", 0.15), ("raw sienna", 0.02), ("green earth", 3.0)]),
-            ("japan", [45.0, 10.0, 30.0, 5.0, 0.1, 0.6, 0.15, 2.0, 0.7, 0.6], None, None, &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)]),
+            ("japan paper", [45.0, 10.0, 30.0, 5.0, 0.1, 0.6, 0.15, 2.0, 0.7, 0.6], None, None, &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)]),
         ];
         assert_eq!(PRESETS.len(), rows.len());
         for (name, v, felt, laid, tone) in rows {
@@ -948,6 +960,7 @@ mod tests {
         sheets.push(Paper { z_mpa: 2.0, ..Paper::drawing(3) });
         sheets.push(Paper { z_mpa: 500.0, ..Paper::drawing(3) });
         let strainer = Mount::named("strainer").unwrap();
+        let bar = STRAINER_BAR_MM;
         for p in sheets {
             let k = |q: Paper, x: f32, y: f32| q.give_at(x, y, w, h);
             let mid = (0.5 * w, 0.5 * h);
@@ -957,30 +970,30 @@ mod tests {
             assert_eq!(p.mounted(Mount::Board).drum, None);
             assert_eq!(s.z_mpa, p.mounted(Mount::Canvas).z_mpa);
             // over the bars, the canvas's give
-            for (x, y) in [(1.0, 250.0), (39.0, 100.0), (300.0, 499.0), (599.0, 400.0)] {
+            for (x, y) in [(1.0, 250.0), (bar - 1.0, 100.0), (300.0, 499.0), (599.0, 400.0)] {
                 assert_eq!(k(s, x, y), k(p.mounted(Mount::Canvas), x, y));
             }
             // inward from the bar, never firmer; as firm as over it just
             // inside its edge, then softer at every step over the next few
             // bending lengths past a patch's radius
             let (l, a) = (s.drum.unwrap().bend_mm, s.drum.unwrap().patch_mm);
-            assert_eq!(k(s, 40.1, mid.1), k(p.mounted(Mount::Canvas), mid.0, mid.1));
-            let mut last = k(s, 40.0, mid.1);
+            assert_eq!(k(s, bar + 0.1, mid.1), k(p.mounted(Mount::Canvas), mid.0, mid.1));
+            let mut last = k(s, bar, mid.1);
             for f in [0.0, 0.5, 1.0, 1.5, 2.0, 3.0] {
-                let now = k(s, 40.0 + a + f * l, mid.1);
+                let now = k(s, bar + a + f * l, mid.1);
                 assert!(now <= last && (f < 0.5 || now < last), "a + {f}ℓ: {now} vs {last}");
                 last = now;
             }
             // far in, the bay's own give, the same in a small bay
-            let far = k(s, 40.0 + a + 12.0 * l, mid.1);
+            let far = k(s, bar + a + 12.0 * l, mid.1);
             assert!((far / k(s, mid.0, mid.1) - 1.0).abs() < 1e-4, "{far}");
             assert_eq!(k(s, mid.0, mid.1), s.give_at(150.0, 150.0, 300.0, 300.0));
             // the drum is the bay's: no unmounted sheet has one
-            assert_eq!(k(p, 40.0, mid.1), free);
+            assert_eq!(k(p, bar, mid.1), free);
             // a crossbar across the longer side is a bar
-            let c = p.mounted(Mount::Strainer { bar_mm: 40.0, cross: 1 });
+            let c = p.mounted(Mount::Strainer { bar_mm: bar, cross: 1 });
             assert_eq!(k(c, mid.0, mid.1), k(p.mounted(Mount::Canvas), mid.0, mid.1));
-            assert!(k(c, mid.0 + 20.0 + a + 0.5 * l, mid.1) > k(c, mid.0 + 20.0 + a + 3.0 * l, mid.1));
+            assert!(k(c, mid.0 + 0.5 * bar + a + 0.5 * l, mid.1) > k(c, mid.0 + 0.5 * bar + a + 3.0 * l, mid.1));
             assert_eq!(k(c, 150.0, mid.1), k(s, 150.0, mid.1));
         }
         assert_eq!(Mount::named("strainer"), Some(Mount::Strainer { bar_mm: STRAINER_BAR_MM, cross: 0 }));
@@ -1004,11 +1017,12 @@ mod tests {
         }
         assert!(near(ref_patch_mm() as f64, 6.855, 1e-3));
         assert!(near(cloth_mpa_per_um() as f64, 5.541e-4, 2e-3), "{}", cloth_mpa_per_um());
-        assert!(near(board_mpa_per_um() as f64, 0.014102, 2e-3), "{}", board_mpa_per_um());
+        assert!(near(board_mpa_per_um() as f64, 0.015009, 2e-3), "{}", board_mpa_per_um());
         let p = Paper::drawing(1);
-        assert!(near(p.bending_nmm() as f64, 8.691, 1e-3), "{}", p.bending_nmm());
+        assert!(near(p.bending_nmm() as f64, 6.686, 1e-3), "{}", p.bending_nmm());
         let d = p.mounted(Mount::named("strainer").unwrap()).drum.unwrap();
-        assert!(near(d.bend_mm as f64, 6.592, 1e-3) && near(d.bay_mpa_per_um as f64, 4.552e-5, 2e-3), "{d:?}");
+        assert!(near(d.bend_mm as f64, 7.171, 1e-3) && near(d.bay_mpa_per_um as f64, 3.226e-5, 2e-3), "{d:?}");
+        assert_eq!(d.bar_mm, 50.0);
         // a membrane's ½; a plate's (β²/4)(ln(2/β) − γ + 3/8)
         assert!(near(drum_sink(40.0), 0.5, 0.03));
         let b: f64 = 0.05;

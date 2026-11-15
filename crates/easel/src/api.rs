@@ -3361,7 +3361,7 @@ mod paper_presets_tests {
         // a strainer's bars and crossbars
         for (src, want, says) in [
             (r#"{"strainer", bar=30, cross=1}"#, Mount::Strainer { bar_mm: 30.0, cross: 1 }, "over a strainer (bars 30 mm, 1 crossbar)"),
-            (r#"{"strainer", cross=2}"#, Mount::Strainer { bar_mm: 40.0, cross: 2 }, "(bars 40 mm, 2 crossbars)"),
+            (r#"{"strainer", cross=2}"#, Mount::Strainer { bar_mm: 50.0, cross: 2 }, "(bars 50 mm, 2 crossbars)"),
             (r#"{"strainer"}"#, Mount::named("strainer").unwrap(), "over a strainer, seed"),
             (r#"{"board"}"#, Mount::Board, "on board"),
         ] {

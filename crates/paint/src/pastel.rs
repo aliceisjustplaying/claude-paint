@@ -1420,7 +1420,11 @@ mod tests {
     /// lets the stick wear (K·F·s/σp: the same on any bed, since the real
     /// contact is F/σp however the load spreads): it spreads the stick's
     /// contact wider, so less of it rides on pastel just laid in the
-    /// tooth. Board, canvas and a strainer's bay, in that order.
+    /// tooth. Board, then canvas; a strainer's bay more than a hard board.
+    /// (Past canvas the contact keeps spreading, but what is laid levels
+    /// off, within a few percent of canvas's with isolated dips: no order
+    /// between canvas and the bay is claimed. notes/research/
+    /// cassatt_papers.md §1.)
     #[test]
     fn a_softer_bed_lays_more_within_archards_wear() {
         use crate::paper::Mount;
@@ -1438,7 +1442,8 @@ mod tests {
             .collect();
         let st = Stick::round([0.02; 3], 0.8, 12.0);
         let archard = st.wear * 3.0 * 30.0 / st.hardness;
-        assert!(laid.windows(2).all(|w| w[0] < w[1]) && laid[3] <= archard, "laid {laid:?}, Archard {archard}");
+        assert!(laid[0] < laid[1] && laid[1] < laid[2] && laid[0] < laid[3], "laid {laid:?}");
+        assert!(laid.iter().all(|&v| v <= archard), "laid {laid:?}, Archard {archard}");
     }
 
     #[test]

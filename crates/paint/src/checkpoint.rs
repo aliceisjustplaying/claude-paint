@@ -1381,30 +1381,44 @@ mod tests {
     }
 
     /// A gritted sheet's paper section is version 2 and comes back with its
-    /// grit and tooth, bit for bit; the same sheet without grit writes
-    /// version 1. An unknown binder, a NaN grit or a section version this
-    /// reader doesn't know is refused.
+    /// grit, its tooth and the pastel in it, bit for bit, and the next stroke
+    /// lays the same (the stick wears against the grit as before); the same
+    /// sheet without grit writes version 1. An unknown binder, a NaN grit or
+    /// a section version this reader doesn't know is refused. (Named so the
+    /// gate's pastel checkpoint filter runs it.)
     #[test]
-    fn a_gritted_sheet_survives_a_checkpoint() {
+    fn paper_and_stick_pastel_survive_a_checkpoint_on_a_gritted_sheet() {
         use crate::paper::{Binder, Grit, Paper};
+        use crate::pastel::{Pose, Stick, StrokePoint};
         let grit = Grit { size_um: 46.2, cover: 0.55, binder: Binder::Glue };
-        let c = Canvas::new_window(64, 1.0, [0.5; 3], None).with_size_mm(40.0).with_paper(Paper { grit: Some(grit), ..Paper::drawing(3) });
+        let mut c = Canvas::new_window(64, 1.0, [0.5; 3], None).with_size_mm(40.0).with_paper(Paper { grit: Some(grit), ..Paper::drawing(3) });
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 1.5, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut st, &line(400.0));
+        c.stick_stroke(&mut st, &line(420.0));
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
         assert_eq!(base_format(&b), 13);
-        let d = load(b.clone()).unwrap();
+        let mut d = load(b.clone()).unwrap();
         assert!(d.paper == c.paper && d.micro == c.micro && d.absorb == c.absorb && d.pixels() == c.pixels());
         let mut again = Vec::new();
         d.write_state(&mut again, "").unwrap();
         assert!(again == b, "rewritten as it was read");
+        let mut st2 = st.clone();
+        let (a1, a2) = (c.stick_stroke(&mut st, &line(410.0)), d.stick_stroke(&mut st2, &line(410.0)));
+        assert!(d.pixels() == c.pixels() && st == st2 && a1.volume_mm3 == a2.volume_mm3);
         let n = c.f.w * c.f.h;
-        // (the section: mark, version, 12 numbers, seed, felt, laid, grit, then the pores)
+        // (the section, the file's last: mark, version, 12 numbers, seed,
+        // felt, laid, grit, then the pores)
         let grit_at = b.len() - (2 * 4 + 8 + 4 * n);
         let section = grit_at - (8 + 8 + 12 * 4 + 8 + (8 + 2 * 4) + 8);
-        assert_eq!(&b[section + 8..section + 16], &2u64.to_le_bytes());
+        assert_eq!(&b[section..section + 8], &PAPER_MARK.to_le_bytes());
+        assert_eq!(&b[section + 8..section + 16], &PAPER_GRIT_V.to_le_bytes());
         let mut plain = Vec::new();
         Canvas::new_window(64, 1.0, [0.5; 3], None).with_size_mm(40.0).with_paper(Paper::drawing(3)).write_state(&mut plain, "").unwrap();
-        assert_eq!(&plain[section + 8..section + 16], &1u64.to_le_bytes(), "no grit: version 1");
+        let plain_at = plain.len() - (8 + 8 + 12 * 4 + 8 + (8 + 2 * 4) + 8 + 4 * n);
+        assert_eq!(&plain[plain_at + 8..plain_at + 16], &PAPER_V.to_le_bytes(), "no grit: version 1");
         let mut binder = b.clone();
         set(&mut binder, grit_at + 8, 7);
         rejected(binder, "unknown binder");

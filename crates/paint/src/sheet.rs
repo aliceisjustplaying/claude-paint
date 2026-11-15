@@ -1662,6 +1662,32 @@ mod tests {
         assert!((k.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() - b0).abs() < 1e-3 * b0, "the knife left the fixed");
     }
 
+    /// On a gritted ground the blade rides hard grains: pressed hard on a
+    /// short edge or cutting as a scalpel, it neither flattens the tooth nor
+    /// tears fibers loose there (no fiber is bare), and still takes loose
+    /// pastel; on the same sheet without grit the same scrapes change the
+    /// tooth.
+    #[test]
+    fn a_knife_leaves_the_grit_its_tooth() {
+        use crate::paper::{Binder, Grit, Paper};
+        let scraped = |grit: Option<Grit>| {
+            let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
+            let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+            for y in [300.0, 320.0, 340.0] {
+                let p = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+                c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y, pose: p, speed: 50.0 }, StrokePoint { x: 900.0, y, pose: p, speed: 50.0 }]);
+            }
+            let m0 = c.micro.clone();
+            let took = c.scrape_pastel(20.0, 100.0, &[(300.0, 200.0), (300.0, 450.0)], (1.0, 1.0), Some(0.0))
+                + c.scrape_pastel(10.0, 1.0, &[(600.0, 200.0), (600.0, 450.0)], (1.0, 1.0), Some(0.0));
+            (took, (0..m0.len()).filter(|&i| c.micro[i] != m0[i]).count())
+        };
+        let (took, changed) = scraped(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
+        assert!(took > 0.0 && changed == 0, "took {took}, the tooth changed at {changed} pixels");
+        let (_, plain) = scraped(None);
+        assert!(plain > 0, "on plain paper the scrapes change the tooth");
+    }
+
     /// The fines a puff lifts settle from the wall jet as the research's
     /// table has them (paper_mechanics_and_transport.md §4): along 10 cm in a
     /// 5 mm layer moving at 15 u*, the 1–2 µm grains hardly at all, 5 µm 1 %

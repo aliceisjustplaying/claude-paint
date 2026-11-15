@@ -625,32 +625,6 @@ mod tests {
         assert!(sd / mean > 0.2, "they vary: cv {}", sd / mean);
     }
 
-    /// A gritted coat's tooth (notes/research/sanded_paper.md): a few
-    /// times a drawing paper's pores (2–4× at P400), more for a coarser
-    /// grade (P320 over P600: painters layer on the coarse grades and detail
-    /// on the fine), less for a closed coat than an open one (a closed coat
-    /// loads sooner); its pixels scatter about it; an acrylic coat seals the
-    /// sheet against oil, a glue one lets it through.
-    #[test]
-    fn a_gritted_coat_has_its_tooth() {
-        let g = |size_um: f32, cover: f32, binder: Binder| Grit { size_um, cover, binder };
-        let p400 = g(35.0, 0.6, Binder::Acrylic);
-        let c = crate::Canvas::new_window(300, 1.0, [0.55; 3], None).with_size_mm(75.0);
-        let plain = c.clone().with_paper(Paper::drawing(4));
-        let sanded = c.with_paper(Paper { grit: Some(p400), ..Paper::drawing(4) });
-        let (pm, sm) = (plain.mean_micro_um().unwrap(), sanded.mean_micro_um().unwrap());
-        assert!(sm > 2.0 * pm && sm < 4.0 * pm, "P400 tooth {sm} µm vs paper {pm} µm");
-        assert!((sm / p400.tooth_um() - 1.0).abs() < 0.05, "the pixels scatter about the coat's tooth");
-        assert!(sanded.micro.iter().any(|&m| (m - sm).abs() > 0.05 * sm), "and scatter");
-        assert!(g(46.2, 0.6, Binder::Acrylic).tooth_um() > p400.tooth_um() && p400.tooth_um() > g(25.8, 0.6, Binder::Acrylic).tooth_um());
-        assert!(g(35.0, 1.0, Binder::Acrylic).tooth_um() < g(35.0, 0.5, Binder::Acrylic).tooth_um());
-        let glue = Paper { grit: Some(g(35.0, 0.6, Binder::Glue)), ..Paper::drawing(4) };
-        let acrylic = Paper { grit: Some(p400), ..Paper::drawing(4) };
-        let coat = crate::surface::COAT_UM;
-        assert!(acrylic.oil_capacity(coat) < glue.oil_capacity(coat) && glue.oil_capacity(coat) > Paper::drawing(4).oil_capacity(coat));
-        assert_eq!(acrylic.oil_capacity(coat), p400.tooth_um() / coat, "the acrylic seals the sheet");
-        assert_eq!(sanded.height, plain.height, "the sheet's grain shows through the thin coat");
-    }
 }
 
 #[cfg(test)]

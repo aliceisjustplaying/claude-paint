@@ -109,9 +109,10 @@
 //! then each extra's block in the order of its bit, then the pores as
 //! before. Bit 0 (`PAPER_EXTRA_GRIT`) is a gritted ground (`paper::Grit`:
 //! its size and cover, two f32, and its binder, a u64: 0 acrylic, 1 glue;
-//! any other refused). Bit 1 (`PAPER_EXTRA_DRUM`) is a mount's drum block
-//! (bar_mm and bay_mpa_per_um, two f32), which this build doesn't support
-//! and refuses. A reader refuses any bit it doesn't know, and an extras
+//! any other refused). Bit 1 (`PAPER_EXTRA_DRUM`) is a strainer's drum
+//! block (bar_mm and bay_mpa_per_um, then bend_mm and patch_mm: four f32,
+//! then the crossbars, cross, a u64), which this build doesn't support and
+//! refuses. A reader refuses any bit it doesn't know, and an extras
 //! word of 0 in version 2 (such a sheet is version 1). A sheet with no
 //! extras writes version 1, so a reader that doesn't know version 2
 //! refuses a gritted sheet instead of loading it as plain paper. The section is there exactly
@@ -172,8 +173,9 @@ const PAPER_V2: u64 = 2;
 /// Extras bit 0: a gritted ground (`paper::Grit`: size f32, cover f32,
 /// binder u64).
 const PAPER_EXTRA_GRIT: u64 = 1;
-/// Extras bit 1: a mount's drum (bar_mm f32, bay_mpa_per_um f32); not
-/// supported by this build, so refused.
+/// Extras bit 1: a strainer's drum (bar_mm, bay_mpa_per_um, bend_mm and
+/// patch_mm, f32 each, then cross, a u64); not supported by this build, so
+/// refused.
 const PAPER_EXTRA_DRUM: u64 = 2;
 /// Version 11, 12 or 13 followed by the sheet's section (`crate::sheet`).
 const MAGIC15: &[u8; 8] = b"PAINTC15";

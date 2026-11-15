@@ -345,6 +345,62 @@ fn a_handed_off_surface_arrives_aged_by_its_time_on_the_way() {
     }
 }
 
+/// A pastel sheet with everything the paper switches put on it: a named sheet (its tone and
+/// sizing) on a gritted ground over a strainer, pastel and vine charcoal, and a wet brush
+/// through both. Made by `sheet{}` with a sheet's name alone, too. It rests (spilled to disk),
+/// wakes and rests again as it was, and handed off and received with no time on the way it
+/// arrives bit for bit: the grit and the drum in its paper section, charcoal's carbon in the
+/// drawing's layout and the water in the wet pastel section.
+#[test]
+fn a_handed_off_sheet_keeps_its_grit_drum_water_and_charcoal() {
+    let dir = Folder::new("cassatt");
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, r#"pa = sheet{name="pastel", size=60, aspect=1, paper={preset="tan wove", grit=true, mount="strainer"}, seed=5}
+use(pa)
+p = pastel(pile{{"cobalt blue",1}})
+p:stroke({{100,300},{900,300}}, {force=2})
+v = charcoal()
+v:stroke({{100,600},{900,600}}, {force=2})
+b = brush{kind="round", width=20}
+b:dip(1)
+b:wash({{100,300},{900,600}})"#);
+    {
+        let st = s.st.borrow();
+        let c = st.canvas.as_ref().unwrap();
+        let p = c.paper().unwrap();
+        assert!(p.grit.is_some() && p.drum.is_some() && p.cobb60 == Some(25.0));
+        assert!(c.pastel_water_at(500.0, 450.0) > 0.0, "wet along the wash");
+    }
+    let woken = surface(&s, "pastel");
+    run(&mut s, r#"use("painting")"#);
+    let resting = surface(&s, "pastel");
+    assert!(resting == woken, "put down as it was");
+    // the sections it carries
+    let has = |b: &[u8], mark: &[u8; 4]| b.windows(4).any(|w| w == mark);
+    assert!(has(&resting, b"WETP") && has(&resting, b"PAPR"));
+    let papr = resting.windows(4).rposition(|w| w == b"PAPR").unwrap();
+    assert_eq!(u64::from_le_bytes(resting[papr + 8..papr + 16].try_into().unwrap()), 2, "paper section version 2: grit and drum");
+    let file = format!("{}/pastel.surface", dir.1);
+    let out = s.run(&format!("assert(handoff(pa, {file:?}) ~= nil)")).unwrap().out;
+    let sha = sha_of(&out);
+    let mut r = receiver();
+    run(&mut r, &format!("k = receive({file:?}, {{after=0, sha256={sha:?}}})\nuse(k)"));
+    assert!(surface(&r, "pastel") == resting, "arrives bit for bit");
+    {
+        let st = r.st.borrow();
+        let c = st.canvas.as_ref().unwrap();
+        let p = c.paper().unwrap();
+        assert!(p.grit.is_some() && p.drum.is_some());
+        assert!(c.pastel_water_at(500.0, 450.0) > 0.0);
+    }
+    // the receiving log replays to the same
+    assert!(states(&replay(&r.program("printer")).unwrap()) == states(&r));
+    // a sheet's name alone, as canvas{} takes it
+    run(&mut r, r#"t = sheet{name="japan", size=40, aspect=1, paper="japan paper"} use(t)"#);
+    assert_eq!(r.st.borrow().canvas.as_ref().unwrap().paper().unwrap().cobb60, None, "Japan paper is unsized");
+}
+
 /// A surface handed off by a chunk that fails never leaves: no file, still in the session.
 /// Files stay in the studio, as `.surface` files.
 #[test]

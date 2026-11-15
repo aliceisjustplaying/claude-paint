@@ -2385,6 +2385,42 @@ mod tests {
         assert!(all[1].1.has_drawing(), "the study has a drawing to spill");
     }
 
+    /// A resting canvas's drawing spilled to disk keeps charcoal's carbon
+    /// shares and wet pastel's water, index and gum and the sheet's water,
+    /// bit for bit, so a surface put down wet with charcoal on it wakes as
+    /// it was.
+    #[test]
+    fn a_spilled_drawing_keeps_its_carbon_and_water() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = crate::tests::drawing_paper(160).with_drawing_optics(true).with_wet_pastel(true);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut Stick::round([0.1, 0.1, 0.5], 0.8, 12.0), &line(400.0));
+        c.stick_stroke(&mut Stick::vine(8.0), &line(420.0));
+        let mut wet = Stick::round([0.5, 0.1, 0.1], 0.8, 12.0);
+        wet.water = wet.tip_capacity_mm3();
+        c.stick_stroke(&mut wet, &line(410.0));
+        c.wait(0.1);
+        let d = c.drawing.as_deref().unwrap();
+        assert!(d.carbon && d.damp && d.sheet.iter().any(|&u| u > 0.0));
+        assert!(d.cells.iter().any(|q| q.carbon > 0.0 && q.water > 0.0 && q.gum != 0 && q.index != 0));
+        let mut packed = Vec::new();
+        let aside = c.pack(&mut packed).unwrap();
+        let mut spilled = aside.clone();
+        let mut disk = Vec::new();
+        spilled.spill(&mut disk).unwrap();
+        assert!(spilled.heap_bytes() == 0);
+        spilled.unspill(&mut Cursor::new(&disk)).unwrap();
+        let (a, b) = (aside.drawing.as_deref().unwrap(), spilled.drawing.as_deref().unwrap());
+        assert!(a.carbon == b.carbon && a.damp == b.damp && a.sheet == b.sheet);
+        assert!(a.cells.iter().zip(&b.cells).all(|(x, y)| (x.carbon, x.carbon_bound, x.water, x.index, x.gum, x.loose, x.bound) == (y.carbon, y.carbon_bound, y.water, y.index, y.gum, y.loose, y.bound)));
+        let (mut x, mut y) = (Canvas::unpack(&mut Cursor::new(&packed), aside).unwrap(), Canvas::unpack(&mut Cursor::new(&packed), spilled).unwrap());
+        assert!(state(&x) == state(&y) && x.pixels() == y.pixels());
+        x.dry();
+        y.dry();
+        assert!(state(&x) == state(&y) && x.pixels() == y.pixels(), "and they dry the same");
+    }
+
     /// Another version of the section, a damaged frame, a canvas cut short, a
     /// current surface that isn't there, two surfaces of one name and trailing
     /// data are refused.

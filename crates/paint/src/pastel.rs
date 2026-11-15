@@ -1411,9 +1411,34 @@ mod tests {
             c.seat_stick(&Stick::round([0.02; 3], 0.8, 12.0), &sp).unwrap().delta
         };
         let p = Paper::drawing(4);
-        let [free, board, canvas, strainer] = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::Strainer)].map(|q| sink(q, 500.0));
+        let [free, board, canvas, strainer] = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::named("strainer").unwrap())].map(|q| sink(q, 500.0));
         assert!(free < board && board < canvas && canvas < strainer, "sinks: free {free}, board {board}, canvas {canvas}, strainer {strainer}");
-        assert_eq!(sink(p.mounted(Mount::Strainer), 70.0).to_bits(), sink(p.mounted(Mount::Canvas), 70.0).to_bits());
+        assert_eq!(sink(p.mounted(Mount::named("strainer").unwrap()), 70.0).to_bits(), sink(p.mounted(Mount::Canvas), 70.0).to_bits());
+    }
+
+    /// A softer bed lays more pastel, but never more than Archard's law
+    /// lets the stick wear (K·F·s/σp: the same on any bed, since the real
+    /// contact is F/σp however the load spreads): it spreads the stick's
+    /// contact wider, so less of it rides on pastel just laid in the
+    /// tooth. Board, canvas and a strainer's bay, in that order.
+    #[test]
+    fn a_softer_bed_lays_more_within_archards_wear() {
+        use crate::paper::Mount;
+        let p = Paper::drawing(4);
+        let laid: Vec<f32> = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::named("strainer").unwrap())]
+            .iter()
+            .map(|&q| {
+                let mut c = Canvas::new_window(400, 1.0, [0.55; 3], None).with_size_mm(300.0).with_paper(q);
+                let u = c.mm_per_unit;
+                let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+                // 30 mm across the middle of the sheet, at 3 N and 60°
+                let pts: Vec<StrokePoint> = (0..=30).map(|i| StrokePoint { x: (135.0 + i as f32) / u, y: 150.0 / u, pose: pose(3.0, 60.0), speed: 50.0 }).collect();
+                c.stick_stroke(&mut st, &pts).volume_mm3
+            })
+            .collect();
+        let st = Stick::round([0.02; 3], 0.8, 12.0);
+        let archard = st.wear * 3.0 * 30.0 / st.hardness;
+        assert!(laid.windows(2).all(|w| w[0] < w[1]) && laid[3] <= archard, "laid {laid:?}, Archard {archard}");
     }
 
     #[test]

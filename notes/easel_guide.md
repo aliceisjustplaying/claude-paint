@@ -283,6 +283,14 @@ line, the paper draws the full share.) A pile takes either medium or blot.
   heaps. 0, the default, is a clean board: every heap stays as knifed.
 - `palette()` returns a line about each heap: its recipe now, and how much of
   it is other paint.
+- **Rose madder, green earth and copper green** have the absorption their
+  measured powders show, in oil as dry, and green earth and copper green the
+  scattering of their coarse grains: rose madder is a deep crimson glaze and
+  a rose with white; green earth a dark, translucent olive; copper green
+  (verdigris) a transparent glaze, black-green where thick, its tints as
+  before. A painting begun before (its head has no `--@ oil-k`) replays them
+  as it was painted: madder a pale pink in oil, green earth and copper green
+  pale and chalky (notes/research/dry_pigment_optics.md §6.7).
 
 The tube box:
 

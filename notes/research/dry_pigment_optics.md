@@ -648,7 +648,7 @@ hiding. Its tint with white barely moves (225 217 230 → 218 207 223), because 
 volume is unidentified, as madder's was. Mars yellow barely moves: its Mie air/oil ratio
 is 1.67 at 2.2 and 1.70 at 2.35.
 
-### 6.5 Rose madder in oil (not changed here)
+### 6.5 Rose madder in oil (done with `--@ oil-k`, §6.7)
 
 Engine 9's oil table gives rose madder a K/S whose R∞ is sRGB 205 141 142 (L\* 65; the
 engine's decoded masstone is 211 126 125). Its 1:1 with lead white in oil is 240 212 217
@@ -668,7 +668,7 @@ for a later PR [C]:
   so they can't pin it. The fix would also move every oil painting's madder, so it needs
   its own switch. Permanent alizarin has the same weak K in oil.
 
-### 6.6 Green earth and verdigris: for the later oil-K PR (not changed here)
+### 6.6 Green earth and verdigris (done with `--@ oil-k`, §6.7)
 
 With their measured index (§6.4) they move further from their powders:
 - green earth: ΔE 26 → 34;
@@ -691,6 +691,119 @@ class C) proposes, for that PR:
     verdigris are the inputs to find.
 - **Its switch.** It moves every new painting's green earth and copper green, so it needs
   its own switch, or a revision of `--@ dry-lakes` before that line ships.
+
+### 6.7 The oil-K switch (`--@ oil-k`)
+
+This section carries out §6.5–6.6: `mixer::OIL_K`, `Palette::oil_k`, the easel's
+`OIL_K_MARK`. Each of the three tubes gets a latent slot of its own, after the 27
+researched ones. In it, K is the table's times one factor, the same in oil and dry,
+because absorption per volume is the pigment's in any medium. S is computed from the
+grain size first. The numbers come from `oil_k_fit.py` (this folder): `uv run
+notes/research/oil_k_fit.py <repo> <CHSOS CSV dir> <tubes.json>`.
+
+**S from the grain size [M sizes, D Mie].** Mie at d by number, lognormal σ_ln 0.5, as in
+`dry_pigment_mie.py`. Oil is linseed, n 1.48.
+
+| Tube | grain size (source) | n | σ′(d)/σ′(1 µm), air | Mie air/oil at d |
+|---|---|---|---|---|
+| green earth | 10 µm: Natural Pigments means 10 (Nicosia) and 12 µm (Verona); Kremer 0–120 µm sieves | 1.62 | 0.0521 (5 µm 0.114, 20 µm 0.024) | 5.57 |
+| copper green (verdigris) | 100 µm: Kremer 44450, main peak 102.5 µm (1.8–226), Reichert et al. 2025, *Anal. Bioanal. Chem.* 417:4351 | 1.545 | 0.00433 (30 µm 0.0151, 200 µm 0.0021) | 17.9 |
+| rose madder | its alumina is a fine lake substrate; the table's oil S is already Mie's to 1.5× (§6.5) | 1.57 | 1 | (S kept) |
+
+**K, fitted to the corrected powders [C].** These are the same powders and the same
+correction as the lakes (§6.1), with the size-aware dry S:
+- **green earth: ×1.638**, ΔE 0.5. Over the correction's bounds it is 1.45–1.86. Over
+  5–20 µm grains it is 3.6–0.77, because the dry fit pins only K/S.
+- **copper green: ×0.8175**, ΔE 10.0 (0.74–0.90). Verdigris's K per volume was about right
+  all along. Its S was what was wrong, 270× too high. At 1 µm the fit had to make up for
+  that with ×189. Its ΔE of 10 is the oil table's K *shape*, which no single factor
+  fixes.
+- **rose madder: ×35.7**, the dry-lakes loading (§6.2), which dye chemistry supports
+  (§6.3).
+
+**Oil S.** For green earth and verdigris, the oil S is the dry S over the Mie air/oil
+ratio. Written as a multiple of lead white's oil S spectrum (the dry rule's shape), it is
+0.01463 and 0.0003667. Madder's is the table's.
+
+**Before → after, R∞ in oil and 1:1 by volume with lead white** (two-constant KM,
+`oil_k_fit.py` §3; sRGB, L\*a\*b\*):
+
+| Tube | masstone before | masstone after | 1:1 lead white before | 1:1 lead white after |
+|---|---|---|---|---|
+| rose madder | 205 141 142 (65.0/24.5/9.6) | **80 29 30** (18.6/24.2/11.1) | 240 212 217 (87.3/10.4/1.1) | **163 100 110** (49.5/26.9/5.2) |
+| green earth | 195 184 158 (74.9/−0.3/14.6) | **76 74 56** (31.2/−2.8/10.9) | 225 222 212 | 213 209 198 |
+| copper green | 151 209 195 (79.7/−21.4/0.7) | **0 21 19** (5.0/−7.6/−1.2) | 195 232 227 | 192 231 227 |
+
+The engine's own decode (a 100 µm film over its reference backing, the colour a pile
+shows) is in §6.8.
+
+Verdigris barely changes in a tint, because its K per volume hardly moves. Its masstone
+becomes what verdigris in oil is: a transparent glaze, black-green when thick.
+
+**The check against oil [M].** CHSOS's linseed-oil swatches are paint-outs on paper. They
+are corrected like the powders:
+- the black floor is a black oil film's total reflectance, 0.045 (0.04–0.05): its surface
+  (n 1.48, 3.7 %) plus a trace of diffuse return;
+- the gain comes from titanium white in oil, 0.895 (0.86–0.93) [E within the bounds];
+- the sphere is linear (§6.1).
+
+Each swatch is read as a film of unknown thickness over the oiled paper (the database's
+own "Linseedoil" swatch, corrected L\* 88.8), with the engine's film and Saunderson
+surface. Fixing the paint's K and S leaves the film's thickness as the only free number.
+The best ΔE76 to each swatch (`oil_k_fit.py` §5):
+
+| Tube | swatch (corrected) | before: best ΔE (at film) | after: best ΔE (at film) |
+|---|---|---|---|
+| rose madder | 211 127 109 (61.7/30.9/23.6) | 10.1 (111 µm) | **5.0** (2.4 µm) |
+| green earth | 90 89 74 (37.4/−2.6/8.8) | 28.9 (no thickness is dark enough; 3.5 mm) | **4.6** (262 µm; 4.2–5.0 over 5–20 µm grains) |
+| copper green | 57 123 123 (47.7/−20.9/−6.4) | 24.7 (5.5 mm) | **17.6** (609 µm) |
+
+Over the correction's bounds the ΔEs move by under 1.2.
+- **Green earth** is the clear confirmation. Before, no film of the old paint could be as
+  dark as the swatch. Fitting K and S freely, the swatch's K/S comes out at 14.7× the old
+  engine's and 0.64× the new one's (0.54–0.77).
+- **Madder** now matches the swatch's hue as a thin transparent glaze. The swatch shows
+  the paper through it, so its own K/S isn't identified (a free fit drives S to 0). It
+  can't separate K per volume from thickness. A measured madder-in-oil tint with lead
+  white would; none was found.
+- **Verdigris** improves but stays 17.6 off. The swatch is bluer (b\* −6.4) than the
+  table's K shape allows. Verdigris in oil also partly dissolves into copper
+  carboxylates, which absorb differently from the crystals. Its K spectrum is the next
+  estimate to replace, from a measured verdigris-in-oil transmission.
+
+**Dry, with the switch.** These three tubes take the slot's K over the dry rule's S at
+their measured index (madder at its substrate's 1.57) times the size factor:
+- madder dry is the dry-lakes colour (the same K, ΔE < 0.05);
+- green earth matches its powder (ΔE 0.5);
+- copper green comes within ΔE 10 of its powder (it was 59 off).
+
+**Old paintings.** A log without the line keeps the researched slots, bit for bit. A
+checkpoint written before the slots existed has 48-float latents and the old identity
+(0x5ecc0e8c41eb7ada; film 0x8e4aed0cc0f1a3d2). It reads with its latents widened with
+zeros.
+
+**Estimates left:**
+- the grain sizes (one source each; CHSOS doesn't say which lot it measured);
+- titanium white's oil-film reflectance in the swatch correction;
+- verdigris's K spectrum;
+- permanent alizarin has the same weak oil K as madder (§6.5) and is not in this switch.
+  Its dry colour has no powder spectrum to fit to (§6.4).
+
+### 6.8 The engine's colours, before → after the oil-K switch
+
+These are the engine-9 colours, sRGB. "Oil" is the pile's colour: a 100 µm film over
+the reference backing, so a transparent paint shows the backing. "Dry" is a pastel stick.
+"1:1" is by volume with lead white. All come with `--@ dry-lakes` on.
+
+| Tube | oil | oil 1:1 | dry | dry 1:1 |
+|---|---|---|---|---|
+| rose madder | 211 126 125 → **57 17 19** | 229 187 191 → **128 73 81** | 174 112 124 (unchanged) | 200 143 154 (unchanged) |
+| green earth | 176 160 126 → **131 106 51** | 207 200 184 → **192 184 167** | 228 225 218 → **139 135 114** | 236 234 229 → **224 221 213** |
+| copper green | 107 190 172 → **0 182 155** | 161 215 206 → 160 216 207 | 197 234 230 → **0 92 86** | 215 241 238 → 208 238 234 |
+
+Copper green in oil is now a clear glaze. Over the white backing it reads a saturated
+blue-green, and where it is thick it turns black-green (R∞ 0 21 19, §6.7). Its tints
+barely move.
 
 Sources for this section: Cosentino 2014, *e-conservation* 2:54–65 (CHSOS copy of the
 paper; data download page
@@ -715,7 +828,7 @@ SPIE Photonics Focus May/June 2026, "In pursuit of the perfect black" ; Coatings
 https://www.mdpi.com/2571-9408/6/4/192 ; CAMEO (MFA Boston): Quinacridone dyes,
 Glauconite, Verdigris, Lead-tin yellow ; SSHADE, goethite ; CHSOS fuchsine,
 https://chsopensource.org/products/pigments-checker/pigments-checker-modern-and-contemporary-art-pigments-list/basic-red-9-fuchsine/ .
-Computation: `dry_lake_fit.py` (this folder).
+Computation: `dry_lake_fit.py` and `oil_k_fit.py` (this folder). For §6.7: Reichert et al., *Anal. Bioanal. Chem.* 417 (2025) 4351–4372 (Kremer 44450 verdigris, main size peak 102.5 µm, 1.8–226 µm); Natural Pigments, Nicosia and Verona green earth datasheets (mean particle size 10 and 12 µm); Kremer Pigmente catalogue 2025 (green earth sieve ranges 0–63 to 0–120 µm); CHSOS linseed-oil swatches (`CSV/linseed oil.csv`, SHA-256 c4978b13…39d8).
 
 ---
 

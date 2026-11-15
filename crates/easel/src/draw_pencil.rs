@@ -1575,6 +1575,46 @@ mod tests {
         }
     }
 
+    /// A new painting's rose madder is a deep crimson in oil and its green earth an olive
+    /// (`OIL_K_MARK`, paint's `mixer::OIL_K`); an older engine-9 log's are the pale tubes it
+    /// was painted with, the same as the box with no switch at all. The log and a save keep the
+    /// switch; below engine 9 the line changes nothing.
+    #[test]
+    fn a_new_paintings_madder_is_deep_in_oil() {
+        use crate::session::{OIL_K_MARK, box_for};
+        assert!(box_for(None).unwrap().oil_k);
+        let oil = |b: &paint::Palette, name: &str| {
+            let i = b.tubes.iter().position(|t| t.name == name).unwrap();
+            b.pile(vec![(i, 1.0)]).color
+        };
+        let engine8 = "--@ box impressionist\n--@ engine 8\n--@ paper\n";
+        assert_eq!(oil(&box_for(Some(&format!("{engine8}{OIL_K_MARK}\n"))).unwrap(), "rose madder"), oil(&box_for(Some(engine8)).unwrap(), "rose madder"));
+        let mut plain = paint::Palette::named_box("impressionist").unwrap();
+        plain.engine = paint::PIGMENT_MIXER;
+        for enabled in [false, true] {
+            let head = format!("--@ box impressionist\n--@ engine 9\n--@ paper\n{}", if enabled { format!("{OIL_K_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.oil_k, enabled);
+            let madder = oil(&tubes, "rose madder").map(|v| paint::color::linear_to_srgb(v) * 255.0);
+            if enabled {
+                assert!(madder[0] < 130.0 && madder[0] > 2.5 * madder[1] && madder[0] > 2.5 * madder[2], "a deep crimson: {madder:?}");
+            } else {
+                assert_eq!(oil(&tubes, "rose madder"), oil(&plain, "rose madder"));
+                assert!(madder[1] > 100.0, "the pale tube it was painted with: {madder:?}");
+            }
+            let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            let program = s.program("oil-k");
+            assert_eq!(program.lines().any(|l| l == OIL_K_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().oil_k, enabled);
+            let path = std::env::temp_dir().join(format!("easel-oil-k-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.oil_k, enabled);
+        }
+    }
+
     /// A gritted ground comes with the switch in the log's head: a new painting's sheet takes
     /// `grit=` (a sanded paper whose tooth holds more pastel) and its log says so, replays and
     /// saves the same sheet; an older log's paper refuses `grit=` as an unknown key, as it did,

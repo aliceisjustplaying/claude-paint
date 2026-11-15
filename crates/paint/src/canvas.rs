@@ -835,7 +835,11 @@ impl Canvas {
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
             for x in 0..w {
                 let i = (y + ky0) * bw + x + kx0;
-                let p = if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
+                let mut p = if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
+                // (bare charcoal has no veil: `unveiled`)
+                if let Some(u) = self.unveiled(i, SURFACE_REFLECTANCE * (1.0 - self.gloss[i].clamp(0.0, 1.0))).filter(|_| self.engine >= 4) {
+                    p = [0, 1, 2].map(|q| p[q] - u[q]);
+                }
                 let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
                     let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);

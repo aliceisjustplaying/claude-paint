@@ -138,12 +138,15 @@ pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
 /// index. Computed in notes/research/charcoal_optics.py (its "for dry.rs"
 /// lines); charcoal.md §2. Carbon absorbs within a tenth of a micrometre, so
 /// what it scatters is what its facets reflect (about 9 % against air, 5 %
-/// against resin): the bed is dark whatever its particles' size.
+/// against resin): the bed is dark whatever its particles' size. That
+/// reflection is the bed's first surface: no veil goes over it
+/// (`Cell::bare_carbon`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CarbonBed {
     pub k_air: Rgb,
     pub s_air: Rgb,
-    /// With a resin of n 1.5 (a fixative's) in its pores and around it.
+    /// With a resin of n 1.49 (a fixative's, poly(n-butyl methacrylate)) in
+    /// its pores and around it.
     pub k_resin: Rgb,
     pub s_resin: Rgb,
 }
@@ -168,19 +171,24 @@ impl CarbonBed {
 pub const VINE_CHARCOAL: CarbonBed = CarbonBed {
     k_air: [0.55891, 0.54904, 0.53309],
     s_air: [0.024504, 0.024225, 0.0234],
-    k_resin: [0.52688, 0.51104, 0.48134],
-    s_resin: [0.015416, 0.017739, 0.022654],
+    k_resin: [0.52805, 0.51231, 0.48283],
+    s_resin: [0.01538, 0.017648, 0.022447],
 };
 
-/// Compressed charcoal: that char pressed with a gum binder (5 % of the
-/// solids), 60 % solids: crumbs (median 3 µm) of a fine compact whose
-/// pores are finer than light, so an effective medium (Bruggeman) of
-/// carbon, gum and air, its index (1.22 + 0.34i) nearer air's, and darker.
+/// Compressed charcoal: charcoal and lamp black pressed with a gum binder
+/// (5 % of the solids, n 1.52), 60 % solids, laid as crumbs (median 3 µm).
+/// Where the carbon is soot of tens of nanometres the crumb is a fine
+/// compact whose pores are finer than light: an effective medium
+/// (Bruggeman) of carbon, gum and air, its index (1.22 + 0.34i) nearer
+/// air's, R∞ 0.010. Where it is ground charcoal of 1–10 µm it is a bed of
+/// opaque splinters, as vine's (0.021). Half of each (the soot's share is
+/// unmeasured; estimates-audit-2 C5, bounds 0.010–0.021), mixed by
+/// Kubelka–Munk: R∞ 0.016.
 pub const COMPRESSED_CHARCOAL: CarbonBed = CarbonBed {
-    k_air: [0.58952, 0.5802, 0.56564],
-    s_air: [0.012182, 0.011773, 0.01094],
-    k_resin: [0.55048, 0.5396, 0.51956],
-    s_resin: [0.0070445, 0.0079591, 0.0099127],
+    k_air: [0.57422, 0.56463, 0.54939],
+    s_air: [0.018359, 0.018013, 0.01718],
+    k_resin: [0.53992, 0.52662, 0.50192],
+    s_resin: [0.011199, 0.012773, 0.016114],
 };
 
 /// Dry color retaining measured absorption and wavelength-dependent
@@ -223,19 +231,26 @@ mod tests {
 
     /// Charcoal's R∞ as charcoal_optics.py prints it: under the measured
     /// ceiling for charcoal powder (below 5 % in the visible, arXiv
-    /// 2110.05832), about 6 % with the matte veil the picture adds over it;
-    /// compressed darker than vine; a fixative's resin darkens it, and only
-    /// a little.
+    /// 2110.05832), and seen as it is, with no veil; compressed darker than
+    /// vine, between its fine compact's 0.010 and the splinters' 0.021; a
+    /// fixative's resin darkens it, and only a little; the K/S scaling the
+    /// tooth's fixative uses for carbon (`crate::charcoal::WET_KS`) is
+    /// these beds'.
     #[test]
     fn charcoal_is_dark_by_its_facets() {
         let (v, k) = (VINE_CHARCOAL.color(0.0), COMPRESSED_CHARCOAL.color(0.0));
-        for (got, want) in v.iter().zip([0.0210, 0.0211, 0.0210]).chain(k.iter().zip([0.0101, 0.0099, 0.0095])) {
+        for (got, want) in v.iter().zip([0.0210, 0.0211, 0.0210]).chain(k.iter().zip([0.0155, 0.0155, 0.0152])) {
             assert!((got - want).abs() < 2e-4, "{v:?} {k:?}");
         }
-        let seen = |r: f32| crate::canvas::SURFACE_REFLECTANCE + (1.0 - crate::canvas::SURFACE_REFLECTANCE) * r;
-        assert!(seen(v[1]) < 0.065 && v[1] < 0.05, "{v:?}");
-        assert!(k.iter().zip(&v).all(|(k, v)| k < v), "{k:?} {v:?}");
+        assert!(v[1] < 0.05, "{v:?}");
+        assert!(k.iter().zip(&v).all(|(k, v)| k < v && *k > 0.010), "{k:?} {v:?}");
         let fixed = VINE_CHARCOAL.color(1.0);
         assert!(fixed[1] < v[1] && fixed[1] > 0.7 * v[1], "{fixed:?}");
+        for bed in [VINE_CHARCOAL, COMPRESSED_CHARCOAL] {
+            for q in 0..3 {
+                let g = (bed.k_resin[q] / bed.s_resin[q]) / (bed.k_air[q] / bed.s_air[q]);
+                assert!((g - crate::charcoal::WET_KS[q]).abs() < 0.02, "{q}: {g}");
+            }
+        }
     }
 }

@@ -1016,13 +1016,18 @@ mod tests {
 
     /// A new painting's rose madder stick is a rose, as madder lake powder is
     /// (`DRY_LAKES_MARK`); an older engine-9 log's replays in the color it was painted
-    /// with (main's bits at 4bbbbec3). The log and a save keep the switch, and the line
-    /// is engine 9's.
+    /// with (main's bits at 4bbbbec3). The log and a save keep the switch; below engine 9
+    /// the line changes nothing.
     #[test]
     fn a_new_paintings_madder_stick_is_a_rose() {
         use crate::session::{DRY_LAKES_MARK, box_for};
         assert!(box_for(None).unwrap().dry_lakes);
-        assert!(box_for(Some(&format!("--@ engine 8\n--@ paper\n{DRY_LAKES_MARK}\n"))).is_err());
+        let madder = |b: paint::Palette| {
+            let i = b.tubes.iter().position(|t| t.name == "rose madder").unwrap();
+            b.dry_color(&[(i, 1.0)])
+        };
+        let engine8 = "--@ box impressionist\n--@ engine 8\n--@ paper\n";
+        assert_eq!(madder(box_for(Some(&format!("{engine8}{DRY_LAKES_MARK}\n"))).unwrap()), madder(box_for(Some(engine8)).unwrap()));
         for enabled in [false, true] {
             let head = format!("--@ box impressionist\n--@ engine 9\n--@ paper\n{}", if enabled { format!("{DRY_LAKES_MARK}\n") } else { String::new() });
             let tubes = box_for(Some(&head)).unwrap();

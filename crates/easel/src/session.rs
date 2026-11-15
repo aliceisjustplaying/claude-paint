@@ -82,7 +82,8 @@ pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// Marks a painting whose dye lakes (rose madder, carmine, yellow lake, magenta) look
 /// dry, as a pastel stick or a sheet's tone, as their measured powders do: their dye at its
 /// loading over their alumina's scattering (`paint::Palette::dry_lakes`): every new
-/// painting. It is engine 9's. A log without it replays its lakes' dry colors as painted.
+/// painting. Only engine 9's dry colors have it (below, the line changes nothing). A log
+/// without it replays its lakes' dry colors as painted.
 pub const DRY_LAKES_MARK: &str = "--@ dry-lakes";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
@@ -1644,9 +1645,6 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.dry_lakes = head(DRY_LAKES_MARK);
-    if b.dry_lakes && engine != paint::PIGMENT_MIXER {
-        return Err(format!("the log's dry lakes switch ({DRY_LAKES_MARK}) is engine 9's; this log names engine {engine}; nothing ran"));
-    }
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

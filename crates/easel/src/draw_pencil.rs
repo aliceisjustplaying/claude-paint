@@ -10,7 +10,7 @@
 //! blunts it the same way.
 
 use crate::api::{S, check_keys, err, frame, num, paint_mask_of, points, seed_of, wrap};
-use mlua::{Lua, Result, Table, Value};
+use mlua::{Lua, MultiValue, Result, Table, Value};
 use paint::graphite::{self, Lead, Mark};
 use paint::{Canvas, Mask, Shape};
 
@@ -99,6 +99,41 @@ fn validate_pastel_marks(st: &S, pts: &[(f32, f32)], sketch: Option<(bool, usize
 /// paper-and-pastel switch, so without it a pencil's methods are as they were.
 fn is_stick(st: &S, p: &Table) -> Result<bool> {
     Ok(st.borrow().paper && p.get::<Option<String>>("kind")?.as_deref() == Some("stick"))
+}
+
+/// Whether `p` is a pastel pencil (`pastel(pile, {kind="pencil"})`): a stick
+/// whose table's section says so (it is a round core to the engine).
+fn is_pastel_pencil(st: &S, p: &Table) -> Result<bool> {
+    Ok(is_stick(st, p)? && p.get::<Option<String>>("section")?.as_deref() == Some("pencil"))
+}
+
+/// The shortest pastel pencil a hand still holds to draw, mm: a stub
+/// shorter wants an extender (an estimate: a grip from the fingertips to
+/// the web of the hand; notes/research/pastel_stick_tribology.md §1).
+const PENCIL_HOLD_MM: f32 = 50.0;
+/// The hand time of a sharpening, s (an estimate: the wood shaved off
+/// around with a blade and the point touched up on sandpaper;
+/// notes/research/pastel_stick_tribology.md §1).
+const SHARPEN_SECS: f64 = 10.0;
+
+/// Sharpen a pastel pencil (`--@ pastel-pencil-sharpen`): a fresh point cut,
+/// the core shorter by the cut (paint's `Stick::sharpen`), stored in its
+/// table; refused if what is left would be too short to hold
+/// (`PENCIL_HOLD_MM`). Returns the mm cut off.
+fn sharpen_pastel_pencil(lua: &Lua, st: &S, p: &Table) -> Result<f32> {
+    let mut stick = stick_of(p)?;
+    let cut = stick.sharpen_cut_mm();
+    let left = stick.length_mm - cut;
+    if left.is_nan() || left < PENCIL_HOLD_MM {
+        return err(format!(
+            "sharpen: the pencil is {:.0} mm long and a fresh point would leave {left:.0} mm, too short to hold (under {PENCIL_HOLD_MM:.0} mm); take a fresh one (pastel(pile, {{kind=\"pencil\"}}))",
+            stick.length_mm
+        ));
+    }
+    st.borrow_mut().canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?.tally_mut().secs += SHARPEN_SECS;
+    stick.sharpen();
+    store_stick(lua, p, &stick)?;
+    Ok(cut)
 }
 
 /// The stick a stick table holds.
@@ -402,14 +437,19 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             draw_marks(&st1, &p, &marks, seed)
         })?)?;
     }
-    // p:sharpen(): a fresh point
+    // p:sharpen(): a fresh point (a pastel pencil's, with `--@ pastel-pencil-sharpen`: the
+    // mm the cut takes off its core)
     {
         let st1 = st.clone();
-        methods.set("sharpen", lua.create_function(move |_, p: Table| {
+        methods.set("sharpen", lua.create_function(move |lua, p: Table| {
+            if st1.borrow().tubes.pastel_pencil_sharpen && is_pastel_pencil(&st1, &p)? {
+                return Ok(MultiValue::from_vec(vec![Value::Number(sharpen_pastel_pencil(lua, &st1, &p)? as f64)]));
+            }
             if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? {
                 return err("sharpen: a pastel stick has no point to sharpen; its end wears into facets as it draws (p.facets)");
             }
-            p.set("worn", 0.0)
+            p.set("worn", 0.0)?;
+            Ok(MultiValue::new())
         })?)?;
     }
     // p:width(): the width of the line it draws now, in units (at pressure 0.5)
@@ -1011,6 +1051,100 @@ mod tests {
             let restored = crate::save::read(&path).unwrap().session;
             std::fs::remove_file(path).unwrap();
             assert_eq!(restored.st.borrow().tubes.pastel_current_heap, enabled);
+        }
+    }
+
+    /// How dark `src`'s line along y is (`Y` in it), averaged over `rows` rows `y0`, `y0 + 45`, ...,
+    /// each drawn by a pencil `C` that `make` returns: the mean over the line's columns of
+    /// its darkest pixel across the line (a pastel line's darkness varies with the paper's
+    /// tooth from row to row).
+    fn line_darkness(s: &mut Session, make: &str, src: &str, y0: f32, rows: usize) -> f32 {
+        let mut dark = 0.0;
+        for k in 0..rows {
+            let y = y0 + 45.0 * k as f32;
+            run(s, &format!("C = {make}"));
+            let before = s.canvas().unwrap().pixels().to_vec();
+            run(s, &src.replace('Y', &y.to_string()));
+            let c = s.canvas().unwrap();
+            let f = c.window();
+            let mut peak = vec![0.0f32; f.w];
+            for (i, (a, b)) in before.iter().zip(c.pixels()).enumerate() {
+                let (x, yy) = (f.ux(i % f.w), f.uy(i / f.w));
+                if x > 200.0 && x < 800.0 && (yy - y).abs() < 30.0 {
+                    peak[i % f.w] = peak[i % f.w].max(a[1] - b[1]);
+                }
+            }
+            let cols = peak.iter().filter(|v| **v > 0.0).count().max(1);
+            dark += peak.iter().sum::<f32>() / cols as f32 / rows as f32;
+        }
+        dark
+    }
+
+    /// A new painting's pastel pencil wears flat as it draws, laying a paler line, and
+    /// `p:sharpen()` cuts it a fresh point: its lines are again a fresh pencil's, and it is
+    /// shorter. It takes hand time, a failed chunk puts the pencil back, a replay sharpens it
+    /// the same, and one too short to hold is refused. A soft stick still refuses; an older
+    /// log's pencil refuses as it was painted. The log's head and a save keep the switch.
+    #[test]
+    fn a_new_paintings_pastel_pencil_is_sharpened() {
+        use crate::session::{PASTEL_SHARPEN_MARK, box_for};
+        const LINE: &str = "C:line({{100, Y}, {900, Y}}, {pressure=0.5})";
+        for enabled in [false, true] {
+            let older = "--@ engine 8\n--@ paper\n--@ calls-agree\n";
+            let mut s = Session::with_box(256, box_for(if enabled { None } else { Some(older) }).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            // (a copy of a pencil as it is: its facets and length)
+            run(&mut s, r#"black = pile{{"bone black", 1}}
+                function fresh() return pastel(black, {kind="pencil"}) end
+                function copy(p) local c = fresh() c.facets = {table.unpack(p.facets)} c.length = p.length return c end
+                soft = pastel(black, {kind="soft"})
+                p = fresh() for i = 1, 20 do p:line({{100, 900 + (i % 5) * 15}, {900, 900 + (i % 5) * 15}}, {pressure=0.5}) end"#);
+            let new = line_darkness(&mut s, "fresh()", LINE, 40.0, 6);
+            let worn = line_darkness(&mut s, "copy(p)", LINE, 310.0, 6);
+            assert!(worn < 0.8 * new, "a pencil worn by 20 lines lays a paler line: {worn} vs {new}");
+            let e = s.run("soft:sharpen()").unwrap_err();
+            assert!(e.contains("sharpen: a pastel stick has no point to sharpen"), "{e}");
+            let length = |s: &mut Session| -> f32 { run(s, "print(p.length)").trim().parse().unwrap() };
+            let before = length(&mut s);
+            if !enabled {
+                let e = s.run("p:sharpen()").unwrap_err();
+                assert!(e.contains("sharpen: a pastel stick has no point to sharpen"), "{e}");
+                assert_eq!(length(&mut s), before);
+                assert!(!s.program("pencil").lines().any(|l| l == PASTEL_SHARPEN_MARK));
+                continue;
+            }
+            // a failed chunk puts the pencil back as it was
+            assert!(s.run("p:sharpen() error('no')").is_err());
+            assert_eq!(length(&mut s), before);
+            let clock = s.st.borrow().clock;
+            let cut: f32 = run(&mut s, "print(p:sharpen())").trim().parse().unwrap();
+            let secs = (s.st.borrow().clock - clock) * 60.0;
+            assert!((9.0..=11.0).contains(&secs), "a sharpening takes some 10 s of hand time: {secs}");
+            let after = length(&mut s);
+            assert!(cut > 0.5 && cut < 15.0, "the cut {cut} mm");
+            assert!((before - cut - after).abs() < 1e-4, "{before} - {cut} = {after}");
+            assert!(run(&mut s, "print(p)").contains(&format!("{after:.1} mm long")));
+            let sharpened = line_darkness(&mut s, "copy(p)", LINE, 580.0, 6);
+            assert!((sharpened - new).abs() < 0.1 * new, "a sharpened pencil lays as a fresh one: {sharpened} vs {new} (worn {worn})");
+            // the switch is the log's: a replay sharpens it the same, and a save keeps it
+            let program = s.program("pencil");
+            assert!(program.lines().any(|l| l == PASTEL_SHARPEN_MARK));
+            assert!(box_for(Some(&program)).unwrap().pastel_pencil_sharpen);
+            assert!(!box_for(Some(older)).unwrap().pastel_pencil_sharpen);
+            let mut replay = Session::replay_with(256, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&program) {
+                run(&mut replay, &chunk);
+            }
+            assert_eq!(length(&mut replay), after);
+            assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+            let path = std::env::temp_dir().join(format!("easel-pencil-sharpen-{}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert!(restored.st.borrow().tubes.pastel_pencil_sharpen);
+            // too short to hold
+            let e = s.run(r#"stub = pastel(black, {kind="pencil", length=45}) stub:sharpen()"#).unwrap_err();
+            assert!(e.contains("too short to hold"), "{e}");
         }
     }
 

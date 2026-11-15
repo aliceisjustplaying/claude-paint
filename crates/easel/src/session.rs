@@ -102,6 +102,14 @@ pub const PAPER_MARK: &str = "--@ paper";
 /// paints the single-cure film engine 9 was released with. It requires
 /// engine 9.
 pub const MATERIAL_MARK: &str = "--@ material";
+/// The wet pastel switch, in the head of a session file: pastel takes
+/// water (paint's `wet_pastel`): `p:wet(share)` dips a stick, `b:dip` and
+/// `b:wash` draw a wet brush (with ground pastel in it, a paste) through
+/// pastel, and the water dries on the painting's clock. A new painting
+/// has it; a log without it replays as it was painted, with none of it.
+/// It rides on the paper-and-pastel switch (`PAPER_MARK`) and the
+/// drawing's optics (`DRAWING_OPTICS_MARK`), and requires both.
+pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -793,6 +801,9 @@ impl Session {
         let material = self.st.borrow().tubes.material;
         if material != 0 {
             let _ = writeln!(s, "{MATERIAL_MARK} {material}");
+        }
+        if self.st.borrow().tubes.wet_pastel {
+            let _ = writeln!(s, "{WET_PASTEL_MARK}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
@@ -1570,6 +1581,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.brush_skim = true;
         b.rag_lift = true;
         b.drain = true;
+        b.wet_pastel = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1642,6 +1654,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.drain = drain;
     b.material = material;
+    b.wet_pastel = head(WET_PASTEL_MARK);
+    if b.wet_pastel && !(b.drawing_optics && logged_paper(text)) {
+        return Err(format!("the log's {WET_PASTEL_MARK} line (the wet pastel switch) needs its {PAPER_MARK} and {DRAWING_OPTICS_MARK} lines too; nothing ran"));
+    }
     Ok(b)
 }
 
@@ -1839,7 +1855,7 @@ mod tests {
         for engine in [1, 3, 4, 5, paint::engine7::ENGINE, paint::PIGMENT_MIXER] {
             let log: String = head.iter().filter(|l| {
                 let l = l.trim();
-                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK)
+                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK && l != WET_PASTEL_MARK)
             }).map(|l| format!("{l}\n")).chain([format!("{ENGINE_MARK} {engine}\n")]).collect();
             let tubes = box_for(Some(&log)).unwrap();
             assert_eq!(tubes.engine, engine);

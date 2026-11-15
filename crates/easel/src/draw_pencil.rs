@@ -113,7 +113,17 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     let ft: Table = p.get("facets")?;
     let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
     let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?] })
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], water: 0.0 })
+}
+
+/// The water in a stick's tip now (mm³), `now` minutes on the painting's
+/// clock: what `p:wet` gave it (its table's `water`, at `wet_at`), less what
+/// has dried off it since (paint's `wet_pastel::tip_water`). 0 for a stick
+/// never dipped.
+fn tip_water(p: &Table, now: f64) -> Result<f32> {
+    let water: f32 = p.raw_get::<Option<f32>>("water")?.unwrap_or(0.0);
+    let at: f64 = p.raw_get::<Option<f64>>("wet_at")?.unwrap_or(now);
+    Ok(paint::wet_pastel::tip_water(water, now - at))
 }
 
 /// Write a stick's wear back into its table (a part of the Lua heap: a
@@ -169,6 +179,12 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
         validate_pastel_path(c, pts, None)?;
     }
     let mut stick = stick_of(p)?;
+    // (a dipped tip: the wet pastel switch's, `p:wet`)
+    let wet = st.borrow().tubes.wet_pastel;
+    if wet {
+        let now = st.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
+        stick.water = tip_water(p, now)?;
+    }
     let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
     // (a NaN angle finds no contact and lays nothing, without saying so)
     if !base_roll.is_finite() || alt.iter().chain(az).chain(roll).chain(force).chain(speed).any(|v| !v.is_finite()) {
@@ -186,15 +202,21 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
             }
         })
         .collect();
-    let (volume, length, facets) = crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
+    let (volume, length, facets, water) = crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
         let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         let l = c.stick_stroke(&mut stick, &sp);
         c.tally_mut().secs += l.secs as f64 + 0.25;
-        Ok((l.volume_mm3, stick.length_mm, stick.facets.clone()))
+        Ok((l.volume_mm3, stick.length_mm, stick.facets.clone(), stick.water))
     })?;
     stick.length_mm = length;
     stick.facets = facets;
     store_stick(lua, p, &stick)?;
+    if wet && p.raw_get::<Option<f32>>("water")?.is_some() {
+        // what the tip still holds, as of the stroke's end
+        let now = st.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
+        p.raw_set("water", water)?;
+        p.raw_set("wet_at", now)?;
+    }
     Ok(volume)
 }
 
@@ -675,6 +697,26 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
+    // p:wet(share): dip the stick's tip in water (the wet pastel switch's)
+    if st.borrow().tubes.wet_pastel {
+        let st1 = st.clone();
+        methods.set("wet", lua.create_function(move |_, (p, share): (Table, Option<f32>)| {
+            if !is_stick(&st1, &p)? {
+                return err("wet: a pastel stick's tip is dipped in water (pastel(pile))");
+            }
+            let share = share.unwrap_or(1.0);
+            if !(0.0..=1.0).contains(&share) {
+                return err("wet: share is how much water the tip takes up, 0 (dry) to 1 (soaked)");
+            }
+            let now = st1.borrow().canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?.now_min();
+            // (a tip still wet from before keeps what it has, if more)
+            let cap = stick_of(&p)?.tip_capacity_mm3();
+            let water = tip_water(&p, now)?.max(share * cap);
+            p.raw_set("water", water)?;
+            p.raw_set("wet_at", now)?;
+            Ok(water / cap)
+        })?)?;
+    }
     // pastel(pile, {kind="soft"|"hard"|"pencil", soft=, diameter=, length=}):
     // a stick of the pile's pigments as they look dry (paint's dry.rs), that
     // rests on the tooth, wears to facets and lays what it abrades (pastel.rs)
@@ -1429,5 +1471,75 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             r.run(&chunk).unwrap();
         }
         assert!(state(&r) == state(&s), "the log replays bit for bit");
+    }
+
+    /// The wet pastel switch: a new painting's log has it and its sticks
+    /// dip (`p:wet`) and its brushes carry water (`b:dip`, `b:wash`); a log
+    /// without it has none of them. A wet stroke is wet and dark, dries on
+    /// the clock, and the painting replays and saves with its water.
+    #[test]
+    fn wet_pastel_comes_with_its_log_head_line() {
+        use crate::session::{DRAWING_OPTICS_MARK, PAPER_MARK, WET_PASTEL_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n";
+        assert!(!box_for(Some(older)).unwrap().wet_pastel);
+        assert!(box_for(Some(&format!("{older}{WET_PASTEL_MARK}\n"))).unwrap().wet_pastel);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{WET_PASTEL_MARK}\n"))).unwrap().wet_pastel, "only in the head");
+        for head in ["--@ engine 9\n--@ drawing-optics\n", "--@ engine 9\n--@ paper\n"] {
+            let e = box_for(Some(&format!("{head}{WET_PASTEL_MARK}\n"))).unwrap_err();
+            assert!(e.contains(PAPER_MARK) && e.contains(DRAWING_OPTICS_MARK), "{e}");
+        }
+        let old = {
+            let mut s = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}) b = brush("round", 12) print(p.wet, b.dip, b.wash)"#)
+        };
+        assert_eq!(old.trim(), "nil\tnil\tnil", "an older log's stick and brush are as they were");
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let src = r#"p = pastel(pile{{"vermilion", 1}, {"lead white", 1}})
+            print(p:wet(1))
+            p:stroke({{100, 400}, {900, 400}}, {force=2})"#;
+        let out = run(&mut s, src);
+        assert_eq!(out.lines().next().and_then(|l| l.parse::<f32>().ok()), Some(1.0), "{out}");
+        // (where the stick touched: about the line, as its pose puts it)
+        let at = (300..500).map(|y| (500.0, y as f32)).find(|&(x, y)| s.canvas().unwrap().pastel_water_at(x, y) > 0.0).expect("the stroke is wet");
+        assert!(run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains(", wet"));
+        assert!(s.run("p:wet(2)").unwrap_err().contains("share"));
+        let out = run(&mut s, r#"b = brush("round", 20)
+            print(b:dip(0.8))
+            print(b:wash({{200, 300}, {800, 500}}, {pressure=0.6}))
+            print(b:dip(1, {pastel=p, amount=0.5}))
+            print(b:wash({{150, 650}, {850, 650}}))
+            print(p.length < 65)"#);
+        assert!(out.trim_end().ends_with("true"), "{out}");
+        assert!(s.run("b:wash({{1, 1}})").is_err());
+        assert!(s.run(r#"c = brush("round", 12) c:wash({{100, 100}, {200, 100}})"#).unwrap_err().contains("dip it"));
+        assert!(s.run(r#"c = brush("round", 12) c:load(pile{{"lead white", 1}}, 0.5) c:dip(1)"#).unwrap_err().contains("oil paint"));
+        let wet_px = s.canvas().unwrap().pixels().to_vec();
+        let program = s.program("wet");
+        assert!(program.lines().any(|l| l == WET_PASTEL_MARK), "{program}");
+        // the log replays bit for bit
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), &wet_px[..]);
+        // a save keeps the switch and the water
+        let path = std::env::temp_dir().join(format!("easel-wet-pastel-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.wet_pastel);
+        assert!(restored.program("wet").lines().any(|l| l == WET_PASTEL_MARK));
+        // it dries on the clock, the same in each, and lighter than wet
+        for session in [&mut s, &mut replay, &mut restored] {
+            run(session, "wait(60)");
+        }
+        assert_eq!(s.canvas().unwrap().pixels(), replay.canvas().unwrap().pixels());
+        assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
+        assert!(!run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains(", wet"));
+        assert!(run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains("pastel"));
+        let lum = |p: &[[f32; 3]]| p.iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
+        assert!(lum(s.canvas().unwrap().pixels()) > lum(&wet_px), "lighter once dry");
     }
 }

@@ -77,6 +77,12 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// `pastel::Stick::sharpen`): every new painting. A log without it replays its pencils'
 /// sharpen as it was painted (refused in a painting whose calls agree).
 pub const PASTEL_SHARPEN_MARK: &str = "--@ pastel-pencil-sharpen";
+/// A log's head line: its sheet of paper may have a gritted ground, a sanded
+/// pastel paper's coat or pumice in glue or gesso (`canvas{paper={grit=}}`,
+/// paint's `paper::Grit`): every new painting. A log without it replays as
+/// it was painted, and `grit=` in it is refused. It rides on the
+/// paper-and-pastel switch's engines, 5 and later.
+pub const GRIT_MARK: &str = "--@ grit";
 /// Marks a painting whose calls agree with each other: a brush table refuses an option it
 /// doesn't know, a brush's load refuses an amount outside 0..1 as a knife's does, a recipe or
 /// mix whose parts overflow is refused, a pastel stick's side strokes keep its strokes' upper
@@ -804,6 +810,9 @@ impl Session {
         }
         if self.st.borrow().tubes.pastel_pencil_sharpen {
             let _ = writeln!(s, "{PASTEL_SHARPEN_MARK}");
+        }
+        if self.st.borrow().tubes.grit {
+            let _ = writeln!(s, "{GRIT_MARK}");
         }
         if self.st.borrow().tubes.calls_agree {
             let _ = writeln!(s, "{CALLS_AGREE_MARK}");
@@ -1590,8 +1599,8 @@ fn box_list() -> String {
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise for sharpening a pastel
-/// pencil (`PASTEL_SHARPEN_MARK`) and their lakes' dry colors (`DRY_LAKES_MARK`).
-/// New paintings are of
+/// pencil (`PASTEL_SHARPEN_MARK`), their lakes' dry colors (`DRY_LAKES_MARK`) and a
+/// gritted ground on paper (`GRIT_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`). The drain and oils switches (`DRAIN_MARK`,
 /// `OILS_MARK`): a new one's on, an existing one's its log's.
@@ -1611,6 +1620,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
         b.pastel_pencil_sharpen = true;
+        b.grit = true;
         b.calls_agree = true;
         b.dry_lakes = true;
         b.blend_at_masks = true;
@@ -1686,6 +1696,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.pastel_pencil_sharpen = head(PASTEL_SHARPEN_MARK);
+    b.grit = head(GRIT_MARK);
+    if b.grit && engine < 5 {
+        return Err(format!("the log's {GRIT_MARK} line (a gritted ground on paper) is engine 5's and later's, as paper is; this log names engine {engine}; nothing ran"));
+    }
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.dry_lakes = head(DRY_LAKES_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);

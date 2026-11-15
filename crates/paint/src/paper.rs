@@ -32,6 +32,16 @@
 //!   pixel: the bearing (Abbott) curve a stick or a finger meets is
 //!   1 − e^(−d/µ) at depth d.
 //!
+//! - **Grit** (`Grit`, optional): a sanded pastel paper's coat, or a
+//!   homemade ground of pumice in glue or gesso. Grains of a size by grade
+//!   (FEPA P320 46 µm, P400 35 µm, P600 26 µm, with FEPA's spread) stand
+//!   in a binder, which seals the fibers under it: the tooth is then the
+//!   open volume of the packing between the binder and the tallest grains
+//!   the stick rests on, 2.5–9 times the drawing paper's, and the hard,
+//!   angular grains abrade a stick about 3 times as fast as rounded
+//!   fibers do (Rabinowicz, with the grains' measured angularity;
+//!   notes/research/sanded_paper.md).
+//!
 //! Everything is laid in millimeters of the sheet, so the paper is the same
 //! at any pixel width and in a crop render.
 
@@ -56,6 +66,158 @@ pub struct Laid {
     pub chain_mm: f32,
     /// Share of the fiber missing over a wire (0.1–0.3 on handmade sheets).
     pub deficit: f32,
+}
+
+/// What holds a gritted ground's grains (notes/research/sanded_paper.md).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Binder {
+    /// An acrylic primer or acrylic gesso (modern sanded papers, a
+    /// homemade pumice-in-gesso ground): a waterproof film that seals the
+    /// fibers under it against oil.
+    Acrylic,
+    /// Animal glue or starch (the 18th- and 19th-century pumice grounds):
+    /// lean and porous; oil reaches the sheet through it.
+    Glue,
+}
+
+/// A gritted ground on the sheet: a sanded pastel paper's coat, or pumice in
+/// glue or gesso painted on (notes/research/sanded_paper.md).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Grit {
+    /// The grains' median size, µm (FEPA P320 46.2, P400 35.0, P600 25.8,
+    /// P800 21.8).
+    pub size_um: f32,
+    /// The share of the sheet's face the grains cover, seen from above
+    /// (0.3–1: an open coat 0.5–0.7, a closed one more; spheres dropped at
+    /// random jam at 0.55, and the coated abrasives' coat weights give about
+    /// 0.7).
+    pub cover: f32,
+    pub binder: Binder,
+}
+
+/// The spread of a FEPA P microgrit's sizes: the standard deviation of ln d
+/// (a lognormal through the P400 and P500 limits: ds94 25.2 and 21.5 µm
+/// give 0.21–0.22, ds3 58.9 and 48.3 µm give 0.25–0.28).
+pub const GRIT_SPREAD: f32 = 0.23;
+/// The binder's solids by volume as it is laid: an acrylic emulsion is
+/// 46–47 % solids by weight (Rhoplex AC-33), at a polymer density of
+/// 1.1–1.15 g/cm³ 0.43–0.45 by volume; a glue size of 1:10–1:20 by weight,
+/// gelatin at 1.35 g/cm³, is 0.04–0.07 (the strong end for a grain coat),
+/// and a starch paste for a pumice ground about as lean.
+const ACRYLIC_SOLIDS: f64 = 0.45;
+const GLUE_SOLIDS: f64 = 0.07;
+/// The binder's wet level, in median grain sizes: laid level with the
+/// median grain's top, the leanest wet coat that carries its grains. A
+/// bench measurement (a cross-section) would set it; its bounds are 1–1.3
+/// (a wet coat to the tallest grains). Colourfix's coat weighs 40 g/m²
+/// (300 g/m² paper printed to 340 g/m²), and the model's coat at P400,
+/// cover 0.6, already weighs 47 g/m² at this level with quartz grit (65
+/// with alumina) and 52 at 1.3. So the measured weight puts it at the lean
+/// bound (notes/research/sanded_paper.md §1).
+const BINDER_WET: f64 = 1.0;
+/// The share of the face the stick rests on: its real contact F/(σp·A₀).
+/// The default soft stick (σp 3.9 MPa) under the hand's default 2–2.5 N
+/// gives 2.9 % on a fresh 20 mm² crescent, 1.1 % on 50 mm² and 0.39 % on
+/// a fully worn 148 mm² facet. A stick wears flat at once
+/// (pastel_stick_tribology.md §4), so take the geometric middle, 1 %. The
+/// coat's tooth is the open volume below the level where the grains carry
+/// that. It is the sheet's, fixed: each step's own force already sets how
+/// far the stick sinks into that relief (`pastel::seat`), so a per-stroke
+/// share would count the load twice.
+const GRIT_FACE: f64 = 0.01;
+/// How much more a crushed grain abrades a stick than a paper fiber does, at
+/// the same load and distance. Both are far harder than pastel (alumina about
+/// 20 GPa, silicon carbide 25, pumice glass 5–6, a fiber wall 0.3–0.5,
+/// against a stick's 2–30 MPa), so the hardness drops out (Tabor,
+/// Richardson: wear doesn't depend on it past about 1.2×) and Rabinowicz's
+/// K = groove area over half the bearing area sets the ratio, the same share
+/// of the groove coming off a friable compact on either. A fiber crossing is
+/// a ridge 12.5 µm in radius across the fiber, long along it: the stick rests
+/// on the highest of the ~490 crossings per mm² of a sheet of Rq 3–5 µm
+/// (Greenwood–Williamson at the stick's 1 % real contact, `GRIT_FACE`), so
+/// K ≈ 0.12–0.155 over random directions. A grain the stick rests on is one
+/// of the coat's tallest, 3–8 µm deep in it (P800 to P240)
+/// (`Grit::tooth_um`'s packing), far past a crushed grain's tip radius
+/// (about 1 µm, Sin et al. 1979), so its facets cut. Their slope is
+/// measured: Hamblin & Stachowiak's angularity SPQ, the mean cos(θ/2) over
+/// a grain's corners of apex θ, runs to 0.60 over 0.25–0.3 mm abrasives
+/// (glass beads to SiC), 0.63–0.65 for freshly fractured WC-Co, and chalk's
+/// two-body wear rises linearly with it. A corner of SPQ 0.55 attacks at
+/// 90° − θ/2 = 33.4°, so K = (2/π)·tan 33.4° = 0.42, and over the fiber's
+/// middle 0.137 that is 3.05 (2.4–4.0 over SPQ 0.50–0.60 and the paper's
+/// roughness). As every grade's grains sit deeper than their tips, it
+/// doesn't depend on the grade (the abrasive size effect of metals comes
+/// from sub-µm grooves) (notes/research/sanded_paper.md §3).
+pub const GRIT_WEAR: f32 = 3.0;
+
+impl Grit {
+    /// The tooth the coat offers, µm: the open volume per area between the
+    /// binder and the level where the stick rests, which is what it holds
+    /// before the stick slides on its own pastel (as a paper's pores,
+    /// `Sheet::micro`). The grains are spheres of FEPA's lognormal spread
+    /// (`GRIT_SPREAD`, by number: the mass median less 3σ² in ln d) at random
+    /// on the sheet, covering `cover` of it seen from above. The binder is
+    /// laid level with the median grain's top (`BINDER_WET`) and dries to its solids
+    /// (`ACRYLIC_SOLIDS`, `GLUE_SOLIDS`), filling the coat between the
+    /// grains from the sheet up. The stick rests where the tallest grains
+    /// carry its real contact (`GRIT_FACE`): about 1.37 median sizes up. So
+    /// the tooth goes as the size: 0.70 of it in acrylic, 0.94 in glue at an
+    /// open coat (P400: 24.4 and 32.8 µm), a little less for a closed one.
+    pub fn tooth_um(&self) -> f32 {
+        self.coat().0
+    }
+
+    /// (tooth µm, grains per µm²)
+    fn coat(&self) -> (f32, f32) {
+        use std::f64::consts::PI;
+        const K: usize = 81;
+        const NZ: usize = 1200;
+        let (sig, d50) = (GRIT_SPREAD as f64, self.size_um as f64);
+        let cover = (self.cover as f64).clamp(0.3, 1.0);
+        let solids = match self.binder {
+            Binder::Acrylic => ACRYLIC_SOLIDS,
+            Binder::Glue => GLUE_SOLIDS,
+        };
+        // the sizes by number, at ±4σ
+        let (mut r, mut w) = ([0.0f64; K], [0.0f64; K]);
+        for k in 0..K {
+            let z = -4.0 + 8.0 * k as f64 / (K - 1) as f64;
+            w[k] = (-0.5 * z * z).exp();
+            r[k] = 0.5 * d50 * (sig * z - 3.0 * sig * sig).exp();
+        }
+        let wsum: f64 = w.iter().sum();
+        w.iter_mut().for_each(|x| *x /= wsum);
+        let n = cover / (0..K).map(|k| w[k] * PI * r[k] * r[k]).sum::<f64>();
+        // the grains' share of the area at each height, from the sheet up
+        let dz = 2.0 * r[K - 1] / NZ as f64;
+        let mr: Vec<f64> = (0..NZ)
+            .map(|i| {
+                let z = (i as f64 + 0.5) * dz;
+                n * PI * (0..K).map(|k| w[k] * (r[k] * r[k] - (z - r[k]).powi(2)).max(0.0)).sum::<f64>()
+            })
+            .collect();
+        // the grains' volume below each height, and the binder's level
+        let mut below = vec![0.0f64; NZ + 1];
+        for i in 0..NZ {
+            below[i + 1] = below[i] + mr[i] * dz;
+        }
+        let at = |z: f64| {
+            let i = ((z / dz) as usize).min(NZ - 1);
+            below[i] + (z - i as f64 * dz) * mr[i]
+        };
+        let wet = BINDER_WET * d50;
+        let binder = solids * (wet - at(wet));
+        let bed = (0..NZ).find(|&i| (i + 1) as f64 * dz - below[i + 1] >= binder).unwrap_or(NZ);
+        let face = (0..NZ).rev().find(|&i| mr[i] >= GRIT_FACE).unwrap_or(0);
+        let open: f64 = (bed.min(face)..face).map(|i| (1.0 - mr[i]) * dz).sum();
+        (open as f32, n as f32)
+    }
+
+    /// Grains over a pixel `px_mm` across.
+    fn per_pixel(&self, px_mm: f32) -> f32 {
+        let px_um = 1000.0 * px_mm;
+        self.coat().1 * px_um * px_um
+    }
 }
 
 /// A sheet of paper.
@@ -92,6 +254,8 @@ pub struct Paper {
     /// stick (39 MPa measured on board, Mann, Baum & Habeger 1979; a soft
     /// drawing paper lower).
     pub z_mpa: f32,
+    /// A gritted ground on it (a sanded paper), or none.
+    pub grit: Option<Grit>,
     pub seed: u64,
 }
 
@@ -115,7 +279,20 @@ impl Paper {
             laid: None,
             absorbent: 0.8,
             z_mpa: 39.0,
+            grit: None,
             seed,
+        }
+    }
+
+    /// How much of the sheet's pore volume takes oil, in coats
+    /// (`surface::COAT_UM`): the sheet's own pores, or on a gritted ground
+    /// the coat's open volume, and the sheet's under it only through a
+    /// glue binder (an acrylic film seals it).
+    pub fn oil_capacity(&self, coat_um: f32) -> f32 {
+        let sheet = self.absorbent.clamp(0.0, 1.0) * self.porosity * self.caliper_um() / coat_um;
+        match self.grit {
+            None => sheet,
+            Some(g) => g.tooth_um() / coat_um + if g.binder == Binder::Glue { sheet } else { 0.0 },
         }
     }
 
@@ -349,6 +526,23 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
             mean * g
         })
         .collect();
+    // a gritted ground: its tooth, not the fibers' (the binder seals them),
+    // scattering as the pixel's own grains do (each grain a hollow beside
+    // it: Gamma(k)/k for the k grains over a pixel, as the pores'); the
+    // sheet's grain at the mm scale shows through the thin coat
+    let micro = match p.grit {
+        None => micro,
+        Some(g) => {
+            let (mean, k) = (g.tooth_um(), g.per_pixel(px_mm).max(1.0));
+            (0..n)
+                .map(|i| {
+                    let (x, y) = ((x0 + i % w) as u64, (y0 + i / w) as u64);
+                    let mut r = Rng::new(p.seed ^ 0x6217_C0A7 ^ x.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ y.wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
+                    mean * gamma(&mut r, k) / k
+                })
+                .collect()
+        }
+    };
     Sheet { height, micro, grammage: gram }
 }
 
@@ -522,6 +716,7 @@ mod tests {
         assert!(mean > 4.0 && mean < 9.0, "mean pore depth {mean}");
         assert!(sd / mean > 0.2, "they vary: cv {}", sd / mean);
     }
+
 }
 
 #[cfg(test)]

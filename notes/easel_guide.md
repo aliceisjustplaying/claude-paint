@@ -100,12 +100,38 @@ cotton drawing paper with a felt grain):
 | `felt` | `{cell=mm, depth=µm}`, or `false` for none |
 | `laid` | `{per_cm=, chain=mm, deficit=}`: a laid mold's wires |
 | `absorbent`, `stiffness` | how much of the pores take oil (0..1); the sheet's give under a stick (MPa) |
+| `grit` | a gritted ground: `{size=µm, cover=0.3..1, binder="acrylic"\|"glue"}`, `true` for a P400 sanded paper (35 µm, cover 0.6, acrylic), or `false` for none |
+
+**Sanded paper.** `grit=` coats the sheet with grains held in a binder,
+as a sanded pastel paper or board is, or a ground of pumice in glue or
+gesso painted onto paper. `size` is the grains' median size (by grade:
+P240 58 µm, P320 46, P400 35, P600 26, P800 22). `cover` is the share of the
+sheet the grains cover, seen from above (an open coat 0.5–0.7; a closed one
+holds a little less). The binder is `"acrylic"` (modern sanded papers, or
+pumice in acrylic gesso) or `"glue"` (glue or starch, the older pumice
+grounds; leaner, so more of the coat is open). The tooth is then the open
+room between the grains, under the tallest ones the stick rests on: at P400
+4 times a drawing paper's in acrylic and 5.5 times in glue, more on the
+coarse grades (P240 7–9 times), less on the fine (P800 2.5–3.5). The hard,
+angular grains also wear a stick about three times as fast ("sanded paper
+eats pastel"), so at the same force it fills in a few more strokes than
+paper does. Laid with a lighter hand, a pass at a time as thick as one on
+fresh paper, it takes 10–15 layers where drawing paper goes slick after
+two or three. The sheet's grain shows through the coat. An acrylic coat seals the paper
+against oil, so only the coat's own pores take it; a glue coat lets oil
+through to the paper. A ground laid over the grit fills its tooth as thick
+paint would. A knife rides the grains: it neither burnishes the tooth nor
+raises a nap. Pumice grounds are 18th century and on; pumice papers were
+sold by about 1890; acrylic sanded papers are late 20th century. Sources,
+and which numbers are estimates: notes/research/sanded_paper.md.
 
 A ground is optional on paper. Thin oil paint on it goes lean and matte, as
 on an absorbent ground. The numbers come from paper physics and, where no
 measurement of artists' papers exists, are estimates. Paper is there in a painting begun since
 it came (its log's head says `--@ paper`); an older painting replays as it
-was painted, and `paper=` in it is refused.
+was painted, and `paper=` in it is refused. Grit is there in a painting
+begun since it came (its log's head also says `--@ grit`); in an older
+painting `grit=` is refused as an unknown key.
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -637,7 +663,11 @@ feel(x, y)                     -- what a fingertip feels there
   below).
 - **The tooth fills.** Loose pastel in the pores is a third body the stick
   slides on: the more there is, the less a stroke lays, until the paper
-  refuses it. Fixative binds it into a rough crust that files the stick again,
+  refuses it. A drawing paper takes two or three layers. A sanded sheet
+  (`paper={grit=...}`) holds four to five and a half times as much at
+  P400, and its grains file the stick about three times as fast, so a light
+  hand lays layer on layer there.
+  Fixative binds it into a rough crust that files the stick again,
   so a fixed passage takes more pastel; and darkens it a little, as the resin
   wets the particles.
   The eraser lifts loose pastel out of the tooth with the coverage it takes,
@@ -666,7 +696,7 @@ feel(x, y)                     -- what a fingertip feels there
   alizarin (a quinacridone, not a lake) is a dusky violet-rose dry, and green
   earth, verdigris, lead-tin yellow and transparent oxide yellow scatter by
   their measured indices.
-- **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
+- **Feel.** `feel(x, y)` answers in words: the surface (paper or sanded paper, paint and how
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
 - Pastel skips wet paint, as graphite does; let the paint set first. Paint

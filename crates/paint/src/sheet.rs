@@ -514,11 +514,13 @@ impl Canvas {
             // the edge cuts fiber walls past q = H·2R (a scalpel's 1 µm edge
             // at 0.15–0.85 N/mm; a knife's never at a hand's load), shaving
             // about a fiber layer
-            let shave = if q * 1000.0 > FIBER_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
+            // (on a gritted ground no fiber is bare: the blade rides the hard
+            // grains, cuts none and tears none loose)
+            let shave = if paper.grit.is_none() && q * 1000.0 > FIBER_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
             // its drag on each fiber it crosses tears the fiber's joints past
             // their strength: the torn ends stand proud (nap)
             let drag = STEEL_PAPER_MU * q * paper.fiber_um * 1e-3;
-            let nap = ((drag - FIBER_JOINT_N) / FIBER_JOINT_N).clamp(0.0, 1.0);
+            let nap = if paper.grit.is_some() { 0.0 } else { ((drag - FIBER_JOINT_N) / FIBER_JOINT_N).clamp(0.0, 1.0) };
             let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
             let mut blade: Vec<usize> = Vec::with_capacity(nb + 1);
             for k in 0..=nb {
@@ -587,9 +589,12 @@ impl Canvas {
         // closed by what the dent took), once per pixel, by the deepest press
         dent.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.partial_cmp(&a.1).unwrap()));
         dent.dedup_by_key(|d| d.0);
+        // (a gritted ground's hollows are between hard grains a blade doesn't
+        // flatten: the sheet under them gives, the tooth stays)
+        let gritted = self.paper.is_some_and(|p| p.grit.is_some());
         for &(i, r) in &dent {
             heights[i] -= r;
-            if let Some(m) = self.micro.get_mut(i) {
+            if let Some(m) = self.micro.get_mut(i).filter(|_| !gritted) {
                 *m = (*m - r).max(0.5);
             }
         }
@@ -1655,6 +1660,32 @@ mod tests {
         assert!(shaved > 0, "the scalpel shaved the surface");
         assert!(c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() < b0, "and took fixed pastel");
         assert!((k.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() - b0).abs() < 1e-3 * b0, "the knife left the fixed");
+    }
+
+    /// On a gritted ground the blade rides hard grains: pressed hard on a
+    /// short edge or cutting as a scalpel, it neither flattens the tooth nor
+    /// tears fibers loose there (no fiber is bare), and still takes loose
+    /// pastel; on the same sheet without grit the same scrapes change the
+    /// tooth.
+    #[test]
+    fn a_knife_leaves_the_grit_its_tooth() {
+        use crate::paper::{Binder, Grit, Paper};
+        let scraped = |grit: Option<Grit>| {
+            let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
+            let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+            for y in [300.0, 320.0, 340.0] {
+                let p = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+                c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y, pose: p, speed: 50.0 }, StrokePoint { x: 900.0, y, pose: p, speed: 50.0 }]);
+            }
+            let m0 = c.micro.clone();
+            let took = c.scrape_pastel(20.0, 100.0, &[(300.0, 200.0), (300.0, 450.0)], (1.0, 1.0), Some(0.0))
+                + c.scrape_pastel(10.0, 1.0, &[(600.0, 200.0), (600.0, 450.0)], (1.0, 1.0), Some(0.0));
+            (took, (0..m0.len()).filter(|&i| c.micro[i] != m0[i]).count())
+        };
+        let (took, changed) = scraped(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
+        assert!(took > 0.0 && changed == 0, "took {took}, the tooth changed at {changed} pixels");
+        let (_, plain) = scraped(None);
+        assert!(plain > 0, "on plain paper the scrapes change the tooth");
     }
 
     /// The fines a puff lifts settle from the wall jet as the research's

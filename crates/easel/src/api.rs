@@ -2599,8 +2599,12 @@ const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<thr
 /// color of cotton rag if none is given. Every key has a default
 /// (`Paper::drawing`).
 fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
-    use paint::paper::{Felt, Laid, Paper};
-    check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    use paint::paper::{Binder, Felt, Grit, Laid, Paper};
+    // (grit= only with the gritted-ground switch: without it the sheet's
+    // keys are refused as they were)
+    const KEYS: &[&str] = &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"];
+    const GRIT_KEYS: &[&str] = &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone", "grit"];
+    check_keys(t, if tubes.grit { GRIT_KEYS } else { KEYS }, "paper")?;
     let d = Paper::drawing(seed);
     let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
         let v = num(t, k)?.unwrap_or(def);
@@ -2635,6 +2639,29 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         }
         _ => return err("paper: laid= {per_cm=, chain=mm, deficit=}"),
     };
+    // grit=: a gritted ground (a sanded paper's coat, pumice in glue or gesso)
+    let grit = match t.get::<Value>("grit")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Boolean(true) => Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }),
+        Value::Table(g) => {
+            check_keys(&g, &["size", "cover", "binder"], "paper grit")?;
+            let (size, cover) = (num(&g, "size")?.unwrap_or(35.0), num(&g, "cover")?.unwrap_or(0.6));
+            if !(10.0..=200.0).contains(&size) {
+                return err("paper: grit= size is the grains' median size in µm, 10 to 200 (P320 46, P400 35, P600 26)");
+            }
+            if !(0.3..=1.0).contains(&cover) {
+                return err("paper: grit= cover is the share of the sheet the grains cover, 0.3 to 1");
+            }
+            let binder = match g.get::<Value>("binder")? {
+                Value::Nil => Binder::Acrylic,
+                Value::String(b) if b.to_str()?.as_ref() == "acrylic" => Binder::Acrylic,
+                Value::String(b) if b.to_str()?.as_ref() == "glue" => Binder::Glue,
+                _ => return err("paper: grit= binder is \"acrylic\" (a primer or acrylic gesso) or \"glue\" (glue or starch)"),
+            };
+            Some(Grit { size_um: size, cover, binder })
+        }
+        _ => return err("paper: grit= {size=µm, cover=0.3..1, binder=\"acrylic\"|\"glue\"}, true for a P400 sanded paper, or false for none"),
+    };
     let p = Paper {
         grammage: get("grammage", d.grammage, 40.0, 600.0)?,
         fiber_mm: get("fiber", d.fiber_mm, 0.3, 10.0)?,
@@ -2650,6 +2677,7 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
         felt,
         laid,
+        grit,
         seed,
     };
     // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...})

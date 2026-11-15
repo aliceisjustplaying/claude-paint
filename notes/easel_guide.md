@@ -107,6 +107,50 @@ measurement of artists' papers exists, are estimates. Paper is there in a painti
 it came (its log's head says `--@ paper`); an older painting replays as it
 was painted, and `paper=` in it is refused.
 
+**Named sheets and mounts.** A sheet may be one of Cassatt's and her
+circle's by name: `paper="tan wove"`, or `paper={preset="tan wove", ...}`
+with keys of your own, which override the preset's (`laid=false` takes a
+laid sheet's wires away). A preset sets the dials below and the tone; a
+preset's tone is mixed from the catalog's tubes, whatever your box. The
+colored papers have faded in museums (many blue sheets are tan now), so
+these are the sheets as estimated new; sources and estimates in
+notes/research/cassatt_papers.md.
+
+| `preset` | grammage | fiber (mm) | felt | laid | calender | tone (parts) |
+|---|---|---|---|---|---|---|
+| `"blue wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, ultramarine blue 1, bone black 0.45 |
+| `"gray-blue wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, ultramarine blue 1, viridian 1.5, red earth 1.5 |
+| `"tan wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | yellow ochre 0.2, bitumen 1, vine black 0.23 |
+| `"buff wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, yellow ochre 2.2, raw umber 3, Prussian blue 0.02 |
+| `"green wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, yellow ochre 0.65, viridian 0.45, bone black 0.45 |
+| `"brown wove"` | 150 | 1.4 (coarseness 0.2, floc 0.6) | 0.8 mm, 18 µm | | 0.25 | raw sienna 1, bitumen 3 |
+| `"cream laid"` | 110 | 2.2 | 0.8 mm, 15 µm | 9 per cm, chains 25 mm, deficit 0.15 | 0.2 | lead white 1, yellow ochre 0.15, raw sienna 0.02, green earth 3 |
+| `"japan"` | 45 | 10 (width 30 µm, coarseness 0.1, porosity 0.6, floc 0.15) | none | | 0.6 | lead white 1, yellow ochre 0.1, raw sienna 0.1, viridian 0.02 |
+
+Every other dial is the drawing paper's (fiber width 25 µm, thickness
+6 µm, coarseness 0.16, porosity 0.5, floc 0.5 of 1.5 mm, press 0.65,
+absorbent 0.8, stiffness 39). Japan paper is thin, long-fibered and
+smooth: the sheet for counterproofs.
+
+`mount=` lays the sheet down on something, which gives under a stick with
+the sheet (`stiffness` stays the sheet's own; the mount's give adds to it):
+
+- no mount: a sheet pinned on a hard drawing board, all but rigid behind it
+- `"board"`: laid down on pasteboard or millboard; a little softer
+- `"canvas"`: laid down on canvas; the cloth compresses, softer still
+- `"strainer"`: on canvas tacked to a wooden strainer. Over the bars (the
+  outer 40 mm of the picture) it is as firm as on canvas; between them the
+  bay drums, more toward the middle
+
+The softer the bed, the further a stick sinks and the more of its end
+bears on the tooth, so the same stroke lays more pastel: on board about a
+quarter more than on a hard drawing board, in the middle of a strainer's
+bay about half as much again. Over the strainer's bars it lays as on canvas.
+
+Named sheets and mounts are there in a painting begun since they came (its
+log's head says `--@ paper-presets`); in an older painting `preset=` and
+`mount=` are unknown keys and a sheet's name alone is refused.
+
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
 matte, a thin film shows the surface under it, a varnish makes all of it

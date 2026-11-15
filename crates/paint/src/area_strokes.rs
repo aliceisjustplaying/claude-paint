@@ -7,6 +7,9 @@
 //! (contact, wear, crumbs) is the stick's own.
 //!
 //! - **A fixed angle** places marks exactly as `hatch_marks_graded` does.
+//! - **A pivot** bows each mark as the hand swings it, a fixed arc about
+//!   the wrist (or the elbow, for a sweep longer than the wrist turns)
+//!   instead of the pencil's random bow (`graphite::Pivot`).
 //! - **A direction field** (an angle in radians at every point) places
 //!   evenly spaced streamlines through the mask (after Jobard and Lefer,
 //!   "Creating evenly-spaced streamlines of arbitrary density", 1997), each
@@ -15,6 +18,7 @@
 //!   each with its own seeded draws per mark, so turning one on doesn't
 //!   move what the others do.
 
+pub use crate::graphite::Pivot;
 use crate::graphite::{self, Mark};
 use crate::mask::Mask;
 use crate::path::arclen;
@@ -68,6 +72,9 @@ pub struct AreaHatch<'a> {
     pub zigzag: Option<Zigzag>,
     pub jitter: Option<Jitter>,
     pub open: Option<Open<'a>>,
+    /// The hand's pivot, bowing each mark; without it, a random bow as the
+    /// pencil's hatching has.
+    pub pivot: Option<Pivot>,
 }
 
 /// Per-mark draws: one generator per (option, mark), so options draw
@@ -83,8 +90,8 @@ const ZIGZAG_SALT: u64 = 0x2162;
 pub fn area_marks(m: &Mask, h: &AreaHatch, seed: u64) -> Vec<Mark> {
     let level = if h.graded { 0.04 } else { 0.5 };
     let base = match h.direction {
-        Direction::Fixed(a) => graphite::hatch_marks_graded(m, a, h.spacing, h.length, h.pressure, h.graded, seed),
-        Direction::Field(f) => streamline_marks(m, f, h.spacing, h.length, h.pressure, h.graded, seed),
+        Direction::Fixed(a) => graphite::hatch_marks_swung(m, a, h.spacing, h.length, h.pressure, h.graded, seed, h.pivot.as_ref()),
+        Direction::Field(f) => streamline_marks(m, f, h.spacing, h.length, h.pressure, h.graded, seed, h.pivot.as_ref()),
     };
     let mut out = Vec::with_capacity(base.len());
     for (k, mark) in base.into_iter().enumerate() {
@@ -273,10 +280,11 @@ impl Traced {
 
 /// Hatching along a direction field: evenly spaced streamlines through the
 /// mask, `spacing` apart, each cut into strokes of at most `length` that
-/// overlap or leave small gaps, bowed a little and lifting off at the end,
-/// as `hatch_marks_graded` cuts its rows (and pressed by the mask with
-/// `graded`).
-pub fn streamline_marks(m: &Mask, field: &(dyn Fn(f32, f32) -> f32 + Sync), spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64) -> Vec<Mark> {
+/// overlap or leave small gaps, bowed a little (by `pivot`'s swing, or at
+/// random without one) and lifting off at the end, as `hatch_marks_graded`
+/// cuts its rows (and pressed by the mask with `graded`).
+#[allow(clippy::too_many_arguments)]
+pub fn streamline_marks(m: &Mask, field: &(dyn Fn(f32, f32) -> f32 + Sync), spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64, pivot: Option<&Pivot>) -> Vec<Mark> {
     let level = if graded { 0.04 } else { 0.5 };
     let f = m.f;
     let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
@@ -379,6 +387,16 @@ pub fn streamline_marks(m: &Mask, field: &(dyn Fn(f32, f32) -> f32 + Sync), spac
             let bow = rng.range(-0.06, 0.06) * (b - a);
             let k = ((b - a) / 0.25).ceil() as usize + 1;
             let centre: Vec<(f32, f32)> = (0..k).map(|i| at_length(line, &s, a + (b - a) * i as f32 / (k - 1) as f32)).collect();
+            let bow = match pivot {
+                Some(pv) => {
+                    // swung along its chord (a line bent by the field has its own curve too)
+                    let (p, q) = (centre[0], centre[k - 1]);
+                    let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+                    let l = (dx * dx + dy * dy).sqrt();
+                    if l > 0.0 { pv.bow((dx / l, dy / l), b - a) } else { 0.0 }
+                }
+                None => bow,
+            };
             let pts: Vec<(f32, f32)> = (0..k)
                 .map(|i| {
                     let t = i as f32 / (k - 1) as f32;
@@ -425,7 +443,7 @@ mod tests {
     }
 
     fn plain<'a>(direction: Direction<'a>) -> AreaHatch<'a> {
-        AreaHatch { direction, spacing: 10.0, length: 60.0, pressure: 0.5, graded: false, zigzag: None, jitter: None, open: None }
+        AreaHatch { direction, spacing: 10.0, length: 60.0, pressure: 0.5, graded: false, zigzag: None, jitter: None, open: None, pivot: None }
     }
 
     #[test]
@@ -488,6 +506,89 @@ mod tests {
         // the swings stay inside the area across the marks
         assert!(zig.iter().all(|mk| mk.pts.iter().all(|p| p.1 > 199.0 && p.1 < 801.0)));
         assert!(plainm.len() > zig.len());
+    }
+
+    /// A right hand's pivot in mm (units here): ANSUR II's hand 189.3 mm,
+    /// 40° of wrist turn, forearm and hand 467 mm, the hand to the lower right.
+    fn hand() -> Pivot {
+        let r = std::f32::consts::FRAC_1_SQRT_2;
+        Pivot { wrist: 189.3, reach: 189.3 * 40f32.to_radians(), elbow: 467.0, toward: (r, r) }
+    }
+
+    /// A mark's chord length and its middle's offset from the chord along
+    /// the normal (-dy, dx) / L (the farthest point from the chord, signed).
+    fn sag(mk: &Mark) -> (f32, f32, (f32, f32)) {
+        let (a, b) = (mk.pts[0], *mk.pts.last().unwrap());
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let l = (dx * dx + dy * dy).sqrt();
+        let n = (-dy / l, dx / l);
+        let off = mk.pts.iter().map(|p| (p.0 - a.0) * n.0 + (p.1 - a.1) * n.1).fold(0.0f32, |m, d| if d.abs() > m.abs() { d } else { m });
+        (l, off, n)
+    }
+
+    /// An arc about the wrist sags L²/(8R) along the radius, its cosine c
+    /// to the chord's normal of it across the chord (the swept share L·|c|),
+    /// away from the hand: -c³ L²/(8R), R the elbow's past the wrist's reach.
+    fn expected_sag(l: f32, n: (f32, f32), pv: &Pivot) -> f32 {
+        let c = n.0 * pv.toward.0 + n.1 * pv.toward.1;
+        let r = if l * c.abs() <= 189.3 * 40f32.to_radians() { 189.3 } else { 467.0 };
+        -c.powi(3) * l * l / (8.0 * r)
+    }
+
+    #[test]
+    fn a_pivot_bows_each_mark_away_from_the_hand() {
+        let m = square();
+        let pv = hand();
+        let mut h = plain(Direction::Fixed(-0.9));
+        h.pivot = Some(pv);
+        let swung = area_marks(&m, &h, 7);
+        let drawn = area_marks(&m, &plain(Direction::Fixed(-0.9)), 7);
+        // the same marks and ends: only the bow differs
+        assert_eq!(swung.len(), drawn.len());
+        for (s, d) in swung.iter().zip(&drawn) {
+            assert!(s.pts[0] == d.pts[0] && s.pts.last() == d.pts.last() && s.pts.len() == d.pts.len());
+            let (l, off, n) = sag(s);
+            let want = expected_sag(l, n, &pv);
+            assert!((off - want).abs() < 0.02 * want.abs() + 0.01, "{l}: {off} against {want}");
+            // away from the hand, to the upper left
+            let mid = s.pts[s.pts.len() / 2];
+            let (a, b) = (s.pts[0], *s.pts.last().unwrap());
+            assert!((mid.0 - (a.0 + b.0) / 2.0) * pv.toward.0 + (mid.1 - (a.1 + b.1) / 2.0) * pv.toward.1 < 0.0 || l < 5.0);
+        }
+        // a 60 mm mark at -0.9: 60²/(8·189.3) = 2.38 mm, nearly all of it across
+        let long = swung.iter().map(sag).filter(|(l, _, _)| (*l - 60.0).abs() < 3.0).count();
+        assert!(long > 10, "{long}");
+        // along the radius (toward the hand) a mark is straight
+        let mut h = plain(Direction::Fixed(std::f32::consts::FRAC_PI_4));
+        h.pivot = Some(pv);
+        assert!(area_marks(&m, &h, 7).iter().all(|mk| sag(mk).1.abs() < 1e-3));
+        // past the wrist's reach (132 mm) the elbow swings it
+        let mut h = plain(Direction::Fixed(-std::f32::consts::FRAC_PI_4));
+        h.length = 300.0;
+        h.pivot = Some(pv);
+        let marks = area_marks(&m, &h, 7);
+        let elbow = marks.iter().map(sag).filter(|(l, _, _)| *l > 140.0).collect::<Vec<_>>();
+        assert!(!elbow.is_empty());
+        for (l, off, n) in elbow {
+            assert!((off - expected_sag(l, n, &pv)).abs() < 0.02 * off.abs() + 0.01, "{l}: {off}");
+        }
+        // along a field, the same bow about each mark's chord
+        let flat = |_: f32, _: f32| 0.0;
+        let mut h = plain(Direction::Field(&flat));
+        h.pivot = Some(pv);
+        for mk in area_marks(&m, &h, 3) {
+            let (l, off, n) = sag(&mk);
+            let want = expected_sag(l, n, &pv);
+            assert!((off - want).abs() < 0.03 * want.abs() + 0.01, "{l}: {off} against {want}");
+        }
+    }
+
+    #[test]
+    fn round_one_is_a_sine() {
+        for i in 0..40 {
+            let t = i as f32 / 17.0;
+            assert!((wave(t, 1.0) - (std::f32::consts::TAU * t).cos()).abs() < 1e-5);
+        }
     }
 
     #[test]

@@ -194,6 +194,11 @@ impl Cell {
     }
 
     pub(crate) fn add_pastel(&mut self, q: f32, color: Rgb, volume: f32) {
+        self.add_pastel_lifting(q, color, volume, crate::pastel::PASTEL_LIFT);
+    }
+
+    /// `add_pastel` of a deposit the eraser takes as readily as `lift`.
+    pub(crate) fn add_pastel_lifting(&mut self, q: f32, color: Rgb, volume: f32, lift: f32) {
         let a1 = (self.a + (1.0 - self.a) * q).min(0.995);
         let old = if self.optics.is_some() { self.loose } else { self.a * (1.0 - q) };
         let added = if self.optics.is_some() { volume } else { q };
@@ -202,8 +207,24 @@ impl Cell {
             let w = if self.optics.is_some() { w } else { w.max(1e-6) };
             self.r = [0, 1, 2].map(|k| ((old * self.r[k] + added * color[k]) / w).clamp(0.0, 1.0));
         }
-        self.lift = (self.a * (1.0 - q) * self.lift + q * 0.55) / (self.a * (1.0 - q) + q).max(1e-6);
+        self.lift = (self.a * (1.0 - q) * self.lift + q * lift) / (self.a * (1.0 - q) + q).max(1e-6);
         self.a = a1;
+    }
+
+    /// `volume` µm of `color` held bound in the tooth as it lands (a
+    /// gripping stick's binder: `crate::pastel::lay_into`); its coverage is
+    /// the caller's.
+    pub(crate) fn hold(&mut self, color: Rgb, volume: f32) {
+        if volume <= 0.0 {
+            return;
+        }
+        let b = self.bound;
+        match self.optics.as_mut() {
+            Some(o) => o.bound = [0, 1, 2].map(|k| ((o.bound[k] * b + color[k] * volume) / (b + volume)).clamp(0.0, 1.0)),
+            // (no separate optics: one mixed color for the cell, as `add_pastel` keeps it)
+            None => {}
+        }
+        self.bound += volume;
     }
 
     pub(crate) fn bind(&mut self, wet: f32) {

@@ -942,12 +942,13 @@ impl Session {
         if self.st.borrow().tubes.surfaces {
             let _ = writeln!(s, "{SURFACES_MARK}");
         }
+        if self.st.borrow().tubes.wet_pastel {
+            let _ = writeln!(s, "{WET_PASTEL_MARK}");
+        }
+        // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
         if material != 0 {
             let _ = writeln!(s, "{MATERIAL_MARK} {material}");
-        }
-        if self.st.borrow().tubes.wet_pastel {
-            let _ = writeln!(s, "{WET_PASTEL_MARK}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);

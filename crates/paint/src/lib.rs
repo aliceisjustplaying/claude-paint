@@ -36,6 +36,7 @@ pub mod sheet;
 pub mod soak;
 pub mod spectral;
 pub mod wet;
+pub mod wet_pastel;
 pub mod bristle;
 pub mod engine7;
 pub mod handling;

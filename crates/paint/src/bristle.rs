@@ -381,6 +381,16 @@ pub struct Held {
     /// Printed only when there is some, so a brush that never brushed pastel
     /// prints (and digests) as it did before.
     pub pastel_mg: f32,
+    /// Water in the brush, mm³, and the paste of ground pastel in it (mm³
+    /// and its dry color): `b:dip` and `b:wash` (`crate::wet_pastel`, the
+    /// wet pastel switch). A wipe takes their share off. Printed only when
+    /// there is some, as `pastel_mg`.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub water_mm3: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_mm3: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste: [f32; 3],
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
@@ -438,6 +448,12 @@ impl std::fmt::Debug for Held {
         d.field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing));
         if self.pastel_mg > 0.0 {
             d.field("pastel_mg", &self.pastel_mg);
+        }
+        if self.water_mm3 > 0.0 {
+            d.field("water_mm3", &self.water_mm3);
+        }
+        if self.paste_mm3 > 0.0 {
+            d.field("paste_mm3", &self.paste_mm3).field("paste", &self.paste);
         }
         d.finish()
     }
@@ -508,7 +524,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0 }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3] }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -604,6 +620,8 @@ impl Held {
     /// dry pastel it holds).
     pub fn wipe(&mut self, frac: f32) {
         self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
+        self.water_mm3 *= 1.0 - frac.clamp(0.0, 1.0);
+        self.paste_mm3 *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);

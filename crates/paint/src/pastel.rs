@@ -75,6 +75,9 @@ pub struct Stick {
     pub wear: f32,
     /// The dry color of the stick: R∞ of its pigments in air (linear RGB).
     pub color: Rgb,
+    /// Water in its tip, mm³ (dipped: `crate::wet_pastel`; 0 dry). A wet
+    /// tip draws only on a canvas with the switch (`Canvas::with_wet_pastel`).
+    pub water: f32,
 }
 
 /// Thickness of the particles a stroke leaves (µm): what turns a volume of
@@ -131,13 +134,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, water: 0.0 }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, water: 0.0 }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7), sharpened by a blade to a
@@ -153,7 +156,7 @@ impl Stick {
             facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, water: 0.0 }
     }
 
     fn radius(&self) -> f32 {
@@ -457,7 +460,21 @@ impl Canvas {
         let crumb_max = (80.0 + 220.0 * soft) * (fmean / 2.0).clamp(0.25, 2.0).powf(0.25);
         let mut rng = crate::rng::Rng::new((pts[0].x.to_bits() as u64) << 32 ^ pts[0].y.to_bits() as u64 ^ (steps as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
         let px_um2 = (px * 1000.0) * (px * 1000.0);
+        // a wet tip (wet_pastel.rs): softer, wearing faster, shedding less,
+        // its paste spread thinner and laying the water it carries; the
+        // stick as it was dry, to come back to
+        let wet_tip = self.wet_pastel && stick.water > 0.0;
+        let (dry_hardness, dry_wear) = (stick.hardness, stick.wear);
+        let (mut shed, mut thick, mut paste_water) = (SHED, PARTICLE_UM, 0.0f32);
         for k in 0..=steps {
+            if wet_tip {
+                let w = stick.wetness();
+                stick.hardness = dry_hardness * (1.0 - w * (1.0 - crate::wet_pastel::WET_SOFT));
+                stick.wear = dry_wear * (1.0 + w * (crate::wet_pastel::WET_WEAR - 1.0));
+                shed = SHED * (1.0 - w * crate::wet_pastel::WET_SHED);
+                thick = PARTICLE_UM * (1.0 - w * (1.0 - crate::wet_pastel::PASTE_THIN));
+                paste_water = crate::wet_pastel::PASTE_WATER * w;
+            }
             let t = k as f32 * ds;
             let mut sp = at(t);
             out.secs += if k == 0 { 0.0 } else { ds / sp.speed };
@@ -479,6 +496,8 @@ impl Canvas {
             let mut caught: Vec<(usize, f32)> = Vec::new();
             let mut worn_um3 = 0.0f32;
             let mut wet_um3 = 0.0f32;
+            // (the water a wet tip laid, µm over a pixel)
+            let mut water_um3 = 0.0f32;
             {
                 let d = self.drawing_mut();
                 // (a stick drawing's layout once pastel lands in the tooth:
@@ -498,8 +517,8 @@ impl Canvas {
                             continue;
                         }
                         worn_um3 += dv;
-                        carried += dv * SHED;
-                        dv *= 1.0 - SHED;
+                        carried += dv * shed;
+                        dv *= 1.0 - shed;
                         caught.push((i, dv));
                         continue;
                     }
@@ -520,17 +539,23 @@ impl Canvas {
                         continue;
                     }
                     worn_um3 += dv;
+                    let worn_here = dv;
                     // most of it comes away as crumbs under the face
-                    carried += dv * SHED;
-                    dv *= 1.0 - SHED;
+                    carried += dv * shed;
+                    dv *= 1.0 - shed;
                     if wetv[j] {
                         wet_um3 += dv;
                         continue;
                     }
-                    let q = 1.0 - (-dv / PARTICLE_UM).exp();
+                    let q = 1.0 - (-dv / thick).exp();
                     let before = (c.a, c.reflectance());
                     c.add_pastel(q, stick.color, dv);
                     c.loose += dv;
+                    if paste_water > 0.0 {
+                        // the paste leaves its water where the tip wore
+                        c.water += worn_here * paste_water;
+                        water_um3 += worn_here * paste_water;
+                    }
                     laid = true;
                     pxs[i] = c.repaint(pxs[i], before);
                 }
@@ -561,6 +586,10 @@ impl Canvas {
                 }
                 carried -= give;
                 d.sticks |= laid;
+                d.damp |= water_um3 > 0.0;
+            }
+            if water_um3 > 0.0 {
+                stick.water = (stick.water - water_um3 * a_px_mm2 * 1e-3).max(0.0);
             }
             self.px = pxs;
             self.film = film;
@@ -604,6 +633,10 @@ impl Canvas {
         }
         if out.volume_mm3 + out.on_wet > 0.0 {
             out.on_wet /= out.volume_mm3 + out.on_wet;
+        }
+        if wet_tip {
+            stick.hardness = dry_hardness;
+            stick.wear = dry_wear;
         }
         out
     }
@@ -952,6 +985,9 @@ impl Canvas {
                 let tooth = if full >= 0.95 { "the tooth full" } else if full > 0.5 { "the tooth half full and more" } else if full > 0.2 { "the tooth taking it" } else { "a little in the tooth" };
                 let fixed = if c.loose <= 0.0 { "fixed" } else if c.bound > 0.0 { "loose over fixed" } else { "loose" };
                 out += &format!(": pastel, {fixed}, {tooth}");
+                if c.water > 0.0 {
+                    out += ", wet";
+                }
             } else {
                 out += ": the tooth open";
             }

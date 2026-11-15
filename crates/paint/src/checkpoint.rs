@@ -179,6 +179,16 @@ const RAG_LIFT: u64 = 1 << 39;
 const LIQUID_FILM_LEVELS: u64 = 1 << 40;
 const SEALED_DRAWING_GUIDE: u64 = 1 << 41;
 const DRAWING_OPTICS: u64 = 1 << 42;
+/// Pastel takes water (`Canvas::with_wet_pastel`): the engine word has
+/// this bit, and its section follows the word (`WET_PASTEL_MARK`).
+const WET_PASTEL: u64 = 1 << 43;
+/// Marks the wet pastel section ("WETP"), and its version: written right
+/// after the engine word exactly when it has `WET_PASTEL`: whether a
+/// drawing follows (0 or 1), then the water standing in each of its cells,
+/// µm (one f32 per buffer pixel). A reader that doesn't know the bit
+/// refuses the file instead of losing the water.
+const WET_PASTEL_MARK: u64 = 0x50544557;
+const WET_PASTEL_V: u64 = 1;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -577,7 +587,15 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 })?;
+        if self.wet_pastel {
+            put_u64(w, WET_PASTEL_MARK)?;
+            put_u64(w, WET_PASTEL_V)?;
+            put_u64(w, u64::from(self.drawing.is_some()))?;
+            if let Some(d) = &self.drawing {
+                put_all(w, d.cells.iter().map(|c| c.water))?;
+            }
+        }
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -845,13 +863,33 @@ impl Canvas {
             c.liquid_film_levels = word & LIQUID_FILM_LEVELS != 0;
             c.sealed_drawing_guide = word & SEALED_DRAWING_GUIDE != 0;
             c.drawing_optics = word & DRAWING_OPTICS != 0;
-            match u32::try_from(word & !(DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            c.wet_pastel = word & WET_PASTEL != 0;
+            match u32::try_from(word & !(WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
         if c.drawing.as_ref().is_some_and(|d| (d.layout() == 4) != c.drawing_optics) {
             return Err(bad("checkpoint drawing optics do not match its layout"));
+        }
+        if c.wet_pastel {
+            if !c.drawing_optics || get_u64(r)? != WET_PASTEL_MARK || get_u64(r)? != WET_PASTEL_V {
+                return Err(bad("checkpoint wet pastel section is invalid"));
+            }
+            match (get_u64(r)?, c.drawing.as_deref_mut()) {
+                (0, None) => {}
+                (1, Some(d)) => {
+                    let water = get_all(r, d.cells.len())?;
+                    if !water.iter().all(|v| v.is_finite() && *v >= 0.0) {
+                        return Err(bad("checkpoint pastel water is invalid"));
+                    }
+                    for (cell, v) in d.cells.iter_mut().zip(water) {
+                        cell.water = v;
+                    }
+                    d.damp = d.cells.iter().any(|c| c.water > 0.0);
+                }
+                _ => return Err(bad("checkpoint wet pastel section disagrees with its drawing")),
+            }
         }
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));

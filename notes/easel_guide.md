@@ -629,6 +629,9 @@ feel(x, y)                     -- what a fingertip feels there
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for
   vermilion and the chromes). Dry blacks are a little grayer than in oil.
+  A dye lake (rose madder, carmine, yellow lake, magenta) is its dye on a
+  white alumina, as its measured powder is: rose madder a muted rose,
+  carmine a deep crimson, and with white they make clear pinks.
 - **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
@@ -688,9 +691,13 @@ tap({g=100})                          -- the board's edge struck on the table (a
 Pastel is there in a painting begun since it came, with paper (its log's
 head says `--@ paper`); an older painting replays as it was painted, and
 has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
-`tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
-fast it wears, what dry pigment looks like) are estimates, not
-measurements (notes/pastel.md).
+`tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. A painting
+begun before the lakes' dry colors came (its head has no `--@ dry-lakes`)
+replays its lake sticks and paper tones in the paler colors it was painted
+with. The numbers (how hard a stick is, how fast it wears, what dry pigment
+looks like) are estimates, not measurements (notes/pastel.md); the lakes'
+dry colors are fitted to measured powders
+(notes/research/dry_pigment_optics.md §6).
 
 ## The rag
 

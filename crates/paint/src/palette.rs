@@ -1432,6 +1432,37 @@ mod tests {
         assert_eq!(custom.dry_color(&[(madder, 1.0)]), plain.dry_color(&[(madder, 1.0)]));
     }
 
+    /// With the switch, pure magenta dry absorbs at its band as a fuchsine
+    /// lake does. The expected K/S is dye chemistry, not this code's
+    /// (dry_pigment_optics.md §6.3): basic fuchsin's ε 8.06×10⁴ L mol⁻¹ cm⁻¹
+    /// at 543 nm (PhotochemCAD L04, M 337.8 g/mol), at 10 wt% on alumina of
+    /// 2.2 g/cm³, μ_a = ln 10 · ε · w ρ / M; van de Hulst's package effect for
+    /// a 1 µm grain; S = ¾ σ′ with σ′ 0.712 µm⁻¹ (n 1.57, table 2.2) times the
+    /// Percus–Yevick packing factor 0.970. That is K/S 5.71.
+    #[test]
+    fn dry_magenta_absorbs_as_a_fuchsine_lake() {
+        let (eps, wt, rho, molar, d, sigma, packing) = (8.06e4f64, 0.10, 2200.0, 337.8, 1.0, 0.7122, 0.970);
+        let mu = 10f64.ln() * eps * wt * rho / molar * 1e-4;
+        let x = mu * d;
+        let q = 1.0 + 2.0 * (-x).exp() / x + 2.0 * ((-x).exp() - 1.0) / (x * x);
+        let expected = (2.0 * 1.5 * q / d / (0.75 * sigma * packing)) as f32;
+        assert!((expected - 5.71).abs() < 0.01, "dye chemistry K/S {expected}");
+        let on = lakes_palette(true);
+        let magenta = on.tubes.iter().position(|t| t.name == "magenta").unwrap();
+        // (a proxy tube: the catalog masstone at the catalog scattering)
+        let p = crate::spectral::SpectralPigment::masstone(on.tubes[magenta].color, on.scat[magenta]);
+        let a = crate::dry::dye_loading("magenta").unwrap();
+        let lake = (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: p.s }, crate::dry::LAKE_SUBSTRATE_INDEX, 1.0);
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+        // the palette's dry path is this list
+        assert_eq!(on.dry_color(&[(magenta, 1.0)]), crate::dry::spectral_color(&[lake], &white));
+        let r = crate::dry::spectral_reflectance(&[lake], &white);
+        let ks = |r: f32| (1.0 - r).powi(2) / (2.0 * r);
+        // 543 nm, between the 540 and 550 nm bands
+        let at_543 = 0.7 * ks(r[16]) + 0.3 * ks(r[17]);
+        assert!((at_543 / expected - 1.0).abs() < 0.02, "magenta dry K/S at 543 nm {at_543}, dye chemistry {expected}");
+    }
+
     /// The fit behind `dry::dye_loading` reads each tube's dry-path K and S
     /// per coat from here (notes/research/dry_lake_fit.py):
     /// `DRY_LAKE_FIT_OUT=<file.json> cargo test -p paint --lib -- --ignored --exact palette::tests::dump_dry_lake_fit_input`.

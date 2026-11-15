@@ -239,19 +239,20 @@ fn stick_marks_held(lua: &Lua, st: &S, p: &Table, marks: &[Mark], held: Held, ev
     Ok(v)
 }
 
-// The area hatching's defaults (mm and radians), estimated from reproductions
-// of Cassatt's pastels of 1890–1910: notes/research/cassatt_pastel_strokes.md.
-/// A zigzag's swing to either side of its line.
-const ZIGZAG_AMPLITUDE_MM: f32 = 6.0;
-/// A zigzag's swing there and back, along its line.
-const ZIGZAG_PERIOD_MM: f32 = 7.0;
-/// A zigzag's corners: a little rounded.
-const ZIGZAG_ROUND: f32 = 0.35;
+// The area hatching's defaults (mm and radians): estimates measured on
+// reproductions of Cassatt's pastels of 1895–1908
+// (notes/research/cassatt_pastel_strokes.md, §3).
+/// A zigzag's swing to either side of its line: legs about 10 mm long.
+const ZIGZAG_AMPLITUDE_MM: f32 = 5.0;
+/// A zigzag's swing there and back, along its line: legs about 4 mm apart.
+const ZIGZAG_PERIOD_MM: f32 = 8.0;
+/// A zigzag's corners: rounded, as a quick hand turns.
+const ZIGZAG_ROUND: f32 = 0.4;
 /// How far one zigzag stroke runs along its line.
-const ZIGZAG_LENGTH_MM: f32 = 45.0;
-/// `jitter=true`: marks' lengths up to ±30%, their angles up to ±0.2 rad (±11°).
+const ZIGZAG_LENGTH_MM: f32 = 40.0;
+/// `jitter=true`: marks' lengths up to ±30%, their angles up to ±0.17 rad (±10°).
 const JITTER_LENGTH: f32 = 0.3;
-const JITTER_ANGLE: f32 = 0.2;
+const JITTER_ANGLE: f32 = 0.17;
 const AREA_HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "graded", "seed", "zigzag", "jitter", "open", "alt", "azimuth", "speed"];
 
 /// A stick's `p:hatch` over an area, with the area-strokes switch

@@ -1701,7 +1701,15 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
         run(&mut s, PAPER);
         let (g_new, _) = names(&mut s);
-        let added: Vec<&String> = g_new.iter().filter(|n| !g_old.contains(n)).collect();
+        assert!(g_old.iter().all(|n| g_new.contains(n)));
+        // (what the charcoal line adds to a new painting: other switches,
+        // such as the surfaces', bring their own verbs beside paper's)
+        let mut tubes = box_for(None).unwrap();
+        tubes.charcoal = false;
+        let mut without = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+        run(&mut without, PAPER);
+        let (g_without, _) = names(&mut without);
+        let added: Vec<&String> = g_new.iter().filter(|n| !g_without.contains(n)).collect();
         assert_eq!(added, ["charcoal"]);
         assert!(!s.globals().contains("charcoal"));
         run(&mut s, r#"v = charcoal() k = charcoal{kind="compressed", diameter=8}

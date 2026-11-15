@@ -83,6 +83,32 @@ fn mie_air(n: f32) -> (f32, f32) {
     (T[11].1, T[11].2)
 }
 
+/// The refractive index of a dye lake's substrate, alumina hydrate
+/// (gibbsite, 1.57; notes/research/dry_pigment_optics.md §6). With the
+/// dry-lakes switch (`Palette::dry_lakes`) a lake scatters dry as its
+/// substrate does, by the same rule as any pigment under 1.9.
+pub const LAKE_SUBSTRATE_INDEX: f32 = 1.57;
+
+/// A dye lake's absorption dry, in a pastel stick or a sheet's pulp, over
+/// its absorption in the engine-9 oil tables, with the dry-lakes switch
+/// (`Palette::dry_lakes`). The oil tables fix a lake's K/S in oil but not
+/// its absorption per volume of pigment (the researched tubes' K is set by
+/// an assumed film, the proxies' by a catalog masstone), and a lake's dry
+/// color depends on exactly that: its dye against its substrate's
+/// scattering in air. Each loading is fitted so the pure lake's dry color
+/// matches measured powder (Cosentino 2014 FORS powders, corrected for the
+/// probe's offset: dry_pigment_optics.md §6, dry_lake_fit.py). Magenta has
+/// no measured powder; it takes yellow lake's loading, its K being made the
+/// same way (an estimate). None for a tube that isn't a dye lake.
+pub fn dye_loading(name: &str) -> Option<f32> {
+    match name {
+        "rose madder" => Some(31.9),
+        "carmine lake" => Some(2.57),
+        "yellow lake" | "magenta" => Some(10.6),
+        _ => None,
+    }
+}
+
 /// The air/oil scattering ratio of a carbon black, whose
 /// absorption comes from carbon on (or in) its particles: bone black's
 /// apatite matrix ×9 at 1 µm (dry_pigment_optics.md, table 2.2), a carbon

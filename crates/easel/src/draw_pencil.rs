@@ -702,6 +702,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if st1.borrow().tubes.pastel_pencil_sharpen && is_pastel_pencil(&st1, &p)? {
                 return Ok(MultiValue::from_vec(vec![Value::Number(sharpen_pastel_pencil(lua, &st1, &p)? as f64)]));
             }
+            if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? && p.raw_get::<Option<String>>("charcoal")?.is_some() {
+                return err("sharpen: sharpening a charcoal stick (a blade, a sanding block) isn't modelled; its end wears into facets as it draws (p.facets)");
+            }
             if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? {
                 return err("sharpen: a pastel stick has no point to sharpen; its end wears into facets as it draws (p.facets)");
             }
@@ -1721,6 +1724,8 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         assert!(run(&mut s, "print(k)").starts_with("compressed charcoal ("));
         assert!(s.run(r#"charcoal{kind="conte"}"#).unwrap_err().contains("vine"));
         assert!(s.run(r#"charcoal{grade="2B"}"#).is_err());
+        // a charcoal stick isn't sharpened here (refused as not modelled, not as a pastel)
+        assert!(s.run("v:sharpen()").unwrap_err().contains("charcoal stick"));
         let program = s.program("charcoal");
         assert!(program.lines().any(|l| l == CHARCOAL_MARK), "{program}");
         assert!(box_for(Some(&program)).unwrap().charcoal);

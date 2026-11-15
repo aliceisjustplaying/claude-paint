@@ -35,11 +35,13 @@ use crate::color::Rgb;
 use crate::pastel::Stick;
 
 /// The studio's relative humidity (0..1) the constants below are taken at:
-/// 50 % (estimates-audit-2). It sets the water condensed at a particle's
-/// contacts with the paper (`VINE_LIFT`) and keeps compressed charcoal's gum
-/// glassy (`gum_tg_c`). HOOK(#322): #322 adds the one studio-humidity
-/// setting; read it from there when it lands. Don't add a second one.
-pub const STUDIO_RH: f32 = 0.50;
+/// the one studio every humidity-dependent effect reads
+/// (`crate::climate::STUDIO`, 50 %). It sets the water condensed at a
+/// particle's contacts with the paper (`VINE_LIFT`) and keeps compressed
+/// charcoal's gum glassy (`gum_tg_c`).
+pub fn studio_rh() -> f32 {
+    crate::climate::STUDIO.rh as f32
+}
 
 /// Gum arabic's glass transition (°C) at water activity `aw` (a gum at
 /// equilibrium with the room: aw = RH): 62 °C at aw 0.33 and 42.6 °C at
@@ -63,12 +65,12 @@ pub fn compressed_color() -> Rgb {
 /// chance it out-pulls their hold on the paper (JKR on the eraser against
 /// 10–150 nN of van der Waals on the fibre, a decade wide, plus the 90 nN
 /// of the water bridge a hydrophilic char and fibre condense at a 0.1 µm
-/// asperity at `STUDIO_RH`; 0.72–0.92 over asperities of 0.2–0.05 µm;
+/// asperity at the studio's humidity (`climate::STUDIO`); 0.72–0.92 over asperities of 0.2–0.05 µm;
 /// charcoal.md §4).
 pub const VINE_LIFT: f32 = 0.85;
 /// And compressed charcoal's deposit, a share f of fines (sub-0.3 µm, held
 /// to the fibre as smooth spheres) and the rest crumbs held as vine's
-/// splinters, both with the water bridge `VINE_LIFT` has at `STUDIO_RH`:
+/// splinters, both with the water bridge `VINE_LIFT` has at the studio's humidity:
 /// fines taken 0.10, crumbs 0.85, so 0.10 f + 0.85 (1 − f) = 0.48 with
 /// f = 0.5, a half-soot stick (bounds 0.10–0.85 over f; charcoal_optics.py
 /// §3). The audit's 0.70 (estimates-audit-2 C4) is the same mix dry, which
@@ -149,11 +151,12 @@ mod tests {
     use super::*;
 
     /// Compressed charcoal's gum is glassy in the studio: its glass
-    /// transition is well above a warm room's 25 °C at `STUDIO_RH` (46 °C at
+    /// transition is well above a warm room's 25 °C at the studio's humidity (46 °C at
     /// 50 %), and reaches it only in a room above about 73 % RH.
     #[test]
     fn the_gum_is_glassy_at_the_studio_humidity() {
-        assert!(gum_tg_c(STUDIO_RH) > 25.0 + 15.0, "{}", gum_tg_c(STUDIO_RH));
+        assert_eq!(studio_rh(), 0.5);
+        assert!(gum_tg_c(studio_rh()) > 25.0 + 15.0, "{}", gum_tg_c(studio_rh()));
         assert!((gum_tg_c(0.33) - 62.0).abs() < 1e-3 && (gum_tg_c(0.54) - 42.6).abs() < 1e-3);
         let aw25 = 0.54 + (42.6 - 25.0) / ((62.0 - 42.6) / 0.21);
         assert!((gum_tg_c(aw25) - 25.0).abs() < 1e-3 && (0.72..0.74).contains(&aw25), "{aw25}");

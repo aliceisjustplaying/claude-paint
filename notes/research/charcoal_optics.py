@@ -138,8 +138,8 @@ C_FINES = 0.5
 
 # The studio's relative humidity (estimates-audit-2: 50 %). It sets the
 # capillary bridge at the paper's asperities (§3) and gum arabic's glass
-# transition (§3). HOOK(#322): #322 adds the one studio-humidity setting;
-# read it there, don't add a second.
+# transition (§3). The engine's one studio setting, crate::climate::STUDIO
+# (20 °C, 50 % RH); keep this in step with it.
 STUDIO_RH = 0.50
 
 

@@ -1,9 +1,8 @@
 //! The room a picture is worked in: one air temperature and one relative
 //! humidity that every humidity-dependent effect reads, so they can't
-//! disagree. Today that is the evaporation of water from wet pastel
-//! (`crate::wet_pastel`); a gum's glass transition and the capillary hold
-//! of particles on a sheet hang on the same humidity, and should read it
-//! here when they are modelled.
+//! disagree: the evaporation of water from wet pastel (`crate::wet_pastel`),
+//! and charcoal's water bridges to the sheet and its gum's glass
+//! transition (`crate::charcoal`).
 //!
 //! Source: notes/research/wet_pastel.md §4 (the studio) and
 //! notes/estimates-audit-2.md W6.

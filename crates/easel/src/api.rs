@@ -2572,6 +2572,11 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
 
 const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or paper={grammage=, tone={{\"<tube>\", <parts>}, ...}, felt={cell=, depth=}|false, laid={per_cm=, chain=, deficit=}, ...} instead of linen: a sheet of paper (a ground is then optional)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
 
+/// A mount by its name (`paint::paper::Mount::named`).
+fn mount_named(s: &str) -> Result<paint::paper::Mount> {
+    paint::paper::Mount::named(s).ok_or_else(|| mlua::Error::runtime(format!("paper: mount= is \"board\", \"canvas\" or \"strainer\", got {s:?}")))
+}
+
 /// The named sheets, for messages: `"blue wove"`, ...
 fn preset_names() -> String {
     paint::paper::PRESETS.iter().map(|p| format!("{:?}", p.name)).collect::<Vec<_>>().join(", ")
@@ -2584,7 +2589,8 @@ fn preset_names() -> String {
 /// (`Paper::drawing`). With the paper-presets switch (`Palette::paper_presets`),
 /// `preset=` names a sheet whose dials are then the defaults (a key given
 /// overrides its preset's), and `mount=` lays it down on board, canvas, or
-/// canvas over a strainer (`Paper::mounted`); without it both are unknown
+/// canvas over a strainer (`Paper::mounted`; `{"strainer", bar=, cross=}`
+/// its bars' width and crossbars); without it both are unknown
 /// keys, as they were.
 fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb, String)> {
     use paint::paper::{Felt, Laid, Mount, Paper};
@@ -2607,11 +2613,35 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
     };
     let mount = match if presets { t.get::<Value>("mount")? } else { Value::Nil } {
         Value::Nil => None,
-        Value::String(s) => {
-            let s = s.to_str()?.to_string();
-            Some(Mount::named(&s).ok_or_else(|| mlua::Error::runtime(format!("paper: mount= is \"board\", \"canvas\" or \"strainer\", got {s:?}")))?)
+        Value::String(s) => Some(mount_named(&s.to_str()?)?),
+        // {"strainer", bar=<mm>, cross=<n>}: a strainer's bars and crossbars
+        Value::Table(m) => {
+            check_keys(&m, &["bar", "cross"], "paper mount")?;
+            let name = match m.get::<Value>(1)? {
+                Value::String(s) => s.to_str()?.to_string(),
+                v => return err(format!("paper: mount= is a name or {{\"strainer\", bar=, cross=}}, got {} first", v.type_name())),
+            };
+            if m.raw_len() != 1 {
+                return err("paper: mount= {\"strainer\", bar=, cross=} has one name");
+            }
+            match mount_named(&name)? {
+                Mount::Strainer { bar_mm, cross } => {
+                    let bar = num(&m, "bar")?.unwrap_or(bar_mm);
+                    if !(5.0..=150.0).contains(&bar) {
+                        return err(format!("paper: mount bar= is the strainer's bars' width in mm (5..150), got {bar}"));
+                    }
+                    let cross = match num(&m, "cross")? {
+                        None => cross,
+                        Some(c) if c.fract() == 0.0 && (0.0..=paint::paper::MAX_CROSS as f32).contains(&c) => c as u32,
+                        Some(c) => return err(format!("paper: mount cross= is a number of crossbars (0..{}), got {c}", paint::paper::MAX_CROSS)),
+                    };
+                    Some(Mount::Strainer { bar_mm: bar, cross })
+                }
+                _ if m.contains_key("bar")? || m.contains_key("cross")? => return err(format!("paper: mount bar= and cross= are a strainer's, not {name:?}'s")),
+                other => Some(other),
+            }
         }
-        v => return err(format!("paper: mount= is \"board\", \"canvas\" or \"strainer\", got {}", v.type_name())),
+        v => return err(format!("paper: mount= is \"board\", \"canvas\" or \"strainer\" (or {{\"strainer\", bar=, cross=}}), got {}", v.type_name())),
     };
     let d = preset.map_or_else(|| Paper::drawing(seed), |p| p.paper(seed));
     let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
@@ -2686,7 +2716,12 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
     match mount {
         Some(Mount::Board) => named.push_str(", on board"),
         Some(Mount::Canvas) => named.push_str(", on canvas"),
-        Some(Mount::Strainer) => named.push_str(", on canvas over a strainer"),
+        Some(Mount::Strainer { bar_mm, cross }) => {
+            named.push_str(", on canvas over a strainer");
+            if bar_mm != paint::paper::STRAINER_BAR_MM || cross != 0 {
+                named.push_str(&format!(" (bars {} mm, {cross} crossbar{})", fmt_num(bar_mm), if cross == 1 { "" } else { "s" }));
+            }
+        }
         None => {}
     }
     Ok((p, tone, named))
@@ -3323,6 +3358,31 @@ mod paper_presets_tests {
         let mut s = session(true);
         s.run(r#"canvas{size=200, aspect=1, seed=3, paper={mount="canvas"}}"#).unwrap();
         assert_eq!(sheet(&s), Paper::drawing(3).mounted(Mount::Canvas));
+        // a strainer's bars and crossbars
+        for (src, want, says) in [
+            (r#"{"strainer", bar=30, cross=1}"#, Mount::Strainer { bar_mm: 30.0, cross: 1 }, "over a strainer (bars 30 mm, 1 crossbar)"),
+            (r#"{"strainer", cross=2}"#, Mount::Strainer { bar_mm: 40.0, cross: 2 }, "(bars 40 mm, 2 crossbars)"),
+            (r#"{"strainer"}"#, Mount::named("strainer").unwrap(), "over a strainer, seed"),
+            (r#"{"board"}"#, Mount::Board, "on board"),
+        ] {
+            let mut s = session(true);
+            s.run(&format!("canvas{{size=200, aspect=1, seed=3, paper={{mount={src}}}}}")).unwrap();
+            assert_eq!(sheet(&s), Paper::drawing(3).mounted(want), "{src}");
+            assert!(s.st.borrow().setup.as_ref().unwrap().contains(says), "{src}: {:?}", s.st.borrow().setup);
+        }
+        for (bad, says) in [
+            (r#"{"strainer", bar=2}"#, "bars' width in mm (5..150), got 2"),
+            (r#"{"strainer", cross=1.5}"#, "a number of crossbars (0..8), got 1.5"),
+            (r#"{"strainer", cross=9}"#, "a number of crossbars (0..8), got 9"),
+            (r#"{"board", bar=30}"#, "bar= and cross= are a strainer's, not \"board\"'s"),
+            (r#"{"strainer", "canvas"}"#, "has one name"),
+            (r#"{"strainer", tension=1}"#, "paper mount: unknown option \"tension\" (options: bar, cross)"),
+            (r#"{bar=30}"#, "got nil first"),
+            (r#"{"easel"}"#, "mount= is \"board\""),
+        ] {
+            let e = session(true).run(&format!("canvas{{size=200, aspect=1, seed=3, paper={{mount={bad}}}}}")).unwrap_err();
+            assert!(e.contains(says), "{bad}: {e}");
+        }
     }
 
     /// Without the switch `preset=` and `mount=` are unknown keys, refused

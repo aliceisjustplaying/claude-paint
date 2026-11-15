@@ -136,16 +136,28 @@ smooth: the sheet for counterproofs.
 the sheet (`stiffness` stays the sheet's own; the mount's give adds to it):
 
 - no mount: a sheet pinned on a hard drawing board, all but rigid behind it
-- `"board"`: laid down on pasteboard or millboard; a little softer
-- `"canvas"`: laid down on canvas; the cloth compresses, softer still
+- `"board"`: laid down on pasteboard or millboard; about ten times softer
+  than the sheet alone
+- `"canvas"`: laid down on canvas on a firm bed; the cloth compacts under
+  the stick, softer still
 - `"strainer"`: on canvas tacked to a wooden strainer. Over the bars (the
-  outer 40 mm of the picture) it is as firm as on canvas; between them the
-  bay drums, more toward the middle
+  outer 40 mm of the picture) it is as firm as on canvas. Between them the
+  sheet and canvas drum: they soften over the first centimeter or so in
+  from a bar, then give the same over the rest of the bay, whatever its
+  size (the whole bay sinks millimeters under the hand, but that carries
+  the stick and the surface round it down together).
+  `mount={"strainer", bar=30, cross=1}` sets the bars' width (mm, 5–150)
+  and a number of crossbars (0–8), as wide as the bars, which divide the
+  longer side into equal bays and are as firm as the bars
 
-The softer the bed, the further a stick sinks and the more of its end
-bears on the tooth, so the same stroke lays more pastel: on board about a
-quarter more than on a hard drawing board, in the middle of a strainer's
-bay about half as much again. Over the strainer's bars it lays as on canvas.
+Each give is derived from measured moduli under a worn stick's full facet
+(notes/research/cassatt_papers.md §1). A softer bed spreads the stick's
+contact wider, so less of it rides on pastel the stroke has just laid in
+the tooth and the same stroke lays a little more: on board about 14% more
+than on a hard drawing board, on canvas 17%, in a strainer's bay 19%. It
+never lays more than the stick wears, which is the same on any bed
+(Archard). A firm bed's marks are crisper (a narrower contact), which may
+be the "bite" painters describe.
 
 Named sheets and mounts are there in a painting begun since they came (its
 log's head says `--@ paper-presets`); in an older painting `preset=` and

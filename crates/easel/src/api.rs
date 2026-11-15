@@ -2650,7 +2650,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     // a brush's methods are its type's: brushes made with the switch
     // (`create_any_userdata`) take these, main's and `dust`; brushes made
     // without it keep exactly main's (`UserData for Brush`)
-    let wet = st.borrow().tubes.wet_pastel;
+    let wet = st.borrow().tubes.wet_pastel && st.borrow().tubes.drawing_optics;
     lua.register_userdata_type::<Brush>(|reg| {
         <Brush as UserData>::register(reg);
         add_dust(reg);

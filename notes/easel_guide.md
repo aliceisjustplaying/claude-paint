@@ -635,7 +635,7 @@ feel(x, y)                     -- what a fingertip feels there
 - Pastel skips wet paint, as graphite does; let the paint set first. Paint
   laid over pastel seals it, as it seals a drawing.
 
-**Pastel with water.** As Degas did, and Cassatt after him:
+**Pastel with water.** A stick dipped in water, a wet brush through laid pastel, ground pastel as a paste:
 
 ```lua
 p:wet(1)                                  -- dip the tip (share 0..1 of what it soaks up); returns how wet it is

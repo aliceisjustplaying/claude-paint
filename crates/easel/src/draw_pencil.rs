@@ -180,7 +180,7 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
     }
     let mut stick = stick_of(p)?;
     // (a dipped tip: the wet pastel switch's, `p:wet`)
-    let wet = st.borrow().tubes.wet_pastel;
+    let wet = st.borrow().tubes.wet_pastel && st.borrow().tubes.drawing_optics;
     if wet {
         let now = st.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
         stick.water = tip_water(p, now)?;
@@ -698,7 +698,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     }
 
     // p:wet(share): dip the stick's tip in water (the wet pastel switch's)
-    if st.borrow().tubes.wet_pastel {
+    if st.borrow().tubes.wet_pastel && st.borrow().tubes.drawing_optics {
         let st1 = st.clone();
         methods.set("wet", lua.create_function(move |_, (p, share): (Table, Option<f32>)| {
             if !is_stick(&st1, &p)? {
@@ -1479,15 +1479,17 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
     /// the clock, and the painting replays and saves with its water.
     #[test]
     fn wet_pastel_comes_with_its_log_head_line() {
-        use crate::session::{DRAWING_OPTICS_MARK, PAPER_MARK, WET_PASTEL_MARK, box_for};
+        use crate::session::{WET_PASTEL_MARK, box_for};
         let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n";
         assert!(!box_for(Some(older)).unwrap().wet_pastel);
         assert!(box_for(Some(&format!("{older}{WET_PASTEL_MARK}\n"))).unwrap().wet_pastel);
         assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{WET_PASTEL_MARK}\n"))).unwrap().wet_pastel, "only in the head");
-        for head in ["--@ engine 9\n--@ drawing-optics\n", "--@ engine 9\n--@ paper\n"] {
-            let e = box_for(Some(&format!("{head}{WET_PASTEL_MARK}\n"))).unwrap_err();
-            assert!(e.contains(PAPER_MARK) && e.contains(DRAWING_OPTICS_MARK), "{e}");
-        }
+        // (without the drawing's optics the switch does nothing)
+        let no_optics = Session::with_box(W, box_for(Some(&format!("--@ engine 9\n--@ paper\n{WET_PASTEL_MARK}\n"))).unwrap()).unwrap().with_paper(true).unwrap();
+        let mut no_optics = no_optics;
+        run(&mut no_optics, PAPER);
+        assert!(!no_optics.canvas().unwrap().wet_pastel());
+        assert_eq!(run(&mut no_optics, r#"p = pastel(pile{{"vermilion", 1}}) b = brush("round", 12) print(p.wet, b.dip)"#).trim(), "nil\tnil");
         let old = {
             let mut s = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
             run(&mut s, PAPER);

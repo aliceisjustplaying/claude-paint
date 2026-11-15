@@ -102,7 +102,10 @@ pub struct Stick {
     pub scatter: f32,
 }
 
-/// How readily a kneaded eraser takes a pastel stick's pastel.
+/// How readily a kneaded eraser takes a pastel stick's pastel, as painted
+/// before the pastel lift switch (an estimate, derived from nothing). With
+/// the switch each stick's is computed from its particles' adhesion
+/// (`Palette::pastel_lift`: whiting 0.61, notes/research/pastel_lift.md).
 pub const PASTEL_LIFT: f32 = 0.55;
 
 /// What a deposit is, beside its color: how readily the eraser takes it
@@ -147,34 +150,43 @@ impl Grains {
 /// carbon and how readily the eraser takes that carbon (the cells' `lift`,
 /// weighted by their carbon), so that charcoal moved is laid as charcoal.
 /// A pastel's pastel carries no carbon and is laid at `PASTEL_LIFT`, as it
-/// always was.
+/// always was. With the pastel lift switch (`whole`,
+/// `Canvas::with_pastel_lift`) the lift is of everything carried, weighted
+/// by volume, and all of it is laid at that: lift is the particles', not
+/// the gesture's.
 ///
 /// With the pastel K–M switch (`km`) it carries its load's scattering
 /// too (`s`, per its volume, the mean of what it took: `Cell::s`), and what
 /// it picks up mixes on it by Kubelka–Munk (`mixed`): a finger, a brush or
-/// a blade rubs particles together.
+/// a blade rubs particles together. The two switches are independent: the
+/// scattering is kept whichever way the lift is.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Carried {
     carbon: f32,
     lift: f32,
     s: f32,
     km: bool,
+    whole: bool,
 }
 
 impl Carried {
-    /// An empty tool, mixing by Kubelka–Munk with the switch (`km`).
-    pub(crate) fn new(km: bool) -> Carried {
-        Carried { km, ..Carried::default() }
+    /// An empty tool, mixing by Kubelka–Munk with that switch (`km`), and
+    /// carrying the lift of all it takes with the pastel lift switch
+    /// (`whole`).
+    pub(crate) fn new(km: bool, whole: bool) -> Carried {
+        Carried { km, whole, ..Carried::default() }
     }
 
     /// What a brush's paste carried from an earlier pass: its carbon share
-    /// and that carbon's lift (`parts`), and its scattering (0 without the
+    /// and that carbon's lift (`parts`), or with the lift switch (`whole`)
+    /// the lift of all of it; and its scattering (0 without the K–M
     /// switch).
-    pub(crate) fn of_parts(carbon: f32, lift: f32, s: f32, km: bool) -> Carried {
-        Carried { carbon: carbon.clamp(0.0, 1.0), lift, s: if km { s } else { 0.0 }, km }
+    pub(crate) fn of_parts(carbon: f32, lift: f32, s: f32, km: bool, whole: bool) -> Carried {
+        Carried { carbon: carbon.clamp(0.0, 1.0), lift, s: if km { s } else { 0.0 }, km, whole }
     }
 
-    /// Its carbon share and that carbon's lift, to keep between passes.
+    /// Its carbon share and that carbon's lift (with the switch, all of
+    /// it's), to keep between passes.
     pub(crate) fn parts(&self) -> (f32, f32) {
         (self.carbon, self.lift)
     }
@@ -203,6 +215,15 @@ impl Carried {
             let (s_held, s_new) = (if self.s > 0.0 { self.s } else { c.s }, if c.s > 0.0 { c.s } else { self.s });
             self.s = (s_held * held + s_new * v) / (held + v);
         }
+        if self.whole {
+            if held + v > 0.0 {
+                self.lift = (self.lift * held.max(0.0) + c.lift * v) / (held.max(0.0) + v);
+                if c.carbon > 0.0 || self.carbon > 0.0 {
+                    self.carbon = ((self.carbon * held + c.carbon * v) / (held + v)).clamp(0.0, 1.0);
+                }
+            }
+            return;
+        }
         if c.carbon <= 0.0 && self.carbon <= 0.0 {
             return;
         }
@@ -215,13 +236,46 @@ impl Carried {
         }
     }
 
-    /// The grains it lays: carbon at its own lift, the rest as pastel.
+    /// The grains it lays: carbon at its own lift, the rest as pastel; with
+    /// the switch, all at the lift of what it carries.
     pub(crate) fn grains(&self) -> Grains {
+        if self.whole {
+            return Grains { lift: self.lift, carbon: self.carbon, lies: 1.0, index: 0.0, s: self.s, layer: false };
+        }
         if self.carbon <= 0.0 {
             return Grains { s: self.s, ..Grains::PASTEL };
         }
         Grains { lift: PASTEL_LIFT + (self.lift - PASTEL_LIFT) * self.carbon, carbon: self.carbon, lies: 1.0, index: 0.0, s: self.s, layer: false }
     }
+}
+
+/// The spread of a stick's particle sizes, σ_ln of a volume lognormal:
+/// Champagne/Meudon whiting through d50 2.4–2.7 µm and D97 13–15 µm,
+/// 0.87–0.94 (wet_pastel.md §1), the middle; the Sauter mean it goes with
+/// is `wet_pastel::PARTICLE_D_UM`. Read by the eraser's lift
+/// (`Palette::pastel_lift`).
+pub const PARTICLE_SIGMA: f64 = 0.905;
+
+/// A pastel pigment's particles as the eraser and the paper hold them
+/// (`crate::adhesion`): a black's carbon by char's Hamaker constant, a lake
+/// by its alumina substrate's index (1.57), any other by its own
+/// (`dry::measured_index` with the dry-lakes switch, else
+/// `dry::refractive_index`) through Tabor–Winterton. All are wetted by
+/// water, the mineral and the charred alike, but the two organics water
+/// stands on: quinacridone (permanent alizarin) and asphaltum (bitumen),
+/// taken at 90° (cos θ 0), an estimate: no contact angle on either powder
+/// was found.
+pub fn particle_of(name: &str, dry_lakes: bool) -> crate::adhesion::Particle {
+    let wets = if matches!(name, "permanent alizarin" | "bitumen") { 0.0 } else { 1.0 };
+    if crate::dry::carbon_ratio(name).is_some() {
+        return crate::adhesion::Particle { hamaker: crate::adhesion::CARBON_A, wets };
+    }
+    let n = if crate::dry::dye_loading(name).is_some() {
+        crate::dry::LAKE_SUBSTRATE_INDEX
+    } else {
+        crate::dry::measured_index(name).filter(|_| dry_lakes).unwrap_or_else(|| crate::dry::refractive_index(name))
+    };
+    crate::adhesion::Particle { hamaker: crate::adhesion::hamaker_of_index(n as f64), wets }
 }
 
 /// Thickness of the particles a stroke leaves (µm): what turns a volume of
@@ -1134,7 +1188,7 @@ impl Canvas {
         }
         // (the pad starts clean, and what it still carries at the end goes
         // with the finger)
-        let mut pad = Pad::new(area, pad_mm2.is_none(), self.pastel_km);
+        let mut pad = Pad::new(area, pad_mm2.is_none(), self.pastel_km, self.pastel_lift);
         self.rubbing(|r| {
             for w in path.windows(2) {
                 let (a, b) = ((w[0].0 * mmu, w[0].1 * mmu), (w[1].0 * mmu, w[1].1 * mmu));
@@ -1268,7 +1322,7 @@ impl Canvas {
         if self.drawing.is_none() {
             return Ok(Rubbed { secs: walk(&mut |_, _| {}), strokes: pieces.len(), carried_mm3: 0.0, pattern });
         }
-        let mut pad = Pad::new(full_area, pad_mm2.is_none(), self.pastel_km);
+        let mut pad = Pad::new(full_area, pad_mm2.is_none(), self.pastel_km, self.pastel_lift);
         let secs = self.rubbing(|r| walk(&mut |c, r_mm| r.press(&mut pad, c, r_mm)));
         Ok(Rubbed { secs, strokes: pieces.len(), carried_mm3: pad.load * 1e-3, pattern })
     }
@@ -1509,8 +1563,8 @@ struct Pad {
 
 impl Pad {
     /// A clean pad of `area` mm², skin (`skin`) or a stump's paper.
-    fn new(area: f32, skin: bool, km: bool) -> Pad {
-        Pad { holds: if skin { SKIN_HOLDS_UM * area } else { 0.0 }, carry: Carried::new(km), ..Pad::default() }
+    fn new(area: f32, skin: bool, km: bool, whole: bool) -> Pad {
+        Pad { holds: if skin { SKIN_HOLDS_UM * area } else { 0.0 }, carry: Carried::new(km, whole), ..Pad::default() }
     }
 }
 
@@ -2840,6 +2894,29 @@ mod tests {
                 assert!(got.len() > 10, "{} cells smeared to", got.len());
                 for cell in got {
                     assert!((cell.lift - lift).abs() < 1e-4 && (cell.carbon - carbon).abs() < 1e-5, "lift {} carbon {}", cell.lift, cell.carbon);
+                }
+            }
+        }
+
+        /// With the pastel lift switch, pastel the finger moves is laid again
+        /// at its stick's lift, as charcoal is; without it, at 0.55 whatever
+        /// its stick's lift was (old paintings).
+        #[test]
+        fn with_the_switch_the_finger_lays_pastel_again_at_its_lift() {
+            for whole in [false, true] {
+                for (mut s, lift, carbon) in [(Stick::vine(8.0), crate::charcoal::VINE_LIFT, 1.0), (Stick { lift: 0.62, ..Stick::round([0.1; 3], 0.8, 8.0) }, 0.62, 0.0)] {
+                    let mut c = paper().with_pastel_lift(whole);
+                    stroke(&mut c, &mut s, 400.0);
+                    let f = c.window();
+                    let below: Vec<usize> = (0..c.pixels().len()).filter(|&i| (300.0..700.0).contains(&f.ux(i % f.w)) && (560.0..640.0).contains(&f.uy(i / f.w))).collect();
+                    c.rub(&[(500.0, 330.0), (500.0, 650.0)], 1.0, None, 40.0);
+                    let d = c.drawing.as_ref().unwrap();
+                    let got: Vec<&crate::graphite::Cell> = below.iter().map(|&i| &d.cells[i]).filter(|c| c.a > 0.0).collect();
+                    assert!(got.len() > 10, "{} cells smeared to", got.len());
+                    let want = if whole || carbon > 0.0 { lift } else { crate::pastel::PASTEL_LIFT };
+                    for cell in got {
+                        assert!((cell.lift - want).abs() < 1e-4 && (cell.carbon - carbon).abs() < 1e-5, "{whole}: lift {} carbon {}", cell.lift, cell.carbon);
+                    }
                 }
             }
         }

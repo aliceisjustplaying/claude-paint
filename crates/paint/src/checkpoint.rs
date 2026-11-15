@@ -223,6 +223,8 @@ const OILS: u64 = 1 << 43;
 /// this bit, and its section follows the word (`WET_PASTEL_MARK`).
 /// (Bit 43 is the tube oils switch's, `OILS`.)
 const WET_PASTEL: u64 = 1 << 44;
+/// The pastel lift switch (`Canvas::with_pastel_lift`).
+const PASTEL_LIFT: u64 = 1 << 45;
 /// Marks the wet pastel section ("WETP"), and its version: written right
 /// after the engine word exactly when it has `WET_PASTEL`: whether a
 /// drawing follows (0 or 1), then for each of its cells (one triple per
@@ -697,7 +699,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.pastel_km { PASTEL_KM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.pastel_km { PASTEL_KM } else { 0 } | if self.pastel_lift { PASTEL_LIFT } else { 0 })?;
         if self.wet_pastel {
             put_u64(w, WET_PASTEL_MARK)?;
             put_u64(w, WET_PASTEL_V)?;
@@ -995,7 +997,8 @@ impl Canvas {
             c.oils = word & OILS != 0;
             c.wet_pastel = word & WET_PASTEL != 0;
             c.pastel_km = word & PASTEL_KM != 0;
-            match u32::try_from(word & !(PASTEL_KM | OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            c.pastel_lift = word & PASTEL_LIFT != 0;
+            match u32::try_from(word & !(PASTEL_KM | PASTEL_LIFT | OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!(c.liquid_film_levels || c.oils) || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
@@ -2417,6 +2420,22 @@ mod tests {
             assert!(a.drawing_guide().data == b.drawing_guide().data);
         }
         assert!(all[1].1.has_drawing(), "the study has a drawing to spill");
+    }
+
+    /// The pastel lift switch round-trips in the engine word, and a canvas
+    /// without it writes the word as it always did (no bit 45).
+    #[test]
+    fn the_pastel_lift_switch_round_trips() {
+        for on in [false, true] {
+            let c = crate::tests::drawing_paper(160).with_pastel_lift(on);
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            let r = Canvas::read_state(&mut Cursor::new(&b)).unwrap().0;
+            assert_eq!(r.pastel_lift(), on);
+            let mut off = Vec::new();
+            crate::tests::drawing_paper(160).write_state(&mut off, "").unwrap();
+            assert_eq!(b == off, !on);
+        }
     }
 
     /// A resting canvas's drawing spilled to disk keeps charcoal's carbon

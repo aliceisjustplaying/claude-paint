@@ -701,7 +701,7 @@ impl Canvas {
         let mut pxs = std::mem::take(&mut self.px);
         let mut d = self.drawing.take().expect("drawing_mut made it");
         let (mut paste, mut col, mut np) = (load.paste_mm3.max(0.0) / um_mm3, load.paste, n_paste);
-        let mut carried = crate::pastel::Carried::of_parts(load.paste_carbon, load.paste_lift, load.paste_s, self.pastel_km);
+        let mut carried = crate::pastel::Carried::of_parts(load.paste_carbon, load.paste_lift, load.paste_s, self.pastel_km, self.pastel_lift);
         let mut laid = 0.0f32;
         for &(c, dir) in &steps {
             let e = (-dir.1, dir.0);

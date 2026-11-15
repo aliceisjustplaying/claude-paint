@@ -255,6 +255,9 @@ pub struct Canvas {
     pub(crate) wet_pastel: bool,
     /// Pastel in the tooth mixes by Kubelka–Munk (`with_pastel_km_mix`).
     pub(crate) pastel_km: bool,
+    /// What a dry tool moves is laid again as readily lifted as it was
+    /// (`with_pastel_lift`, `crate::pastel::Carried`).
+    pub(crate) pastel_lift: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -346,6 +349,7 @@ impl Canvas {
             drawing_optics: false,
             wet_pastel: false,
             pastel_km: false,
+            pastel_lift: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -509,6 +513,20 @@ impl Canvas {
 
     pub fn pastel_km_mix(&self) -> bool {
         self.pastel_km
+    }
+
+    /// The pastel lift switch: pastel that a finger, a blade, a dry or wet
+    /// brush or a puff moves is laid again as readily lifted by the
+    /// eraser as the cells it came from (`crate::pastel::Carried`), as
+    /// charcoal always is: lift is the particles', not the gesture's.
+    /// Without it moved pastel is laid at `pastel::PASTEL_LIFT`.
+    pub fn with_pastel_lift(mut self, enabled: bool) -> Self {
+        self.pastel_lift = enabled;
+        self
+    }
+
+    pub fn pastel_lift(&self) -> bool {
+        self.pastel_lift
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

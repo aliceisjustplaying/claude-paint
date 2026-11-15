@@ -496,7 +496,7 @@ impl Canvas {
         let mut heights = std::mem::take(&mut self.height);
         let (mut taken, mut pushed) = (0.0f32, 0.0f32);
         let mut col = [0.0f32; 3];
-        let mut carry = crate::pastel::Carried::new(self.pastel_km);
+        let mut carry = crate::pastel::Carried::new(self.pastel_km, self.pastel_lift);
         let mut last_band: Vec<usize> = Vec::new();
         let mut dent: Vec<(usize, f32)> = Vec::new();
         let mut napped: Vec<(usize, f32)> = Vec::new();
@@ -664,7 +664,7 @@ impl Canvas {
         let total_px = (steps.len().max(1) - 1) as f32 * 0.7;
         let mut kept_um = 0.0f32;
         let (mut ahead, mut col) = (0.0f32, [0.0f32; 3]);
-        let mut carry = crate::pastel::Carried::new(self.pastel_km);
+        let mut carry = crate::pastel::Carried::new(self.pastel_km, self.pastel_lift);
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
@@ -844,7 +844,7 @@ impl Canvas {
         let mut ccol = vec![(0.0f32, [0.0f32; 3]); nsec];
         let mut fcol = vec![(0.0f32, [0.0f32; 3]); nsec];
         // (and what of them is charcoal)
-        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::new(self.pastel_km); nsec], vec![crate::pastel::Carried::new(self.pastel_km); nsec]);
+        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::new(self.pastel_km, self.pastel_lift); nsec], vec![crate::pastel::Carried::new(self.pastel_km, self.pastel_lift); nsec]);
         // (by Kubelka–Munk with the K–M switch: `Carried::mixed`)
         let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb, km: Option<Rgb>| {
             let t = acc.0 + v;

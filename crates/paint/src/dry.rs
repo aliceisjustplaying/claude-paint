@@ -202,6 +202,47 @@ fn s_dry(s_oil: f32, n: f32, s_dry_white: f32, sigma_white: f32) -> f32 {
     }
 }
 
+/// The whiting a pile's whites stand for, per volume of its other pigments:
+/// the share that gives the stick's dry color (`dry_color`) its luminance by
+/// Kubelka–Munk (`particle_index`). `pigments` are the parts that aren't
+/// whites, and there is at least one of each.
+fn whiting_per_pigment(parts: &[(Rgb, f32, f32, f32, f32, bool)], pigments: &[&(Rgb, f32, f32, f32, f32, bool)], s_oil_white: f32, s_w: f32, s_dry_white: f32, sigma_white: f32) -> f32 {
+    let lum = |r: Rgb| 0.2126 * r[0] + 0.7152 * r[1] + 0.0722 * r[2];
+    let target = lum(dry_color(&parts.iter().map(|p| (p.0, p.1, p.2, p.4)).collect::<Vec<_>>(), s_oil_white));
+    let vp: f32 = pigments.iter().map(|p| p.4).sum();
+    // KM of the pigments and x of whiting per volume of pigment
+    let mix = |x: f32| -> f32 {
+        let mut r = [0.0f32; 3];
+        for (q, o) in r.iter_mut().enumerate() {
+            let (mut k, mut s) = (0.0f32, 0.0f32);
+            for p in pigments {
+                let m = p.0[q].clamp(1e-4, 0.9999);
+                k += p.4 / vp * (1.0 - m) * (1.0 - m) / (2.0 * m) * p.1;
+                s += p.4 / vp * s_dry(p.1, p.2, s_dry_white, sigma_white);
+            }
+            let wq = WHITING[q];
+            k += x * (1.0 - wq) * (1.0 - wq) / (2.0 * wq) * s_w;
+            s += x * s_w;
+            let ks = k / s.max(1e-9);
+            *o = 1.0 + ks - (ks * ks + 2.0 * ks).sqrt();
+        }
+        lum(r)
+    };
+    // (luminance rises with the whiting: bisect its log)
+    let (mut lo, mut hi) = ((1e-4f32).ln(), (1e4f32).ln());
+    if mix(hi.exp()) < target {
+        hi.exp()
+    } else if mix(lo.exp()) > target {
+        lo.exp()
+    } else {
+        for _ in 0..60 {
+            let m = 0.5 * (lo + hi);
+            if mix(m.exp()) < target { lo = m } else { hi = m }
+        }
+        (0.5 * (lo + hi)).exp()
+    }
+}
+
 /// The particle index of a pastel stick, for how water in its pores darkens
 /// it (`crate::wet_pastel`): its pigments' and its filler's, weighted by
 /// scattering × volume (each part scatters in water by its own contrast).
@@ -235,41 +276,29 @@ pub fn particle_index(parts: &[(Rgb, f32, f32, f32, f32, bool)], s_oil_white: f3
     if pigments.is_empty() {
         return WHITING_INDEX;
     }
-    let lum = |r: Rgb| 0.2126 * r[0] + 0.7152 * r[1] + 0.0722 * r[2];
-    let target = lum(dry_color(&parts.iter().map(|p| (p.0, p.1, p.2, p.4)).collect::<Vec<_>>(), s_oil_white));
     let vp: f32 = pigments.iter().map(|p| p.4).sum();
-    // KM of the pigments and x of whiting per volume of pigment
-    let mix = |x: f32| -> f32 {
-        let mut r = [0.0f32; 3];
-        for (q, o) in r.iter_mut().enumerate() {
-            let (mut k, mut s) = (0.0f32, 0.0f32);
-            for p in &pigments {
-                let m = p.0[q].clamp(1e-4, 0.9999);
-                k += p.4 / vp * (1.0 - m) * (1.0 - m) / (2.0 * m) * p.1;
-                s += p.4 / vp * s_dry(p.1, p.2, s_dry_white, sigma_white);
-            }
-            let wq = WHITING[q];
-            k += x * (1.0 - wq) * (1.0 - wq) / (2.0 * wq) * s_w;
-            s += x * s_w;
-            let ks = k / s.max(1e-9);
-            *o = 1.0 + ks - (ks * ks + 2.0 * ks).sqrt();
-        }
-        lum(r)
-    };
-    // (luminance rises with the whiting: bisect its log)
-    let (mut lo, mut hi) = ((1e-4f32).ln(), (1e4f32).ln());
-    let x = if mix(hi.exp()) < target {
-        hi.exp()
-    } else if mix(lo.exp()) > target {
-        lo.exp()
-    } else {
-        for _ in 0..60 {
-            let m = 0.5 * (lo + hi);
-            if mix(m.exp()) < target { lo = m } else { hi = m }
-        }
-        (0.5 * (lo + hi)).exp()
-    };
+    let x = whiting_per_pigment(parts, &pigments, s_oil_white, s_w, s_dry_white, sigma_white);
     weighted(&mut pigments.iter().map(|p| (p.4 / vp * s_dry(p.1, p.2, s_dry_white, sigma_white), p.3)).chain(std::iter::once((x * s_w, WHITING_INDEX))))
+}
+
+/// What a pastel stick is made of, by volume, as `particle_index` reads it:
+/// each part's share (0 for a white where the pile has other pigments) and
+/// the share of whiting its whites stand for. A pile of whites alone is all
+/// whiting; one without is its pigments. Parts as `particle_index`'s.
+pub fn stick_volumes(parts: &[(Rgb, f32, f32, f32, f32, bool)], s_oil_white: f32) -> (Vec<f32>, f32) {
+    let total: f32 = parts.iter().map(|p| p.4.max(0.0)).sum();
+    let pigments: Vec<_> = parts.iter().filter(|p| !p.5 && p.4 > 0.0).collect();
+    if total <= 0.0 || pigments.is_empty() {
+        return (vec![0.0; parts.len()], 1.0);
+    }
+    if pigments.len() == parts.iter().filter(|p| p.4 > 0.0).count() {
+        return (parts.iter().map(|p| p.4.max(0.0) / total).collect(), 0.0);
+    }
+    let (sigma_white, r_white) = mie_air(2.0);
+    let s_dry_white = r_white * s_oil_white;
+    let x = whiting_per_pigment(parts, &pigments, s_oil_white, WHITING_S_REL * s_dry_white, s_dry_white, sigma_white);
+    let vp: f32 = pigments.iter().map(|p| p.4).sum();
+    (parts.iter().map(|p| if p.5 || p.4 <= 0.0 { 0.0 } else { p.4 / vp / (1.0 + x) }).collect(), x / (1.0 + x))
 }
 
 /// The air/oil scattering ratio of a carbon black, whose

@@ -25,6 +25,7 @@ pub mod rag;
 pub mod scene;
 pub mod palette;
 pub mod paper;
+pub mod adhesion;
 pub mod charcoal;
 pub mod pastel;
 pub mod pigment;

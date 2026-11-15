@@ -326,8 +326,17 @@ pub fn uptake_rate(p: &crate::paper::Paper) -> f32 {
 
 /// The water a sheet's pores can take, µm: the share of its pore volume a
 /// liquid reaches (`absorbent`, as for oil: `Canvas::with_paper`) times its
-/// porosity and caliper (120 µm for the default sheet).
+/// porosity and caliper (120 µm for the default sheet). Under a gritted
+/// ground's acrylic coat, none: the dried acrylic is a waterproof film over
+/// the fibers, so water stands in the coat's tooth with the pastel and only
+/// evaporates, as oil does there (`Paper::oil_capacity`). A glue coat is lean
+/// and porous (7 % solids by volume, `paper::Binder::Glue`), so water reaches
+/// the sheet through it at the sheet's own sizing, as oil does
+/// (wet_pastel.md §4.1).
 pub fn sheet_capacity_um(p: &crate::paper::Paper) -> f32 {
+    if p.grit.is_some_and(|g| g.binder == crate::paper::Binder::Acrylic) {
+        return 0.0;
+    }
     p.absorbent.clamp(0.0, 1.0) * p.porosity * p.caliper_um()
 }
 
@@ -1197,6 +1206,45 @@ mod tests {
         // the sheet's water rises into pores that aren't full
         let (w, u, _) = settle(1.0, 5.0, 4.0, 1.0, 1e-6, e, a, None);
         assert!((w - 4.0).abs() < 1e-3 && (u - 2.0).abs() < 1e-3, "{w} {u}");
+    }
+
+    /// On a gritted ground (`paper::Grit`) the binder decides where water
+    /// goes, as it does for oil (`Paper::oil_capacity`): an acrylic coat is a
+    /// waterproof film, so the sheet under it takes none and a flood stands
+    /// in the tooth with its gum until it evaporates, binding the veil; a
+    /// glue coat lets it through to the sheet at the sheet's own sizing, so
+    /// an unsized sheet drinks the flood and its gum as bare paper does.
+    #[test]
+    fn an_acrylic_grit_coat_keeps_the_water_off_the_sheet() {
+        use crate::paper::{Binder, Grit};
+        let gritted = |binder: Binder| {
+            let c = sheet(paper(true), None, 1.0);
+            let mut p = *c.paper.as_ref().unwrap();
+            p.grit = Some(Grit { size_um: 35.0, cover: 0.6, binder });
+            let mut c = c;
+            c.paper = Some(p);
+            c
+        };
+        let bare = *sheet(paper(true), None, 1.0).paper.as_ref().unwrap();
+        let (acrylic, glue) = (gritted(Binder::Acrylic), gritted(Binder::Glue));
+        assert_eq!(sheet_capacity_um(acrylic.paper.as_ref().unwrap()), 0.0);
+        assert_eq!(sheet_capacity_um(glue.paper.as_ref().unwrap()), sheet_capacity_um(&bare));
+        assert!(sheet_capacity_um(&bare) > 100.0);
+        let veil = |c: Canvas| {
+            let mut c = c;
+            let mut st = Stick::round([0.05, 0.05, 0.3], 0.8, 12.0);
+            stroke(&mut c, &mut st, 100.0, 500.0, 900.0, 500.0, 0.3);
+            wet_all(&mut c, 150.0);
+            c.wait(0.25);
+            let soaked: f32 = c.drawing.as_ref().unwrap().sheet.iter().sum();
+            c.dry();
+            (c, soaked)
+        };
+        let left_loose = |c: &Canvas| c.drawing.as_ref().unwrap().cells.iter().filter(|c| c.loose > 0.0 && c.bound == 0.0).count();
+        let ((sealed, into_acrylic), (through, into_glue)) = (veil(acrylic), veil(glue));
+        assert!(into_acrylic == 0.0 && into_glue > 0.0, "{into_acrylic} {into_glue}");
+        assert!(bound(&sealed) > 0.0 && left_loose(&sealed) == 0, "{}", left_loose(&sealed));
+        assert!(left_loose(&through) > 0 && bound(&through) < bound(&sealed), "{} {} vs {}", left_loose(&through), bound(&through), bound(&sealed));
     }
 
     #[test]

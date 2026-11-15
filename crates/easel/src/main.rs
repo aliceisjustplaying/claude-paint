@@ -42,6 +42,7 @@ mod state_dump;
 mod studio;
 mod surfaces;
 mod plate;
+mod etch;
 mod time;
 mod world;
 

@@ -185,7 +185,7 @@ fn along(o: Option<&Table>, key: &str, n: usize, default: f32) -> Result<Vec<f32
 }
 
 /// The plate `k` names, in hand: (its width in mm, its height in units).
-fn in_hand(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
+pub(crate) fn in_hand(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
     let s = st.borrow();
     if k.kind != Kind::Plate || !s.tubes.plate {
         return err(format!("{verb}: a plate's tool, and {:?} is a {}", k.name, k.kind.name()));
@@ -197,7 +197,7 @@ fn in_hand(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
 }
 
 /// A tool's path in units into plate points (mm), with its options along it.
-fn path(st: &S, k: &SurfaceU, verb: &str, pts: &Value, o: Option<&Table>, force: f32, max_force: f32) -> Result<Vec<Point>> {
+pub(crate) fn path(st: &S, k: &SurfaceU, verb: &str, pts: &Value, o: Option<&Table>, force: f32, max_force: f32, speed: f32) -> Result<Vec<Point>> {
     let (mm, h) = in_hand(st, k, verb)?;
     let pts = crate::api::points(pts)?;
     if pts.len() < 2 {
@@ -210,7 +210,7 @@ fn path(st: &S, k: &SurfaceU, verb: &str, pts: &Value, o: Option<&Table>, force:
     let f = along(o, "force", n, force)?;
     let alt = along(o, "alt", n, 55.0)?;
     let az = along(o, "azimuth", n, 45.0)?;
-    let speed = along(o, "speed", n, TOOL_MM_S)?;
+    let speed = along(o, "speed", n, speed)?;
     if f.iter().any(|v| !(0.0..=max_force).contains(v)) {
         return err(format!("{verb}: force is newtons, 0 to {max_force}"));
     }
@@ -232,7 +232,7 @@ fn int_opt(o: Option<&Table>, key: &str, default: u32, most: u32) -> Result<u32>
     Ok(v as u32)
 }
 
-fn opt(o: Option<&Table>, key: &str, default: f32, lo: f32, hi: f32, what: &str) -> Result<f32> {
+pub(crate) fn opt(o: Option<&Table>, key: &str, default: f32, lo: f32, hi: f32, what: &str) -> Result<f32> {
     let v = o.map(|o| num(o, key)).transpose()?.flatten().unwrap_or(default);
     if !(lo..=hi).contains(&v) {
         return err(format!("{key}: {what}, {lo} to {hi}"));
@@ -241,16 +241,20 @@ fn opt(o: Option<&Table>, key: &str, default: f32, lo: f32, hi: f32, what: &str)
 }
 
 /// A tool's report as it is recorded (replay checkpoints take a verb's result from the trace).
-type Rep = (Vec<f64>, bool, bool);
+pub(crate) type Rep = (Vec<f64>, bool, bool);
 
 fn rep_of(r: &Report) -> Rep {
     (vec![r.width_um, r.depth_um, r.burr_um, r.beta_deg, r.groove_um3, r.burr_um3, r.chip_um3, r.flattened_um3, r.length_mm, r.secs, r.pressure_mpa, r.scrape_um], r.cut, r.ploughed)
 }
 
-/// Apply `op` to the plate in hand, its hand time on the plate's clock.
+/// Apply `op` to the plate in hand, its hand time on the plate's clock. A plate under a coat
+/// (a ground, varnish, rosin or a bite's state, `--@ etch`) is cleaned first.
 fn apply(st: &S, op: Op) -> Result<Rep> {
     crate::time::verb_plate(st, crate::time::Verb::Pass, move |s| {
         let plate = Rc::make_mut(s.plate.as_mut().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?);
+        if plate.coated() {
+            return Err(mlua::Error::runtime("the plate has a ground, varnish, rosin or the acid's work on it: clean it first (k:clean())"));
+        }
         let r = plate.apply(op);
         let c = s.canvas.as_mut().ok_or_else(crate::api::no_canvas)?;
         c.tally_mut().secs += r.secs;
@@ -280,7 +284,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
             check_keys(o, &["force", "alt", "azimuth", "speed"], "drypoint")?;
         }
         // (a hand presses a needle with 0.5–5 N, IP §1.3)
-        let pts = path(&st, k, "drypoint", &pts, o.as_ref(), 2.0, 20.0)?;
+        let pts = path(&st, k, "drypoint", &pts, o.as_ref(), 2.0, 20.0, TOOL_MM_S)?;
         let r = apply(&st, Op::Drypoint { tip_um: n.tip, cone_deg: n.cone, pts })?;
         if r.1 {
             let beta = r.0[3];
@@ -302,7 +306,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         // (a rounded burnisher of 5–20 mm at a hand's 10–50 N: IP §1.7)
         let radius = opt(o.as_ref(), "radius", 10.0, 1.0, 50.0, "the burnisher's radius in mm")?;
         let passes = int_opt(o.as_ref(), "passes", 3, 1000)?;
-        let pts = path(&st, k, "burnish", &pts, o.as_ref(), 30.0, 200.0)?;
+        let pts = path(&st, k, "burnish", &pts, o.as_ref(), 30.0, 200.0, TOOL_MM_S)?;
         let r = apply(&st, Op::Burnish { radius_mm: radius, passes, pts })?;
         table(lua, &r)
     });
@@ -314,7 +318,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         }
         let width = opt(o.as_ref(), "width", 8.0, 0.5, 40.0, "the blade's width on the plate in mm")?;
         let passes = int_opt(o.as_ref(), "passes", 1, 1000)?;
-        let pts = path(&st, k, "scrape", &pts, o.as_ref(), 5.0, 100.0)?;
+        let pts = path(&st, k, "scrape", &pts, o.as_ref(), 5.0, 100.0, TOOL_MM_S)?;
         let r = apply(&st, Op::Scrape { width_mm: width, passes, pts })?;
         table(lua, &r)
     });
@@ -328,7 +332,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         let tooth = opt(o.as_ref(), "tooth", 30.0, 0.0, 300.0, "a tooth's point radius in µm")?;
         // [E] a tooth's point: a roulette's teeth are cut as small pyramids; 45° until measured
         let cone = opt(o.as_ref(), "cone", 45.0, 5.0, 80.0, "a tooth's half-angle in degrees")?;
-        let pts = path(&st, k, "roulette", &pts, o.as_ref(), 3.0, 50.0)?;
+        let pts = path(&st, k, "roulette", &pts, o.as_ref(), 3.0, 50.0, TOOL_MM_S)?;
         let r = apply(&st, Op::Roulette { pitch_mm: pitch, tooth_um: tooth, cone_deg: cone, pts })?;
         table(lua, &r)
     });
@@ -343,15 +347,25 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
             let s = st.borrow();
             let p = s.plate.as_ref().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?;
             let c = p.cell_at_mm((x * mm / 1000.0) as f64, (y * mm / 1000.0) as f64).unwrap_or_default();
-            Ok(feel(&c))
+            let (mut nums, mut words) = feel(&c);
+            // under a coat (`--@ etch`): the ground, the varnish, the rosin
+            if p.coats().is_some() {
+                let (cx, cy) = (((x * mm / 1000.0) as f64 * 1000.0 / p.pitch_um()) as usize, ((y * mm / 1000.0) as f64 * 1000.0 / p.pitch_um()) as usize);
+                let (more, n) = crate::etch::feel(p, cx, cy);
+                words = if words == "smooth" && !more.is_empty() { more } else if more.is_empty() { words } else { format!("{more}; under it {words}") };
+                nums.extend(n);
+            }
+            Ok((nums, words))
         })?;
         let t = lua.create_table()?;
-        for (k, v) in ["depth", "width", "open", "burr", "level"].iter().zip(&nums) {
+        for (k, v) in ["depth", "width", "open", "burr", "level", "ground", "rosin"].iter().zip(&nums) {
             t.set(*k, *v)?;
         }
         t.set("words", words)?;
         Ok(t)
     });
+    // the etching tools (etch.rs, `--@ etch`)
+    crate::etch::methods(m);
 }
 
 /// A cell as a fingernail finds it: (mean depth µm, mean width µm, open share, burr height µm,
@@ -426,7 +440,7 @@ pub(crate) fn probe(p: &Plate, place: &str, r: (usize, usize, usize, usize)) -> 
     }
     let nf = n as f64;
     let what = if n == 1 { place.to_string() } else { format!("{place}, over {} x {} cells", x1 - x0, y1 - y0) };
-    format!(
+    let mut out = format!(
         "{what}\n{} plate, {} HV\nopen {}% · lines up to {} µm wide and {} µm deep · {} µm³ of openings a mm²\nburr over {}%, up to {} µm high\nlevel {} µm\n",
         p.metal.name(),
         fmt_num(p.vickers() as f32),
@@ -437,7 +451,12 @@ pub(crate) fn probe(p: &Plate, place: &str, r: (usize, usize, usize, usize)) -> 
         (100.0 * burr / nf).round(),
         tallest.round(),
         fmt_num(((level / nf) * 10.0).round() as f32 / 10.0)
-    )
+    );
+    // its coats and bites (`--@ etch`)
+    if p.coats().is_some() {
+        out.push_str(&crate::etch::probe(p, r));
+    }
+    out
 }
 
 #[cfg(test)]

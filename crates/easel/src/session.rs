@@ -116,6 +116,13 @@ pub const SURFACES_MARK: &str = "--@ surfaces";
 /// the named-surfaces switch (`SURFACES_MARK`): without that it is accepted and installs
 /// nothing.
 pub const PLATE_MARK: &str = "--@ plate";
+/// The etching switch, in the head of a session file (notes/plan-intaglio.md §4, phase P4;
+/// etch.rs): a painting whose log has it may lay a hard ground on its plates, draw through it
+/// with an etching needle, stop out, bite in ferric chloride, nitric acid or Dutch mordant, lay
+/// and melt an aquatint, and clean the plate with solvent. A new painting has it; a log without
+/// it replays as it was painted. It builds on the plate switch (`PLATE_MARK`): without that it
+/// is accepted and installs nothing.
+pub const ETCH_MARK: &str = "--@ etch";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -867,6 +874,9 @@ impl Session {
         }
         if self.st.borrow().tubes.plate {
             let _ = writeln!(s, "{PLATE_MARK}");
+        }
+        if self.st.borrow().tubes.etch {
+            let _ = writeln!(s, "{ETCH_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1645,6 +1655,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.calls_agree = true;
         b.surfaces = true;
         b.plate = true;
+        b.etch = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1715,6 +1726,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.surfaces = head(SURFACES_MARK);
     b.plate = head(PLATE_MARK);
+    b.etch = head(ETCH_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

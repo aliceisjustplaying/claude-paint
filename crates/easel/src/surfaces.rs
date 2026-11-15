@@ -804,6 +804,9 @@ fn receive(st: &S, path: &str, o: &Table) -> Result<SurfaceU> {
         return crate::api::err(format!("receive {path}: a plate, and this painting has no plates (its log's head has no {:?} line)", crate::session::PLATE_MARK));
     }
     let plate = plate_of(kind, &current_payload).map_err(|e| mlua::Error::runtime(format!("receive {path}: {e}")))?;
+    if plate.as_ref().is_some_and(|p| p.coats().is_some()) && !tubes.etch {
+        return crate::api::err(format!("receive {path}: an etched plate, and this painting doesn't etch (its log's head has no {:?} line)", crate::session::ETCH_MARK));
+    }
     let canvas = canvas.take().ok_or_else(|| mlua::Error::runtime(format!("receive {path}: the surface has no canvas")))?;
     let name = o.get::<Option<String>>("name")?.unwrap_or(sent_name.clone());
     check_new(&st.borrow(), "receive", &name)?;

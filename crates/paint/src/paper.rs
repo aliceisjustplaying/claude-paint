@@ -90,9 +90,151 @@ pub struct Paper {
     pub absorbent: f32,
     /// Through-thickness (z) modulus, MPa: how the sheet gives under a
     /// stick (39 MPa measured on board, Mann, Baum & Habeger 1979; a soft
-    /// drawing paper lower).
+    /// drawing paper lower). A mount's backing (`Paper::mounted`) is folded
+    /// into it: the give of the sheet and what it is laid on, together.
     pub z_mpa: f32,
+    /// A sheet on canvas over a strainer: the bay between the bars drums
+    /// under a stick (`Paper::give_at`). None on a firm bed.
+    pub drum: Option<Drum>,
     pub seed: u64,
+}
+
+/// What a sheet is laid down on (notes/research/cassatt_papers.md §1; the
+/// numbers are estimates). Without one, the sheet lies on a hard
+/// drawing board, all but rigid under a stick (the easel before mounts).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mount {
+    /// Laid down on pasteboard or millboard: the board's top gives a little.
+    Board,
+    /// Laid down on canvas (a lined canvas on a firm bed): the cloth
+    /// compresses under the sheet.
+    Canvas,
+    /// Laid on canvas tacked to a wooden strainer: the canvas, and between
+    /// the bars the bay drums.
+    Strainer,
+}
+
+/// The bay of a strainer under a sheet on canvas: firm over the bars, giving
+/// most in the middle of the bay.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Drum {
+    /// The bars' width under the picture, mm (from each edge).
+    pub bar_mm: f32,
+    /// The bay's own stiffness where it gives most (the middle), MPa per µm,
+    /// in series with the sheet and canvas.
+    pub bay_mpa_per_um: f32,
+}
+
+impl Mount {
+    pub fn named(name: &str) -> Option<Mount> {
+        match name {
+            "board" => Some(Mount::Board),
+            "canvas" => Some(Mount::Canvas),
+            "strainer" => Some(Mount::Strainer),
+            _ => None,
+        }
+    }
+
+    /// The backing's stiffness under a stick, MPa per µm, in series with
+    /// the sheet's own (estimates, notes/research/cassatt_papers.md §1): pasteboard about
+    /// 0.1, a canvas about 0.015 (the cloth compacted at a stick's pressure).
+    pub fn backing_mpa_per_um(self) -> f32 {
+        match self {
+            Mount::Board => 0.1,
+            Mount::Canvas | Mount::Strainer => 0.015,
+        }
+    }
+}
+
+/// A strainer's bars, mm (estimate: 3–5 cm bars on a 60–80 cm strainer).
+pub const STRAINER_BAR_MM: f32 = 40.0;
+/// The bay's stiffness in its middle, MPa per µm (estimate: the sheet and
+/// canvas bend about 10 µm across a stick's 3 mm patch at 2 N, held by
+/// about 200 N/m of tension; notes/research/cassatt_papers.md §1).
+pub const STRAINER_BAY_MPA_PER_UM: f32 = 0.008;
+/// The length over which a tensioned sheet on canvas bends rather than
+/// stretches, mm: √(D/T) for a bending stiffness D ≈ 40 N·mm and a tension
+/// T ≈ 0.2 N/mm (estimate). The bay's give grows as the log of the
+/// distance from a bar in these units.
+const DRUM_BEND_MM: f32 = 14.0;
+
+/// A named sheet (`Paper::preset`): the dials of a paper of Cassatt's and
+/// her circle's, and its tone as parts of tubes of the catalog. Sources
+/// and estimates: notes/research/cassatt_papers.md.
+#[derive(Clone, Copy, Debug)]
+pub struct Preset {
+    pub name: &'static str,
+    pub grammage: f32,
+    pub fiber_mm: f32,
+    pub fiber_um: f32,
+    pub thick_um: f32,
+    pub coarseness: f32,
+    pub porosity: f32,
+    pub floc: f32,
+    pub floc_mm: f32,
+    pub press: f32,
+    pub calender: f32,
+    pub felt: Option<Felt>,
+    pub laid: Option<Laid>,
+    /// The sheet's tone: parts of the catalog's tubes, seen dry.
+    pub tone: &'static [(&'static str, f32)],
+}
+
+/// A colored machine-made wove pastel sheet of the 1880s–1900s: wood pulp
+/// with some rag, about 130 g/m², a light felt mark (estimates; the
+/// research note).
+const WOVE: Preset = Preset {
+    name: "",
+    grammage: 130.0,
+    fiber_mm: 1.6,
+    fiber_um: 25.0,
+    thick_um: 6.0,
+    coarseness: 0.16,
+    porosity: 0.5,
+    floc: 0.5,
+    floc_mm: 1.5,
+    press: 0.65,
+    calender: 0.25,
+    felt: Some(Felt { cell_mm: 0.7, depth_um: 14.0 }),
+    laid: None,
+    tone: &[],
+};
+
+/// The named sheets (the research note's table).
+pub const PRESETS: &[Preset] = &[
+    Preset { name: "blue wove", tone: &[("lead white", 1.0), ("ultramarine blue", 1.0), ("bone black", 0.45)], ..WOVE },
+    Preset { name: "gray-blue wove", tone: &[("lead white", 1.0), ("ultramarine blue", 1.0), ("viridian", 1.5), ("red earth", 1.5)], ..WOVE },
+    Preset { name: "tan wove", tone: &[("yellow ochre", 0.2), ("bitumen", 1.0), ("vine black", 0.23)], ..WOVE },
+    Preset { name: "buff wove", tone: &[("lead white", 1.0), ("yellow ochre", 2.2), ("raw umber", 3.0), ("Prussian blue", 0.02)], ..WOVE },
+    Preset { name: "green wove", tone: &[("lead white", 1.0), ("yellow ochre", 0.65), ("viridian", 0.45), ("bone black", 0.45)], ..WOVE },
+    // brown: an unbleached wood-pulp sheet, heavier and coarser
+    Preset { name: "brown wove", grammage: 150.0, fiber_mm: 1.4, coarseness: 0.2, floc: 0.6, felt: Some(Felt { cell_mm: 0.8, depth_um: 18.0 }), tone: &[("raw sienna", 1.0), ("bitumen", 3.0)], ..WOVE },
+    // a handmade or mold-made rag laid sheet (her print and drawing papers)
+    Preset { name: "cream laid", grammage: 110.0, fiber_mm: 2.2, calender: 0.2, felt: Some(Felt { cell_mm: 0.8, depth_um: 15.0 }), laid: Some(Laid { per_cm: 9.0, chain_mm: 25.0, deficit: 0.15 }), tone: &[("lead white", 1.0), ("yellow ochre", 0.15), ("raw sienna", 0.02), ("green earth", 3.0)], ..WOVE },
+    // Japan paper: long kozo fibers, thin, open, well formed, smooth
+    Preset { name: "japan", grammage: 45.0, fiber_mm: 10.0, fiber_um: 30.0, thick_um: 5.0, coarseness: 0.1, porosity: 0.6, floc: 0.15, floc_mm: 2.0, press: 0.7, calender: 0.6, felt: None, laid: None, tone: &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)] },
+];
+
+impl Preset {
+    /// The sheet of this make (a drawing paper's give and absorbency: the
+    /// sources give none for these sheets).
+    pub fn paper(&self, seed: u64) -> Paper {
+        Paper {
+            grammage: self.grammage,
+            fiber_mm: self.fiber_mm,
+            fiber_um: self.fiber_um,
+            thick_um: self.thick_um,
+            coarseness: self.coarseness,
+            porosity: self.porosity,
+            floc: self.floc,
+            floc_mm: self.floc_mm,
+            press: self.press,
+            calender: self.calender,
+            felt: self.felt,
+            laid: self.laid,
+            ..Paper::drawing(seed)
+        }
+    }
 }
 
 impl Paper {
@@ -115,8 +257,46 @@ impl Paper {
             laid: None,
             absorbent: 0.8,
             z_mpa: 39.0,
+            drum: None,
             seed,
         }
+    }
+
+    /// The named sheet `name` (`PRESETS`), if there is one.
+    pub fn preset(name: &str) -> Option<&'static Preset> {
+        PRESETS.iter().find(|p| p.name == name)
+    }
+
+    /// This sheet laid down on `m`: the backing's give in series with the
+    /// sheet's own, folded into `z_mpa` (so the stiffness a stick meets,
+    /// `z_mpa / caliper`, is the two springs together), and on a strainer
+    /// the bay's drum.
+    pub fn mounted(mut self, m: Mount) -> Paper {
+        let cal = self.caliper_um().max(10.0);
+        let k = 1.0 / (cal / self.z_mpa + 1.0 / m.backing_mpa_per_um());
+        self.z_mpa = k * cal;
+        if m == Mount::Strainer {
+            self.drum = Some(Drum { bar_mm: STRAINER_BAR_MM, bay_mpa_per_um: STRAINER_BAY_MPA_PER_UM });
+        }
+        self
+    }
+
+    /// How stiffly the sheet gives under a stick at (`xm`, `ym`) mm of a
+    /// sheet `w_mm` × `h_mm`, MPa per µm (a Winkler spring): its z modulus
+    /// over its caliper, and on a strainer the bay's drum in series. The
+    /// drum is nothing over the bars and grows as the log of the distance
+    /// from them (a tensioned plate's point compliance), to its full give in
+    /// the middle of the bay.
+    pub fn give_at(&self, xm: f32, ym: f32, w_mm: f32, h_mm: f32) -> f32 {
+        let k = self.z_mpa / self.caliper_um().max(10.0);
+        let Some(d) = self.drum else { return k };
+        let into = xm.min(w_mm - xm).min(ym).min(h_mm - ym) - d.bar_mm;
+        if into <= 0.0 {
+            return k;
+        }
+        let deepest = (0.5 * w_mm.min(h_mm) - d.bar_mm).max(into);
+        let s = (1.0 + into / DRUM_BEND_MM).ln() / (1.0 + deepest / DRUM_BEND_MM).ln();
+        1.0 / (1.0 / k + s / d.bay_mpa_per_um)
     }
 
     /// Mean number of fibers over a point: c̄ = βω/δ.
@@ -509,6 +689,78 @@ mod tests {
         let (_, a) = stats(&lay(&smooth, 0, 0, 120, 120, 0.25).height);
         let (_, b) = stats(&lay(&rough, 0, 0, 120, 120, 0.25).height);
         assert!(b > 1.5 * a, "rough {b} smooth {a}");
+    }
+
+    /// Each named sheet is the make its research note documents
+    /// (notes/research/cassatt_papers.md; the guide's table), with a drawing
+    /// paper's absorbency and give, and no drum.
+    #[test]
+    fn the_presets_are_their_documented_dials() {
+        let felt = |cell_mm, depth_um| Some(Felt { cell_mm, depth_um });
+        let wove = felt(0.7, 14.0);
+        // name: grammage, fiber, width, thickness, coarseness, porosity, floc, floc size, press, calender, felt, laid, tone
+        type Row = (&'static str, [f32; 10], Option<Felt>, Option<Laid>, &'static [(&'static str, f32)]);
+        let w = [130.0, 1.6, 25.0, 6.0, 0.16, 0.5, 0.5, 1.5, 0.65, 0.25];
+        let rows: [Row; 8] = [
+            ("blue wove", w, wove, None, &[("lead white", 1.0), ("ultramarine blue", 1.0), ("bone black", 0.45)]),
+            ("gray-blue wove", w, wove, None, &[("lead white", 1.0), ("ultramarine blue", 1.0), ("viridian", 1.5), ("red earth", 1.5)]),
+            ("tan wove", w, wove, None, &[("yellow ochre", 0.2), ("bitumen", 1.0), ("vine black", 0.23)]),
+            ("buff wove", w, wove, None, &[("lead white", 1.0), ("yellow ochre", 2.2), ("raw umber", 3.0), ("Prussian blue", 0.02)]),
+            ("green wove", w, wove, None, &[("lead white", 1.0), ("yellow ochre", 0.65), ("viridian", 0.45), ("bone black", 0.45)]),
+            ("brown wove", [150.0, 1.4, 25.0, 6.0, 0.2, 0.5, 0.6, 1.5, 0.65, 0.25], felt(0.8, 18.0), None, &[("raw sienna", 1.0), ("bitumen", 3.0)]),
+            ("cream laid", [110.0, 2.2, 25.0, 6.0, 0.16, 0.5, 0.5, 1.5, 0.65, 0.2], felt(0.8, 15.0), Some(Laid { per_cm: 9.0, chain_mm: 25.0, deficit: 0.15 }), &[("lead white", 1.0), ("yellow ochre", 0.15), ("raw sienna", 0.02), ("green earth", 3.0)]),
+            ("japan", [45.0, 10.0, 30.0, 5.0, 0.1, 0.6, 0.15, 2.0, 0.7, 0.6], None, None, &[("lead white", 1.0), ("yellow ochre", 0.1), ("raw sienna", 0.1), ("viridian", 0.02)]),
+        ];
+        assert_eq!(PRESETS.len(), rows.len());
+        for (name, v, felt, laid, tone) in rows {
+            let pr = Paper::preset(name).unwrap_or_else(|| panic!("{name}"));
+            assert_eq!(pr.tone, tone, "{name}");
+            let p = pr.paper(7);
+            let got = [p.grammage, p.fiber_mm, p.fiber_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender];
+            assert_eq!(got, v, "{name}");
+            let d = Paper::drawing(7);
+            assert!(p.felt == felt && p.laid == laid && p.absorbent == d.absorbent && p.z_mpa == d.z_mpa && p.drum.is_none() && p.seed == 7, "{name}");
+            // every tone's tube is in the catalog
+            let every = crate::palette::Palette::named_box("every").unwrap();
+            assert!(tone.iter().all(|(t, _)| every.tubes.iter().any(|e| e.name == *t)), "{name}");
+        }
+        assert!(Paper::preset("Blue wove").is_none() && Paper::preset("").is_none());
+    }
+
+    /// A mount's backing gives in series with the sheet: board least,
+    /// canvas more, a strainer as canvas over its bars and more in the bay,
+    /// most in the middle; the give rises steadily from the bar inward.
+    #[test]
+    fn mounts_order_the_give() {
+        let (w, h) = (600.0, 500.0);
+        let mut sheets: Vec<Paper> = PRESETS.iter().map(|p| p.paper(3)).collect();
+        sheets.push(Paper::drawing(3));
+        sheets.push(Paper { z_mpa: 2.0, ..Paper::drawing(3) });
+        sheets.push(Paper { z_mpa: 500.0, ..Paper::drawing(3) });
+        for p in sheets {
+            let k = |q: Paper, x: f32, y: f32| q.give_at(x, y, w, h);
+            let mid = (0.5 * w, 0.5 * h);
+            let (free, board, canvas) = (k(p, mid.0, mid.1), k(p.mounted(Mount::Board), mid.0, mid.1), k(p.mounted(Mount::Canvas), mid.0, mid.1));
+            let s = p.mounted(Mount::Strainer);
+            assert!(free > board && board > canvas && canvas > k(s, mid.0, mid.1), "{p:?}");
+            assert_eq!(p.mounted(Mount::Board).drum, None);
+            assert_eq!(s.z_mpa, p.mounted(Mount::Canvas).z_mpa);
+            // over the bars, the canvas's give
+            for (x, y) in [(1.0, 250.0), (39.0, 100.0), (300.0, 499.0), (599.0, 400.0)] {
+                assert_eq!(k(s, x, y), k(p.mounted(Mount::Canvas), x, y));
+            }
+            // inward from the bar, softer at every step
+            let mut last = k(s, 40.0, mid.1);
+            for x in [41.0, 60.0, 100.0, 200.0, 300.0] {
+                let now = k(s, x, mid.1);
+                assert!(now < last, "{x}: {now} vs {last}");
+                last = now;
+            }
+            // the drum is the bay's: no unmounted sheet has one
+            assert_eq!(k(p, 40.0, mid.1), free);
+        }
+        assert_eq!(Mount::named("strainer"), Some(Mount::Strainer));
+        assert_eq!(Mount::named("stretcher"), None);
     }
 
     /// Pores: a pixel's mean depth scatters (a few dozen pores in it), the

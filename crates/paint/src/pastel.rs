@@ -1395,6 +1395,27 @@ mod tests {
         Pose { force, alt: alt_deg.to_radians(), az: 45f32.to_radians(), roll: 0.0 }
     }
 
+    /// A sheet laid down on board gives a little more than one on a hard
+    /// drawing board, on canvas more, and on canvas over a strainer, in the
+    /// middle of the bay, most: the stick sinks further. Over the
+    /// strainer's bars the sheet is as firm as on canvas.
+    #[test]
+    fn a_stick_sinks_further_on_a_strainer_than_on_canvas_or_board() {
+        use crate::canvas::Crop;
+        use crate::paper::Mount;
+        let sink = |p: Paper, at: f32| {
+            // (a 300 mm sheet, only a few centimeters of it laid)
+            let crop = Crop { units: [at - 60.0, 440.0, at + 60.0, 560.0], margin: 0.0 };
+            let c = Canvas::new_window(800, 1.0, [0.55; 3], Some(crop)).with_size_mm(300.0).with_paper(p);
+            let sp = StrokePoint { x: at, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 };
+            c.seat_stick(&Stick::round([0.02; 3], 0.8, 12.0), &sp).unwrap().delta
+        };
+        let p = Paper::drawing(4);
+        let [free, board, canvas, strainer] = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::Strainer)].map(|q| sink(q, 500.0));
+        assert!(free < board && board < canvas && canvas < strainer, "sinks: free {free}, board {board}, canvas {canvas}, strainer {strainer}");
+        assert_eq!(sink(p.mounted(Mount::Strainer), 70.0).to_bits(), sink(p.mounted(Mount::Canvas), 70.0).to_bits());
+    }
+
     #[test]
     fn stagnant_midpoints_preserve_forty_step_results() {
         let solve = |mut lo: f32, mut hi: f32, force: f32, stop: bool| {

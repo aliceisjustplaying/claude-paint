@@ -1076,6 +1076,10 @@ impl Canvas {
                 h[9] = k;
             }
             wax = Some(w);
+            // (on base version 11 with nothing after it, the section ends the file)
+            if version == 11 && !pigments && !layers && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint has trailing data"));
+            }
         }
         // the drain section (version 14): the switch, the pigment's packing
         // per pixel, and whether a soak section follows

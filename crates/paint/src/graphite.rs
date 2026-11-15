@@ -211,22 +211,6 @@ impl Cell {
         self.a = a1;
     }
 
-    /// `volume` µm of `color` held bound in the tooth as it lands (a
-    /// gripping stick's binder: `crate::pastel::lay_into`); its coverage is
-    /// the caller's.
-    pub(crate) fn hold(&mut self, color: Rgb, volume: f32) {
-        if volume <= 0.0 {
-            return;
-        }
-        let b = self.bound;
-        match self.optics.as_mut() {
-            Some(o) => o.bound = [0, 1, 2].map(|k| ((o.bound[k] * b + color[k] * volume) / (b + volume)).clamp(0.0, 1.0)),
-            // (no separate optics: one mixed color for the cell, as `add_pastel` keeps it)
-            None => {}
-        }
-        self.bound += volume;
-    }
-
     pub(crate) fn bind(&mut self, wet: f32) {
         let Some(mut optics) = self.optics else { return };
         let g = (self.non_pastel - self.non_pastel_floor).max(0.0);

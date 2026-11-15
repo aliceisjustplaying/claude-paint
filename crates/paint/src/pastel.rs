@@ -76,13 +76,9 @@ pub struct Stick {
     /// The dry color of the stick: R∞ of its pigments in air (linear RGB).
     pub color: Rgb,
     /// How readily a kneaded eraser takes what it lays, 0..1 (the drawing
-    /// cell's `lift`): `PASTEL_LIFT` for a pastel, more for vine charcoal,
-    /// less for compressed (`crate::charcoal`).
+    /// cell's `lift`): `PASTEL_LIFT` for a pastel; a charcoal's from the
+    /// adhesion of its particles (`crate::charcoal`).
     pub lift: f32,
-    /// The share of what it lays that its binder holds in the tooth, bound
-    /// as fixative binds (the finger, a puff, a brush and the eraser leave
-    /// it): 0 for a pastel and vine charcoal, some for compressed charcoal.
-    pub grip: f32,
 }
 
 /// How readily a kneaded eraser takes a pastel stick's pastel.
@@ -142,13 +138,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT, grip: 0.0 }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT, grip: 0.0 }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7), sharpened by a blade to a
@@ -164,7 +160,7 @@ impl Stick {
             facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, lift: PASTEL_LIFT, grip: 0.0 }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, lift: PASTEL_LIFT }
     }
 
     fn radius(&self) -> f32 {
@@ -319,13 +315,13 @@ pub struct Laid {
 /// returns how much.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
-    lay_crumbs_of(d, film, pxs, bed, vol, color, (PASTEL_LIFT, 0.0), rng, dmax, px_um2)
+    lay_crumbs_of(d, film, pxs, bed, vol, color, PASTEL_LIFT, rng, dmax, px_um2)
 }
 
-/// `lay_crumbs` of a stick whose deposit lifts and grips as `(lift, grip)`
-/// (`Stick::lift`, `Stick::grip`).
+/// `lay_crumbs` of a stick whose deposit the eraser takes as readily as
+/// `lift` (`Stick::lift`).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, laid: (f32, f32), rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
+pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, lift: f32, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
     let mut cum = Vec::with_capacity(bed.len());
     let mut total = 0.0f32;
     for &(_, g, _) in bed {
@@ -363,28 +359,18 @@ pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs:
         // about PARTICLE_UM thick, as the contact's own deposit
         let q = 1.0 - (-dv / PARTICLE_UM).exp();
         let before = (c.a, c.reflectance());
-        lay_into(c, q, color, dv, laid);
+        lay_into(c, q, color, dv, lift);
         pxs[i] = c.repaint(pxs[i], before);
     }
     lost
 }
 
 /// Lay `dv` µm of a stick's deposit (coverage `q`) of `color` into a cell,
-/// lifting and gripping as `(lift, grip)`: a pastel's (`PASTEL_LIFT`, no
-/// grip) all loose, as it always was; a gripping stick's share `grip` bound
-/// by its binder, its coverage under the eraser's floor.
-pub(crate) fn lay_into(c: &mut crate::graphite::Cell, q: f32, color: Rgb, dv: f32, (lift, grip): (f32, f32)) {
-    if grip <= 0.0 {
-        c.add_pastel_lifting(q, color, dv, lift);
-        c.loose += dv;
-        return;
-    }
-    let a0 = c.a;
-    let held = dv * grip.min(1.0);
-    c.add_pastel_lifting(q, color, dv - held, lift);
-    c.loose += dv - held;
-    c.hold(color, held);
-    c.floor = (c.floor + (c.a - a0) * grip.min(1.0)).min(c.a);
+/// loose, the eraser taking it as readily as `lift` (a pastel's
+/// `PASTEL_LIFT`, as it always was).
+pub(crate) fn lay_into(c: &mut crate::graphite::Cell, q: f32, color: Rgb, dv: f32, lift: f32) {
+    c.add_pastel_lifting(q, color, dv, lift);
+    c.loose += dv;
 }
 
 
@@ -564,7 +550,7 @@ impl Canvas {
                     }
                     let q = 1.0 - (-dv / PARTICLE_UM).exp();
                     let before = (c.a, c.reflectance());
-                    lay_into(c, q, stick.color, dv, (stick.lift, stick.grip));
+                    lay_into(c, q, stick.color, dv, stick.lift);
                     laid = true;
                     pxs[i] = c.repaint(pxs[i], before);
                 }
@@ -589,7 +575,7 @@ impl Canvas {
                 let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
                 laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, (stick.lift, stick.grip), &mut rng, crumb_max, px_um2);
+                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, stick.lift, &mut rng, crumb_max, px_um2);
                 for &(i, g) in &last_sheet_bed {
                     caught.push((i, to_sheet * g / gs));
                 }
@@ -624,7 +610,7 @@ impl Canvas {
             let a_px_mm2 = px * px;
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
-            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, (stick.lift, stick.grip), &mut rng, crumb_max, px_um2);
+            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, stick.lift, &mut rng, crumb_max, px_um2);
             self.px = pxs;
             self.film = film;
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
@@ -2139,16 +2125,21 @@ mod tests {
             assert!(v > 1.5 * k, "vine {v}, compressed {k}");
         }
 
+        /// Both charcoals lie loose (compressed's gum, glassy at room
+        /// humidity, holds nothing to the sheet), so the finger smears
+        /// compressed about as far as vine; graphite not at all.
         #[test]
-        fn vine_smears_more_with_the_finger_than_compressed_and_graphite() {
+        fn the_finger_smears_both_charcoals_and_not_graphite() {
             let (v, k, g) = (smeared(&Medium::Vine), smeared(&Medium::Compressed), smeared(&Medium::Graphite));
             eprintln!("smeared: vine {v}, compressed {k}, graphite {g}");
-            assert!(v > 1.3 * k && k > 0.0, "vine {v}, compressed {k}");
-            assert!(g.abs() < 1e-6 && v > 0.0, "graphite {g}, vine {v}");
+            assert!(v > 0.2 && k > 0.7 * v && k < 1.3 * v, "vine {v}, compressed {k}");
+            assert!(g.abs() < 1e-6, "graphite {g}");
         }
 
-        /// Fixative darkens vine charcoal a little and binds it: the eraser and
-        /// the finger then leave it.
+        /// Fixative binds vine and compressed charcoal and darkens them only
+        /// a little (carbon's facets reflect against resin about half what
+        /// they do against air, over the share the resin wets: charcoal.md
+        /// §2): the eraser and the finger then leave it.
         #[test]
         fn fixative_binds_and_darkens_charcoal() {
             for mut s in [Stick::vine(6.0), Stick::compressed(7.0)] {
@@ -2158,7 +2149,7 @@ mod tests {
                 fix(&mut c);
                 let d1 = dark(&c, 300.0, 700.0, 300.0, 500.0);
                 eprintln!("fixed: {d0} -> {d1}");
-                assert!(d1 > d0, "fixed darker: {d0} -> {d1}");
+                assert!(d1 > d0 && d1 < 1.02 * d0, "fixed a little darker: {d0} -> {d1}");
                 let f = c.frame();
                 c.erase(&Mask::full(f), 1.0);
                 c.rub(&[(500.0, 330.0), (500.0, 650.0)], 1.0, None, 40.0);

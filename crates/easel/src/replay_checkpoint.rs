@@ -880,7 +880,7 @@ print(counter,rand(),drying(300,300))
         }
     }
 
-    /// A charcoal stick's table (its lift and grip with its wear) and the
+    /// A charcoal stick's table (its lift with its wear) and the
     /// charcoal in the tooth come back from a replay checkpoint as they were.
     #[test]
     fn charcoal_checkpoints_reconstruct_its_sticks() {
@@ -910,7 +910,7 @@ print(counter,rand(),drying(300,300))
                 for name in ["v", "c"] {
                     assert_eq!(s.held_stick(name).unwrap(), plain.held_stick(name).unwrap());
                 }
-                assert_eq!(s.held_stick("c").unwrap().0.grip, paint::charcoal::COMPRESSED_GRIP);
+                assert_eq!(s.held_stick("c").unwrap().0.lift, paint::charcoal::COMPRESSED_LIFT);
                 assert_eq!(s.program("charcoal"), source);
             }
         }

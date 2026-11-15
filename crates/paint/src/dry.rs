@@ -131,6 +131,58 @@ pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
     out
 }
 
+/// A bed of carbon particles in air, the way a charcoal stick lays it:
+/// Kubelka–Munk absorption K = 2σa and scattering S = 0.75σs(1−g) per unit
+/// particle volume (µm⁻¹), per channel (R, G, B at 610, 550, 460 nm), from
+/// Mie, size-averaged as `mie_air`'s table, of carbon's measured complex
+/// index. Computed in notes/research/charcoal_optics.py (its "for dry.rs"
+/// lines); charcoal.md §2. Carbon absorbs within a tenth of a micrometre, so
+/// what it scatters is what its facets reflect (about 9 % against air, 5 %
+/// against resin): the bed is dark whatever its particles' size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CarbonBed {
+    pub k_air: Rgb,
+    pub s_air: Rgb,
+    /// With a resin of n 1.5 (a fixative's) in its pores and around it.
+    pub k_resin: Rgb,
+    pub s_resin: Rgb,
+}
+
+impl CarbonBed {
+    /// R∞ (linear RGB) with a share `wet` (0..1) of its pores filled by
+    /// resin: the two media mixed by share.
+    pub fn color(&self, wet: f32) -> Rgb {
+        let w = wet.clamp(0.0, 1.0);
+        std::array::from_fn(|q| {
+            let k = (1.0 - w) * self.k_air[q] + w * self.k_resin[q];
+            let s = (1.0 - w) * self.s_air[q] + w * self.s_resin[q];
+            let ks = k / s;
+            1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
+        })
+    }
+}
+
+/// Vine (willow) charcoal: splinters of charred cell wall, median 3 µm, of
+/// cellulose fired at 500 °C (n, k from Jäger, Mutschke & Henning 1998,
+/// halfway between their 400 and 600 °C chars; the firing from FAO 1987).
+pub const VINE_CHARCOAL: CarbonBed = CarbonBed {
+    k_air: [0.55891, 0.54904, 0.53309],
+    s_air: [0.024504, 0.024225, 0.0234],
+    k_resin: [0.52688, 0.51104, 0.48134],
+    s_resin: [0.015416, 0.017739, 0.022654],
+};
+
+/// Compressed charcoal: that char pressed with a gum binder (5 % of the
+/// solids), 60 % solids: crumbs (median 3 µm) of a fine compact whose
+/// pores are finer than light, so an effective medium (Bruggeman) of
+/// carbon, gum and air, its index (1.22 + 0.34i) nearer air's, and darker.
+pub const COMPRESSED_CHARCOAL: CarbonBed = CarbonBed {
+    k_air: [0.58952, 0.5802, 0.56564],
+    s_air: [0.012182, 0.011773, 0.01094],
+    k_resin: [0.55048, 0.5396, 0.51956],
+    s_resin: [0.0070445, 0.0079591, 0.0099127],
+};
+
 /// Dry color retaining measured absorption and wavelength-dependent
 /// scattering. The air/oil rule is the same as `dry_color`.
 pub fn spectral_color(parts: &[(crate::spectral::SpectralPigment, f32, f32)], white: &crate::spectral::Spectrum) -> Rgb {
@@ -167,5 +219,23 @@ mod tests {
         let dv = dry_color(&[(verm, 1.0, 3.0, 1.0)], 1.0);
         assert!(du[2] > ultra[2] + 0.2, "ultramarine dry {du:?}");
         assert!((dv[0] - verm[0]).abs() < 0.15, "vermilion dry {dv:?}");
+    }
+
+    /// Charcoal's R∞ as charcoal_optics.py prints it: under the measured
+    /// ceiling for charcoal powder (below 5 % in the visible, arXiv
+    /// 2110.05832), about 6 % with the matte veil the picture adds over it;
+    /// compressed darker than vine; a fixative's resin darkens it, and only
+    /// a little.
+    #[test]
+    fn charcoal_is_dark_by_its_facets() {
+        let (v, k) = (VINE_CHARCOAL.color(0.0), COMPRESSED_CHARCOAL.color(0.0));
+        for (got, want) in v.iter().zip([0.0210, 0.0211, 0.0210]).chain(k.iter().zip([0.0101, 0.0099, 0.0095])) {
+            assert!((got - want).abs() < 2e-4, "{v:?} {k:?}");
+        }
+        let seen = |r: f32| crate::canvas::SURFACE_REFLECTANCE + (1.0 - crate::canvas::SURFACE_REFLECTANCE) * r;
+        assert!(seen(v[1]) < 0.065 && v[1] < 0.05, "{v:?}");
+        assert!(k.iter().zip(&v).all(|(k, v)| k < v), "{k:?} {v:?}");
+        let fixed = VINE_CHARCOAL.color(1.0);
+        assert!(fixed[1] < v[1] && fixed[1] > 0.7 * v[1], "{fixed:?}");
     }
 }

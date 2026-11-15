@@ -113,13 +113,12 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     let ft: Table = p.get("facets")?;
     let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
     let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-    // (a pastel's table has no lift or grip: a charcoal's has, `charcoal()`)
+    // (a pastel's table has no lift: a charcoal's has, `charcoal()`)
     let lift = p.raw_get::<Option<f32>>("lift")?.unwrap_or(paint::pastel::PASTEL_LIFT);
-    let grip = p.raw_get::<Option<f32>>("grip")?.unwrap_or(0.0);
-    if !((0.0..=1.0).contains(&lift) && (0.0..=1.0).contains(&grip)) {
-        return err("a charcoal stick's lift and grip are 0 to 1");
+    if !(0.0..=1.0).contains(&lift) {
+        return err("a charcoal stick's lift is 0 to 1");
     }
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], lift, grip })
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], lift })
 }
 
 /// Write a stick's wear back into its table (a part of the Lua heap: a
@@ -928,8 +927,8 @@ const CHARCOAL_KEYS: &[&str] = &["kind", "diameter", "length"];
 /// diameter=, length=}` (or `charcoal()`, a vine stick; `charcoal("compressed")`),
 /// a pastel stick of charcoal (paint's `charcoal`): it draws with the
 /// stick's methods and the pencil's, and the finger, the eraser, a puff and
-/// fixative work on it as on pastel. Vine is all loose and lifts readily;
-/// compressed is darker and its binder holds part of what it lays.
+/// fixative work on it as on pastel. Vine lifts readily; compressed is
+/// darker and lays fine particles the eraser takes less readily.
 fn install_charcoal(lua: &Lua, meta: Table) -> Result<()> {
     lua.globals().set("charcoal", lua.create_function(move |lua, a: Value| {
         let o = match a {
@@ -953,7 +952,7 @@ fn install_charcoal(lua: &Lua, meta: Table) -> Result<()> {
         let stick = match kind.as_str() {
             "vine" | "willow" => paint::pastel::Stick::vine(dia.unwrap_or(6.0).clamp(2.0, 16.0)),
             "compressed" => paint::pastel::Stick::compressed(dia.unwrap_or(7.0).clamp(3.0, 15.0)),
-            k => return err(format!("charcoal: kind {k:?}: vine (willow: a charred twig, loose and light) or compressed (charcoal pressed with a binder: darker, it holds)")),
+            k => return err(format!("charcoal: kind {k:?}: vine (willow: a charred twig, loose and light) or compressed (charcoal pressed with a binder: darker, finer)")),
         };
         let p = lua.create_table()?;
         p.set("kind", "stick")?;
@@ -969,7 +968,6 @@ fn install_charcoal(lua: &Lua, meta: Table) -> Result<()> {
         p.set("hardness", stick.hardness)?;
         p.set("wear", stick.wear)?;
         p.set("lift", stick.lift)?;
-        p.set("grip", stick.grip)?;
         p.set("r", stick.color[0])?;
         p.set("g", stick.color[1])?;
         p.set("b", stick.color[2])?;
@@ -1193,7 +1191,7 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             v:line({{100, 300}, {900, 300}}, {pressure=0.6})
             k:stroke({{100, 600}, {900, 600}}, {force=2})
             print(v) print(k)"#);
-        let out = run(&mut s, "print(tostring(v), v.lift, v.grip, k.lift, k.grip)");
+        let out = run(&mut s, "print(tostring(v), v.lift, k.lift)");
         assert!(out.starts_with("vine charcoal ("), "{out}");
         assert!(run(&mut s, "print(k)").starts_with("compressed charcoal ("));
         assert!(s.run(r#"charcoal{kind="conte"}"#).unwrap_err().contains("vine"));
@@ -1221,7 +1219,7 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         assert!(restored.st.borrow().tubes.charcoal);
         assert!(restored.program("charcoal").lines().any(|l| l == CHARCOAL_MARK));
         // (a save keeps the canvas, not the Lua heap: a fresh stick on both)
-        let more = "w = charcoal{kind=\"compressed\"} w:line({{100, 450}, {900, 450}}, {pressure=0.5}) smudge({{500, 250}, {500, 700}}) erase({{300, 280}, {300, 620}}) print(w.length, w.grip)";
+        let more = "w = charcoal{kind=\"compressed\"} w:line({{100, 450}, {900, 450}}, {pressure=0.5}) smudge({{500, 250}, {500, 700}}) erase({{300, 280}, {300, 620}}) print(w.length, w.lift)";
         let (a, b) = (run(&mut s, more), run(&mut restored, more));
         assert_eq!(a, b);
         assert_eq!(restored.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());

@@ -693,7 +693,7 @@ fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
 
 **Charcoal.** Vine (willow) charcoal is a charred twig with no binder;
-compressed charcoal is charcoal powder pressed with a gum or wax binder.
+compressed charcoal is charcoal powder pressed with a gum binder.
 Both are sticks in the tooth, as pastel is: they draw with a stick's calls
 and a pencil's, and the finger, the eraser, a dry brush, a puff and fixative
 work on them as on pastel.
@@ -704,13 +704,16 @@ k = charcoal("compressed")              -- compressed, a square stick 7 mm (char
 v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v:roll, v:snap as a pastel's
 ```
 
-- **Vine** is soft and grey-black, and all of it lies loose on the tooth:
-  the kneaded eraser takes it more readily than graphite (an erased
-  passage is nearly clean), a finger smears it far, a dry brush or a puff
-  lifts it. It is for laying in and correcting.
-- **Compressed** is darker and denser, and its binder holds about half of
-  what it lays: the finger moves less of it, the eraser lightens it and
-  leaves a stain, a puff leaves the held part.
+- **Vine** is soft and black, its splinters lying loose on the tooth: the
+  kneaded eraser takes it more readily than graphite (an erased passage is
+  nearly clean), a finger smears it far, a dry brush or a puff lifts it.
+  It reads grey where the line is broken and the paper shows. It is for
+  laying in and correcting.
+- **Compressed** is darker (its fine powder is packed, so its facets
+  reflect less) and lays finer particles, which hold to the fibres about
+  as hard as the eraser pulls: the eraser lightens it and leaves a stain.
+  Its gum binds nothing once dry, so the finger and a puff move it as they
+  move vine.
 - Charcoal is matte: no graphite sheen. **Fixative** (`fix()`) binds it and
   darkens it a little, as pastel; the eraser and the finger then leave it.
   Paint over it seals it.
@@ -722,8 +725,9 @@ v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v
 
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it
-was painted and has no `charcoal`. Its numbers are estimates
-(notes/research/charcoal.md).
+was painted and has no `charcoal`. Its color and how the eraser takes it
+come from carbon's optics and the particles' adhesion; its hardness and
+wear are estimates (notes/research/charcoal.md).
 
 ## The rag
 

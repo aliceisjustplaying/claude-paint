@@ -98,10 +98,10 @@ pub const PAPER_MARK: &str = "--@ paper";
 /// has it has `charcoal()`, vine and compressed charcoal sticks
 /// (draw_pencil.rs, paint's `charcoal`). A new painting has it; a log
 /// without it was painted before charcoal and replays as it was painted,
-/// with no `charcoal` global. Charcoal is a stick in the tooth, so the
-/// switch requires the paper-and-pastel switch (`PAPER_MARK`) and the
-/// drawing's own optics (`DRAWING_OPTICS_MARK`); the box carries it
-/// (`Palette::charcoal`).
+/// with no `charcoal` global. Charcoal is a stick in the tooth, so
+/// `charcoal` comes with the paper-and-pastel switch's verbs
+/// (`PAPER_MARK`, `api::install_paper`): with the line and no paper there is
+/// none. The box carries it (`Palette::charcoal`).
 pub const CHARCOAL_MARK: &str = "--@ charcoal";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
@@ -1656,9 +1656,6 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.drain = drain;
     b.material = material;
     b.charcoal = head(CHARCOAL_MARK);
-    if b.charcoal && !(logged_paper(text) && b.drawing_optics) {
-        return Err(format!("the log's {CHARCOAL_MARK} line (the charcoal switch) needs its {PAPER_MARK} and {DRAWING_OPTICS_MARK} lines too; nothing ran"));
-    }
     Ok(b)
 }
 

@@ -255,8 +255,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.calls_agree = h.get("calls_agree") == Some(&"1");
     tubes.charcoal = match h.get("charcoal") {
         None => false,
-        Some(&"1") if paper && tubes.drawing_optics => true,
-        Some(&"1") => return Err(format!("{}: the save's charcoal=1 needs paper=1 and the drawing's own optics", path.display())),
+        Some(&"1") => true,
         Some(v) => return Err(format!("the save's charcoal={v:?} isn't 1")),
     };
     let width: usize = parse(&h, "width")?;

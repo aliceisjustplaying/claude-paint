@@ -1171,8 +1171,8 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
 
     /// The charcoal switch: a new painting's log names it and has `charcoal`;
     /// an older log (paper, no charcoal line) has no `charcoal` and its walk of
-    /// the globals is as it was; the line needs paper and the drawing's
-    /// optics; a save keeps it, and the stick tables round-trip.
+    /// the globals is as it was; without paper the line brings nothing; a
+    /// replay and a save keep it.
     #[test]
     fn charcoal_comes_with_its_switch_in_the_log_s_head() {
         use crate::session::{CHARCOAL_MARK, box_for};
@@ -1201,11 +1201,11 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         let program = s.program("charcoal");
         assert!(program.lines().any(|l| l == CHARCOAL_MARK), "{program}");
         assert!(box_for(Some(&program)).unwrap().charcoal);
-        // the line needs paper and the drawing's optics
-        for head in ["--@ engine 9\n--@ drawing-optics\n--@ charcoal\n", "--@ engine 9\n--@ paper\n--@ charcoal\n"] {
-            let e = box_for(Some(head)).unwrap_err();
-            assert!(e.contains(CHARCOAL_MARK), "{e}");
-        }
+        // charcoal comes with paper's verbs: the line without paper brings none
+        let mut bare = Session::with_box(64, box_for(Some("--@ engine 9\n--@ charcoal\n")).unwrap()).unwrap();
+        assert!(bare.st.borrow().tubes.charcoal);
+        run(&mut bare, CANVAS);
+        assert_eq!(run(&mut bare, "print(type(charcoal), type(pastel))").trim(), "nil\tnil");
         // a line after the first chunk isn't the head's
         assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{CHARCOAL_MARK}\n"))).unwrap().charcoal);
         // replay and a save

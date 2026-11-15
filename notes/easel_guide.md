@@ -1028,6 +1028,91 @@ use(k)
   a receive without it says the hash, and a replay that finds another file there refuses
   it. `name=` renames it on arrival.
 
+## Plates: copper and zinc beside the painting
+
+A painting whose log's head also says `--@ plate` (new paintings do; it needs
+`--@ surfaces`) may keep intaglio plates among its surfaces and work them as a drypoint
+artist does. Without the switch none of this exists (`plate`, `needle` and the plate's tools
+are not there), and a painting with named surfaces that makes no plate saves and replays as
+before. No ink, wiping or press yet: those come with `--@ press`.
+
+```lua
+k = plate{name="key", metal="copper", temper="half-hard", size={346, 211}, thickness=1.3, bevel=45}
+n = needle{tip=25, cone=30}       -- point radius µm, half-angle of its cone, degrees
+use(k)                            -- in hand: only the plate's tools mark it
+r = k:drypoint(n, {{100,200},{800,260}}, {force=2, alt=55, azimuth=0, speed=30})
+k:burnish({{300,300},{600,300}}, {force=30, radius=10, passes=3})
+k:scrape({{650,400},{800,400}}, {force=5, width=8, passes=1})
+k:roulette({{100,500},{900,500}}, {pitch=0.2, tooth=30, force=3})
+print(k:feel(450, 230).words)     -- "a line about … µm wide and … µm deep, burr standing … µm"
+use("painting")
+```
+
+- **`plate{name=, metal=, temper=, size={w, h}, thickness=, bevel=}`.** The period box
+  (an 1890s Paris print box) has `"copper"` and `"zinc"`; another metal is refused.
+  - Copper comes `"annealed"` (45 HV), `"eighth-hard"` (65 HV, an estimate between the two
+    measured tempers) or `"half-hard"` (90 HV, the default). Zinc is `"rolled"` (45 HV).
+  - Size is in mm; thickness (default 1.3 mm) and bevel (45°) are for the plate mark later.
+  - It is laid out at the painting's pitch, as the sheet it prints on will be. Its width is
+    1000 units (`k.H` its height).
+  - Steel facing comes later (`--@ edition`); the plate keeps the hook.
+- **A statistical plate.** A pixel is wider than a drypoint line. So each cell keeps its
+  openings binned by width, each bin's share, depth and width, and its burr's volume,
+  height and side, not a picture of the lines. Those are what wiping and the press will
+  read.
+  - The tools' paths are kept too, so a crop look draws the lines again at its own scale.
+- **`needle{tip=, cone=}`** and **`k:drypoint(n, pts, {force=, alt=, azimuth=, speed=})`.**
+  Each option is a number or a list along the points, as for a pastel stroke: force in N
+  (a hand: 0.5–5), alt and azimuth as pastel takes them, speed in mm/s.
+  - **Width from scratch hardness:** w = √(8F/πH). Four times the force gives twice the
+    width, and zinc is √2 wider than half-hard copper.
+  - **Depth** follows the point: its rounded tip, then its cone.
+  - **Plough or cut.** The needle's lean toward the way it goes (pulled, top ahead) lowers
+    its attack angle, 90° − cone − lean.
+    - Below copper's critical 60° (measured 45–85°) it ploughs: all of the groove's metal
+      goes into burr, 0.75 × the depth high (an estimate: no burr has been measured).
+    - Pushed or held upright, it cuts a chip and leaves a clean line with no burr. The verb
+      says so.
+  - **The burr's side.** Leaning to one side throws the burr to the other; leaning past
+    its half-angle, all of it.
+  - **The result** is a table: `width`, `depth`, `burr`, `beta`, `cut`, `ploughed`,
+    volumes in µm³ (`groove`, `burr_volume`, `chip`), `length`, `seconds`.
+- **`k:burnish(pts, {force=, radius=, passes=, speed=})`.** A steel burnisher (a sphere of
+  `radius` mm).
+  - **Burr first.** It sits on the burr and presses it flat where the burr can't bear its
+    force at the metal's hardness. The fin folds onto the land beside the line.
+  - **Then the line's rims.** Once no burr holds it off, the rims flow into the line where
+    its Hertz pressure passes what a rim bears, by the contact's elastic give each pass.
+  - A drypoint line goes after a dozen passes or so. Metal is conserved (`flattened`,
+    `pressure` in MPa).
+- **`k:scrape(pts, {force=, width=, passes=, speed=})`.** A three-sided scraper held to cut.
+  - It takes the burr off, then shaves t = F/(H·width·tan 30°) a stroke (about 1 µm for
+    5 N on 8 mm of copper).
+  - The lines go with it, and it leaves a shallow dish (`scraped`, `chip`).
+- **`k:roulette(pts, {pitch=, tooth=, cone=, force=, speed=})`.** A toothed wheel: a pit
+  every `pitch` mm, each indented at the hardness, with a ring of burr.
+- **`k:feel(x, y)`** answers as a fingernail would: `words` ("a line about 50 µm wide and
+  40 µm deep, burr standing 30 µm", "a shallow dish 4 µm down", "smooth") and the numbers
+  (`depth`, `width`, `open`, `burr`, `level`).
+- **Hand time.** A tool's path at its speed (default 30 mm/s, an estimate: drypoint is hard
+  work) goes on the clock, which every surface shares.
+- **Only its tools mark it.** Paint, pencil and pastel are refused while a plate is in hand.
+- **Looking at it.** `look --surface key` shows polished metal.
+  - **The colour** is Fresnel reflection from the metal's measured optical constants:
+    Johnson & Christy for copper, Werner et al. for zinc.
+  - **Lines read dark** because a V-groove sends the light from wall to wall before it
+    climbs out. The burr catches light at its faces' slope.
+  - **Light.** `--mode relief` or `--light az,el` lights the relief (lines, burr, a scraped
+    dish) with the canvas's own raking light; `--mode mirror` previews the print's way
+    round.
+  - **A crop** is drawn again from the tools' paths at the crop's scale.
+  - `probe --surface key --at x,y` (or `--crop`) gives the open share, the lines' width
+    and depth, the burr and the level. `save` refuses a plate.
+- **Saves, checkpoints, replay and handoff** keep the plate's whole state (its cells and
+  its tools' paths) in its surface's entry. A plate handed off arrives exactly as it left,
+  and a session without the switch refuses to receive one.
+- **Physics and estimates:** notes/research/intaglio_physics.md, notes/research/plate_physics.md.
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

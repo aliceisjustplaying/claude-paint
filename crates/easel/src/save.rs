@@ -105,6 +105,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.oils {
         kv("oils", "1".to_string());
     }
+    if st.tubes.charcoal {
+        kv("charcoal", "1".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -284,6 +287,11 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.dry_lakes = h.get("dry_lakes") == Some(&"1");
     tubes.paper_presets = h.get("paper_presets") == Some(&"1");
     tubes.pastel_area_strokes = h.get("area_strokes") == Some(&"1");
+    tubes.charcoal = match h.get("charcoal") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's charcoal={v:?} isn't 1")),
+    };
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {

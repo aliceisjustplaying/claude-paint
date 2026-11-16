@@ -523,7 +523,7 @@ impl Plate {
         }
     }
 
-    fn ink_cell_mut(&mut self, x: usize, y: usize) -> &mut InkCell {
+    pub(super) fn ink_cell_mut(&mut self, x: usize, y: usize) -> &mut InkCell {
         let tw = self.w.div_ceil(TILE);
         let n = self.tiles.len();
         let k = self.ink.get_or_insert_with(|| Box::new(Inking { inks: Vec::new(), tiles: vec![None; n], warm_c: ROOM_C as f32, warm_at: 0.0, aged_to: 0.0 }));

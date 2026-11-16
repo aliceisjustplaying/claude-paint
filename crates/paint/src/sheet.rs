@@ -204,7 +204,7 @@ fn shao_lu(d_um: f32, rho: f32) -> f32 {
 /// Through-thickness shear modulus of a drawing paper, MPa: 16–127 measured
 /// in paperboard plies (Nygårds); for a drawing paper 15–50 [E], the middle
 /// (paper_mechanics_and_transport.md §1).
-const PAPER_GXZ_MPA: f32 = 30.0;
+pub(crate) const PAPER_GXZ_MPA: f32 = 30.0;
 /// Steel on paper, friction (0.2–0.4 [E]), and the strength of a fiber–fiber
 /// joint, N (1.1–6.5 mN measured: the middle).
 const STEEL_PAPER_MU: f32 = 0.3;

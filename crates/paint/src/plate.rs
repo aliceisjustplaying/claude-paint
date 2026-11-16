@@ -1587,6 +1587,7 @@ fn get32(r: &mut (impl Read + ?Sized)) -> io::Result<u32> {
 
 pub mod etched;
 pub mod inked;
+pub mod press;
 
 #[cfg(test)]
 mod tests;

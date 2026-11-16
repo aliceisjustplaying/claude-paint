@@ -711,6 +711,18 @@ feel(x, y)                     -- what a fingertip feels there
   under its face and settle into the tooth along and beside the stroke, the
   hollows taking more: a mark covers several times what the stick touches,
   as discrete specks. Crumbs that fall on wet paint are lost in it.
+  Pressed flat by the face, each crumb covers its own area (its volume as a
+  layer of particles 6 µm thick: a 250 µm crumb about 1.4 mm²), over as
+  many pixels as that takes, and where it fills the tooth the stick meets
+  the filled pores over that area and bare tooth beside it (with
+  `--@ pastel-crumb-layer` each patch lies over the loose pastel it lands
+  on as a layer of its own depth). So a passage
+  covers the same, shows the same color and lets the same paper through at
+  any width; only its detail changes (at 0.67 mm a pixel and coarser, where
+  a pixel is as large as the largest crumbs, it reads a few percent paler).
+  This needs the switch `--@ crumb-area`, which every new painting has; an
+  older log packs each crumb into the one pixel it falls in, as it was
+  painted, so its `--width` previews look fuller than the painting.
 - **Keeping pastel inside a shape.** A stick has no `clip=`: it lays where
   it touches, and its crumbs land beside the stroke, so pastel worked up to
   a shape's edge spills past it. To keep a passage clean, cover it first:

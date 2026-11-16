@@ -299,6 +299,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.wet_pastel = canvas.wet_pastel();
     tubes.pastel_km_mix = canvas.pastel_km_mix();
     tubes.pastel_crumb_layer = canvas.pastel_crumb_layer();
+    tubes.crumb_area = canvas.crumb_area();
     tubes.rag_lift = canvas.rag_lift();
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();

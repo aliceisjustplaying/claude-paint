@@ -2572,4 +2572,53 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         assert!(restored.st.borrow().tubes.pastel_crumb_layer && restored.canvas().unwrap().pastel_crumb_layer());
         assert_eq!(restored.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
     }
+
+    /// The crumb area switch: a new painting's log has it and its crumbs
+    /// cover their own area (more of the sheet than an older log's at this
+    /// width, whose crumbs keep to their pixel); the crumbs that reach a
+    /// sheet laid on the picture go with it. It replays bit for bit, a save
+    /// keeps it, and an older log's head leaves it off.
+    #[test]
+    fn crumb_area_comes_with_its_log_head_line() {
+        use crate::session::{CRUMB_AREA_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n";
+        assert!(!box_for(Some(older)).unwrap().crumb_area);
+        assert!(box_for(Some(&format!("{older}{CRUMB_AREA_MARK}\n"))).unwrap().crumb_area);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{CRUMB_AREA_MARK}\n"))).unwrap().crumb_area, "only in the head");
+        assert!(box_for(None).unwrap().crumb_area, "a new painting has it");
+        let src = r#"p = pastel(pile{{"lead white", 1}})
+            for y = 300, 500, 25 do p:stroke({{150, y}, {850, y}}, {force=2}) end
+            lay_sheet(rect(500, 560, 400, 200))
+            p:stroke({{150, 600}, {850, 600}}, {force=2})
+            lift_sheet()"#;
+        let painted = |log: Option<&str>| {
+            let mut s = Session::with_box(W, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, src);
+            s
+        };
+        let (old, mut s) = (painted(Some(older)), painted(None));
+        assert!(!old.canvas().unwrap().crumb_area() && s.canvas().unwrap().crumb_area());
+        // (a light stick on a darker sheet: covering more, lighter)
+        let lum = |c: &paint::Canvas| c.pixels().iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
+        assert!(lum(&s.canvas().unwrap()) > lum(&old.canvas().unwrap()), "crumbs over their own area cover more");
+        let program = s.program("crumbs");
+        assert!(program.lines().any(|l| l == CRUMB_AREA_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+        let path = std::env::temp_dir().join(format!("easel-crumb-area-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.crumb_area && restored.canvas().unwrap().crumb_area());
+        let more = r#"q = pastel(pile{{"lead white", 1}})
+            q:stroke({{850, 450}, {150, 420}}, {force=1})"#;
+        for session in [&mut s, &mut restored] {
+            run(session, more);
+        }
+        assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
+    }
 }

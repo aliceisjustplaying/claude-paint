@@ -246,6 +246,16 @@ const DAMP_PAPER: u64 = 1 << 45;
 /// damp canvas that isn't paper, is refused.
 const DAMP_MARK: u64 = 0x504d4144;
 const DAMP_V: u64 = 1;
+/// Sifted crumbs lying on the tooth (`crate::steam`, the steam-and-sift
+/// switch): the engine word has this bit exactly when the drawing holds a
+/// record of them (`Drawing::perched`), and its section follows the damp
+/// sheet's place (`STEAM_SIFT_MARK`, "SIFT"): the record, `steam::PERCH`
+/// values a cell. A reader that doesn't know the bit refuses the file
+/// instead of pressing the crumbs into the tooth. (Bits 51–53 are reserved
+/// for the 2026-11-16 wave's other switches.)
+const STEAM_SIFT: u64 = 1 << 54;
+const STEAM_SIFT_MARK: u64 = 0x5446_4953;
+const STEAM_SIFT_V: u64 = 1;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -702,7 +712,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.damp.is_some() { DAMP_PAPER } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.damp.is_some() { DAMP_PAPER } else { 0 } | if self.drawing.as_ref().is_some_and(|d| !d.perched.is_empty()) { STEAM_SIFT } else { 0 })?;
         if self.wet_pastel {
             put_u64(w, WET_PASTEL_MARK)?;
             put_u64(w, WET_PASTEL_V)?;
@@ -724,6 +734,14 @@ impl Canvas {
             put_u64(w, DAMP_V)?;
             put_u64(w, d.water.to_bits())?;
             put_u64(w, d.faces as u64)?;
+        }
+        if let Some(d) = self.drawing.as_ref().filter(|d| !d.perched.is_empty()) {
+            if d.perched.len() != d.cells.len() * crate::steam::PERCH || !d.perched.iter().all(|v| v.is_finite() && *v >= 0.0) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "the sifted crumbs' record is invalid"));
+            }
+            put_u64(w, STEAM_SIFT_MARK)?;
+            put_u64(w, STEAM_SIFT_V)?;
+            put_all(w, d.perched.iter().copied())?;
         }
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
@@ -985,6 +1003,7 @@ impl Canvas {
         }
         c.tally = crate::tally::Tally::from_words(words).ok_or_else(|| bad("checkpoint hand-time ledger is invalid"))?;
         let mut damp = false;
+        let mut sifted = false;
         c.engine = if version == 7 {
             1
         } else {
@@ -1002,7 +1021,8 @@ impl Canvas {
             c.oils = word & OILS != 0;
             c.wet_pastel = word & WET_PASTEL != 0;
             damp = word & DAMP_PAPER != 0;
-            match u32::try_from(word & !(OILS | WET_PASTEL | DAMP_PAPER | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            sifted = word & STEAM_SIFT != 0;
+            match u32::try_from(word & !(OILS | WET_PASTEL | DAMP_PAPER | STEAM_SIFT | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!(c.liquid_film_levels || c.oils) || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
@@ -1060,6 +1080,21 @@ impl Canvas {
                 return Err(bad("checkpoint damp sheet's water is invalid"));
             }
             c.damp = Some(crate::damp::Damp { water, faces: faces as u8 });
+        }
+        if sifted {
+            if get_u64(r)? != STEAM_SIFT_MARK {
+                return Err(bad("checkpoint sifted crumbs section is invalid"));
+            }
+            match get_u64(r)? {
+                STEAM_SIFT_V => {}
+                v => return Err(bad(&format!("checkpoint sifted crumbs section is version {v}; this easel reads version {STEAM_SIFT_V} only"))),
+            }
+            let Some(d) = c.drawing.as_deref_mut() else { return Err(bad("checkpoint sifted crumbs without a drawing")) };
+            let v = get_all(r, d.cells.len() * crate::steam::PERCH)?;
+            if !v.iter().all(|x| x.is_finite() && *x >= 0.0) {
+                return Err(bad("checkpoint sifted crumbs are invalid"));
+            }
+            d.perched = v;
         }
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));

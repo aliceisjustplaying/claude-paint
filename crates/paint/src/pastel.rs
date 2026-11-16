@@ -1020,6 +1020,10 @@ impl Canvas {
                 let before = (c.a, c.reflectance());
                 c.bind_resin(w, resin);
                 self.px[i] = c.repaint(self.px[i], before);
+                // (sifted crumbs lying there are fixed with it: `crate::steam`)
+                if let Some(p) = d.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
+                    crate::steam::bind(p, 1.0);
+                }
                 continue;
             }
             c.floor = c.a;

@@ -100,6 +100,12 @@ const CRUMB_KG_M3: f32 = 1250.0;
 /// The largest loose crumb lying on the tooth, µm (crumbs from soft pastel
 /// run to 100–300 µm: pastel_stick_tribology.md §3).
 const CRUMB_MAX_UM: f32 = 300.0;
+
+/// The largest dry loose crumb a tap at `g` gravities leaves on the tooth,
+/// µm: its weight m·a passes `ADHESION_N` (a crumb of d_c = (6F/πρa)^⅓).
+pub(crate) fn dry_fall_um(g: f32) -> f32 {
+    (6.0 * ADHESION_N / (std::f32::consts::PI * CRUMB_KG_M3 * 9.81 * g)).cbrt() * 1e6
+}
 /// Air: density kg/m³ and kinematic viscosity m²/s.
 const AIR_KG_M3: f32 = 1.2;
 const AIR_NU: f32 = 1.5e-5;
@@ -435,7 +441,7 @@ impl Canvas {
     /// Take loose pastel off cell `i` down to `keep` µm of it (the fixed stays):
     /// its coverage falls as a deposit's builds (Poisson, PARTICLE_UM).
     /// Returns what came off, µm.
-    fn take_loose(c: &mut crate::graphite::Cell, px: &mut Rgb, keep: f32) -> f32 {
+    pub(crate) fn take_loose(c: &mut crate::graphite::Cell, px: &mut Rgb, keep: f32) -> f32 {
         let v = c.loose + c.bound;
         let keep = keep.max(c.bound).min(v);
         let ex = if c.optics.is_some() { c.loose - (keep - c.bound).max(0.0) } else { v - keep };
@@ -864,14 +870,27 @@ impl Canvas {
                 let v = cl.loose + cl.bound;
                 // the heap goes past its threshold (shear fluctuates: a ramp, not a cut)
                 let heap_goes = ramp(us / ut_heap);
-                let heap = (v - mu).max(0.0).min(cl.loose);
+                let mut heap = (v - mu).max(0.0).min(cl.loose);
                 // and the pores' fine grains as deep as the flow keeps the shear
                 let z = if us > ut_fine { w_um / 2.105 * (us / ut_fine).ln() } else { 0.0 };
-                let in_pores = v.min(mu);
+                let mut in_pores = v.min(mu);
+                // (dry sifted crumbs lie on the tooth, `crate::steam`: they are
+                // heaped whatever the pores hold)
+                let perch = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH);
+                let lp = perch.map_or(0.0, |p| crate::steam::blowable(p, cl)).min(cl.loose);
+                if lp > heap {
+                    heap = lp;
+                    in_pores = (v - lp).min(mu);
+                }
                 let keep_pores = if z > 0.0 { Self::below(in_pores, mu, z) } else { in_pores };
                 let keep = keep_pores + (v - in_pores) - heap * heap_goes;
                 let r = cl.r;
                 let ex = Self::take_loose(cl, &mut pxs[i], keep);
+                if lp > 0.0 {
+                    if let Some(p) = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
+                        crate::steam::blown(p, (lp * heap_goes).min(ex));
+                    }
+                }
                 if ex > 0.0 {
                     let k = sector(wx, wy);
                     let crumbs = (heap * heap_goes).min(ex);
@@ -1090,7 +1109,7 @@ impl Canvas {
         }
         let s_mm = self.px_mm();
         let px_um2 = (s_mm * 1000.0).powi(2);
-        let d_c = (6.0 * ADHESION_N / (std::f32::consts::PI * CRUMB_KG_M3 * 9.81 * g)).cbrt() * 1e6;
+        let d_c = dry_fall_um(g);
         let (amin, amax, ac) = (25.0f32, CRUMB_MAX_UM * CRUMB_MAX_UM, (d_c * d_c).max(25.0));
         let share = ((amax - ac) / (amax - amin)).clamp(0.0, 1.0);
         if share <= 0.0 {
@@ -1099,21 +1118,34 @@ impl Canvas {
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut gone = 0.0f32;
+        // (sifted crumbs lying on the tooth, `crate::steam`: shed by their
+        // own sizes and hold, counted as crushed)
+        let mut sifted = 0.0f32;
         for i in 0..pxs.len() {
             if !self.open_pastel(&dr, i) {
                 continue;
             }
             let mu = self.micro_um(i);
             let cl = &mut dr.cells[i];
+            let mut perched = 0.0f32;
+            if let Some(p) = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
+                let (dv, dl, left) = crate::steam::tap(p, cl, g);
+                if dl > 0.0 {
+                    let v = cl.loose + cl.bound;
+                    Self::take_loose(cl, &mut pxs[i], v - dl);
+                    sifted += dv;
+                }
+                perched = left;
+            }
             let v = cl.loose + cl.bound;
-            let heap = (v - mu).max(0.0).min(cl.loose);
+            let heap = (v - mu - perched).max(0.0).min(cl.loose - perched);
             if heap > 0.0 {
                 gone += Self::take_loose(cl, &mut pxs[i], v - heap * share);
             }
         }
         self.drawing = Some(dr);
         self.px = pxs;
-        gone * px_um2 * 1e-9
+        gone * px_um2 * 1e-9 + sifted * px_um2 * 1e-9
     }
 
     /// A stick held at `pose` with its tip at (x, y) (units), over the window's

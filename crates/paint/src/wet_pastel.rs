@@ -641,6 +641,10 @@ impl Canvas {
                 damp = true;
             } else if wet_before {
                 c.gum_set(binds(g));
+                // (sifted crumbs lying there are bound with it: `crate::steam`)
+                if let Some(p) = d.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
+                    crate::steam::bind(p, binds(g));
+                }
             }
             self.px[i] = c.repaint(self.px[i], before);
         }

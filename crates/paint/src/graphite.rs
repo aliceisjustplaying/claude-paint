@@ -410,6 +410,10 @@ pub struct Drawing {
     /// The water the sheet has taken in under each cell, µm (empty until
     /// water first sinks into it: `crate::wet_pastel`).
     pub(crate) sheet: Vec<f32>,
+    /// Sifted crumbs lying on the tooth rather than pressed into it, per
+    /// cell (`crate::steam::PERCH` values each; empty until pastel is first
+    /// sifted: `crate::steam`).
+    pub(crate) perched: Vec<f32>,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -768,7 +772,8 @@ impl Drawing {
         w.write_all(&b)?;
         crate::checkpoint::spill_vec(w, Some(&self.guide))?;
         crate::checkpoint::spill_vec(w, self.guide_floor.as_deref())?;
-        crate::checkpoint::spill_vec(w, Some(&self.sheet))
+        crate::checkpoint::spill_vec(w, Some(&self.sheet))?;
+        crate::checkpoint::spill_vec(w, Some(&self.perched))
     }
 
     /// `spill` read back.
@@ -794,17 +799,18 @@ impl Drawing {
         let guide = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its guide"))?;
         let guide_floor = crate::checkpoint::unspill_vec(r)?;
         let sheet = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its sheet's water"))?;
-        Ok(Drawing { cells, guide, guide_floor, sticks: flags[0] == 1, optics: flags[1] == 1, carbon: flags[2] == 1, damp: flags[3] == 1, sheet })
+        let perched = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its perched crumbs"))?;
+        Ok(Drawing { cells, guide, guide_floor, sticks: flags[0] == 1, optics: flags[1] == 1, carbon: flags[2] == 1, damp: flags[3] == 1, sheet, perched })
     }
 
     /// The bytes its buffers hold (what a canvas put aside keeps of it in
     /// memory: checkpoint.rs `Aside::heap_bytes`).
     pub(crate) fn heap_bytes(&self) -> usize {
-        self.cells.capacity() * std::mem::size_of::<Cell>() + self.guide.capacity() * 4 + self.guide_floor.as_ref().map_or(0, |g| g.capacity() * 4) + self.sheet.capacity() * 4
+        self.cells.capacity() * std::mem::size_of::<Cell>() + self.guide.capacity() * 4 + self.guide_floor.as_ref().map_or(0, |g| g.capacity() * 4) + self.sheet.capacity() * 4 + self.perched.capacity() * 4
     }
 
     fn new(n: usize, whole: usize, optics: bool) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, carbon: false, optics, damp: false, sheet: Vec::new() }
+        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, carbon: false, optics, damp: false, sheet: Vec::new(), perched: Vec::new() }
     }
 
     /// The serialized layout (the checkpoint's drawing flag): 1 graphite
@@ -865,7 +871,7 @@ impl Drawing {
             && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0 && ok(c.carbon) && ok(c.carbon_bound))
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
         let valid = valid && cells.iter().all(|c| c.optics.is_none_or(|o| ok(o.fixed) && ok(o.graphite) && o.bound.into_iter().all(ok) && o.under.into_iter().all(f32::is_finite) && c.non_pastel_floor <= c.non_pastel && c.non_pastel_floor <= c.floor && c.floor + c.non_pastel - c.non_pastel_floor <= c.a + 1e-5));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, carbon: layout == 5, optics: layout >= 4, damp: false, sheet: Vec::new() }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, carbon: layout == 5, optics: layout >= 4, damp: false, sheet: Vec::new(), perched: Vec::new() }))
     }
 }
 

@@ -24,7 +24,7 @@ Where each stick's S comes from:
 - **Compressed charcoal:** `COMPRESSED_CHARCOAL` counts K and S per crumb of the compact (its pores within the crumb), so all of the stick: 0.0179.
 - In the tooth a stick's worn volume lies at `PARTICLE_UM / cover_um` of itself (`Grains::lies`), so its S per µm as it lies is `scatter × cover_um / PARTICLE_UM` (`Stick::lying_scatter`): pastel 0.45 S_particle, vine 0.49, compressed 0.55, the same packing of about one half.
 
-The intimate paths are the finger (`Canvas::rub`), the crumbs under a stick's face (`pastel::lay_crumbs_of`), a dry brush, a knife and a puff (`sheet.rs`), a wet brush's paste (`wet_pastel::wash_pastel`) and sticks ground together into a brush's paste (the easel's `b:dip`). Each tool carries its load's S (`pastel::Carried::mixed`, `WashLoad::paste_s`, `Held::paste_s`), so what it picks up mixes on it by Kubelka–Munk too. A paste that packs as it dries (`wet_pastel::dried_share`) keeps its particles, so its S per volume rises by the same factor.
+The intimate paths are the finger (`Canvas::rub`), the crumbs under a stick's face (`pastel::lay_crumbs_of`; with the crumb layer switch they lie over the loose pastel instead, §3a), a dry brush, a knife and a puff (`sheet.rs`), a wet brush's paste (`wet_pastel::wash_pastel`) and sticks ground together into a brush's paste (the easel's `b:dip`). Each tool carries its load's S (`pastel::Carried::mixed`, `WashLoad::paste_s`, `Held::paste_s`), so what it picks up mixes on it by Kubelka–Munk too. A paste that packs as it dries (`wet_pastel::dried_share`) keeps its particles, so its S per volume rises by the same factor.
 
 **Check against the audit's figure** (a yellow pastel (0.75, 0.6, 0.1) whose particles scatter as chalk filler, S = 0.75 × 0.73 µm⁻¹, with vine charcoal; charcoal.md §6):
 
@@ -46,6 +46,10 @@ The tooth's layers cover by area as `Cell::reflectance` counts them, l = 1 − e
 - (1 − l_old) q is the new particles beside the old: their own color, an area mix.
 
 So pastel over loose charcoal keeps more of its color than the same pastel rubbed in: a single stroke's 6 µm of chalk (SX ≈ 0.7) lets the charcoal show; a heavy one hides it. Over fixed pastel nothing changes (the fixed crust is its own stratum, as before).
+
+## 3a. A stroke's crumbs: a layer too (the crumb layer switch) [D]
+
+This switch (`--@ pastel-crumb-layer`) mixed a stroke's crumbs (`pastel::lay_crumbs_of`) into the loose pastel intimately, with the finger's paste. But the crumbs settle in the bed of pixels under the face *not* in contact with it (0 < gap < a crumb's size): the face is above them, so nothing shears them into the pastel already there. They lie over it, as the face deposit does, and need the same two-layer rule. The crumbs are 1 − 1/6.6 ≈ 85 % of what a stroke lays (`SHED`), so mixing them made a light over a loose dark all but invisible: three passes of a near-black (3.3 µm loose in the tooth), then four passes of a pale stick laying 1.4 µm more, moved the band's Y from 0.387 to 0.382 (darker), and over the same passage smudged from 0.322 to 0.311. With the crumbs layered: 0.387 → 0.442 and 0.322 → 0.419. Pastel over loose charcoal still comes out greyer than over fixed (the layer is thin and leaves gaps). Details and the other behaviours checked with it: pastel_layering.md.
 
 ## 4. Memory
 

@@ -280,6 +280,8 @@ pub struct Canvas {
     pub(crate) drain: bool,
     /// A strainer's bar holds the sheet beside it up (`with_strainer_edge`).
     pub(crate) strainer_edge: bool,
+    /// A pastel stick's seat found by Newton (`with_seat_solver`).
+    pub(crate) seat_solver: bool,
     /// A sheet of paper laid over part of the picture (`sheet.rs`).
     pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
@@ -349,6 +351,7 @@ impl Canvas {
             soak: None,
             drain: false,
             strainer_edge: false,
+            seat_solver: false,
             sheet: None,
         }
     }
@@ -406,6 +409,23 @@ impl Canvas {
 
     pub fn strainer_edge(&self) -> bool {
         self.strainer_edge
+    }
+
+    /// Where a pastel stick comes down (`Canvas::seat_stick`), found by
+    /// safeguarded Newton on the force balance and on each pixel's balance
+    /// of the surface's give against the stick's yielding, instead of a
+    /// bisection of bisections: the same balance, to 1e-6 of the force and
+    /// finer than the bisection in each pixel, several times faster. It
+    /// changes the last bits of where the stick sits, so a painting begun
+    /// before it keeps the bisection. A checkpoint keeps it (a bit of the
+    /// engine word).
+    pub fn with_seat_solver(mut self, enabled: bool) -> Self {
+        self.seat_solver = enabled;
+        self
+    }
+
+    pub fn seat_solver(&self) -> bool {
+        self.seat_solver
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {

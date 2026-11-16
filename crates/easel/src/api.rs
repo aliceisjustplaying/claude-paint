@@ -3499,4 +3499,56 @@ mod paper_presets_tests {
         std::fs::remove_file(path).unwrap();
         assert!(restored.st.borrow().tubes.strainer_edge && restored.canvas().unwrap().strainer_edge());
     }
+    /// The seat-solver switch: a new painting's log has it, and a log
+    /// without it seats a pastel stick by the bisection, as before. With it
+    /// the strokes lay what the bisection's did, to a tenth of a percent
+    /// (0.02% here), and its pixels move by under 2% of what was laid (the
+    /// crumbs land a little differently); it is read from the head only,
+    /// and replays and saves bit for bit.
+    #[test]
+    fn the_seat_solver_comes_with_its_log_head_line() {
+        use crate::session::SEAT_SOLVER_MARK;
+        let fresh = Session::replay_with(96, box_for(None).unwrap()).unwrap().with_paper(true).unwrap().program("t");
+        let older: String = fresh.lines().take_while(|l| !l.starts_with(MARK)).filter(|l| *l != SEAT_SOLVER_MARK).map(|l| format!("{l}\n")).collect();
+        assert!(fresh.lines().any(|l| l == SEAT_SOLVER_MARK), "{fresh}");
+        assert!(!box_for(Some(&older)).unwrap().seat_solver);
+        assert!(box_for(Some(&format!("{older}{SEAT_SOLVER_MARK}\n"))).unwrap().seat_solver);
+        assert!(!box_for(Some(&format!("{older}{MARK} 1\n{SEAT_SOLVER_MARK}\n"))).unwrap().seat_solver, "only in the head");
+        assert!(box_for(None).unwrap().seat_solver, "a new painting has it");
+        let canvas = r#"canvas{size=200, aspect=1, seed=3, paper={preset="blue wove", mount="strainer"}}"#;
+        let strokes = r#"p = pastel(pile{{"lead white", 1}})
+            for x = 300, 700, 50 do p:stroke({{x, 300}, {x + 150, 700}}, {force=2}) end"#;
+        let painted = |log: Option<&str>, strokes: &str| {
+            let mut s = Session::replay_with(96, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            s.run(canvas).unwrap();
+            if !strokes.is_empty() {
+                s.run(strokes).unwrap();
+            }
+            s
+        };
+        let bare = painted(None, "");
+        let (old, new) = (painted(Some(&older), strokes), painted(None, strokes));
+        assert!(!old.canvas().unwrap().seat_solver() && new.canvas().unwrap().seat_solver());
+        let (b, o, n) = (bare.canvas().unwrap().pixels().to_vec(), old.canvas().unwrap().pixels().to_vec(), new.canvas().unwrap().pixels().to_vec());
+        let lift = |p: &[paint::Rgb]| p.iter().zip(&b).map(|(q, r)| (0..3).map(|k| (q[k] - r[k]) as f64).sum::<f64>()).sum::<f64>();
+        let (lo, ln) = (lift(&o), lift(&n));
+        // (and pixel by pixel: what moved is small beside what was laid)
+        let moved = o.iter().zip(&n).map(|(p, q)| (0..3).map(|k| (p[k] - q[k]).abs() as f64).sum::<f64>()).sum::<f64>();
+        assert!(lo > 0.0 && ((ln - lo) / lo).abs() < 1e-3, "lightening {lo} by the bisection, {ln} by Newton");
+        assert!(moved > 0.0 && moved < 0.02 * lo, "moved {moved} of {lo} laid");
+        let s = painted(None, strokes);
+        let log = s.program("t");
+        assert!(log.lines().any(|l| l == SEAT_SOLVER_MARK), "{log}");
+        for (log, live) in [(log.clone(), &s), (older.clone(), &painted(Some(&older), strokes))] {
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_paper(true).unwrap();
+            replay.run(canvas).unwrap();
+            replay.run(strokes).unwrap();
+            assert_eq!(replay.canvas().unwrap().pixels(), live.canvas().unwrap().pixels());
+        }
+        let path = std::env::temp_dir().join(format!("easel-seat-solver-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &log, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.seat_solver && restored.canvas().unwrap().seat_solver());
+    }
 }

@@ -109,6 +109,14 @@ pub const PAPER_PRESETS_MARK: &str = "--@ paper-presets";
 /// hard line along each bar's inner edge, replayed as it was painted. A new
 /// painting has it; off a strainer it changes nothing.
 pub const STRAINER_EDGE_MARK: &str = "--@ strainer-edge";
+/// The seat-solver switch, in the head of a session file: a pastel stick's
+/// seat (how far it sinks into the tooth, and each pixel's pressure) found
+/// by safeguarded Newton instead of a bisection of bisections (paint's
+/// `Canvas::with_seat_solver`): the same balance to within its tolerance,
+/// several times faster, most on a soft bed such as a sheet on a strainer.
+/// A log without it keeps the bisection's bits and replays as it was
+/// painted. A new painting has it.
+pub const SEAT_SOLVER_MARK: &str = "--@ seat-solver";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
 /// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
@@ -810,6 +818,9 @@ impl Session {
         }
         if self.st.borrow().tubes.strainer_edge {
             let _ = writeln!(s, "{STRAINER_EDGE_MARK}");
+        }
+        if self.st.borrow().tubes.seat_solver {
+            let _ = writeln!(s, "{SEAT_SOLVER_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1588,6 +1599,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.calls_agree = true;
         b.paper_presets = true;
         b.strainer_edge = true;
+        b.seat_solver = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1658,6 +1670,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.paper_presets = head(PAPER_PRESETS_MARK);
     b.strainer_edge = head(STRAINER_EDGE_MARK);
+    b.seat_solver = head(SEAT_SOLVER_MARK);
     if b.paper_presets && engine < 5 {
         return Err(format!("the log's {PAPER_PRESETS_MARK} line (the paper-presets switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }

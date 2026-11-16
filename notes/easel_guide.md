@@ -756,6 +756,14 @@ has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
 
+How far a stick sinks, and the pressure on each pixel under it, is found by
+Newton in a painting begun since the seat solver came (its log's head says
+`--@ seat-solver`). It is the same balance as before, solved more closely
+and several times faster, most of all on a soft bed: a hatch on a sheet over
+a strainer takes about a thirtieth of the time at 2400 px. An older painting
+seats its sticks by the bisection it was painted with, and replays as it was
+painted.
+
 ## The rag
 
 ```lua

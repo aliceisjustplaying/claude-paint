@@ -263,6 +263,36 @@ Ink is pushed into the lines with a card, a roller or a dabber (rolled felt), wo
   - Ink in a pit is a mixture of both, by volume.
   - In the press the inks do not flow sideways much (§6.4).
 
+### 5.6 What the engine uses (phase P3b, `--@ press`) [D] [M] [E]
+
+crates/paint/src/plate/inked.rs. Each number is derived here, taken from a measurement, or marked [E] with its reason.
+
+- **The ink's viscosity [D, M, E].**
+  - Burnt plate oil at 20 °C: #3 ("medium", the usual heavy grade) taken as a 40-poise lithographic varnish, **4 Pa·s** [M, Printing Ink Manual 1961: a litho ink's varnish of 40 poise]; #00 ("thin", "like cooking oil") **0.1 Pa·s** [E: the makers give no figure; vegetable oils are 0.05–0.1 Pa·s]. Grades between are log-linear.
+  - The pigment raises it by Krieger–Dougherty, η = η_oil·(1 − φ/φ_m)^(−2.5·φ_m), φ_m = 0.64 (random close packing) [M, standard suspension rheology]. φ is the tubes' pigment share (their oil from `palette::tube_packing`, the pigments' oil absorption), less the plate oil added.
+  - Check: a bone-black ink at φ = 0.45 in #3 oil comes to 28 Pa·s, inside the banknote range of 5–50 Pa·s [M] and below the bureau's 130 Pa·s ink [M] (§5.1).
+  - Warmth: η halves every **17.5 °C** (§5.1's 15–20 °C for linseed oil) [M].
+  - Shear-thinning is left out: the zero-shear viscosity is used throughout [E: no flow curve for etching ink was found].
+- **Filling a line [D].** Ink pushed at pressure p into a slot of width w flows by plane Poiseuille flow, dL/dt = w²p/(12ηL), so in a time t it goes L = w·√(pt/(6η)) deep; against a yield stress τ a plug is held by both walls at L = pw/(2τ). The share filled is L/d, at most **φ_air = 0.9** [E: air trapped at the groove's bottom; plan §5.1, until Unknown 3].
+  - The card: 10 N on a bead 50 mm × 2 mm, 100 kPa; a point under the bead 0.25 s, twice [E: hand estimates]. The dabber: 20 N on a 30 mm face, 28 kPa, ten dabs of 0.2 s [E].
+  - With these a line of a few µm fills to φ_air; only a stiff cold ink in a line of 1–2 µm is limited, and warming fills it. The yield stress (**300 Pa** [E], the middle of §5.1's 10²–10³ Pa) limits nothing at the card's pressure.
+- **The card's film [D].** The card's edge rides on the ink as Reynolds' inclined slider: h = √(6·K·η·U·ℓ/p), K = 0.0267 at the best inclination [M, Reynolds' slider], U 20 mm/s, ℓ the 1 mm edge [E]. A 28 Pa·s ink leaves about 30 µm on the flat; the dabber leaves 10 µm [E: half, a film's split, of a 20 µm charge].
+- **The tarlatan [D, E].** As §5.3: B = 10⁻⁵–10⁻⁴ N·m by `stiff` 0–1, log-linear [E, Unknown 8]; yarn radius 75 µm [E]; the pad presses at 20 kPa × `pressure` (a hand's 20–50 N over 20–50 cm²) [D].
+  - **Reach** into an opening of width w at x from its rim: the yarn's chord r − √(r² − w²/4) for w < 2r (its radius r in a wider one) plus the cloth's sag as a beam clamped at both rims, p·x²(w − x)²/(24B), which is §5.3's p·w⁴/(384B) at the middle. A wide opening's cell knows its distance from the rim; a narrow one is averaged across its width.
+  - Consequence: an open bite shallower than a yarn's radius (75 µm) is wiped clean to its rims. A deeper one keeps a band at its rim where the yarn and the sag stay above its floor: about 0.5 mm for a 120 µm bite 5 mm wide at B = 5·10⁻⁵ N·m and 10 kPa.
+  - **What it takes** follows the rag's lift law (crates/paint/src/rag.rs: `LIFT`, the face's thirst, its creases), the ink's fluidity (`drying::fluid` of its cure), and the face's room (`CAP_UM`). It smears back `SMEAR` of the ink at its surface for each quarter of its width it slides, of which `SOAK` soaks in. That smear is the plate tone. These are the rag's [E] numbers, reused as plan §5.2 decided; the tarlatan's own capacity is unmeasured.
+  - With them, on a stiff black (30 µm left by the card), one pass in circles leaves a tone of 3 µm, three passes 1 µm, five 0.4 µm and eight 0.2 µm. The last two are inside this note's [E] 0.1–0.5 µm (§5.4). The comparison is a check, not a fit.
+- **The burr's lee [D].** The cloth is held off the plate for (B·h/p)^¼ (§1.5) **either side** of a burr, as a plate bent over a support lifts on both sides. It is held off in proportion to |sin φ|, φ the angle between the wipe and the line [D/E: a drape sliding along the burr wipes beside it; how fully is unmeasured]. Across a line the lee keeps its ink; along it, it doesn't.
+- **The palm [D, E].** Skin 0.3 MPa [E: §5.4's 0.1–1 MPa, geometric middle], ν = 0.5 [M], pressed at 10 kPa × `pressure` [E].
+  - It bulges into a slit as a pressurised crack in an elastic half-space, 2p(1 − ν²)/E·√(x(w − x)) (Sneddon): **about 1 µm into a 100 µm line** at 5 kPa, the whole of an open bite.
+  - It is held off past a step h for h·E/(p(1 − ν²)): 2 mm past a 25 µm burr.
+  - It parts from the film it touches taking half (a symmetric film split, §6.4), or 0.9 with whiting [E: whiting drinks the oil], four touches a pass [E]. Two passes with whiting take a tarlatan's tone to nearly nothing (well under §5.4's 0.05 µm: the palm is wiped clean between strokes, so it lays nothing back); without whiting each pass leaves about a sixteenth.
+  - Whiting's abrasion of burr is left to phase P7 (wear).
+- **Retroussage [D, E].** A soft muslin's fibre ends, cotton 15 µm across [M: 12–20 µm], hang into any wider opening. They draw ink up by Lucas–Washburn, h = √(γ·r·t/(2η)): γ = 0.033 N/m for linseed oil [M], pores 10 µm [E], 0.05 s a touch [E]. That is about 17 µm of a 28 Pa·s ink at 20 °C and 28 µm warmed to 45 °C. The ink is laid on the plate within 0.5 mm [E], less the rag's `SOAK` share, which the cloth keeps.
+- **Drying [D].** The ink dries as an oil film of its thickness: `drying::rate` with its pigments' rates (`Palette::drying_of`), fattened by added oil, at engine 3's pace (`drying::Pace`). It is wiped or printed by its fluidity, `drying::fluid` of its cure: a stiff black left on a plate a week has set past its gel point. Warmth's effect on the oxidation rate is not modelled [E].
+- **The warm plate [D, M, E].** Off the hot plate a plate cools in air with τ = ρ·c·t/h: copper 8960 kg/m³ × 385 J/(kg·K), zinc 7140 × 388 [M]. h = 10 W/(m²·K) over its area, both faces and the bench [E: natural convection from a warm horizontal plate is 2–5 W/(m²·K) a face; polished copper hardly radiates]. A 1.3 mm copper plate has τ = 7.5 min. Warming takes 2 min of hand time [D: ρct over a 300 W/(m²·K) contact is 15 s, four of those come within 2 %; the contact conductance is E].
+- **Hand time [P].** Cassatt's 15–20 min to ink and wipe each plate of a three-plate proof (§5.4) is spread over a plate of 35 × 21 cm and the usual sequence: a card's inking, three tarlatan passes and two palm passes. A quarter of the time goes to the card, a half to the tarlatan and a quarter to the palm [E: the split]. That gives 277 mm²/s for the card, 416 for a tarlatan pass and 555 for a palm pass.
+
 ## 6. The press
 
 ### 6.1 Pressure [M] [D] [P]

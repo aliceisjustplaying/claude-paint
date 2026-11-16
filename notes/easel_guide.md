@@ -1335,7 +1335,7 @@ A painting whose log's head also says `--@ plate` (new paintings do; it needs
 `--@ surfaces`) may keep intaglio plates among its surfaces and work them as a drypoint
 artist does. Without the switch none of this exists (`plate`, `needle` and the plate's tools
 are not there), and a painting with named surfaces that makes no plate saves and replays as
-before. No ink, wiping or press yet: those come with `--@ press`.
+before. Ink and wiping come with `--@ press` (below, after damp paper).
 
 ```lua
 k = plate{name="key", metal="copper", temper="half-hard", size={346, 211}, thickness=1.3, bevel=45}
@@ -1419,8 +1419,7 @@ use("painting")
 A painting whose log's head also says `--@ etch` (new paintings do; it needs `--@ plate`) may
 ground its plates, draw through the ground, bite them in acid and lay an aquatint. Without the
 switch these tools refuse ("this painting doesn't etch"), and a plate no etching tool has
-touched saves and replays byte for byte as before. Still no ink or press: those come with
-`--@ press`.
+touched saves and replays byte for byte as before. Ink and wiping come with `--@ press`.
 
 ```lua
 use(k)
@@ -1571,6 +1570,78 @@ mc, word, t = damp_of(pr)         -- 0.4 (g water per g fiber), "damp", {width=,
   the way (`receive{after=}`) if it was left open, as it left if covered. Saves and
   checkpoints keep its water.
 
+
+## Ink and wiping a plate
+
+A painting whose log's head also says `--@ press` (new paintings do; it needs `--@ plate` and
+`--@ damp-paper`, and without them it is accepted and installs nothing) may mix etching inks,
+ink its plates and wipe them as a printer does. Without the switch `ink` and `tarlatan` don't
+exist and a plate's printer's verbs refuse ("no ink or press"); a plate never inked saves and
+replays byte for byte as before. The press itself comes next.
+
+```lua
+black = ink{{"bone black", 3}, {"raw umber", 1}, oil=0.1, stiff=1}  -- tubes from the box, in burnt plate oil
+use(k)
+k:warm(40)                                   -- on the hot plate at 40 °C; it cools in air from then
+r = k:ink(black)                             -- by card; {by="dabber"}, {mask=m}
+t = tarlatan{stiff=0.7}                      -- starched tarlatan bunched to a pad (width= mm)
+w = t:wipe(k, nil, {pressure=0.5, passes=3}) -- in circles; {angle=90}: back and forth across
+k:hand_wipe(nil, {passes=2})                 -- the palm, with whiting ({whiting=false}: without)
+k:retrousse(rect(0, 250, 1000, 100))         -- a soft muslin drawing ink up beside the lines
+print(k:feel(500, 300).words)                -- "wet ink, 12 µm in the lines and a film of 0.02 µm; …"
+k:clean_ink()                                -- solvent and a rag: all the ink off
+use("painting")
+```
+
+- **`ink{{tube, parts}, ..., oil=, stiff=, name=}`.** Pigment from the box's tubes in burnt
+  plate oil. `oil` (0 to 0.6, default 0) is plate oil added, its share of the ink: it thins
+  the pigment's colour per µm and makes the ink fatter (slower to dry). `stiff` is the oil's
+  grade, 0 light (#00) to 1 heavy (#3, the default). The ink's viscosity is the oil's raised
+  by its pigment (Krieger–Dougherty) and halving with every 17.5 °C of warmth: `black.viscosity`
+  (Pa·s at 20 °C), `black.pigment` (its share of the ink).
+- **`k:warm(t)`** puts the plate on the hot plate (2 minutes of hand time); it comes off at
+  `t` °C and cools in air with a time constant from its metal and thickness (copper 1.3 mm:
+  7.5 minutes). A warm plate's ink is thinner: it fills fine lines more fully and
+  retroussage draws up more.
+- **`k:ink(black, {mask=, by=})`** pushes ink into every line and pit (to 90 % of it, the
+  air trapped at the bottom, unless the ink is too stiff to be pushed into a very fine line in
+  the time) and leaves a film on the flat: the card's edge drags a film by Reynolds' slider
+  law, some tens of µm of a stiff ink. Reports `added` (mm³), `film` (µm), `fill`, `temp`,
+  `viscosity`, `area` (mm²), `seconds`. A coated plate (ground, rosin) refuses ink.
+- **`t:wipe(k, mask, {pressure=, passes=, angle=})`.** A tarlatan is a rag: its face loads,
+  takes less as it fills, smears a little back (the plate tone), and is refolded with
+  `t:refold()`. It reaches a line's ink by its yarns (a 75 µm yarn dips 4 µm into a 50 µm
+  line, 19 µm into a 100 µm one, its radius into a wider one) and by its sag across a wide
+  opening, which goes as the width to the fourth: lines under half a millimetre keep their ink
+  below the yarns' reach, an open bite of several millimetres is wiped clean but for a band at
+  its rim (none if it is shallower than a yarn's radius). Past a burr the cloth is held off
+  the plate for (B·h/p)^¼, half a millimetre or so either side: wiping across a drypoint
+  line keeps that ink, the velvet of a drypoint; wiping along it doesn't. More `stiff`
+  starch holds the cloth stiffer: less from wide lines. Reports `before`, `after`, `taken`,
+  `laid`, `kept` (mm³: `kept` is what the cloth now holds, `before − after`), `film` and
+  `lines` (µm left over the area), `seconds`, `temp`; `t.load`, `t.ink` (mm³ held).
+- **`k:hand_wipe(mask, {pressure=, passes=, whiting=, angle=})`.** The palm: soft skin bulges
+  only a few µm into a fine line and right into an open bite, parts from the film it touches
+  taking half (with whiting nearly all), and is held off past a burr further than the cloth.
+  Two passes with whiting take a tarlatan's tone to almost nothing: the bare metal shines.
+- **`k:retrousse(mask, {passes=})`.** A soft cloth's fibre ends hang into the lines and draw
+  ink up by capillarity (more from a warm plate), laying it on the plate within half a
+  millimetre around: lines soften and spread.
+- **Drying.** The ink dries as an oil film of its thickness, on the clock: it wipes for hours,
+  and a day or two later it has set and nothing moves it. A plate handed off inked
+  (`handoff`) arrives aged by its time on the way: received three days later, its ink has
+  dried in.
+- **`k:feel`** adds the ink (`ink`, `film`, `cure` and words: wet, tacky or set); `probe` adds
+  the ink in the lines and the film over the area, and the plate's temperature. `look --surface`
+  shows the ink as a Kubelka–Munk film over the metal, black in the lines.
+- **Hand time.** From Cassatt's account of printing with Leroy (15–20 minutes to ink and wipe
+  each plate of a proof, plates about 35 × 21 cm): the card 277 mm² a second, a tarlatan pass
+  416, a palm pass 555; a small plate takes proportionally less.
+- **Saves, checkpoints, replay and handoff** keep the ink in the plate's section (`PLAT`
+  version 3; versions 1 and 2 still read and are still written for plates never inked). The
+  tarlatans are held with the rags: a failed chunk puts them back. A session without the switch
+  refuses to receive an inked plate.
+- **Physics and estimates:** notes/research/intaglio_physics.md §5.6.
 
 ## The journal
 

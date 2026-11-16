@@ -345,6 +345,38 @@ crates/paint/src/plate/inked.rs. Each number is derived here, taken from a measu
   - "Light-field" monotype paints the ink on; "dark-field" inks the whole plate and wipes the image out [Clark Art]. Both are inking and wiping (§5) without lines.
   - Degas soaked the paper to take up more ink [P].
 
+### 6.6 What the engine uses (phase P3b, `press{}`) [D] [M] [E]
+
+crates/paint/src/plate/press.rs.
+
+- **The felts [D, M, E].** A Winkler layer of stiffness k = E_f/T under a rigid roller of radius R (§6.1). Squeezed by d, a length of roller carries (4√2/3)·k·√R·d^(3/2) and presses k·d at the middle of a contact 2√(2Rd) long. The values:
+  - the felts' thicknesses 1.6 + 6.35 + 3.2 mm [M];
+  - the roller Ø 106 mm and the rating 130 N/mm over a 45 cm bed [M];
+  - E_f = 4.5 MPa [E: the geometric middle of §6.1's 1–20 MPa; Unknown 2].
+  - `pressure` is the share of the rated load the screws set.
+  - Over the plate the felts are squeezed by its thickness more than over the bed beside it. The load is shared between the two, so a 1.3 mm plate 35 cm wide at 0.7 takes 2.7 MPa against 2.2 MPa beside it, over a contact 54 mm long. These sit inside §6.1's 0.5–15 MPa.
+  - Squeezed past 80 % of their thickness the felts are solid and the press refuses [E: wool felt is about 80 % air].
+- **Press-in [D].** Over an opening of width w the sheet has nothing under it. The felt's pressure p pushes it in, and it is held by its through-thickness shear and its bending, as a Timoshenko strip clamped at the rims: v(x) = p·x(w − x)/(2·G·T) + p·x²(w − x)²/(24·D), with D = E·T³/12.
+  - G is sheet.rs's 30 MPa (paper_mechanics_and_transport.md §1). E is 4 GPa in plane [M: printing papers 2–8 GPa].
+  - Both fall with the sheet's water by damp.rs's `stiffness` (0.22 damp), so a damp sheet goes in about 4.5 times as far.
+  - A sheet thicker than the opening is wide bridges it, as Aoki found.
+- **The fibre tops [D].** Over an opening the sheet's surface fibres are not pressed flat. The share of them reaching a depth z below its face is the bearing curve of its pores, e^(−z/µ) (paper.rs: µ, the pore depth, about 4–9 µm).
+  - So the share of an opening's ink the sheet touches is the mean across its width of e^(−max(0, g − v)/µ), where g is how far below the plate's face the ink stands.
+  - This is what lets a fine line print when the sheet barely presses into it (Aoki: transfer starts low at low press-in and climbs fast with fill).
+- **The split [M, E].** 0.45 to a non-absorbent sheet [M, Aoki & Murakami], 0.6 to an absorbent one [M, Pritchard & Finkle]. A dry sheet lies between them by `Paper::absorbent` [D: interpolation], a damp sheet 0.6 [E: §6.4's 0.55–0.7].
+  - Transfer from an opening is the split × its ink × the share touched × the ink's fluidity (`drying::fluid`: set ink stays). The film on the flat splits whole.
+  - It rises with fill and with press-in, toward the split, never past it. A damp sheet takes more than a dry one, by its press-in and its split.
+- **The print [D].** Mirrored. The ink is laid at the sheet's pixel under each plate cell, by area (the two pitches can differ by rounding), as wet oil paint of its tubes (`Palette::pile(...).paint(oil)`).
+  - It mixes by volume with any wet paint there, its cure carried over (`Canvas::lay_ink`).
+  - Nothing is drawn into the sheet's pores: a damp sheet's pores hold water, which oil does not enter (§6.4). Its absorption as the sheet dries is not modelled.
+  - The 5–15 µm sideways squeeze at a line's edge [E, §6.4] is below the engine's pixel and is left out.
+- **Embossing and the plate mark [D, E].** A damp sheet (free water in its pores, its bonds open: damp.rs `plastic`) keeps the shape it was pressed into as it dries (§6.3):
+  - the lines stand up by their mean press-in;
+  - a burr is pressed in by its volume;
+  - the footprint sinks by half the plate's thickness [E: §6.3's "fair share", 0.3–1 mm], sloping at the bevel over thickness/tan(bevel).
+  - A dry sheet springs back: none [E].
+- **Hand time [E].** The bed's travel (the plate's length and the contact) at `speed`, and 45 s to lay the sheet, tissue and felts and lift them: plan §6.2's "about a minute a pass".
+
 ## 7. Registration
 
 ### 7.1 Methods [P]

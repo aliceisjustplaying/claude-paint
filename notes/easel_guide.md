@@ -1571,13 +1571,13 @@ mc, word, t = damp_of(pr)         -- 0.4 (g water per g fiber), "damp", {width=,
   checkpoints keep its water.
 
 
-## Ink and wiping a plate
+## Ink, wiping and the press
 
 A painting whose log's head also says `--@ press` (new paintings do; it needs `--@ plate` and
 `--@ damp-paper`, and without them it is accepted and installs nothing) may mix etching inks,
-ink its plates and wipe them as a printer does. Without the switch `ink` and `tarlatan` don't
-exist and a plate's printer's verbs refuse ("no ink or press"); a plate never inked saves and
-replays byte for byte as before. The press itself comes next.
+ink its plates, wipe them and pull prints as a printer does. Without the switch `ink`,
+`tarlatan` and `press` don't exist and a plate's printer's verbs refuse ("no ink or press"); a
+plate never inked saves and replays byte for byte as before.
 
 ```lua
 black = ink{{"bone black", 3}, {"raw umber", 1}, oil=0.1, stiff=1}  -- tubes from the box, in burnt plate oil
@@ -1642,6 +1642,42 @@ use("painting")
   tarlatans are held with the rags: a failed chunk puts them back. A session without the switch
   refuses to receive an inked plate.
 - **Physics and estimates:** notes/research/intaglio_physics.md §5.6.
+
+### The press
+
+```lua
+pr = sheet{name="proof", size=60, aspect=1, paper={grammage=250, laid={per_cm=9, chain=25}}, seed=3}
+soak(pr, {minutes=30}); blot(pr)               -- damp through (damp_of(pr) says "damp")
+r = press{plate=k, sheet=pr, pressure=0.7}     -- at={x, y} mm, felts={1.6, 6.35, 3.2}, roller=53, speed=20, load=130
+print(r.pressure, r.taken, r.mark)             -- MPa on the plate, mm³ of ink printed, µm of plate mark
+use(pr)                                        -- the print: mirrored, the ink wet on it
+```
+
+- **`press{plate=, sheet=, at=, felts=, pressure=, roller=, speed=, load=}`** pulls a print.
+  The sheet (a `sheet{}` or the painting if it is paper) is taken up for the pull and put
+  aside again; the plate rests, and gives up its ink. `at` places the plate's left edge on the
+  sheet as printed (mm; centred if not given). The press is a hand etching press: rated 130
+  N/mm over a 45 cm bed (`load`), a 106 mm top roller (`roller` is its radius), the felts a
+  catcher, a cushion and a pusher. `pressure` is the screws, 0 to 1 of its load.
+- **Pressure.** The felts are a soft layer under the roller; squeezed more over the plate by its
+  thickness, they press it harder than the bed beside it: at 0.7 some 3 MPa on the plate over a
+  contact about 55 mm long. Screwed down so far the felts would be squeezed solid, the press
+  refuses. Reports `pressure` and `beside` (MPa), `contact` (mm), `strain` (the felts').
+- **Transfer.** Where the sheet touches the ink, the ink splits: the sheet takes 0.6 of it if
+  it is damp, 0.45 to 0.6 if dry by how readily its pores take oil (`split`). The film on the
+  flat and the ink by a burr are always touched; in a line, the sheet presses in by its shear
+  and bending (a damp sheet some five times as far) and its fibre tops reach further by its
+  pores' depth, so a well-filled line gives more and a deep, half-wiped one less; never more
+  than the split. What isn't taken stays on the plate. Reports `taken` and `left` (mm³).
+- **The print** is the plate mirrored, the ink an oil film of its tubes on the paper, wet: it
+  dries on the clock as paint does. A damp sheet takes more than a dry one.
+- **Embossing.** A damp sheet keeps the plate's shape as it dries: its lines stand up, a burr is
+  pressed in, and the plate's footprint lies half the plate's thickness below the margin (the
+  plate mark, `mark` µm), sloping over the bevel. A dry sheet springs back. `look --mode relief`
+  shows it.
+- **Hand time.** The bed's travel at `speed` and three quarters of a minute to lay the sheet,
+  tissue and felts and lift them.
+- **Ink is conserved**: what the plate loses the sheet gains, to rounding.
 
 ## The journal
 

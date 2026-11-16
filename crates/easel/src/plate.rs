@@ -135,7 +135,7 @@ fn make(st: &S, o: Option<Table>) -> Result<SurfaceU> {
         return err(format!("plate: {wmm} mm at the painting's {} mm a pixel is {px} px across; a plate is at most {most} px", fmt_num(painting_mm / width as f32)));
     }
     let aspect = wmm / hmm;
-    let mut c = paint::Canvas::new_window(px, aspect, Plate::bare_rgb(metal), None).with_engine(tubes.engine).with_size_mm(wmm).with_drain(tubes.drain);
+    let mut c = paint::Canvas::new_window(px, aspect, Plate::bare_rgb(metal), None).with_engine(tubes.engine).with_size_mm(wmm).with_drain(tubes.drain).with_oils(tubes.oils);
     c.set_hand_time(Some(crate::time::SLICE_MIN));
     let plate = Plate::new(metal, temper, wmm, hmm, thickness, bevel, px, c.window().h);
     let h = c.height();

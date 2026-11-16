@@ -13,7 +13,9 @@
 #   2. Hamaker constants from the refractive index (Tabor–Winterton) against
 #      measured ones;
 #   3. whiting's lift over its measured size distribution, and its bounds;
-#   4. sticks: whiting, tints, pure pigments.
+#   4. sticks: whiting, tints, pure pigments;
+#   5. the water bridge held to the summits that touch (the water-bridge
+#      switch), its humidity dependence, and the lifts it gives.
 #
 # Run: uv run notes/research/pastel_lift.py
 import math
@@ -39,15 +41,17 @@ def kelvin_diameter(rh, t_c):
     return 2 * GAMMA * V_M / (R_GAS * (t_c + 273.15) * math.log(1 / rh))
 
 
-def taken(r, a_p, cos_p=1.0, rh=0.5, t_c=20.0, asperity=ASPERITY, rough_scale=1.0):
-    """The chance the eraser out-pulls the paper's hold on a particle of radius `r` (m) and Hamaker constant `a_p`."""
+def taken(r, a_p, cos_p=1.0, rh=0.5, t_c=20.0, asperity=ASPERITY, rough_scale=1.0, bridge=None):
+    """The chance the eraser out-pulls the paper's hold on a particle of radius `r` (m) and Hamaker constant `a_p`.
+    `bridge`, if given, is the radius the water bridge acts over as a function of r (§5); else min(r, asperity)."""
     w = math.sqrt(A_ERASER * a_p) / (12 * math.pi * D0**2)
     f_eraser = 1.5 * math.pi * w * r  # JKR: the putty wraps the particle
     a_pc = math.sqrt(A_CEL * a_p)
     f_vdw = a_pc * r / (6 * D0**2) if r < FINE_R else F_ROUGH * rough_scale  # DMT below the asperity scale
     # the water bridge at the contact, both sides wetted (cos θ fibre 1); the
     # eraser's hydrocarbon putty gets none
-    f_water = 2 * math.pi * GAMMA * min(r, asperity) * max(cos_p + 1.0, 0.0) if kelvin_diameter(rh, t_c) > D0 else 0.0
+    a_w = bridge(r) if bridge else min(r, asperity)
+    f_water = 2 * math.pi * GAMMA * a_w * max(cos_p + 1.0, 0.0) if kelvin_diameter(rh, t_c) > D0 else 0.0
     return NormalDist().cdf(math.log(f_eraser / (f_vdw + f_water)) / SPREAD)
 
 
@@ -115,3 +119,67 @@ print("\n== 4. Pure pigments (whiting's sizes; Hamaker by Tabor–Winterton)")
 for name, n, cos_p in [("ultramarine", 1.5, 1), ("Prussian blue", 1.56, 1), ("lake (alumina 1.57)", 1.57, 1), ("green earth", 1.62, 1), ("cobalt blue", 1.74, 1), ("lead white", 2.0, 1), ("chrome yellow", 2.4, 1), ("red earth", 2.7, 1), ("vermilion", 3.0, 1), ("permanent alizarin (PV19, hydrophobic)", 2.03, 0)]:
     print(f"  {name:40} A {hamaker_tw(n) * 1e20:5.1f}  lift {stick_take(hamaker_tw(n), cos_p):.3f}")
 print(f"  {'vine or bone black (carbon)':40} A   6.0  lift {stick_take(A_CARBON):.3f}")
+
+# --- 5. The water bridge held to the summits that touch ---------------------
+# §1 takes the bridge at one smooth 0.1 µm asperity of the fibre: 4πγa,
+# 90 nN. That is the smooth-sphere law, and it holds only where both
+# surfaces are smooth on the scale of the meniscus. At 50 % RH the Kelvin
+# diameter is 1.5 nm (§1); paper fibres and pastel and charcoal particles
+# are rough far above that, so water condenses only between the summits
+# that touch: the asperity regime (Halsey & Levine 1998; Charlaix &
+# Ciccotti 2010), measured as pull-off forces of rough particles far below
+# 4πγR and nearly independent of humidity (Jones et al. 2002, 2003;
+# Moutinho et al. 2017; Rabinovich et al. 2002). pastel_lift.md §5.
+#
+# The fibre: at the bridge's scale its surface is cellulose fibril
+# aggregates, 15–25 nm across (AFM, Fahlén & Salmén 2003, 2005): a cylinder
+# of radius a_f 10 nm (7.5–12.5).
+# The particle: the summit it touches with. Persson & Biele (2021) compute
+# 47 nN for a rough particle on a flat at 40 % RH from a measured fracture
+# surface's spectrum (granite, H 1): 4πγa of a summit a_p = 52 nm. Rougher
+# (their meteorite spectra, ×2–3) gives 13 and 6 nN (a_p 15 and 7 nm); ground
+# limestone and alumina show no notable rise with humidity (Jones et al.
+# 2003), which bounds a_p from above at about the same. Coccolith calcite's
+# faces are smoother (rms 0.45–2.8 nm over 200 nm, 2026 JACS) but chalk's
+# carry 1–4 nm clay laths (Skovbjerg et al. 2012); sawdust char 7 nm rms.
+# a_p = 52 nm, 15–100.
+# The geometry: a sphere (a_p) crossing a cylinder (a_f). The gap is
+# x²/2 (1/a_p + 1/a_f) + y²/2a_p; water fills it below the Kelvin
+# diameter d_K, at the Laplace pressure γ/(d_K/2): the area π d_K/√(c1c2)
+# times 2γ/d_K is 2πγ·2a with a = (c1c2)^(−1/2). For both surfaces wetted
+# (cos θ 1 each) the bridge is 2πγa(cos θ_p + cos θ_f), the engine's form,
+# with a in place of the smooth asperity.
+# Humidity: the bridge stays held to the summits while d_K is below the
+# fibrils' size (2a_f); past it the gaps between fibrils fill and one
+# meniscus takes the particle whole (the spherical regime, a jump).
+A_F, A_P = 10e-9, 52e-9
+
+
+def summit_radius(r, a_p=A_P, a_f=A_F, rh=0.5, t_c=20.0):
+    if kelvin_diameter(rh, t_c) >= 2 * a_f:
+        return r
+    ap = min(r, a_p)
+    return 1 / math.sqrt((1 / ap + 1 / a_f) / ap)
+
+
+print("\n== 5. The water bridge held to the summits that touch")
+a = summit_radius(1.5e-6)
+print(f"a = {a * 1e9:.1f} nm: the bridge {4 * math.pi * GAMMA * a * 1e9:.1f} nN (smooth 0.1 µm asperity: {4 * math.pi * GAMMA * ASPERITY * 1e9:.1f})")
+for ap in (15e-9, 52e-9, 100e-9):
+    lo, hi = summit_radius(1.5e-6, ap, 7.5e-9), summit_radius(1.5e-6, ap, 12.5e-9)
+    print(f"  a_p {ap * 1e9:3.0f} nm, a_f 7.5–12.5 nm: a {lo * 1e9:4.1f}–{hi * 1e9:4.1f} nm, {4 * math.pi * GAMMA * lo * 1e9:4.1f}–{4 * math.pi * GAMMA * hi * 1e9:4.1f} nN")
+rh_jump = math.exp(-2 * GAMMA * V_M / (R_GAS * 293.15 * 2 * A_F))
+print(f"the spherical regime above {rh_jump * 100:.1f} % RH (Kelvin diameter {2 * A_F * 1e9:.0f} nm)")
+b = lambda **kw: (lambda r: summit_radius(r, **kw))
+vine = taken(1.5e-6, A_CARBON, bridge=b())
+fines = taken(0.1e-6, A_CARBON, bridge=b())
+print(f"vine (splinters R 1.5 µm): {vine:.3f} (smooth {taken(1.5e-6, A_CARBON):.3f}); a_p 15–100 nm: {taken(1.5e-6, A_CARBON, bridge=b(a_p=100e-9)):.3f}–{taken(1.5e-6, A_CARBON, bridge=b(a_p=15e-9)):.3f}")
+print(f"compressed's fines (R 0.1 µm): {fines:.3f}; compressed, f = 0.5: {0.5 * fines + 0.5 * vine:.3f} (smooth 0.48; bounds over f {fines:.2f}–{vine:.2f})")
+for rh in (0.3, 0.5, 0.7, 0.9, 0.96):
+    print(f"  at {rh:.0%} RH: vine {taken(1.5e-6, A_CARBON, rh=rh, bridge=b(rh=rh)):.3f}, whiting {stick_take(A_WHITING, rh=rh, bridge=b(rh=rh)):.3f}")
+w5 = stick_take(A_WHITING, bridge=b())
+print(f"whiting: {w5:.3f} (smooth {w0:.3f}); a_p 15–100 nm: {stick_take(A_WHITING, bridge=b(a_p=100e-9)):.3f}–{stick_take(A_WHITING, bridge=b(a_p=15e-9)):.3f}; a_f 7.5–12.5 nm: {stick_take(A_WHITING, bridge=b(a_f=12.5e-9)):.3f}–{stick_take(A_WHITING, bridge=b(a_f=7.5e-9)):.3f}")
+print("pure pigments with it:")
+for name, n, cos_p in [("ultramarine", 1.5, 1), ("lead white", 2.0, 1), ("vermilion", 3.0, 1), ("permanent alizarin (PV19, hydrophobic)", 2.03, 0)]:
+    print(f"  {name:40} lift {stick_take(hamaker_tw(n), cos_p, bridge=b()):.3f}")
+print(f"  {'bone black (carbon)':40} lift {stick_take(A_CARBON, bridge=b()):.3f}")

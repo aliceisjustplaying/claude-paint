@@ -15,7 +15,12 @@
 //!   wider than the contact's gap (at any studio humidity: above 0.2 % RH),
 //!   and the bridge at an asperity of radius a holds 2πγa(cos θ_p + cos θ_f)
 //!   more. The fibre is wetted (θ_f 0); the eraser's hydrocarbon putty is
-//!   not, so it gets no bridge.
+//!   not, so it gets no bridge. Which asperity (`Bridge`): first a smooth
+//!   0.1 µm one (90 nN); with the water-bridge switch the bridge is held to
+//!   the summits that touch, a fibre's cellulose fibril aggregate under a
+//!   particle's nanometre roughness (about 19 nN), as long as the Kelvin
+//!   diameter is below the surfaces' roughness (to about 95 % RH);
+//!   notes/research/pastel_lift.md §5.
 //!
 //! The share the eraser takes is the chance its pull beats the hold.
 
@@ -41,6 +46,54 @@ const ASPERITY: f64 = 0.1e-6;
 const ROUGH_HOLD: f64 = 3.872_983_346_207_417e-8;
 /// Below this radius (m) a particle sits on one smooth asperity.
 const FINE_R: f64 = 0.3e-6;
+/// The radius of a paper fibre's cellulose fibril aggregates, m: 15–25 nm
+/// across by AFM on spruce fibres, 18 nm in the wood and 23 nm in kraft
+/// pulp (Fahlén & Salmén 2003, 2005), 20 nm, the middle. What a particle
+/// touches on a fibre at the bridge's scale (`Bridge::Asperity`).
+const FIBRIL_R: f64 = 10.0e-9;
+/// The radius of the summits a rough particle touches with, m, as a water
+/// bridge sees them: Persson & Biele (2021) compute 47 nN for one rough
+/// particle on a flat at 40 % RH from a measured fracture surface's
+/// roughness spectrum (granite, self-affine, H 1), the bridge 4πγa of a
+/// summit of 52 nm. Ground limestone and alumina show no notable rise of
+/// pull-off with humidity (Jones et al. 2003), which wants summits no
+/// larger. `Bridge::Asperity`.
+const SUMMIT_R: f64 = 52.0e-9;
+
+/// Which water bridge holds a particle to the fibre.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bridge {
+    /// At one smooth asperity of the fibre, `ASPERITY` (0.1 µm), or the
+    /// particle if it is smaller: 90 nN for a wetted particle. As charcoal's
+    /// lifts were derived (`charcoal::VINE_LIFT`), and the pastel lift
+    /// switch's without the water-bridge switch.
+    Smooth,
+    /// Held to the summits that touch (the water-bridge switch): at the
+    /// studio's humidity the Kelvin diameter (1.5 nm) is far below the
+    /// roughness of either surface, so water condenses only where a
+    /// particle's summit (`SUMMIT_R`, or the particle if smaller) crosses a
+    /// fibre's fibril aggregate (`FIBRIL_R`): a sphere on a cylinder, the
+    /// meniscus an ellipse, the bridge 2πγ a (cos θ_p + cos θ_f) with
+    /// a = [(1/a_p + 1/a_f) / a_p]^(−1/2), 21 nm (19 nN). Once the Kelvin
+    /// diameter passes the fibrils' size (above about 95 % RH) the gaps
+    /// between them fill and one meniscus takes the particle whole (radius
+    /// r): the asperity regime gives way to the spherical one, a jump
+    /// (Charlaix & Ciccotti 2010).
+    Asperity,
+}
+
+/// The radius the water bridge at a particle of radius `r` (m) acts over in
+/// `room`, m.
+pub fn bridge_radius(r: f64, room: crate::climate::Climate, bridge: Bridge) -> f64 {
+    match bridge {
+        Bridge::Smooth => r.min(ASPERITY),
+        Bridge::Asperity if kelvin_diameter(room) >= 2.0 * FIBRIL_R => r,
+        Bridge::Asperity => {
+            let a_p = r.min(SUMMIT_R);
+            ((1.0 / a_p + 1.0 / FIBRIL_R) / a_p).sqrt().recip()
+        }
+    }
+}
 
 /// A kind of particle: its Hamaker constant (J) and the cosine of water's
 /// contact angle on it (1 wetted; 0 for one water stands on at 90°).
@@ -58,21 +111,22 @@ pub fn kelvin_diameter(room: crate::climate::Climate) -> f64 {
 }
 
 /// The share of particles of radius `r` (m) one eraser press takes off a
-/// fibre in `room` (0..1).
-pub fn taken(r: f64, p: Particle, room: crate::climate::Climate) -> f64 {
+/// fibre in `room` (0..1), with water bridges of the kind `bridge`.
+pub fn taken(r: f64, p: Particle, room: crate::climate::Climate, bridge: Bridge) -> f64 {
     let w = (ERASER_A * p.hamaker).sqrt() / (12.0 * std::f64::consts::PI * D0 * D0);
     let pull = 1.5 * std::f64::consts::PI * w * r;
     let vdw = if r < FINE_R { (CELLULOSE_A * p.hamaker).sqrt() * r / (6.0 * D0 * D0) } else { ROUGH_HOLD };
-    let water = if kelvin_diameter(room) > D0 { 2.0 * std::f64::consts::PI * GAMMA * r.min(ASPERITY) * (p.wets + 1.0).max(0.0) } else { 0.0 };
+    let water = if kelvin_diameter(room) > D0 { 2.0 * std::f64::consts::PI * GAMMA * bridge_radius(r, room, bridge) * (p.wets + 1.0).max(0.0) } else { 0.0 };
     // a decade wide: ±1σ spans ×10
     normal_cdf((pull / (vdw + water)).ln() / (10f64.ln() / 2.0))
 }
 
 /// `taken` over a lognormal size distribution by volume with Sauter mean
-/// `d32_um` (µm) and spread `sigma` (σ_ln), averaged by projected area: the
+/// `d32_um` (µm) and spread `sigma` (σ_ln), averaged by projected area (with
+/// water bridges of the kind `bridge`): the
 /// share of a mark's coverage the eraser takes (coverage per volume goes as
 /// 1/d).
-pub fn taken_of_sizes(d32_um: f64, sigma: f64, p: Particle, room: crate::climate::Climate) -> f64 {
+pub fn taken_of_sizes(d32_um: f64, sigma: f64, p: Particle, room: crate::climate::Climate, bridge: Bridge) -> f64 {
     // (by area the lognormal's median is d32·e^(−σ²/2))
     let median = d32_um * (-sigma * sigma / 2.0).exp();
     const N: usize = 240;
@@ -80,7 +134,7 @@ pub fn taken_of_sizes(d32_um: f64, sigma: f64, p: Particle, room: crate::climate
     for i in 0..N {
         let z = -6.0 + 12.0 * (i as f64 + 0.5) / N as f64;
         let w = (-z * z / 2.0).exp();
-        acc += w * taken(median * (sigma * z).exp() / 2.0 * 1e-6, p, room);
+        acc += w * taken(median * (sigma * z).exp() / 2.0 * 1e-6, p, room, bridge);
         tot += w;
     }
     acc / tot
@@ -123,8 +177,8 @@ mod tests {
     #[test]
     fn charcoal_follows_the_law() {
         let carbon = Particle { hamaker: CARBON_A, wets: 1.0 };
-        let vine = taken(1.5e-6, carbon, STUDIO);
-        let fines = taken(0.1e-6, carbon, STUDIO);
+        let vine = taken(1.5e-6, carbon, STUDIO, Bridge::Smooth);
+        let fines = taken(0.1e-6, carbon, STUDIO, Bridge::Smooth);
         assert!((vine - crate::charcoal::VINE_LIFT as f64).abs() < 0.005, "{vine}");
         assert!((fines - 0.10).abs() < 0.005, "{fines}");
         assert!((0.5 * fines + 0.5 * vine - crate::charcoal::COMPRESSED_LIFT as f64).abs() < 0.01);
@@ -139,15 +193,52 @@ mod tests {
         let dry = Climate { rh: 0.001, ..STUDIO };
         assert!(kelvin_diameter(dry) < D0);
         let whiting = Particle { hamaker: WHITING_A, wets: 1.0 };
-        assert!(taken(1.0e-6, whiting, dry) > taken(1.0e-6, whiting, STUDIO) + 0.1);
+        assert!(taken(1.0e-6, whiting, dry, Bridge::Smooth) > taken(1.0e-6, whiting, STUDIO, Bridge::Smooth) + 0.1);
     }
 
     /// Whiting (d₃₂ 1.7 µm, σ_ln 0.905) is taken 0.61 at the studio's
     /// humidity: 0.608 in pastel_lift.py §3.
     #[test]
     fn whiting_as_the_script_has_it() {
-        let w = taken_of_sizes(1.7, 0.905, Particle { hamaker: WHITING_A, wets: 1.0 }, STUDIO);
+        let w = taken_of_sizes(1.7, 0.905, Particle { hamaker: WHITING_A, wets: 1.0 }, STUDIO, Bridge::Smooth);
         assert!((w - 0.608).abs() < 0.002, "{w}");
+    }
+
+    /// The water bridge held to the summits that touch (pastel_lift.py §5):
+    /// a summit of 52 nm crossing a 10 nm fibril acts as a 20.9 nm sphere,
+    /// 18.9 nN against the smooth asperity's 90.5. Vine is taken 0.960, the
+    /// fines 0.286, so compressed 0.623 (`charcoal::vine_lift`,
+    /// `charcoal::compressed_lift`); whiting 0.763.
+    #[test]
+    fn the_bridge_held_to_the_summits() {
+        let a = bridge_radius(1.5e-6, STUDIO, Bridge::Asperity);
+        assert!((a - 20.9e-9).abs() < 0.05e-9, "{a}");
+        assert!((4.0 * std::f64::consts::PI * GAMMA * a - 18.9e-9).abs() < 0.05e-9);
+        assert!((4.0 * std::f64::consts::PI * GAMMA * bridge_radius(1.5e-6, STUDIO, Bridge::Smooth) - 90.5e-9).abs() < 0.05e-9);
+        let carbon = Particle { hamaker: CARBON_A, wets: 1.0 };
+        let (vine, fines) = (taken(1.5e-6, carbon, STUDIO, Bridge::Asperity), taken(0.1e-6, carbon, STUDIO, Bridge::Asperity));
+        assert!((vine - 0.960).abs() < 0.001 && (fines - 0.286).abs() < 0.001, "{vine} {fines}");
+        assert!((crate::charcoal::vine_lift(Bridge::Asperity) as f64 - 0.960).abs() < 0.001);
+        assert!((crate::charcoal::compressed_lift(Bridge::Asperity) as f64 - 0.623).abs() < 0.001);
+        // (before the switch, the constants as painted)
+        assert_eq!((crate::charcoal::vine_lift(Bridge::Smooth), crate::charcoal::compressed_lift(Bridge::Smooth)), (crate::charcoal::VINE_LIFT, crate::charcoal::COMPRESSED_LIFT));
+        let w = taken_of_sizes(1.7, 0.905, Particle { hamaker: WHITING_A, wets: 1.0 }, STUDIO, Bridge::Asperity);
+        assert!((w - 0.763).abs() < 0.002, "{w}");
+    }
+
+    /// Held to the summits, the bridge doesn't change with the room's
+    /// humidity until the Kelvin diameter passes the fibrils' 20 nm, at
+    /// 94.8 % RH; above, one meniscus takes the particle whole and vine is
+    /// taken 0.153 (pastel_lift.py §5). The smooth bridge never jumps.
+    #[test]
+    fn the_bridge_jumps_only_near_saturation() {
+        let carbon = Particle { hamaker: CARBON_A, wets: 1.0 };
+        let at = |rh: f64, b| taken(1.5e-6, carbon, Climate { rh, ..STUDIO }, b);
+        for rh in [0.3, 0.7, 0.9, 0.94] {
+            assert_eq!(at(rh, Bridge::Asperity), at(0.5, Bridge::Asperity), "{rh}");
+        }
+        assert!((at(0.96, Bridge::Asperity) - 0.153).abs() < 0.002, "{}", at(0.96, Bridge::Asperity));
+        assert_eq!(at(0.96, Bridge::Smooth), at(0.5, Bridge::Smooth));
     }
 
     /// Tabor–Winterton by class against the measured constants (pastel_lift.py §2).

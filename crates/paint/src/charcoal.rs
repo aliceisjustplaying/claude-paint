@@ -77,6 +77,41 @@ pub const VINE_LIFT: f32 = 0.85;
 /// contradicts vine's own water term. f is unmeasured: an SEM of a mark
 /// would set it.
 pub const COMPRESSED_LIFT: f32 = 0.48;
+/// The radius of vine's splinters, m (`VINE_LIFT`: a cell wall, 3 µm).
+const VINE_SPLINTER_R: f64 = 1.5e-6;
+/// The radius of compressed charcoal's fines, m (sub-0.3 µm soot), and
+/// their share of its deposit, f (`COMPRESSED_LIFT`).
+const FINES_R: f64 = 0.1e-6;
+const FINES_SHARE: f64 = 0.5;
+
+/// Vine's lift from the adhesion law (`crate::adhesion`) with water bridges
+/// of the kind `bridge`: `VINE_LIFT` as painted before the water-bridge
+/// switch (`Bridge::Smooth`; the law gives 0.853 there), and with it its
+/// splinters held to the summits that touch, 0.960 (pastel_lift.md §5).
+pub fn vine_lift(bridge: crate::adhesion::Bridge) -> f32 {
+    match bridge {
+        crate::adhesion::Bridge::Smooth => VINE_LIFT,
+        b => crate::adhesion::taken(VINE_SPLINTER_R, carbon(), crate::climate::STUDIO, b) as f32,
+    }
+}
+
+/// And compressed charcoal's: `COMPRESSED_LIFT` before the switch; with it
+/// its fines' and crumbs' takes, f and 1 − f, 0.62.
+pub fn compressed_lift(bridge: crate::adhesion::Bridge) -> f32 {
+    match bridge {
+        crate::adhesion::Bridge::Smooth => COMPRESSED_LIFT,
+        b => {
+            let take = |r| crate::adhesion::taken(r, carbon(), crate::climate::STUDIO, b);
+            (FINES_SHARE * take(FINES_R) + (1.0 - FINES_SHARE) * take(VINE_SPLINTER_R)) as f32
+        }
+    }
+}
+
+/// Char's particles as the eraser and the paper hold them: carbon, wetted
+/// by water (`VINE_LIFT`).
+fn carbon() -> crate::adhesion::Particle {
+    crate::adhesion::Particle { hamaker: crate::adhesion::CARBON_A, wets: 1.0 }
+}
 
 /// The area a volume worn from a vine stick covers, as a layer's
 /// thickness, µm: willow charcoal is about 80 % pores (apparent density

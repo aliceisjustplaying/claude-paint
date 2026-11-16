@@ -2097,6 +2097,52 @@ mod tests {
         }
     }
 
+    /// A failed chunk rolls back cleanly over pastel fixed with the fixative
+    /// index switch. Dark sticks whose red is all but none (viridian with
+    /// Prussian blue, ultramarine with bone black) fixed in thin layers,
+    /// where the resin wets their pores through and a low index's scattering
+    /// in resin all but vanishes, have K/S of 10⁴–10⁷ in red: there R∞ by
+    /// `1 + K/S − √((K/S)² + 2 K/S)` in f32 came out a rounding step below
+    /// zero, the packed canvas couldn't be read back ("checkpoint drawing is
+    /// invalid"), and the easel rebuilt the painting from its log.
+    #[test]
+    fn a_failed_chunk_rolls_back_over_pastel_fixed_by_its_index() {
+        let chunks = [
+            "canvas{size=160, aspect=0.8, seed=1903, paper={preset=\"blue wove\", mount=\"strainer\"}}",
+            "function stick(parts) local p = pile(parts); local s = pastel(p, {kind=\"soft\"}); palette{scrape={p}}; return s end\n\
+             blue = stick({{\"ultramarine blue\", 1}, {\"bone black\", 0.3}, {\"burnt sienna\", 0.2}})\n\
+             green = stick({{\"viridian\", 1}, {\"Prussian blue\", 0.3}, {\"burnt sienna\", 0.3}})\n\
+             for i = 0, 19 do\n\
+               blue:hatch(rect(50 + 45 * i, 50, 40, 550), {angle=0.7, pressure=0.05 + 0.04 * i, spacing=6, length=30, seed=10 + i})\n\
+               green:hatch(rect(50 + 45 * i, 650, 40, 550), {angle=0.7, pressure=0.05 + 0.04 * i, spacing=6, length=30, seed=40 + i})\n\
+             end",
+            "fix()",
+        ];
+        let bits = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        // (a new painting's head, every switch on, with the impressionist box's tubes)
+        let head: String = std::iter::once(format!("{BOX_MARK} impressionist\n"))
+            .chain(Session::with_box(96, box_for(None).unwrap()).unwrap().program("p").lines().take_while(|l| !l.starts_with(MARK)).filter(|l| !l.starts_with(BOX_MARK)).map(|l| format!("{l}\n")))
+            .collect();
+        for width in [96] {
+            let session = || Session::with_box(width, box_for(Some(&head)).unwrap()).unwrap().with_paper(true).unwrap();
+            let (mut failed, mut clean) = (session(), session());
+            assert!(failed.tube_box().fixative_index && failed.tube_box().pastel_km_mix);
+            for chunk in chunks {
+                failed.run(chunk).unwrap();
+                clean.run(chunk).unwrap();
+            }
+            let e = failed.run("green:hatch(rect(100, 100, 600, 700), {angle=-0.6, pressure=0.75, spacing=8, length=70, seed=2003})\nerror('rollback')").unwrap_err();
+            assert!(e.contains("rollback") && !e.contains("put back"), "{width}: {e}");
+            assert!(!failed.stale && !failed.unrestored, "{width}: the rollback left the session to a rebuild");
+            assert!(bits(&failed) == bits(&clean), "{width}: the canvas differs after the rollback");
+            Canvas::read_state(&mut bits(&clean).as_slice()).unwrap();
+        }
+    }
+
     /// A resting canvas that can't be brought back (its packed file is gone) leaves
     /// the session stale: the next chunk rebuilds the painting from its log, and
     /// nothing in between takes the session for one without a canvas.

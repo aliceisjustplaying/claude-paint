@@ -1637,4 +1637,35 @@ mod tests {
             }
         }
     }
+
+    /// Pastel fixed by its index stays a drawing a checkpoint reads back. A
+    /// stick whose red is all but none (viridian with Prussian blue: R ≈
+    /// 2·10⁻⁵, K/S 5·10³ at the clamp) fixed where the resin wets its pores
+    /// through and its index scatters little in resin (n 1.5–1.6) has K/S
+    /// of 10⁴–10⁷: the bound color must stay in [0, 1] (R∞ worked without
+    /// cancellation, `dry::r_of`), and the window written as the checkpoint
+    /// writes it (`to_f32s`) reads back (`from_f32s`), as a failed chunk's
+    /// rollback reads its packed canvas.
+    #[test]
+    fn pastel_fixed_by_its_index_reads_back() {
+        let mut cells = Vec::new();
+        for red in [0.0f32, 2.3e-5, 1e-4, 1e-3] {
+            for n in [1.5f32, 1.55, 1.6, 1.75, 2.0] {
+                for i in 0..400 {
+                    let loose = 0.5 * 60f32.powf(i as f32 / 399.0);
+                    let mut c = Cell { optics: Some(Optics { under: [0.15, 0.24, 0.38], ..Optics::default() }), film: 0.0, a: 0.4, lift: 0.55, r: [red, 0.157, 0.298], loose, index: crate::wet_pastel::to_index(n), ..Cell::default() };
+                    c.bind_by_index(crate::charcoal::LIGHT_SPRAY_UM);
+                    let b = c.optics.unwrap().bound;
+                    assert!(b.iter().all(|v| (0.0..=1.0).contains(v)), "red {red}, n {n}, {loose} µm: {b:?}");
+                    cells.push(c);
+                }
+            }
+        }
+        let n = cells.len();
+        let d = Drawing { cells, ..Drawing::new(n, n, true) };
+        let mut written = d.to_f32s();
+        let back = Drawing::from_f32s(n, n, d.layout(), |k| Ok::<_, ()>(written.by_ref().take(k).collect::<Vec<f32>>())).unwrap();
+        assert!(back.is_some(), "the fixed drawing doesn't read back");
+        assert!(written.next().is_none());
+    }
 }

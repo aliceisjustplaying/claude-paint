@@ -166,6 +166,20 @@ pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// none of it. Its verbs are a sheet of paper's, so it installs them only beside the
 /// paper-and-pastel switch (`PAPER_MARK`): without that it is accepted and installs nothing.
 pub const SURFACES_MARK: &str = "--@ surfaces";
+/// The plate switch, in the head of a session file (notes/plan-intaglio.md §2–§3, phase P2;
+/// plate.rs): a painting whose log has it may make copper and zinc plates among its named
+/// surfaces (`plate{}`) and work them with a drypoint needle, a burnisher, a scraper and a
+/// roulette. A new painting has it; a log without it replays as it was painted. It builds on
+/// the named-surfaces switch (`SURFACES_MARK`): without that it is accepted and installs
+/// nothing.
+pub const PLATE_MARK: &str = "--@ plate";
+/// The etching switch, in the head of a session file (notes/plan-intaglio.md §4, phase P4;
+/// etch.rs): a painting whose log has it may lay a hard ground on its plates, draw through it
+/// with an etching needle, stop out, bite in ferric chloride, nitric acid or Dutch mordant, lay
+/// and melt an aquatint, and clean the plate with solvent. A new painting has it; a log without
+/// it replays as it was painted. It builds on the plate switch (`PLATE_MARK`): without that it
+/// is accepted and installs nothing.
+pub const ETCH_MARK: &str = "--@ etch";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -322,6 +336,9 @@ struct Snap {
     /// The surfaces besides the current one (surfaces.rs): each resting one's packed canvas
     /// is shared, not copied, so a surface the chunk takes up is put back from where it rested.
     surfaces: crate::surfaces::Surfaces,
+    /// The current surface's plate, if it is one (plate.rs): shared, not copied, as the
+    /// plate's tools copy it before they change it.
+    plate: Option<Rc<paint::plate::Plate>>,
 }
 
 pub struct Session {
@@ -557,7 +574,7 @@ impl Session {
             (r, v)
         }).collect();
         let canvas = s.canvas.as_ref().map(CanvasSnapshot::take).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put aside before the chunk: {e}")))?;
-        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags, surfaces: s.surfaces.clone() })
+        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags, surfaces: s.surfaces.clone(), plate: s.plate.clone() })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -584,6 +601,7 @@ impl Session {
         s.canvas = snap.canvas.map(|c| c.restore()).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put back from where it was put aside: {e}")))?;
         // every other surface as it rested before the chunk (the chunk's own packs go)
         s.surfaces = snap.surfaces;
+        s.plate = snap.plate;
         s.style = snap.style;
         s.setup = snap.setup;
         s.canvas_src = snap.canvas_src;
@@ -944,6 +962,12 @@ impl Session {
         }
         if self.st.borrow().tubes.wet_pastel {
             let _ = writeln!(s, "{WET_PASTEL_MARK}");
+        }
+        if self.st.borrow().tubes.plate {
+            let _ = writeln!(s, "{PLATE_MARK}");
+        }
+        if self.st.borrow().tubes.etch {
+            let _ = writeln!(s, "{ETCH_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1735,6 +1759,8 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.paper_presets = true;
         b.pastel_area_strokes = true;
         b.surfaces = true;
+        b.plate = true;
+        b.etch = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1822,6 +1848,8 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.pastel_area_strokes = head(PASTEL_AREA_STROKES_MARK);
     b.surfaces = head(SURFACES_MARK);
+    b.plate = head(PLATE_MARK);
+    b.etch = head(ETCH_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

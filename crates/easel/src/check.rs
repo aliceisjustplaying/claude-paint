@@ -82,6 +82,8 @@ pub struct Input {
     /// name and canvas as it rests, as `live` is the current one's.
     pub current: String,
     pub resting: Vec<(String, (Vec<u32>, Vec<u32>))>,
+    /// Every plate among the surfaces (plate.rs), by name, as its section's bytes.
+    pub plates: Vec<(String, Vec<u8>)>,
 }
 
 /// A canvas as a check compares it: bits of what's seen and of the surface.
@@ -170,6 +172,9 @@ fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bo
     };
     // every other surface, as it rests, one in memory at a time (the replay's current one goes first)
     let mut st = fresh.st.borrow_mut();
+    if crate::surfaces::plates(&st) != input.plates {
+        return Ok(false);
+    }
     st.canvas = None;
     let resting: Vec<_> = st.surfaces.slots.iter().filter_map(|s| s.rest.as_ref().map(|r| (s.name.clone(), r.canvas.clone()))).collect();
     if !same || st.surfaces.current_name() != input.current || resting.len() != input.resting.len() {

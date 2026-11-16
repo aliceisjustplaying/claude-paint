@@ -1495,13 +1495,20 @@ impl Aside {
 /// stand before the next surface: its reader sees the frame's end as the
 /// file's.
 ///
+/// Version 2 (the easel's `--@ plate`) is version 1 with each surface's
+/// payload after its canvas: its length (u64) and its bytes, the caller's
+/// (a plate's state, `plate::Plate::write`). A checkpoint whose surfaces
+/// have no payload is written as version 1, byte for byte as before.
+///
 /// Only a session that has named a surface writes one: a session with the
 /// painting alone writes its canvas checkpoint exactly as before. A reader
 /// that doesn't know this magic refuses the file (as one that doesn't know
 /// version 22 refuses a material canvas) instead of loading the painting
 /// without its other sheets, and a section of another version is refused.
 const SURFACES_MAGIC: &[u8; 8] = b"PAINTSRF";
-pub const SURFACES_V: u64 = 1;
+pub const SURFACES_V: u64 = 2;
+/// The longest payload of a surface (bytes).
+const PAYLOAD_MAX: u64 = 1 << 32;
 /// The longest chunk of a framed canvas (bytes).
 const FRAME: usize = 1 << 20;
 /// The most surfaces a checkpoint holds, and the longest name (bytes).
@@ -1509,11 +1516,14 @@ pub const SURFACES_MAX: usize = 64;
 pub const SURFACE_NAME_MAX: usize = 64;
 
 /// One surface of a multi-surface checkpoint, but its canvas.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct SurfaceEntry {
     pub name: String,
     pub kind: u64,
     pub fields: String,
+    /// What the surface keeps besides its canvas (a plate's state; version
+    /// 2): empty for most.
+    pub payload: Vec<u8>,
 }
 
 /// Whether a checkpoint starting with these 8 bytes holds several surfaces
@@ -1619,8 +1629,10 @@ pub fn write_surfaces(w: &mut impl Write, header: &str, current: &str, entries: 
     if !entries.iter().any(|e| e.name == current) {
         return Err(invalid("the current surface is one of them"));
     }
+    // (version 1 while no surface has a payload: such a file is as it was)
+    let v = if entries.iter().any(|e| !e.payload.is_empty()) { 2 } else { 1 };
     w.write_all(SURFACES_MAGIC)?;
-    put_u64(w, SURFACES_V)?;
+    put_u64(w, v)?;
     put_str(w, header)?;
     put_str(w, current)?;
     put_u64(w, entries.len() as u64)?;
@@ -1632,6 +1644,10 @@ pub fn write_surfaces(w: &mut impl Write, header: &str, current: &str, entries: 
         canvas(i, &mut f)?;
         f.flush_chunk()?;
         put_u64(w, 0)?;
+        if v == 2 {
+            put_u64(w, e.payload.len() as u64)?;
+            w.write_all(&e.payload)?;
+        }
     }
     Ok(())
 }
@@ -1649,8 +1665,8 @@ pub fn read_surfaces(r: &mut impl Read, mut each: impl FnMut(SurfaceEntry, Canva
         return Err(bad("not a surfaces checkpoint"));
     }
     let v = get_u64(r)?;
-    if v != SURFACES_V {
-        return Err(bad(&format!("surfaces checkpoint of version {v}: this build reads version {SURFACES_V}")));
+    if !(1..=SURFACES_V).contains(&v) {
+        return Err(bad(&format!("surfaces checkpoint of version {v}: this build reads versions 1 to {SURFACES_V}")));
     }
     let header = get_str(r, 1 << 20, "header")?;
     let current = get_str(r, SURFACE_NAME_MAX, "current surface's name")?;
@@ -1671,8 +1687,22 @@ pub fn read_surfaces(r: &mut impl Read, mut each: impl FnMut(SurfaceEntry, Canva
         if !head.is_empty() || u.read(&mut [0u8; 1])? != 0 || !u.done {
             return Err(bad("surfaces checkpoint: a surface's canvas doesn't end with its frame"));
         }
+        let payload = if v >= 2 {
+            let n = get_u64(r)?;
+            if n > PAYLOAD_MAX {
+                return Err(bad("surfaces checkpoint: a surface's payload is too long"));
+            }
+            let mut b = Vec::new();
+            r.take(n).read_to_end(&mut b)?;
+            if b.len() as u64 != n {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "surfaces checkpoint: a surface's payload ends early"));
+            }
+            b
+        } else {
+            Vec::new()
+        };
         names.push(name.clone());
-        each(SurfaceEntry { name, kind, fields }, canvas)?;
+        each(SurfaceEntry { name, kind, fields, payload }, canvas)?;
     }
     if !names.contains(&current) {
         return Err(bad("surfaces checkpoint: the current surface isn't among them"));
@@ -2322,7 +2352,7 @@ mod tests {
         let pose = crate::pastel::Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
         study.stick_stroke(&mut st, &[crate::pastel::StrokePoint { x: 100.0, y: 300.0, pose, speed: 60.0 }, crate::pastel::StrokePoint { x: 800.0, y: 400.0, pose, speed: 60.0 }]);
         let japan = Canvas::new_window(40, 0.8, [0.95; 3], None).with_size_mm(50.0).with_paper(crate::paper::Paper::drawing(9));
-        let e = |name: &str, kind: u64, fields: &str| SurfaceEntry { name: name.into(), kind, fields: fields.into() };
+        let e = |name: &str, kind: u64, fields: &str| SurfaceEntry { name: name.into(), kind, fields: fields.into(), payload: Vec::new() };
         vec![(e("painting", 0, ""), painting), (e("study", 1, "since=1\n"), study), (e("japan", 1, "since=2\n"), japan)]
     }
 
@@ -2355,6 +2385,27 @@ mod tests {
             assert!(state(c0) == state(c1), "{}: rewritten as it was read", e0.name);
         }
         assert!(surfaces_bytes(&back, "study") == b, "the checkpoint rewritten as it was read");
+    }
+
+    /// A surface's payload (version 2: a plate's state) comes back with it,
+    /// and a checkpoint with one is version 2; cut short, it is refused.
+    #[test]
+    fn a_surfaces_payload_survives_a_checkpoint() {
+        let mut all = three_surfaces();
+        all[2].0.payload = (0..=255u8).cycle().take(5000).collect();
+        let b = surfaces_bytes(&all, "japan");
+        assert_eq!(u64::from_le_bytes(b[8..16].try_into().unwrap()), 2);
+        let mut back = Vec::new();
+        read_surfaces(&mut Cursor::new(b.clone()), |e, c| {
+            back.push((e, c));
+            Ok(())
+        }).unwrap();
+        for ((e0, c0), (e1, c1)) in all.iter().zip(&back) {
+            assert_eq!(e0, e1);
+            assert!(state(c0) == state(c1));
+        }
+        assert!(surfaces_bytes(&back, "japan") == b);
+        assert!(read_surfaces(&mut Cursor::new(b[..b.len() - 10].to_vec()), |_, _| Ok(())).is_err());
     }
 
     /// A packed canvas's buffers spilled to disk come back bit for bit: the
@@ -2433,9 +2484,14 @@ mod tests {
             assert!(r.is_err(), "{what} was read");
             r.unwrap_err().to_string()
         };
+        let mut v9 = b.clone();
+        set(&mut v9, 8, 9);
+        assert!(refused(v9, "version 9").contains("version 9"));
+        // a file without payloads is version 1, as before; read as version 2 it is damaged
+        assert_eq!(u64::from_le_bytes(b[8..16].try_into().unwrap()), 1);
         let mut v2 = b.clone();
         set(&mut v2, 8, 2);
-        assert!(refused(v2, "version 2").contains("version 2"));
+        refused(v2, "version 1 read as 2");
         refused(b[..b.len() - 9].to_vec(), "a truncated checkpoint");
         let mut longer = b.clone();
         longer.push(0);

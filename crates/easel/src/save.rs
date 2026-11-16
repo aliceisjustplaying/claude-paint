@@ -111,6 +111,12 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.surfaces {
         kv("surfaces", "1".to_string());
     }
+    if st.tubes.plate {
+        kv("plate", "1".to_string());
+    }
+    if st.tubes.etch {
+        kv("etch", "1".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -321,6 +327,16 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
         None => false,
         Some(&"1") => true,
         Some(v) => return Err(format!("the save's surfaces={v:?} isn't 1")),
+    };
+    tubes.plate = match h.get("plate") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's plate={v:?} isn't 1")),
+    };
+    tubes.etch = match h.get("etch") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's etch={v:?} isn't 1")),
     };
     if surfaces.is_some() && !(tubes.surfaces && paper) {
         return Err(format!("{}: the save holds several surfaces, but its header has not the named-surfaces switch", path.display()));

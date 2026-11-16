@@ -84,6 +84,9 @@ pub struct Studio {
     /// Surfaces the running chunk handed off, written beside their files and put in place
     /// when it is kept (surfaces.rs `commit`), or taken away if it fails.
     pub handoffs: Vec<crate::surfaces::Pending>,
+    /// The current surface's plate, while a plate is current (plate.rs; its canvas, `canvas`,
+    /// keeps its clock and the hand time spent on it). None for the painting and sheets.
+    pub plate: Option<Rc<paint::plate::Plate>>,
 }
 
 impl Studio {
@@ -92,7 +95,7 @@ impl Studio {
             #[cfg(test)]
             pass_feedback_disabled: false,
             drying_feedback: Default::default(),
-            width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false, surfaces: Default::default(), handoffs: Vec::new()
+            width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false, surfaces: Default::default(), handoffs: Vec::new(), plate: None
         }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
@@ -2084,6 +2087,11 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
 
 /// The longest `wait` (minutes): 10 years of 365.25 days.
 pub(crate) const MAX_WAIT_MIN: f64 = 10.0 * 365.25 * 24.0 * 60.0;
+
+/// The studio a Lua state paints in (for a userdata's methods, which are given no other).
+pub(crate) fn studio(lua: &Lua) -> Result<S> {
+    lua.app_data_ref::<S>().map(|s| s.clone()).ok_or_else(|| mlua::Error::runtime("no studio"))
+}
 
 pub(crate) fn current_frame(lua: &Lua) -> Result<Frame> {
     let st = lua.app_data_ref::<S>().ok_or_else(|| mlua::Error::runtime("no studio"))?;

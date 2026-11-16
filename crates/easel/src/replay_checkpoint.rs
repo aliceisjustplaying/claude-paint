@@ -419,7 +419,11 @@ fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Op
         match surfaces {
             None if st.surfaces.named() => return Err("replay checkpoint: the session has named surfaces the checkpoint doesn't hold".into()),
             None => {}
-            Some(rb) => rb.canvases_into(&mut st.surfaces).map_err(|e| format!("replay checkpoint: {e}"))?,
+            Some(rb) => {
+                // the current surface's plate, as its canvas, from the checkpoint (plate.rs)
+                st.plate = rb.current_plate().map_err(|e| format!("replay checkpoint: {e}"))?;
+                rb.canvases_into(&mut st.surfaces).map_err(|e| format!("replay checkpoint: {e}"))?
+            }
         }
     }
     s.st.borrow_mut().canvas = canvas;

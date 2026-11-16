@@ -27,6 +27,8 @@ pub mod palette;
 pub mod paper;
 pub mod charcoal;
 pub mod pastel;
+pub mod plate;
+pub mod etch;
 pub mod pigment;
 pub mod prepared_optics;
 pub mod rng;

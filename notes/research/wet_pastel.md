@@ -133,14 +133,14 @@ The water the sheet has taken in under each cell (§4) is the other case: only t
   - Thyssen-Bornemisza technical study of *At the Milliner's*: he sometimes crushed sticks and mixed them with water "to create a watercolour effect or achieve a pasty texture" [P] (museothyssen.org).
   - Princeton: in *Dancers* he applied pastel "both wet and dry" [P] (artmuseum.princeton.edu).
   - Kimberly Schenck (NGA, 2023) found crushed pastel mixed with a liquid in the bodices of *Two Women*, the exact application left open [P] (as cited by thehistoryofart.org; not read directly).
-- **Steam** dissolved a layer into a film, or melted it into a paste reworked with a brush or knife as it dried [P] (Reff, quoted second-hand; Artist's Network). Not modelled: research gap 6.
+- **Steam** dissolved a layer into a film, or melted it into a paste reworked with a brush or knife as it dried [P] (Reff, quoted second-hand; Artist's Network). Modelled by the steam-and-sift switch (notes/research/steam_sift.md).
 - **Cassatt.** Areas of finished pastels are "painted in pastel chalk mixed with water, a technique learned from Degas" [P] (PMA 2024, via Weiss). The c. 1879 canvas pastel was built using "moisture to create a multilayered surface" [P] (PMA, *In the Loge*). How she applied the water is not recorded (cassatt_materials.md §2, on branch notes/cassatt-materials).
 
 ## 7. What is left out
 
 - Water flowing sideways (backruns, blooms), and the edge darkening of a drying wash.
 - The paper's own darkening when wet, and cockling.
-- Steam and moisture vapour (gap 6).
+- Steam and moisture vapour: the steam-and-sift switch, notes/research/steam_sift.md.
 - A finger in wet paste: it moves the loose pastel as it does dry pastel.
 - The sheet's own water after it sinks, its darkening, and the slow drying from inside it.
 - A tragacanth stick's gelled pores, and the gum's slowing of the sheet's uptake.

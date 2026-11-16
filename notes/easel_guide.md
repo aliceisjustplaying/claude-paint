@@ -1387,6 +1387,64 @@ mc, word, t = damp_of(pr)         -- 0.4 (g water per g fiber), "damp", {width=,
   checkpoints keep its water.
 
 
+## Steam and sifted pastel
+
+A painting begun with steam and sift (its log's head says `--@ steam-sift`, beside
+`--@ paper` and `--@ wet-pastel`) has Degas's steam and Cassatt's 1914 trick of crushed
+pastel sifted onto a sheet dampened by vapour. An older painting replays as it was painted,
+and `steam` and `sift` don't exist in it. The numbers and their sources are in
+notes/research/steam_sift.md.
+
+```lua
+m = rect(300, 200, 250, 300)
+w, t = steam(m, {seconds=8})           -- the kettle's jet over the patch: 12 µm of water, face 64 °C
+r = sift(pile{{"green earth", 1}, {"lead white", 2}}, m, {amount=4, grain=0.3})
+print(r.cluster)                       -- the clusters the drying drops gather, µm
+p = pastel(pile{{"vermilion", 1}})
+sift(p, rect(600, 200, 200, 200), {amount=10})   -- the stick shortens by 10 mm³ over its section
+tap()                                  -- dry crumbs fall; stuck ones stay
+```
+
+- **`steam(mask, {seconds=, distance=})`** plays a boiling kettle's jet over the mask (nil:
+  the whole sheet). `seconds` is how long each point is in the jet (a soft mask edge gets
+  less); `distance` is mm from the spout (200 if not given, 100 to 600). At 200 mm the jet
+  is a fog of about 67 °C: in a second it condenses about 4 g/m² of water, in 10 s about
+  14, growing as the square root of the time once the paper's face has warmed (the board
+  behind takes the heat). The hand's time is `seconds` over the jet's footprint (a disc
+  about 38 mm across at 200 mm): a whole sheet takes minutes. Returns the water (µm, where
+  the mask is full) and the face's temperature.
+- **What the water does** is what water does in pastel (`--@ wet-pastel`): the pastel's
+  pores take it first and it darkens while wet; what is left stands on the sheet and
+  sinks in as its sizing lets it (on the default sheet about 3 µm in the first second, 25
+  in a minute); the stick's gum dissolves, and as the water dries on the clock it binds
+  the loose pastel there. So steamed pastel, once dry, smudges and lifts far less than
+  pastel that wasn't. Steam carries no color: nothing moves unless you work the wet
+  pastel then (`b:wash` moves it as paste). Not under a mask sheet, on wet paint, or on
+  pastel painted over.
+- **`sift(stick or pile, mask, {amount=, grain=})`** crushes `amount` mm³ of a stick (it
+  shortens; refused if under 5 mm would be left) or of a pile's color, and rubs it through
+  a sieve of `grain` mm (0.5 if not given) over the mask (nil: all of it), with no stroke.
+  A soft crushing gives many fines: about a quarter of the mass is under 5 µm and settles
+  into the tooth's pores; the rest lies on the tooth as crumbs up to the sieve's size,
+  scattered as they fall (a coarse sieve speckles, a fine one veils). Takes 20 s of hand
+  time.
+- **On a dry sheet** the crumbs lie loose. `tap()` (100 g) sheds every crumb heavier than a
+  dry grain's hold, about 43 µm and up: with a 0.5 mm sieve a little over half of what was
+  sifted; `tap{g=1}` (tilting the sheet upright) sheds crumbs over 0.2 mm; `blow` takes
+  them as it takes heaped pastel. The fines stay, a ghost of the color.
+- **On a damp sheet** (steamed, or a damp sheet's own water, `--@ damp-paper`) the crumbs
+  drink the water into their pores and a liquid bridge holds each to the sheet: a tap at
+  100 g leaves anything under 0.6 mm. Where water still stands once they have drunk, the
+  drops it dries into gather the crumbs smaller than themselves into clusters: the more
+  water, the larger (about 10 µm over a 4 µm film, 30 µm over 19 µm). On a sized sheet the
+  condensed drops sink in within half a minute, so sift a patch straight after steaming
+  it; sifted later the crumbs still stick, but singly. As it dries, the gum binds them:
+  fixed without fixative. Returns a table: `laid`, `fines`, `loose`, `stuck`, `caught`
+  (on a mask sheet or wet paint) in mm³, and `cluster`, `film` and `crumb` (the crumbs'
+  mass-mean size) in µm.
+- Saves and checkpoints keep the crumbs lying on the tooth and whether they are held.
+
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

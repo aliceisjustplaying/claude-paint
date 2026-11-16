@@ -166,6 +166,7 @@ The ranking is by how much each gap matters for working as she did. Her output w
 - **Research:** transfer fraction against dampness and pressure (none measured; conservation literature on chalk and pastel counterproofs); Japan paper fiber, grammage and absorbency for the paper dials.
 
 ### 6. Moisture vapor and sifted pastel (M)
+- **Built:** the easel's `--@ steam-sift` (`steam`, `sift`; notes/research/steam_sift.md, notes/easel_guide.md).
 - **Why.** In a 1914 pastel she sifted crushed pastel onto a surface dampened by vapor, so that it dried in minute clusters (research §2). Degas's steaming is the same tool (notes/degas-materials.md §5).
 - **What it would model:**
   - `steam(mask, {seconds=})`: wets the paper and the pastel's surface (the water state of gap 1), so loose pastel softens and partly binds as it dries

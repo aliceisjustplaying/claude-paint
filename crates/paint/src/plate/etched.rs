@@ -17,6 +17,16 @@
 //! takes it out and writes it again from the class's new depth. A clean
 //! (`clean`) leaves what was written as plain openings.
 //!
+//! **The bath on the clock** (plan-intaglio §4.2). A plate goes into its
+//! tray (`immerse`) at a time on its own clock and comes out (`lift`) at a
+//! later one; between, whatever else happens, it lies in the acid. Its bite
+//! is worked out when it comes out, from the minutes it lay there, in the
+//! same steps as a bite of those minutes: nothing in the bath depends on
+//! what the hand does meanwhile, so the bite of a plate put in, left while
+//! other work is done and lifted out is the bite of the same minutes in one.
+//! While it lies there the plate keeps the bath it is in and when it went
+//! in (`InBath`), which a save, a checkpoint and a handoff carry.
+//!
 //! **Metal** taken by the acid is counted (`Coats::bitten_um3`): the plate's
 //! metal above its flat plus its chips plus what the acid took is what it
 //! started with.
@@ -31,6 +41,22 @@ pub const LINES: usize = 2;
 /// The time steps of a bite: at most a minute each, so the bath's loading
 /// and a still face-up plate's growing diffusion layer are followed.
 const STEP_MIN: f64 = 1.0;
+/// Past a day in the bath (a plate forgotten in it) a step lengthens to a
+/// sixtieth of the time already passed, or the time the bath takes to use a
+/// hundredth of its oxidant left at the last step's pace, whichever is
+/// shorter (never under a minute): a week costs a few hundred steps more
+/// than a day, not ten thousand, and a bath running out is followed.
+const DAY_MIN: f64 = 24.0 * 60.0;
+const LATE_STEP: f64 = 1.0 / 60.0;
+const LATE_USE: f64 = 0.01;
+/// A bath is spent when less than this share of the oxidant it was made up
+/// with is left: all it could still dissolve is that share of what it held,
+/// so nothing it could bite on would show.
+const SPENT: f64 = 1e-3;
+/// A bath's time is read to the millisecond: the minutes a plate lay in it
+/// come from clocks that have added and subtracted many times, and a
+/// rounding of a few parts in 10¹⁵ must not make one more step.
+const CLOCK_GRAIN_MIN: f64 = 1.0 / 60_000.0;
 /// A ground's resistance to the needle: the flow pressure of a beeswax and
 /// asphaltum ground, 5 MPa [E: waxes and bitumens indent at 1–10 MPa at room
 /// temperature, a hundredth of copper's hardness; unmeasured for a ground].
@@ -104,6 +130,15 @@ impl Tray {
     }
 }
 
+/// A plate lying in its tray: the bath it went into and when (minutes on
+/// the plate's own clock; for a surface of a session, its canvas's clock,
+/// which a rest, a save and a handoff keep).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InBath {
+    pub bath: BathSpec,
+    pub since: f64,
+}
+
 /// A plate's coats and baths (see the module's notes).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Coats {
@@ -111,12 +146,28 @@ pub struct Coats {
     pub ground_um: f32,
     pub dust: Vec<Dust>,
     pub tray: Option<Tray>,
+    /// The plate in its tray now, if it is.
+    pub bath: Option<InBath>,
     /// Metal the acid has taken (µm³).
     pub bitten_um3: f64,
     tiles: Vec<Option<Box<[Etch]>>>,
 }
 
-/// A bite as it is asked for.
+/// A bath as the plate is put into it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BathSpec {
+    pub acid: Acid,
+    /// The oxidant's concentration of a fresh bath (mol/L).
+    pub molar: f64,
+    pub temp_c: f64,
+    pub face: Face,
+    pub rock: Option<(f64, f64)>,
+    pub feather: Option<f64>,
+    /// Make a fresh bath even if the plate's tray holds this acid.
+    pub fresh: bool,
+}
+
+/// A bite as it is asked for in one: into the bath, `minutes`, out.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BiteSpec {
     pub acid: Acid,
@@ -129,6 +180,21 @@ pub struct BiteSpec {
     pub feather: Option<f64>,
     /// Make a fresh bath even if the plate's tray holds this acid.
     pub fresh: bool,
+}
+
+impl BiteSpec {
+    pub fn bath(&self) -> BathSpec {
+        BathSpec { acid: self.acid, molar: self.molar, temp_c: self.temp_c, face: self.face, rock: self.rock, feather: self.feather, fresh: self.fresh }
+    }
+}
+
+/// What putting a plate into its bath found: the tray (fresh, or the one it
+/// had, with the metal it holds), and whether loose rosin floated off.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Immersion {
+    pub tray: Tray,
+    pub fresh: bool,
+    pub washed: bool,
 }
 
 /// What a bite did.
@@ -146,6 +212,10 @@ pub struct BiteReport {
     pub molar: f64,
     /// Loose (unmelted) rosin floated off.
     pub washed: bool,
+    /// The minutes the plate lay in the bath, and whether the bath was spent
+    /// (its oxidant used up) before it came out.
+    pub minutes: f64,
+    pub spent: bool,
 }
 
 /// 64-bit mixing (splitmix64).
@@ -574,6 +644,9 @@ impl Plate {
         if self.coats.as_ref().and_then(|c| c.tray).is_none_or(|t| t.acid != acid) {
             self.coats_mut().tray = Some(Tray { acid, molar0: 0.0, litres: 1.0, metal_mol: 0.0 });
         }
+        if doses.is_empty() {
+            return (0.0, 0.0);
+        }
         let t = self.ground_um() as f64;
         let a = self.pitch * self.pitch;
         let cells = self.exposed();
@@ -614,45 +687,123 @@ impl Plate {
         (taken, deepest)
     }
 
-    /// A bite in the plate's tray (EP §2): the bath made up as `spec` asks
-    /// (or the tray's, if it holds that acid), for `spec.minutes` in steps of
-    /// at most a minute. Each step's rate is the bath's (`etch::transport`)
-    /// at the oxidant left, the metal taken in the earlier steps having used
-    /// some; after the bite the tray holds exactly the metal the plate lost.
-    pub fn bite(&mut self, spec: BiteSpec) -> BiteReport {
-        let metal = self.metal;
+    /// The plate in its tray, if it is.
+    pub fn in_bath(&self) -> Option<InBath> {
+        self.coats.as_ref().and_then(|c| c.bath)
+    }
+
+    /// The plate's tray, as a bath of `bath` finds it (EP §2): the tray it
+    /// has if it holds this acid made up to this strength and no fresh bath
+    /// is asked for, else a fresh one, as deep as `etch::TRAY_DEPTH_M` over
+    /// the plate and its margins.
+    fn tray_for(&self, bath: &BathSpec) -> (Tray, bool) {
         let (wm, hm) = (self.width_mm as f64 * 1e-3, self.height_mm as f64 * 1e-3);
         let litres = (wm + 2.0 * etch::TRAY_MARGIN_M) * (hm + 2.0 * etch::TRAY_MARGIN_M) * etch::TRAY_DEPTH_M * 1000.0;
-        let tray = match self.coats.as_ref().and_then(|c| c.tray) {
-            Some(t) if !spec.fresh && t.acid == spec.acid && (t.molar0 - spec.molar).abs() < 1e-9 => t,
-            _ => Tray { acid: spec.acid, molar0: spec.molar, litres, metal_mol: 0.0 },
-        };
+        match self.coats.as_ref().and_then(|c| c.tray) {
+            Some(t) if !bath.fresh && t.acid == bath.acid && (t.molar0 - bath.molar).abs() < 1e-9 => (t, false),
+            _ => (Tray { acid: bath.acid, molar0: bath.molar, litres, metal_mol: 0.0 }, true),
+        }
+    }
+
+    /// Put the plate into its tray at `now` (minutes on its clock): it lies
+    /// in the acid until `lift`. Loose rosin floats off as it goes in. A
+    /// plate already in a bath is refused (it comes out first).
+    pub fn immerse(&mut self, bath: BathSpec, now: f64) -> Result<Immersion, String> {
+        if let Some(b) = self.in_bath() {
+            return Err(format!("the plate is in its {} bath already (since {} min on its clock)", b.bath.acid.name(), b.since));
+        }
+        if !now.is_finite() {
+            return Err("the bath's clock isn't a time".into());
+        }
+        let (tray, fresh) = self.tray_for(&bath);
+        let c = self.coats_mut();
+        let washed = c.dust.iter().any(|d| !d.melted);
+        c.dust.retain(|d| d.melted);
+        c.tray = Some(tray);
+        c.bath = Some(InBath { bath: BathSpec { fresh: false, ..bath }, since: now });
+        Ok(Immersion { tray, fresh, washed })
+    }
+
+    /// Take the plate out of its tray at `now` (minutes on its clock): it
+    /// has bitten for the minutes since it went in (`bite_for`).
+    pub fn lift(&mut self, now: f64) -> Result<BiteReport, String> {
+        let Some(b) = self.in_bath() else { return Err("the plate isn't in a bath".into()) };
+        let minutes = now - b.since;
+        if !(minutes >= -CLOCK_GRAIN_MIN) {
+            return Err(format!("the plate's clock reads {now} min, before it went into the bath at {} min", b.since));
+        }
+        let rep = self.bite_for(&b.bath, (minutes / CLOCK_GRAIN_MIN).round().max(0.0) * CLOCK_GRAIN_MIN);
+        self.coats_mut().bath = None;
+        Ok(rep)
+    }
+
+    /// A copy of the plate as it would come out of its bath at `now` (a look
+    /// at a plate still in it); the plate itself as it is if it isn't in one.
+    pub fn as_lifted(&self, now: f64) -> Plate {
+        let mut p = self.clone();
+        if p.in_bath().is_some() {
+            let since = p.in_bath().unwrap().since;
+            let _ = p.lift(now.max(since));
+        }
+        p
+    }
+
+    /// A bite in one: into the bath at 0, out at `spec.minutes` (EP §2).
+    pub fn bite(&mut self, spec: BiteSpec) -> BiteReport {
+        let washed = self.immerse(spec.bath(), 0.0).expect("bite: the plate is in a bath already").washed;
+        BiteReport { washed, ..self.lift(spec.minutes).expect("bite: the plate went in") }
+    }
+
+    /// The bath's work on the plate over `minutes` in it, in steps (`steps`).
+    /// Each step's rate is the bath's (`etch::transport`) at the oxidant left,
+    /// the metal taken in the earlier steps having used some; after the bite
+    /// the tray holds exactly the metal the plate lost. A spent bath (no
+    /// oxidant left) bites no more.
+    fn bite_for(&mut self, spec: &BathSpec, minutes: f64) -> BiteReport {
+        let metal = self.metal;
+        let (wm, hm) = (self.width_mm as f64 * 1e-3, self.height_mm as f64 * 1e-3);
+        let tray = self.coats.as_ref().and_then(|c| c.tray).filter(|t| t.acid == spec.acid).unwrap_or_else(|| self.tray_for(spec).0);
         self.coats_mut().tray = Some(tray);
-        let washed = self.coats.as_ref().is_some_and(|c| c.dust.iter().any(|d| !d.melted));
         let l_nat = match spec.face {
             Face::Down => wm * hm / (2.0 * (wm + hm)),
             _ => hm,
         };
         let still_up = spec.face == Face::Up && spec.rock.is_none();
-        let steps = (spec.minutes / STEP_MIN).ceil().max(1.0) as usize;
-        let dt = spec.minutes * 60.0 / steps as f64;
         let (_, v_m) = etch::molar(metal);
-        let mut doses = Vec::with_capacity(steps);
-        let mut rep = BiteReport { washed, ..BiteReport::default() };
+        let mut doses = Vec::new();
+        let mut rep = BiteReport { minutes, ..BiteReport::default() };
         let mut metal_mol = tray.metal_mol;
         let before = self.bitten_um3();
         let mut deepest = 0.0f64;
-        for i in 0..steps {
-            let molar = Tray { metal_mol, ..tray }.molar(metal);
-            let bath = Bath { acid: spec.acid, molar, molar0: tray.molar0, temp_c: spec.temp_c, face: spec.face, rock: spec.rock, feather: spec.feather };
-            let (t1, t2) = (i as f64 * dt, (i + 1) as f64 * dt);
+        let bath_at = |metal_mol: f64| Bath { acid: spec.acid, molar: Tray { metal_mol, ..tray }.molar(metal), molar0: tray.molar0, temp_c: spec.temp_c, face: spec.face, rock: spec.rock, feather: spec.feather };
+        // (the rate the plate starts at, reported if it comes straight out: over its first minute)
+        let tr0 = etch::transport(&bath_at(metal_mol), metal, l_nat, wm, STEP_MIN * 60.0);
+        (rep.rate_um_min, rep.delta_um, rep.bubbles) = (tr0.rate_um_min, tr0.delta_um, tr0.bubbles);
+        let early = steps(minutes);
+        let end = minutes * 60.0;
+        let (mut i, mut t1, mut pace) = (0usize, 0.0f64, 0.0f64);
+        while t1 < end {
+            // (the first day in its steps; past it, steps as `LATE_STEP` and `LATE_USE` allow)
+            let t2 = match early.get(i) {
+                Some(&(_, t2)) => t2,
+                None => {
+                    let left = Tray { metal_mol, ..tray }.molar(metal) * tray.litres / spec.acid.stoichiometry(metal).0;
+                    let by_use = if pace > 0.0 { LATE_USE * left / pace } else { f64::INFINITY };
+                    (t1 + (t1 * LATE_STEP).min(by_use).max(STEP_MIN * 60.0)).min(end)
+                }
+            };
+            let bath = bath_at(metal_mol);
+            if bath.molar < SPENT * tray.molar0 {
+                rep.spent = true;
+                break;
+            }
             let tr = etch::transport(&bath, metal, l_nat, wm, t2);
             let dose = if still_up {
                 // the diffusion layer's growth integrated: ∫k dt = 2t·k(t), from t1 to t2
                 let tr1 = etch::transport(&bath, metal, l_nat, wm, t1.max(1e-9));
                 (tr.rate_um_min / 60.0) * 2.0 * t2 - if t1 > 0.0 { (tr1.rate_um_min / 60.0) * 2.0 * t1 } else { 0.0 }
             } else {
-                tr.rate_um_min / 60.0 * dt
+                tr.rate_um_min / 60.0 * (t2 - t1)
             };
             if i == 0 {
                 (rep.rate_um_min, rep.delta_um, rep.bubbles) = (tr.rate_um_min, tr.delta_um, tr.bubbles);
@@ -663,18 +814,37 @@ impl Plate {
             // the steps, which bite a rebuilt crop to the same depths, `bite_run`)
             let (taken, z) = self.bite_run(spec.acid, &[step]);
             metal_mol += taken * 1e-18 / v_m;
+            pace = taken * 1e-18 / v_m / (t2 - t1);
             deepest = deepest.max(z);
+            (i, t1) = (i + 1, t2);
+        }
+        // (no step: a plate in and straight out; its vectors still wash its loose rosin off)
+        if doses.is_empty() {
+            self.bite_run(spec.acid, &[]);
         }
         self.ops.push(Op::Bite { acid: spec.acid, doses });
         let taken = self.bitten_um3() - before;
         let tray = Tray { metal_mol: tray.metal_mol + taken * 1e-18 / v_m, ..tray };
         self.coats_mut().tray = Some(tray);
         rep.deepest_um = deepest;
-        rep.metal_um3 = self.bitten_um3() - before;
+        rep.metal_um3 = taken;
         rep.loaded_g_l = tray.metal_mol * etch::molar(metal).0 * 1000.0 / tray.litres;
         rep.molar = tray.molar(metal);
         rep
     }
+}
+
+/// A bite's time steps (s from the plate going in) over its first day:
+/// `minutes` cut into equal steps of at most `STEP_MIN`, or minute steps for
+/// the day if it is longer (`bite_for` steps on past it).
+fn steps(minutes: f64) -> Vec<(f64, f64)> {
+    if minutes <= 0.0 {
+        return Vec::new();
+    }
+    let span = minutes.min(DAY_MIN);
+    let n = (span / STEP_MIN).ceil().max(1.0) as usize;
+    let dt = span * 60.0 / n as f64;
+    (0..n).map(|i| (i as f64 * dt, (i + 1) as f64 * dt)).collect()
 }
 
 /// A coated plate's look (EP §5): a ground or a varnish as a film of bitumen
@@ -801,6 +971,20 @@ pub(super) fn write_etch(c: &Coats, w: &mut impl Write) -> io::Result<()> {
             }
         }
     }
+    // the plate in its bath: the bath (acid, strength, °C, face, rock, feather) and when it went in
+    match c.bath {
+        None => put64(w, 0)?,
+        Some(b) => {
+            put64(w, 1)?;
+            put64(w, b.bath.acid.word())?;
+            put64(w, b.bath.face.word())?;
+            let (rocks, (tilt, period)) = (b.bath.rock.is_some(), b.bath.rock.unwrap_or((0.0, 0.0)));
+            put64(w, rocks as u64 | (b.bath.feather.is_some() as u64) << 1)?;
+            for v in [b.bath.molar, b.bath.temp_c, tilt, period, b.bath.feather.unwrap_or(0.0), b.since] {
+                put64(w, v.to_bits())?;
+            }
+        }
+    }
     let used: Vec<usize> = (0..c.tiles.len()).filter(|&i| c.tiles[i].is_some()).collect();
     put64(w, used.len() as u64)?;
     let mut buf = Vec::new();
@@ -877,6 +1061,25 @@ pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
             Some(Tray { acid, molar0, litres, metal_mol })
         }
         _ => return Err(bad("its tray is damaged")),
+    };
+    c.bath = match get64(r)? {
+        0 => None,
+        1 => {
+            let acid = Acid::of(get64(r)?).ok_or_else(|| bad("an acid this build doesn't know"))?;
+            let face = Face::of(get64(r)?).ok_or_else(|| bad("its bath is damaged"))?;
+            let flags = get64(r)?;
+            let mut v = [0.0f64; 6];
+            for x in v.iter_mut() {
+                *x = f64::from_bits(get64(r)?);
+            }
+            let [molar, temp_c, tilt, period, feather, since] = v;
+            if flags > 3 || !v.iter().all(|x| x.is_finite()) || molar < 0.0 {
+                return Err(bad("its bath is damaged"));
+            }
+            let bath = BathSpec { acid, molar, temp_c, face, rock: (flags & 1 == 1).then_some((tilt, period)), feather: (flags & 2 == 2).then_some(feather), fresh: false };
+            Some(InBath { bath, since })
+        }
+        _ => return Err(bad("its bath is damaged")),
     };
     let used = get64(r)?;
     if used > c.tiles.len() as u64 {

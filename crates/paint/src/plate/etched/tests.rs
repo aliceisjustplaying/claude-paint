@@ -249,3 +249,109 @@ fn a_grounded_plate_looks_dark_with_bright_lines() {
     let var = l.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / l.len() as f32;
     assert!(var.sqrt() > 0.002 * mean, "a speckle: {} of {mean}", var.sqrt());
 }
+
+/// The bath on the clock: a plate put in at one time on its clock and lifted
+/// out 15 minutes later is the plate of a 15-minute bite in one, bit for bit,
+/// whenever it went in; a plate still in its bath goes through its section
+/// and comes out the same; a look at it in the bath sees what a lift then
+/// would give and leaves it in; it can't go in twice, nor come out unless in.
+#[test]
+fn a_bath_on_the_clock_is_the_bite_in_one() {
+    let mut one = lined();
+    one.bite(ferric(15.0, 20.0));
+    // (a clock that has had many odd minutes added: the 15 minutes come back a hair off)
+    let t0 = 0.1 + 0.2 + 1e3 / 7.0;
+    let t1 = (t0 + 0.11) + 14.89;
+    assert!(t1 - t0 != 15.0, "the clock's sums aren't exact here: {}", t1 - t0);
+    let mut p = lined();
+    let im = p.immerse(ferric(0.0, 20.0).bath(), t0).unwrap();
+    assert!(im.fresh && !im.washed);
+    assert!(p.in_bath().is_some());
+    assert!(p.immerse(ferric(0.0, 20.0).bath(), t0 + 1.0).unwrap_err().contains("already"));
+    // in its section, still in the bath
+    let mut b = Vec::new();
+    p.write(&mut b).unwrap();
+    let mut back = Plate::read(&mut b.as_slice()).unwrap();
+    assert!(back == p, "a plate in its bath comes back in it");
+    // a look half way: a copy bitten to then; the plate is still in, unbitten
+    let half = p.as_lifted(t0 + 7.5);
+    assert!(half.in_bath().is_none() && p.in_bath().is_some());
+    let z = |p: &Plate| p.etch(100, 50).lines.iter().map(|l| l.z).fold(0.0, f32::max);
+    assert!(z(&half) > 0.0 && z(&p) == 0.0);
+    let r = p.lift(t1).unwrap();
+    assert_eq!(r.minutes, 15.0);
+    assert!(p == one, "in at {t0}, out at {t1}: the 15-minute bite");
+    back.lift(t1).unwrap();
+    assert!(back == one, "and through a save while in the bath");
+    assert!(p.lift(t1 + 1.0).unwrap_err().contains("isn't in"));
+    assert!(z(&half) < z(&one));
+}
+
+/// Taken out, stopped out and put back into the same (loaded) tray: the lines
+/// under the varnish keep the depth of the first bath; a +10 °C bath bites
+/// 1.40 times as fast in the open (Ea 24.9 kJ/mol); straight in and out bites
+/// nothing but washes loose rosin off.
+#[test]
+fn out_stopped_out_and_back_in_keeps_the_first_depths() {
+    let mut p = lined();
+    p.immerse(ferric(0.0, 20.0).bath(), 100.0).unwrap();
+    p.lift(110.0).unwrap();
+    let (bw, bh) = (200usize, 100usize);
+    let mut bits = vec![0u8; (bw * bh).div_ceil(8)];
+    for i in 0..60 * bw {
+        bits[i / 8] |= 1 << (i % 8);
+    }
+    p.apply(Op::StopOut { w: bw as u32, h: bh as u32, bits });
+    let kept = (p.cell(100, 50), p.etch(100, 50));
+    let tray = p.coats().unwrap().tray.unwrap();
+    let im = p.immerse(ferric(0.0, 20.0).bath(), 130.0).unwrap();
+    assert!(!im.fresh && im.tray == tray, "back into the tray it came out of");
+    p.lift(150.0).unwrap();
+    assert!((p.cell(100, 50), p.etch(100, 50)) == kept, "the stopped-out line keeps its first depth");
+    let z = |p: &Plate, x, y| p.etch(x, y).lines.iter().map(|l| l.z).fold(0.0, f32::max);
+    assert!(z(&p, 100, 70) > 2.0 * z(&p, 100, 50));
+
+    let open = |temp: f64| {
+        let mut q = tiny(Metal::Copper);
+        q.immerse(ferric(0.0, temp).bath(), 5.0).unwrap();
+        q.lift(15.0).unwrap();
+        -q.cell(50, 50).level as f64
+    };
+    let arrh = (24.9e3f64 / 8.314462618 * (1.0 / 293.15 - 1.0 / 303.15)).exp();
+    assert!((arrh - 1.40).abs() < 0.01);
+    assert!((open(30.0) / open(20.0) / arrh - 1.0).abs() < 1e-3, "{} {}", open(30.0), open(20.0));
+
+    let mut q = tiny(Metal::Copper);
+    q.apply(Op::Aquatint { per_um2: etch::dust_box(0.6, 15.0, 1.0).iter().map(|&v| v as f32).collect(), seed: 5 });
+    let before = q.cell(50, 50);
+    assert!(q.immerse(ferric(0.0, 20.0).bath(), 1.0).unwrap().washed);
+    let r = q.lift(1.0).unwrap();
+    assert!(r.minutes == 0.0 && r.metal_um3 == 0.0 && q.cell(50, 50) == before);
+    assert!(q.coats().unwrap().dust.is_empty());
+    assert!(q.rebuilt(1, (0, 0, 200, 100)).coats().is_none_or(|c| c.dust.is_empty()), "the vectors wash it off too");
+}
+
+/// A plate forgotten in its bath bites on past a day in longer steps; a big
+/// open plate spends its tray (Dutch mordant, 0.16 M chlorate, takes 0.03 M
+/// of copper per litre) and bites no deeper than the tray's oxidant could
+/// take off it; the metal balances.
+#[test]
+fn a_forgotten_plate_bites_on_until_the_bath_is_spent() {
+    assert_eq!(steps(15.0).len(), 15);
+    assert_eq!(steps(0.5), vec![(0.0, 30.0)]);
+    assert_eq!(steps(3.0 * DAY_MIN).len(), 1440);
+    let dutch = BathSpec { acid: Acid::Dutch, molar: etch::DUTCH_CHLORATE_M, temp_c: 20.0, face: Face::Up, rock: Some((5.0, 4.0)), feather: None, fresh: true };
+    // (a 400 mm plate at 10 mm a cell: a 7.2 L tray)
+    let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 400.0, 400.0, 1.3, 45.0, 40, 40);
+    p.immerse(dutch, 0.0).unwrap();
+    let t0 = std::time::Instant::now();
+    let r = p.lift(365.0 * DAY_MIN).unwrap();
+    assert!(t0.elapsed().as_secs_f64() < 20.0, "a year in the bath: {:?}", t0.elapsed());
+    let t = p.coats().unwrap().tray.unwrap();
+    assert!(r.spent, "a year: the bath is spent ({} M left)", t.molar(Metal::Copper));
+    let (_, v) = etch::molar(Metal::Copper);
+    let most_um = etch::DUTCH_CHLORATE_M * t.litres / Acid::Dutch.stoichiometry(Metal::Copper).0 * v * 1e18 / (400e3 * 400e3);
+    let depth = -p.cell(20, 20).level as f64;
+    assert!(depth <= most_um * 1.001 && depth > most_um * (1.0 - 2.0 * SPENT) - 0.01, "{depth} µm against the bath's {most_um}");
+    assert!(balance(&p).abs() < 1e-3 * p.bitten_um3());
+}

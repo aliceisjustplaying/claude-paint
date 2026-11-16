@@ -1295,7 +1295,8 @@ impl Plate {
     /// (`--@ etch`) is a plate an etching tool has touched: its etching tools
     /// among its uses, each with its own data after its points (a length and
     /// the bytes), and after the tiles its coats (`etched`: the ground, the
-    /// rosin, the tray, the metal the acid took, and the etched cells). A
+    /// rosin, the tray, the bath the plate lies in if it does, the metal the
+    /// acid took, and the etched cells). A
     /// plate no etching tool has touched is written as version 1, byte for
     /// byte as before.
     pub fn write(&self, w: &mut impl Write) -> io::Result<()> {

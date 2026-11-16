@@ -1311,8 +1311,9 @@ impl Plate {
     /// acid took, and the etched cells). A
     /// plate no etching tool has touched is written as version 1, byte for
     /// byte as before. Version 3 (`--@ press`) is a plate that has been
-    /// inked: as version 2, but its coats only if it has any (a word, 0 or 1,
-    /// before them), then its ink (`inked`). A plate never inked is written
+    /// inked: as version 2, but its coats (version 2's, the bath slot among
+    /// them) only if it has any (a word, 0 or 1, before them), then its ink
+    /// (`inked`). A plate never inked is written
     /// as version 1 or 2 as before.
     pub fn write(&self, w: &mut impl Write) -> io::Result<()> {
         let v3 = self.ink.is_some();
@@ -1413,7 +1414,7 @@ impl Plate {
         Ok(())
     }
 
-    /// `write` read back (version 1 or 2): refuses another version, a
+    /// `write` read back (version 1, 2 or 3): refuses another version, a
     /// damaged size, a tool it doesn't know and trailing data.
     pub fn read(r: &mut impl Read) -> io::Result<Plate> {
         let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, format!("plate: {m}"));

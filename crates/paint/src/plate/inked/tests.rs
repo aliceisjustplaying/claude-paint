@@ -337,3 +337,38 @@ fn ink_darkens_the_metal_it_lies_on() {
     assert!(lum(line) < 0.2 * lum(bare), "line {line:?} against bare {bare:?}");
     assert!(lum(flat) > 0.7 * lum(metal), "the polished flat {flat:?} against metal {metal:?}");
 }
+
+/// An etched plate, bitten on the clock (into its bath, out of it), cleaned
+/// and inked, is version 3 with its coats, the bath slot among them, and
+/// reads back whole; a plate still in its bath stays version 2 (`--@ etch`'s
+/// layout, the bath in its coats).
+#[test]
+fn an_etched_and_inked_plate_reads_back_with_its_coats() {
+    use super::etched::BathSpec;
+    use crate::etch::{self, Acid, Face};
+    let mut p = square(20.0, 100.0);
+    p.apply(Op::Ground { um: etch::GROUND_UM as f32 });
+    let pt = |x: f32| Point { x, y: 10.0, force: 0.3, alt: 80.0, az: 0.0, speed: 20.0 };
+    p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0), pt(16.0)] });
+    let bath = BathSpec { acid: Acid::Ferric, molar: 2.2, temp_c: 20.0, face: Face::Down, rock: None, feather: None, fresh: false };
+    p.immerse(bath, 10.0).unwrap();
+    let mut b = Vec::new();
+    p.write(&mut b).unwrap();
+    assert_eq!(u64::from_le_bytes(b[4..12].try_into().unwrap()), 2);
+    let back = Plate::read(&mut &b[..]).unwrap();
+    assert!(back == p && back.in_bath() == p.in_bath());
+    p.lift(25.0).unwrap();
+    p.apply(Op::Clean);
+    assert!(p.coats().is_some() && p.in_bath().is_none());
+    p.warm(35.0, 30.0);
+    p.ink(&black(), None, Inker::Card, 30.5).unwrap();
+    let mut b = Vec::new();
+    p.write(&mut b).unwrap();
+    assert_eq!(u64::from_le_bytes(b[4..12].try_into().unwrap()), 3);
+    let q = Plate::read(&mut &b[..]).unwrap();
+    assert!(q == p, "an etched, inked plate comes back as it was");
+    let mut again = Vec::new();
+    q.write(&mut again).unwrap();
+    assert!(again == b);
+    assert!(Plate::read(&mut &b[..b.len() - 1]).is_err());
+}

@@ -1648,7 +1648,9 @@ use("painting")
   air trapped at the bottom, unless the ink is too stiff to be pushed into a very fine line in
   the time) and leaves a film on the flat: the card's edge drags a film by Reynolds' slider
   law, some tens of µm of a stiff ink. Reports `added` (mm³), `film` (µm), `fill`, `temp`,
-  `viscosity`, `area` (mm²), `seconds`. A coated plate (ground, rosin) refuses ink.
+  `viscosity`, `area` (mm²), `seconds`. A coated plate (ground, rosin) refuses ink. A plate
+  still in its acid (`k:immerse{}`) refuses ink, warmth and the wipes until `k:lift()`, and
+  an inked plate refuses `k:immerse` and `k:bite` until `k:clean_ink()`.
 - **`t:wipe(k, mask, {pressure=, passes=, angle=})`.** A tarlatan is a rag: its face loads,
   takes less as it fills, smears a little back (the plate tone), and is refolded with
   `t:refold()`. It reaches a line's ink by its yarns (a 75 µm yarn dips 4 µm into a 50 µm
@@ -1679,7 +1681,8 @@ use("painting")
   each plate of a proof, plates about 35 × 21 cm): the card 277 mm² a second, a tarlatan pass
   416, a palm pass 555; a small plate takes proportionally less.
 - **Saves, checkpoints, replay and handoff** keep the ink in the plate's section (`PLAT`
-  version 3; versions 1 and 2 still read and are still written for plates never inked). The
+  version 3: version 2's layout, the coats with their bath slot, then the ink; versions 1 and
+  2 still read and are still written for plates never inked). The
   tarlatans are held with the rags: a failed chunk puts them back. A session without the switch
   refuses to receive an inked plate.
 - **Physics and estimates:** notes/research/intaglio_physics.md §5.6.

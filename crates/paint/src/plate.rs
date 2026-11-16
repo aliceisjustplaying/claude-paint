@@ -1307,7 +1307,8 @@ impl Plate {
     /// (`--@ etch`) is a plate an etching tool has touched: its etching tools
     /// among its uses, each with its own data after its points (a length and
     /// the bytes), and after the tiles its coats (`etched`: the ground, the
-    /// rosin, the tray, the metal the acid took, and the etched cells). A
+    /// rosin, the tray, the bath the plate lies in if it does, the metal the
+    /// acid took, and the etched cells). A
     /// plate no etching tool has touched is written as version 1, byte for
     /// byte as before. Version 3 (`--@ press`) is a plate that has been
     /// inked: as version 2, but its coats only if it has any (a word, 0 or 1,

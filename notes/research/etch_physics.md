@@ -87,6 +87,11 @@ Every mordant here bites at the rate its oxidant reaches the metal:
   - The tray tracks the metal the plate has given it, and its oxidant falls by ν per mol, so an old bath bites slower.
   - The tray's capacity follows from the stoichiometry. A 3.5 M ferric bath can take 1.75 M of copper, 111 g/L, against MG Chemicals' rated 100 g/L [M]: a check, not an input.
   - A tray is the plate plus its margin, 20 mm deep **[E]**. Its rate within a bite follows its loading, in steps of a minute.
+- **The bath on the clock.** A plate lies in its tray from `immerse` to `lift`, and nothing in the bath depends on what the hand does meanwhile. The bite is therefore worked out when the plate comes out, from the minutes it lay there, in the same steps as a bite of those minutes taken in one. In, other work, out is the same bite as in, wait, out.
+  - A plate taken out and put back starts a fresh diffusion layer [D]. Rinsing clears the spent acid, and a still face-up plate's layer grows again as √t from its return.
+  - **A plate left in** (for days) bites on, for as long as the session's clock runs. Past a day the steps lengthen to a sixtieth of the time passed, or to the time the bath takes to use a hundredth of its oxidant left, whichever is shorter. Both are numerical choices, not physics: the loading changes as little in each step as in a minute's early on.
+  - **A spent bath.** The bath stops biting once its oxidant falls below a thousandth of what it was made up with. That is a bound, not an estimate: all the bath could still dissolve is that share of what it held. Before then the rate falls with the oxidant left, so the depth approaches the stoichiometric capacity over the bitten area.
+  - **A bite deeper than the plate** is reported, not modelled. The acid would open the back where the plate is holed, and the back's varnish isn't modelled.
 - **Nitric 1:8 on zinc,** rocked and feathered, bites about 1.7 µm/min, **5.6×** ferric on copper in the same rocked tray. IP §3.2 has 5–10× [P].
 
 ### 2.4 Nitric acid's bubbles [M] [D] [E]
@@ -182,7 +187,7 @@ Every mordant here bites at the rate its oxidant reaches the metal:
 
 - **PLAT version 2** is written when an etching tool has touched a plate.
   - The etching tools are among its uses, each with its own data after its points (a length and the bytes). A bite keeps its steps, each step's flat dose and diffusion layer, so a crop rebuilt from the vectors bites to the same depths.
-  - After the tiles come the coats: the ground's thickness, the metal the acid took, the rosin layers (seed, melted, grains per size), the tray (its acid, strength as made, volume and the metal it holds) and the etched cells' states.
+  - After the tiles come the coats: the ground's thickness, the metal the acid took, the rosin layers (seed, melted, grains per size), the tray (its acid, strength as made, volume and the metal it holds), the bath the plate lies in if it does (its acid, strength, temperature, face, rocking, feathering, and when it went in, on the plate's clock) and the etched cells' states.
 - **A plate no etching tool has touched** is still version 1, byte for byte, and version 1 is still read.
 
 ## 7. Estimates still standing

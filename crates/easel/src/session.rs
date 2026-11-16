@@ -1132,7 +1132,7 @@ impl Session {
 
     pub fn status(&self) -> String {
         let s = self.st.borrow();
-        format!("{} chunks · {}px · {}{}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"), s.surfaces.status())
+        format!("{} chunks · {}px · {}{}{}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"), s.surfaces.status(), crate::etch::baths(&s))
     }
 }
 

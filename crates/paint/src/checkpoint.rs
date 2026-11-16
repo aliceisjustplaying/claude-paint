@@ -2438,6 +2438,33 @@ mod tests {
         }
     }
 
+    /// The pastel K–M and lift switches together: the word has both bits,
+    /// the K–M section is written and read as with that switch alone, and
+    /// both switches and each cell's scattering and lift come back bit for
+    /// bit. Any of the four combinations reads back as it was written.
+    #[test]
+    fn the_pastel_km_and_lift_switches_round_trip_together() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        for (km, lift) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut c = crate::tests::drawing_paper(160).with_drawing_optics(true).with_pastel_km_mix(km).with_pastel_lift(lift);
+            let mut tint = Stick { lift: 0.62, scatter: 0.25, ..Stick::round([0.7, 0.6, 0.1], 0.8, 12.0) };
+            c.stick_stroke(&mut Stick::vine(8.0), &line(400.0));
+            c.stick_stroke(&mut tint, &line(405.0));
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            assert_eq!(b.windows(8).any(|w| w == PASTEL_KM_MARK.to_le_bytes()), km);
+            let (back, _) = Canvas::read_state(&mut Cursor::new(&b)).unwrap();
+            assert_eq!((back.pastel_km_mix(), back.pastel_lift()), (km, lift));
+            let (x, y) = (c.drawing.as_deref().unwrap(), back.drawing.as_deref().unwrap());
+            assert!(x.cells.iter().zip(&y.cells).all(|(p, q)| p.s.to_bits() == q.s.to_bits() && p.lift.to_bits() == q.lift.to_bits()));
+            if km {
+                assert!(x.cells.iter().any(|q| q.s > 0.0));
+            }
+        }
+    }
+
     /// A resting canvas's drawing spilled to disk keeps charcoal's carbon
     /// shares and wet pastel's water, index and gum and the sheet's water,
     /// bit for bit, so a surface put down wet with charcoal on it wakes as

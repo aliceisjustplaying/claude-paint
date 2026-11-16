@@ -2921,6 +2921,44 @@ mod tests {
             }
         }
 
+        /// The pastel K–M and lift switches together: a tint and vine smeared
+        /// into one another by the finger. Each switch does with the other on
+        /// what it does alone: the cells' color and scattering are those of
+        /// the K–M switch whatever the lift switch, and their lift and carbon
+        /// those of the lift switch whatever the K–M switch. With both, the
+        /// smeared cells carry scattering and every one is laid at the volume
+        /// mix of the two sticks' lifts.
+        #[test]
+        fn the_km_and_lift_switches_work_together() {
+            let run = |km: bool, whole: bool| {
+                let mut c = paper().with_pastel_km_mix(km).with_pastel_lift(whole);
+                assert_eq!((c.pastel_km_mix(), c.pastel_lift()), (km, whole));
+                let mut tint = Stick { lift: 0.62, scatter: 0.25, ..Stick::round([0.7, 0.6, 0.1], 0.8, 8.0) };
+                stroke(&mut c, &mut tint, 400.0);
+                stroke(&mut c, &mut Stick::vine(8.0), 470.0);
+                c.rub(&[(500.0, 330.0), (500.0, 650.0)], 1.0, None, 40.0);
+                let f = c.window();
+                let d = c.drawing.as_ref().unwrap();
+                (0..d.cells.len()).filter(|&i| (300.0..700.0).contains(&f.ux(i % f.w)) && (520.0..640.0).contains(&f.uy(i / f.w)) && d.cells[i].a > 0.0).map(|i| { let q = &d.cells[i]; (i, q.r, q.s, q.lift, q.carbon) }).collect::<Vec<_>>()
+            };
+            let [none, lift, km, both] = [run(false, false), run(false, true), run(true, false), run(true, true)];
+            assert!(both.len() > 10, "{} cells smeared to", both.len());
+            for (a, b) in [(&none, &lift), (&km, &both)] {
+                assert!(a.len() == b.len() && a.iter().zip(b).all(|(p, q)| p.0 == q.0 && p.1.map(f32::to_bits) == q.1.map(f32::to_bits) && p.2.to_bits() == q.2.to_bits()), "the lift switch leaves color and scattering alone");
+            }
+            for (a, b) in [(&none, &km), (&lift, &both)] {
+                assert!(a.len() == b.len() && a.iter().zip(b).all(|(p, q)| p.0 == q.0 && (p.3 - q.3).abs() < 1e-5 && (p.4 - q.4).abs() < 1e-5), "the K–M switch leaves lift and carbon alone");
+            }
+            assert!(none.iter().zip(&km).any(|(p, q)| (0..3).any(|j| (p.1[j] - q.1[j]).abs() > 1e-3)), "the K–M switch mixes the two otherwise");
+            assert!(none.iter().all(|q| q.2 == 0.0) && both.iter().all(|q| q.2 > 0.0), "scattering only with the K–M switch");
+            let vine = crate::charcoal::VINE_LIFT;
+            assert!(both.iter().all(|q| q.3 > 0.62 - 1e-4 && q.3 < vine + 1e-4), "lifts between the sticks'");
+            assert!(both.iter().any(|q| q.4 > 0.0 && q.4 < 1.0 && q.3 > 0.62 + 1e-3 && q.3 < vine - 1e-3), "a mixed cell's lift lies between");
+            // (without it, moved tint is laid at 0.55, below its own 0.62: each
+            // cell's lift is lower than with the switch)
+            assert!(none.iter().zip(&lift).all(|(p, q)| p.3 > crate::pastel::PASTEL_LIFT - 1e-4 && p.3 < q.3 - 1e-3), "without the lift switch moved pastel is at 0.55");
+        }
+
         /// Fixative wets thin loose charcoal through (the light spray's
         /// 1.5 µm of resin over its pores) and darkens it as carbon is by
         /// resin, as the bed's own Mie in resin gives (`CarbonBed::color`),

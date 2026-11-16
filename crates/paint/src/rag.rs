@@ -74,7 +74,7 @@ pub const PAD_MM: f32 = 40.0;
 /// to 0.4 of that contact) and the pad's soft edge take less. Set so one
 /// pass lifts about half of a thin fresh sky film, as in the table in
 /// notes/rag/README.md [E].
-const LIFT: f32 = 4.0;
+pub(crate) const LIFT: f32 = 4.0;
 /// What a blot lifts, as a share of a full pass (no drag) [E].
 const BLOT: f32 = 0.8;
 /// The stain before engine 3: coats of film the cloth can't take, pigment
@@ -93,7 +93,7 @@ const WICK: f32 = 0.25;
 /// How much one face of the pad holds before it lifts nothing more: a film
 /// this thick (µm) over the face (`width` square). Cotton cloth some 0.3 mm
 /// thick, with paint caught in its surface as well [E].
-const CAP_UM: f32 = 400.0;
+pub(crate) const CAP_UM: f32 = 400.0;
 /// A face dipped in spirits lifts wet paint more readily: its lift rate
 /// is `1 + DAMP_LIFT × damp` times a dry face's, and that is all a dip
 /// does. "To strengthen the lights, dip the rag into OMS and then wipe them
@@ -117,7 +117,7 @@ pub const DAMP_HALF_MIN: f64 = 3.0;
 const DRY_DAMP: f32 = 0.01;
 /// How many faces a rag can be refolded to before none is clean: a cloth
 /// about 30 cm square [E].
-const FACES: f32 = 12.0;
+pub(crate) const FACES: f32 = 12.0;
 /// The pad's creases: spacing across the path (mm), and how far along the
 /// path a crease runs before the cloth shifts (mm) [E].
 const CREASE_MM: f32 = 3.0;
@@ -179,8 +179,8 @@ const END_MM: f32 = 8.0;
 /// `SMEAR` back at the next step, over its light-pressed rim (the frayed
 /// sides and the trailing end of the wipe). What it lays back comes off
 /// the rag's load [E].
-const SOAK: f32 = 0.35;
-const SMEAR: f32 = 0.2;
+pub(crate) const SOAK: f32 = 0.35;
+pub(crate) const SMEAR: f32 = 0.2;
 /// A face loaded this far is full: it lifts almost nothing more (its
 /// thirst is under a tenth and its room a twentieth of a clean face's).
 /// With the rag lift switch the easel says so when a wipe starts on one.
@@ -268,7 +268,7 @@ struct Seg {
 /// 1 dipped well, as of `wet_at`; refolding preserves this dampness, and
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rag {
     pub width: f32,
@@ -288,12 +288,37 @@ pub struct Rag {
     /// wipe or blot to the next until it soaks in; a refold turns out a
     /// face without any.
     pub mobile: Mobile,
+    /// A tarlatan's own (crate::plate::inked, the easel's `--@ press`): its
+    /// starch and the ink at its face. None for a rag.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub cloth: Option<Box<crate::plate::inked::Tarlatan>>,
+}
+
+impl std::fmt::Debug for Rag {
+    /// As derived, but a rag without a tarlatan's cloth prints as it always
+    /// did (`easel run --state-digest` hashes it).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("Rag");
+        d.field("width", &self.width)
+            .field("load", &self.load)
+            .field("soaked", &self.soaked)
+            .field("damp", &self.damp)
+            .field("wet_at", &self.wet_at)
+            .field("fold", &self.fold)
+            .field("seed", &self.seed)
+            .field("solvent_mm3", &self.solvent_mm3)
+            .field("mobile", &self.mobile);
+        if let Some(c) = &self.cloth {
+            d.field("cloth", c);
+        }
+        d.finish()
+    }
 }
 
 impl Rag {
     /// A clean rag bunched to a pad `width` units across.
     pub fn new(width: f32, seed: u64) -> Self {
-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default() }
+        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default(), cloth: None }
     }
 
     /// Turn a cleaner face outward, retaining the cloth's dampness.
@@ -343,11 +368,11 @@ impl Rag {
 
     /// How readily the face in use still takes paint (1 clean .. 0 full):
     /// a half-loaded cloth still drinks; a nearly full one barely does.
-    fn thirst(&self) -> f32 {
+    pub(crate) fn thirst(&self) -> f32 {
         1.0 - self.load.clamp(0.0, 1.0).powi(2)
     }
 
-    fn cloth_seed(&self, s: u64) -> u64 {
+    pub(crate) fn cloth_seed(&self, s: u64) -> u64 {
         self.seed ^ (self.fold as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ s.wrapping_mul(0xD6E8_FEB8_6659_FD93)
     }
 }
@@ -428,7 +453,7 @@ fn cloth(u: f32, v: f32, seed: u64) -> f32 {
 /// Engine 3's cloth at pressure `p`: as `cloth`, but the folds between
 /// creases miss (`FOLD_MISS`, `FOLD_PRESS`): 0..1.
 #[inline]
-fn cloth3(u: f32, v: f32, seed: u64, p: f32) -> f32 {
+pub(crate) fn cloth3(u: f32, v: f32, seed: u64, p: f32) -> f32 {
     let a = vn(u / CREASE_MM, v / SHIFT_MM, seed);
     let b = vn(u / (3.0 * CREASE_MM), v / (2.0 * SHIFT_MM), seed ^ 0x51ED);
     let t = 0.55 * a + 0.45 * b;

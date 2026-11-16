@@ -217,6 +217,15 @@ const SHAVE_UM: f32 = 12.0;
 /// full nap, the middle.
 const NAP_TOOTH: f32 = 1.9;
 
+/// How far (µm) a round tip of radius `r` µm reaches down into a gap `w` µm
+/// wide: the chord r − √(r² − w²/4) (notes/research/pastel_brushing.md);
+/// infinite when the gap is as wide as the tip, which falls in. A dry
+/// brush's tips over paper's pores (`dust_pastel`), a tarlatan's yarn over a
+/// plate's line (plate/inked.rs).
+pub fn tip_reach_um(r: f32, w: f32) -> f32 {
+    if w / 2.0 >= r { f32::INFINITY } else { r - (r * r - w * w / 4.0).sqrt() }
+}
+
 /// Chen et al.'s (2020) z-compression of paper: stress (MPa) at strain `e`.
 fn chen(e: f32) -> f32 {
     0.636 * ((13.54 * e).exp() - 1.0)
@@ -655,7 +664,7 @@ impl Canvas {
         // the gaps between fibers: about a fiber's width
         let w_um = self.paper.as_ref().map_or(30.0, |p| p.fiber_um);
         let r = tip_um.max(1.0);
-        let reach_um = if w_um / 2.0 >= r { f32::INFINITY } else { r - (r * r - w_um * w_um / 4.0).sqrt() };
+        let reach_um = tip_reach_um(r, w_um);
         let half = width * s * 0.5;
         // the tips' band along the path: a bristle tuft pressed on paper, about 2 mm deep
         let depth_px = (2.0 / s_mm).max(1.0);

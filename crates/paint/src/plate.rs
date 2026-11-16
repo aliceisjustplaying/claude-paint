@@ -694,6 +694,8 @@ pub struct Plate {
     /// Grounds, varnish, rosin and the acid's bites (`etched`): None until an
     /// etching tool touches the plate.
     coats: Option<Box<etched::Coats>>,
+    /// Its ink (`inked`, the easel's `--@ press`): None until it is inked.
+    ink: Option<Box<inked::Inking>>,
 }
 
 impl Plate {
@@ -702,7 +704,7 @@ impl Plate {
     pub fn new(metal: Metal, temper: Temper, width_mm: f32, height_mm: f32, thickness_mm: f32, bevel_deg: f32, w: usize, h: usize) -> Plate {
         let pitch = width_mm as f64 * 1000.0 / w as f64;
         let (tw, th) = (w.div_ceil(TILE), h.div_ceil(TILE));
-        Plate { metal, temper, facing: None, width_mm, height_mm, thickness_mm, bevel_deg, w, h, pitch, tiles: vec![None; tw * th], ops: Vec::new(), chip_um3: 0.0, clip: None, coats: None }
+        Plate { metal, temper, facing: None, width_mm, height_mm, thickness_mm, bevel_deg, w, h, pitch, tiles: vec![None; tw * th], ops: Vec::new(), chip_um3: 0.0, clip: None, coats: None, ink: None }
     }
 
     pub fn size_px(&self) -> (usize, usize) {
@@ -1213,6 +1215,7 @@ impl Plate {
         }
         p.ops = self.ops.clone();
         p.clip = None;
+        self.ink_onto(&mut p, factor, window);
         p
     }
 
@@ -1231,6 +1234,15 @@ impl Plate {
         for y in y0..y1 {
             for x in x0..x1 {
                 let c = self.cell(x, y);
+                // ink on it (`inked`, `--@ press`): the metal under its films
+                if self.ink.is_some() {
+                    let tilt = if c.burr_area > 0.0 { (2.0 * c.burr_height() / (c.burr_area * self.pitch as f32).max(1e-6)).atan().to_degrees().round() as usize } else { 0 };
+                    if let Some(px) = self.inked_rgb(x, y, &c, flat, &walls, deg[tilt.min(90)]) {
+                        col.push(px);
+                        hgt.push(c.height());
+                        continue;
+                    }
+                }
                 if let Some(l) = &coats
                     && let Some(px) = l.cell(self, x, y, &c, &flat, &walls)
                 {
@@ -1297,11 +1309,15 @@ impl Plate {
     /// the bytes), and after the tiles its coats (`etched`: the ground, the
     /// rosin, the tray, the metal the acid took, and the etched cells). A
     /// plate no etching tool has touched is written as version 1, byte for
-    /// byte as before.
+    /// byte as before. Version 3 (`--@ press`) is a plate that has been
+    /// inked: as version 2, but its coats only if it has any (a word, 0 or 1,
+    /// before them), then its ink (`inked`). A plate never inked is written
+    /// as version 1 or 2 as before.
     pub fn write(&self, w: &mut impl Write) -> io::Result<()> {
-        let v2 = self.coats.is_some() || self.ops.iter().any(Op::etching);
+        let v3 = self.ink.is_some();
+        let v2 = v3 || self.coats.is_some() || self.ops.iter().any(Op::etching);
         w.write_all(PLAT_MAGIC)?;
-        put64(w, if v2 { PLAT_V } else { 1 })?;
+        put64(w, if v3 { PLAT_V } else if v2 { 2 } else { 1 })?;
         put64(w, self.metal.word())?;
         put64(w, self.temper.word())?;
         for v in [self.width_mm, self.height_mm, self.thickness_mm, self.bevel_deg] {
@@ -1383,7 +1399,14 @@ impl Plate {
             }
             w.write_all(&buf)?;
         }
-        if v2 {
+        if v3 {
+            // (version 3: whether it has coats, then them; then its ink)
+            put64(w, self.coats.is_some() as u64)?;
+            if let Some(c) = self.coats.as_deref() {
+                etched::write_etch(c, w)?;
+            }
+            inked::write_ink(self.ink.as_deref().unwrap(), w)?;
+        } else if v2 {
             etched::write_etch(self.coats.as_deref().unwrap_or(&etched::Coats::default()), w)?;
         }
         Ok(())
@@ -1399,7 +1422,7 @@ impl Plate {
             return Err(bad("not a plate's section"));
         }
         let v = get64(r)?;
-        if v != 1 && v != PLAT_V {
+        if !(1..=PLAT_V).contains(&v) {
             return Err(bad(&format!("a plate of version {v}: this build reads versions 1 to {PLAT_V}")));
         }
         let metal = Metal::of(get64(r)?).ok_or_else(|| bad("a metal this build doesn't know"))?;
@@ -1521,6 +1544,13 @@ impl Plate {
         }
         if v == 2 {
             p.coats = Some(Box::new(etched::read_etch(&p, r)?));
+        } else if v == 3 {
+            match get64(r)? {
+                0 => {}
+                1 => p.coats = Some(Box::new(etched::read_etch(&p, r)?)),
+                _ => return Err(bad("its coats' mark is damaged")),
+            }
+            p.ink = Some(Box::new(inked::read_ink(&p, r)?));
         }
         if r.read(&mut [0u8; 1])? != 0 {
             return Err(bad("trailing data"));
@@ -1530,9 +1560,10 @@ impl Plate {
 }
 
 const PLAT_MAGIC: &[u8; 4] = b"PLAT";
-/// The newest version of a plate's section (`write`): 2, a plate an etching
-/// tool has touched; version 1 is still read.
-pub const PLAT_V: u64 = 2;
+/// The newest version of a plate's section (`write`): 3, a plate that has
+/// been inked (`--@ press`); 2, a plate an etching tool has touched, and 1
+/// are still written for plates without ink, and read.
+pub const PLAT_V: u64 = 3;
 
 fn put64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
@@ -1555,6 +1586,7 @@ fn get32(r: &mut (impl Read + ?Sized)) -> io::Result<u32> {
 }
 
 pub mod etched;
+pub mod inked;
 
 #[cfg(test)]
 mod tests;

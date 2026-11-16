@@ -233,7 +233,7 @@ impl Pace {
     }
 
     /// The cure of an open film of cure `c` and rate `r` after `dt` minutes.
-    fn age(self, c: f32, dt: f32, r: f32) -> f32 {
+    pub(crate) fn age(self, c: f32, dt: f32, r: f32) -> f32 {
         if self == Pace::EVEN {
             return c + dt * r;
         }

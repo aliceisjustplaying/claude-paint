@@ -184,8 +184,21 @@ fn along(o: Option<&Table>, key: &str, n: usize, default: f32) -> Result<Vec<f32
         .collect())
 }
 
-/// The plate `k` names, in hand: (its width in mm, its height in units).
+/// The plate `k` names, in hand and out of any bath (a plate lying in its acid is lifted out
+/// before it is worked or felt: etch.rs): (its width in mm, its height in units).
 pub(crate) fn in_hand(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
+    let r = held(st, k, verb)?;
+    let s = st.borrow();
+    if let (Some(p), Some(c)) = (s.plate.as_ref(), s.canvas.as_ref())
+        && let Some(e) = crate::etch::refuse_in_bath(p, c.clock(), verb, &k.name)
+    {
+        return Err(mlua::Error::runtime(e));
+    }
+    Ok(r)
+}
+
+/// The plate `k` names, in hand, in a bath or not: (its width in mm, its height in units).
+pub(crate) fn held(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
     let s = st.borrow();
     if k.kind != Kind::Plate || !s.tubes.plate {
         return err(format!("{verb}: a plate's tool, and {:?} is a {}", k.name, k.kind.name()));
@@ -393,7 +406,15 @@ fn feel(c: &paint::plate::Cell) -> (Vec<f64>, String) {
 
 /// A look at a plate: its colour in the room's light, or lit on its relief, whole at its own
 /// pitch or a crop drawn again from its vectors at the crop's (`Plate::rebuilt`).
+/// A plate still in its bath is seen as it would come out now (`Plate::as_lifted`); it stays in.
 pub(crate) fn render(c: &paint::Canvas, p: &Plate, v: &crate::look::View) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    let lifted;
+    let p = if p.in_bath().is_some() {
+        lifted = p.as_lifted(c.clock());
+        &lifted
+    } else {
+        p
+    };
     let f = c.window();
     let (w, h) = p.size_px();
     if (f.w, f.h) != (w, h) {
@@ -419,8 +440,17 @@ pub(crate) fn render(c: &paint::Canvas, p: &Plate, v: &crate::look::View) -> std
     }
 }
 
-/// `probe` on a plate over cells (x0, y0, x1, y1), end-exclusive: its lines, burr and level.
-pub(crate) fn probe(p: &Plate, place: &str, r: (usize, usize, usize, usize)) -> String {
+/// `probe` on a plate over cells (x0, y0, x1, y1), end-exclusive: its lines, burr and level; a
+/// plate in its bath as it would come out at `now` (its clock), and the bath.
+pub(crate) fn probe(p: &Plate, now: f64, place: &str, r: (usize, usize, usize, usize)) -> String {
+    let bath = crate::etch::bath_line(p, now);
+    let lifted;
+    let p = if p.in_bath().is_some() {
+        lifted = p.as_lifted(now);
+        &lifted
+    } else {
+        p
+    };
     let (x0, y0, x1, y1) = r;
     let n = (x1 - x0) * (y1 - y0);
     let (mut open, mut vol, mut deepest, mut widest, mut burr, mut tallest, mut level) = (0.0f64, 0.0f64, 0.0f32, 0.0f32, 0.0f64, 0.0f32, 0.0f64);
@@ -456,6 +486,7 @@ pub(crate) fn probe(p: &Plate, place: &str, r: (usize, usize, usize, usize)) -> 
     if p.coats().is_some() {
         out.push_str(&crate::etch::probe(p, r));
     }
+    out.push_str(&bath);
     out
 }
 

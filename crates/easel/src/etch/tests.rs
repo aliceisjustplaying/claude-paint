@@ -91,7 +91,7 @@ fn a_plate_is_etched_on_the_clock() {
     {
         let st = s.st.borrow();
         let (c, pl) = (st.canvas.as_ref().unwrap(), st.plate.as_ref().unwrap());
-        let text = crate::plate::probe(pl, "at 500,200", (13, 5, 14, 6));
+        let text = crate::plate::probe(pl, c.clock(), "at 500,200", (13, 5, 14, 6));
         assert!(text.contains("rosin over") && text.contains("bitten up to") && text.contains("its tray"), "{text}");
         for v in [crate::look::View::default(), crate::look::View { crop: Some([400.0, 150.0, 600.0, 250.0]), light: Some((135.0, 25.0)), ..Default::default() }] {
             let (w, h, png) = crate::plate::render(c, pl, &v).unwrap();
@@ -243,4 +243,183 @@ fn the_switch_comes_from_the_log_head() {
     assert!(bare.lua.globals().get::<mlua::Value>("plate").unwrap().is_nil());
     let e = bare.run("st = sheet{name=\"s\", size=60, aspect=1, paper={grammage=200}, seed=3}\nuse(st)\nst:ground(\"hard\")").unwrap_err();
     assert!(e.contains("plate"), "{e}");
+}
+
+/// A grounded plate with two needle lines, in hand.
+const LINES: &str = r#"use(k)
+k:ground("hard", {um=4})
+k:needle(n, {{100, 200}, {900, 200}})
+k:needle(n, {{100, 500}, {900, 500}})"#;
+const STUDY: &str = r#"st = sheet{name="study", size=60, aspect=1, paper={grammage=200}, seed=3}"#;
+
+fn lined() -> Session {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    run(&mut s, STUDY);
+    run(&mut s, LINES);
+    s
+}
+
+/// Into the bath, other work for 15 minutes (a pencil drawing on the study, a wait at the
+/// painting, a wait at the plate), out: the plate of a 15-minute bite in one, bit for bit; and
+/// with hand work that leaves odd minutes, the bite in one of the minutes the lift reports.
+#[test]
+fn in_other_work_out_is_the_bite_in_one() {
+    let mut one = lined();
+    run(&mut one, "k:bite{acid=\"ferric\", baume=36, minutes=15}");
+    let mut s = lined();
+    let t0 = s.st.borrow().clock;
+    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nuse(st)\nh = pencil(\"2B\")\nh:line({{100,100},{500,500}})");
+    let drawn = s.st.borrow().clock - t0;
+    assert!(drawn > 0.0, "the drawing took hand time");
+    run(&mut s, &format!("use(\"painting\")\nwait({})\nuse(k)\nwait(5)\nr = k:lift()", 10.0 - drawn));
+    let got: f64 = s.lua.globals().get::<mlua::Table>("r").unwrap().get("minutes").unwrap();
+    assert!((got - 15.0).abs() < 1e-4, "{got} min in the bath");
+    // (the drawing's odd seconds: the minutes are read to the millisecond)
+    let mut odd = lined();
+    run(&mut odd, &format!("k:bite{{acid=\"ferric\", baume=36, minutes={got}}}"));
+    assert!(plates(&s) == plates(&odd), "in, a drawing and waits, out: the bite in one of {got} min");
+
+    let mut w = lined();
+    run(&mut w, "k:immerse{acid=\"ferric\", baume=36}\nuse(st)\nwait(6)\nuse(\"painting\")\nwait(4)\nuse(k)\nwait(5)\nk:lift()");
+    assert!(plates(&w) == plates(&one), "in, waits at three surfaces, out: the 15-minute bite");
+    let (ct, cw) = (one.st.borrow().clock, w.st.borrow().clock);
+    assert!((ct - cw).abs() < 1e-9, "the same time on the clock: {ct} {cw}");
+}
+
+/// A plate still in its bath through a save and its reading, a replay of the log, a replay
+/// checkpoint, and a handoff (it travels in its tray, biting on the way) comes out with the bite
+/// it would have had without them.
+#[test]
+fn a_bite_across_a_save_reload_and_handoff_is_the_same() {
+    let mut one = lined();
+    run(&mut one, "k:bite{acid=\"ferric\", baume=36, minutes=15}");
+    let mut s = lined();
+    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nuse(\"painting\")\nwait(4)");
+    let status = s.status();
+    assert!(status.contains("in the bath: key (ferric, 4 min)"), "{status}");
+    let dir = Folder::new("bath");
+    let log = s.program("bath");
+    let path = dir.0.join("live.ckpt");
+    assert!(crate::save::write(&s, &log, &path).unwrap());
+    let mut back = crate::save::read(&path).unwrap().session;
+    assert!(plates(&back) == plates(&s), "saved in its bath");
+    run(&mut s, "wait(6)\nuse(k)\nwait(5)\nk:lift()");
+    // (a save keeps no Lua heap, so no `k`: the plate is taken up by name and lifted at its clock)
+    run(&mut back, "wait(6)\nuse(\"key\")\nwait(5)");
+    {
+        let mut st = back.st.borrow_mut();
+        let now = st.canvas.as_ref().unwrap().clock();
+        std::rc::Rc::make_mut(st.plate.as_mut().unwrap()).lift(now).unwrap();
+    }
+    assert!(plates(&back) == plates(&one), "lifted after the save was read: the 15-minute bite");
+    assert!(plates(&s) == plates(&one));
+    // the log replayed, and resumed from a replay checkpoint taken while the plate was in
+    let log = s.program("bath");
+    let r = replay(&log).unwrap();
+    assert!(plates(&r) == plates(&one));
+    let chunks = parse_program(&log);
+    let n = chunks.len();
+    let ck = dir.0.join("replay.ckpt");
+    let args = vec!["--replay-checkpoint".to_string(), ck.display().to_string(), "--until-chunk".into(), (n - 1).to_string()];
+    let mut first = Session::replay_with(W, box_for(Some(&log)).unwrap()).unwrap().with_paper(true).unwrap();
+    let mut batch = crate::replay_checkpoint::Batch::open(&args, &log, W, &mut first, &chunks, &dir.0.join("out.png")).unwrap();
+    for (i, c) in chunks.iter().enumerate() {
+        first.run(c).unwrap();
+        if batch.completed(&first, i + 1).unwrap() {
+            break;
+        }
+    }
+    drop(batch);
+    assert!(plate(&first).in_bath().is_some(), "the checkpoint is taken with the plate in its bath");
+    let args = vec!["--replay-checkpoint".to_string(), ck.display().to_string()];
+    let mut resumed = Session::replay_with(W, box_for(Some(&log)).unwrap()).unwrap().with_paper(true).unwrap();
+    let batch = crate::replay_checkpoint::Batch::open(&args, &log, W, &mut resumed, &chunks, &dir.0.join("out.png")).unwrap();
+    assert_eq!(batch.done, n - 1);
+    resumed.run(&chunks[n - 1]).unwrap();
+    drop(batch);
+    assert!(plates(&resumed) == plates(&one), "resumed in the bath, lifted: the same bite");
+
+    // handed off in the bath 4 minutes in, 5 on the way, lifted 6 minutes after it came
+    let mut a = lined();
+    run(&mut a, "k:immerse{acid=\"ferric\", baume=36}\nuse(\"painting\")\nwait(4)");
+    let out = a.run(&format!("handoff(k, \"{}/key.surface\")", dir.1)).unwrap();
+    let sha = out.out.split("sha256=").nth(1).unwrap()[..64].to_string();
+    let mut b = live();
+    run(&mut b, CANVAS);
+    let out = b.run(&format!("k = receive(\"{}/key.surface\", {{after=5, sha256=\"{sha}\"}})", dir.1)).unwrap();
+    assert!(out.out.contains("came in its ferric bath"), "{}", out.out);
+    run(&mut b, "wait(2)\nuse(k)\nwait(4)\nk:lift()");
+    assert!(plates(&b) == plates(&one), "a plate handed off in its bath bit all the way");
+}
+
+/// A bath 10 °C warmer bites a bare face 1.40 times as fast (Ea 24.9 kJ/mol); a line stopped out
+/// between two baths keeps the depth of the first.
+#[test]
+fn a_warmer_bath_bites_faster_and_stop_out_keeps_depth() {
+    let open = |temp: u32| {
+        let mut s = live();
+        run(&mut s, CANVAS);
+        run(&mut s, PLATE);
+        run(&mut s, &format!("use(k)\nk:immerse{{acid=\"ferric\", baume=36, temp={temp}}}\nwait(10)\nk:lift()"));
+        -plate(&s).cell(10, 10).level as f64
+    };
+    let arrh = (24.9e3f64 / 8.314462618 * (1.0 / 293.15 - 1.0 / 303.15)).exp();
+    let ratio = open(30) / open(20);
+    assert!((ratio / arrh - 1.0).abs() < 1e-3 && (ratio - 1.40).abs() < 0.01, "{ratio} against {arrh}");
+
+    let mut s = lined();
+    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nwait(10)\nk:lift()\nk:stop_out(rect(0, 400, 1000, 350))");
+    // (the lower line at y 500 units, 20 mm down the 40 mm plate, under the varnish; the upper at 8 mm)
+    let at = |s: &Session| {
+        let p = plate(s);
+        let c = |mm: f64| (mm * 1000.0 / p.pitch_um()) as usize;
+        (p.cell(c(20.0), c(20.0)), p.etch(c(20.0), c(20.0)), p.etch(c(20.0), c(8.0)))
+    };
+    let (cell, etched, upper) = at(&s);
+    assert!(etched.stopped && etched.lines.iter().any(|l| l.z > 0.0));
+    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nuse(st)\nwait(20)\nuse(k)\nk:lift()");
+    let (cell2, etched2, upper2) = at(&s);
+    assert!(cell2 == cell && etched2 == etched, "the stopped-out line keeps its first depth");
+    let z = |e: &paint::plate::etched::Etch| e.lines.iter().map(|l| l.z).fold(0.0, f32::max);
+    assert!(z(&upper2) > 2.0 * z(&upper), "the open line bit on: {} → {}", z(&upper), z(&upper2));
+}
+
+/// In its bath the plate can't be worked, felt or put in again, nor lifted out when it isn't in;
+/// a look and a probe see it as it would come out, and leave it in; a one-call bite is refused
+/// too.
+#[test]
+fn a_plate_in_its_bath_refuses_work_and_is_seen_as_it_would_come_out() {
+    let mut s = lined();
+    let e = s.run("k:lift()").unwrap_err();
+    assert!(e.contains("isn't in a bath"), "{e}");
+    let e = s.run("k:immerse{acid=\"ferric\", minutes=3}").unwrap_err();
+    assert!(e.contains("minutes"), "{e}");
+    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nwait(3)");
+    for (src, verb) in [
+        ("k:immerse{acid=\"ferric\"}", "immerse"),
+        ("k:bite{acid=\"ferric\", minutes=1}", "bite"),
+        ("k:needle(n, {{100,700},{900,700}})", "needle"),
+        ("k:stop_out(rect(0, 0, 100, 100))", "stop_out"),
+        ("k:clean()", "clean"),
+        ("k:feel(500, 200)", "feel"),
+        ("k:drypoint(n, {{100,700},{900,700}})", "drypoint"),
+    ] {
+        let e = s.run(src).unwrap_err();
+        assert!(e.contains(&format!("{verb}: the plate \"key\" is in its ferric bath (3 min so far): lift it out first")), "{src}: {e}");
+    }
+    {
+        let st = s.st.borrow();
+        let (c, pl) = (st.canvas.as_ref().unwrap(), st.plate.as_ref().unwrap());
+        let text = crate::plate::probe(pl, c.clock(), "at 500,200", (13, 5, 14, 6));
+        assert!(text.contains("in its bath: ferric") && text.contains("3 min so far"), "{text}");
+        let deepest = text.split("bitten up to ").nth(1).unwrap().split(' ').next().unwrap().parse::<f64>().unwrap();
+        assert!(deepest > 0.0, "seen bitten so far: {text}");
+        let (w, h, png) = crate::plate::render(c, pl, &crate::look::View::default()).unwrap();
+        assert!(w > 0 && h > 0 && !png.is_empty());
+    }
+    assert!(plate(&s).in_bath().is_some(), "a look leaves it in");
+    let r = s.run("r = k:lift()\nprint(r.minutes)").unwrap();
+    assert_eq!(r.out.trim(), "3.0");
 }

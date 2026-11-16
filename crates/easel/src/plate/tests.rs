@@ -98,7 +98,7 @@ h:line({{100,100},{800,700}})"#).unwrap_err();
             let (w, h, png) = super::render(c, pl, &v).unwrap();
             assert!(w > 0 && h > 0 && !png.is_empty());
         }
-        let text = super::probe(pl, "at 500,300", (13, 7, 14, 8));
+        let text = super::probe(pl, c.clock(), "at 500,300", (13, 7, 14, 8));
         assert!(text.contains("copper") && text.contains("µm"), "{text}");
     }
     s.unshow(shown).unwrap();

@@ -821,6 +821,8 @@ fn receive(st: &S, path: &str, o: &Table) -> Result<SurfaceU> {
     // aged to before it arrived by what it was owed in the sender and the minutes on the way:
     // taken up (or looked at), it waits them out with the time since, as one wait
     let since = s.clock - (from.owed + after);
+    // (a plate handed off in its bath came in its tray: it bit on the way, and bites on here)
+    let bathing = own.plate.as_ref().and_then(|p| p.in_bath()).map(|b| b.bath.acid.name());
     s.surfaces.slots.push(Slot { name: name.clone(), kind, rest: Some(Resting { own, canvas: Some(packed), since }) });
     s.out.push_str(&format!(
         "received {name:?} ({} {sent_name:?}, handed off at clock {} min of the session that sent it) after {} min on the way\n",
@@ -828,6 +830,9 @@ fn receive(st: &S, path: &str, o: &Table) -> Result<SurfaceU> {
         crate::api::fmt_num(from.clock as f32),
         crate::api::fmt_num(after as f32)
     ));
+    if let Some(acid) = bathing {
+        s.out.push_str(&format!("  it came in its {acid} bath, and bit all the way: it bites on until it is lifted out (use({name:?}), then k:lift())\n"));
+    }
     Ok(SurfaceU { name, kind, size_mm, h })
 }
 

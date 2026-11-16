@@ -127,7 +127,7 @@ impl Lead {
     }
 
     /// How readily a kneaded eraser takes it (per pass, at the tops).
-    fn lift(&self) -> f32 {
+    pub(crate) fn lift(&self) -> f32 {
         match self.medium {
             Medium::Graphite => 0.9,
             Medium::Chalk => 0.72,
@@ -818,6 +818,15 @@ impl Drawing {
     /// Whether the drawing has optics (layout 4 or 5).
     pub(crate) fn optics(&self) -> bool {
         self.optics
+    }
+
+    /// A line laid into the guide at whole-canvas pixel `k`, `a` of the
+    /// pixel covered (a traced line: crate::trace): the guide keeps the
+    /// firmer of the two.
+    pub(crate) fn lay_guide(&mut self, k: usize, a: f32) {
+        if let Some(g) = self.guide.get_mut(k) {
+            *g = g.max(a.clamp(0.0, 1.0));
+        }
     }
 
     /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with

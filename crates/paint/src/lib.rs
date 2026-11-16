@@ -52,6 +52,7 @@ pub mod outline;
 pub mod skin;
 pub mod surface;
 pub mod thinner;
+pub mod trace;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;

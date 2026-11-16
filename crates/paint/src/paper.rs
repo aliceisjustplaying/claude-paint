@@ -719,6 +719,17 @@ impl Paper {
         (self.grammage * 1e-3) * (self.fiber_um * 1e-3) / (self.coarseness * 1e-3)
     }
 
+    /// The mean depth of its pores at the surface, µm: t_f·ε/(1 − ε), the
+    /// mean of the per-pixel micro-roughness `sheet` lays (at the mean
+    /// grammage); on a gritted ground, its coat's tooth. What a rubbed coat
+    /// fills once the excess is wiped off (crate::trace).
+    pub fn pore_um(&self) -> f32 {
+        match self.grit {
+            Some(g) => g.tooth_um(),
+            None => self.thick_um * self.porosity / (1.0 - self.porosity).max(0.05),
+        }
+    }
+
     /// Mean caliper, µm: c̄·t_f / (1 − ε).
     pub fn caliper_um(&self) -> f32 {
         self.coverage() * self.thick_um / (1.0 - self.porosity).max(0.05)

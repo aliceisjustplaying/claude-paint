@@ -305,8 +305,8 @@ export function surveyReply<I extends { type: "image"; data: string }>(said: str
 export function hideCounters(t: string): string {
 	return t
 		.replace(/\[string "chunk \d+"\]/g, '[string "chunk"]')
-		// the easel's limit on a chunk's machine time (it has never been reached: the longest chunk took under 4 minutes)
-		.replace(/the chunk ran longer than \d+ minutes and was stopped/g, "the chunk didn't finish and was stopped");
+		// the easel's limit on a chunk's computing (it has never been reached: the longest chunk took under 4 minutes)
+		.replace(/the chunk ran longer than \d+ minutes(?: of computing)? and was stopped/g, "the chunk didn't finish and was stopped");
 }
 
 /**

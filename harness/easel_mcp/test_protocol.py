@@ -243,6 +243,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
              "painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00"),
             ("painting a chunk (20 lines): 0 strokes and touches so far, 14 min 20 s on the painting's clock (now day 3, 18:40), running for 40 s",
              "painting a chunk: it has taken 14 min 20 s of the painting's time so far, and the painting's clock reads day 3, 18:40"),
+            ("painting a chunk (at line 8 of 20): 100 strokes and touches so far, 5 s on the painting's clock (now day 1, 09:00), running for 12 min 3 s (2 min 10 s of the 10 min of computing a chunk may do)",
+             "painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00"),
             ("painting a chunk: starting, running for 2 s", "painting a chunk: starting"),
             ("the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s", "the chunk is in the log; the easel is finishing its reply"),
             # an easel line worded otherwise still tells only that a chunk is painting
@@ -252,6 +254,17 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(easel=easel):
                 self.assertEqual(module.progress_words(easel), painter)
                 self.assertNotRegex(module.progress_words(easel), MACHINE_WORDS)
+
+    def test_the_chunk_limit_is_told_without_its_minutes(self):
+        loader = SourceFileLoader("limit_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        for easel in (
+            "the chunk ran longer than 10 minutes and was stopped; nothing it did was kept",
+            "the chunk ran longer than 10 minutes of computing and was stopped; nothing it did was kept",
+        ):
+            with self.subTest(easel=easel):
+                self.assertEqual(module.hide_counters(easel), "the chunk didn't finish and was stopped; nothing it did was kept")
 
     async def test_background_display_paths_are_not_renamed(self):
         loader = SourceFileLoader("display_test_server", str(SERVER))

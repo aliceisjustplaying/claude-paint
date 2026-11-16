@@ -558,7 +558,12 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
     }
     // plate{}: a copper or zinc plate among the surfaces (plate.rs), with its own switch
     if st.borrow().tubes.plate {
-        crate::plate::install(lua, st)?;
+        crate::plate::install(lua, st.clone())?;
+        // ink{} and tarlatan{}: the press switch's, beside plates and damp paper
+        let t = st.borrow().tubes.clone();
+        if t.press && t.damp_paper {
+            crate::ink::install(lua, st)?;
+        }
     }
     Ok(())
 }
@@ -813,6 +818,9 @@ fn receive(st: &S, path: &str, o: &Table) -> Result<SurfaceU> {
     let plate = plate_of(kind, &current_payload).map_err(|e| mlua::Error::runtime(format!("receive {path}: {e}")))?;
     if plate.as_ref().is_some_and(|p| p.coats().is_some()) && !tubes.etch {
         return crate::api::err(format!("receive {path}: an etched plate, and this painting doesn't etch (its log's head has no {:?} line)", crate::session::ETCH_MARK));
+    }
+    if plate.as_ref().is_some_and(|p| p.inking().is_some()) && !tubes.press {
+        return crate::api::err(format!("receive {path}: an inked plate, and this painting has no ink (its log's head has no {:?} line)", crate::session::PRESS_MARK));
     }
     let canvas = canvas.take().ok_or_else(|| mlua::Error::runtime(format!("receive {path}: the surface has no canvas")))?;
     let name = o.get::<Option<String>>("name")?.unwrap_or(sent_name.clone());

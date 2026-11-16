@@ -255,6 +255,7 @@ fn apply(st: &S, op: Op) -> Result<Rep> {
         if plate.coated() {
             return Err(mlua::Error::runtime("the plate has a ground, varnish, rosin or the acid's work on it: clean it first (k:clean())"));
         }
+        crate::ink::refuse_inked(plate).map_err(mlua::Error::runtime)?;
         let r = plate.apply(op);
         let c = s.canvas.as_mut().ok_or_else(crate::api::no_canvas)?;
         c.tally_mut().secs += r.secs;
@@ -355,10 +356,21 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
                 words = if words == "smooth" && !more.is_empty() { more } else if more.is_empty() { words } else { format!("{more}; under it {words}") };
                 nums.extend(n);
             }
+            // ink on it (`--@ press`)
+            if p.inking().is_some() {
+                let (cx, cy) = (((x * mm / 1000.0) as f64 * 1000.0 / p.pitch_um()) as usize, ((y * mm / 1000.0) as f64 * 1000.0 / p.pitch_um()) as usize);
+                let (more, n) = crate::ink::feel(p, cx, cy);
+                if !more.is_empty() {
+                    words = if words == "smooth" { more } else { format!("{more}; under it {words}") };
+                }
+                nums.extend(n);
+            }
             Ok((nums, words))
         })?;
         let t = lua.create_table()?;
-        for (k, v) in ["depth", "width", "open", "burr", "level", "ground", "rosin"].iter().zip(&nums) {
+        // (the ground and rosin only on a coated plate: the ink's after whichever came before)
+        let names: &[&str] = if nums.len() >= 10 { &["depth", "width", "open", "burr", "level", "ground", "rosin", "ink", "film", "cure"] } else if nums.len() == 8 { &["depth", "width", "open", "burr", "level", "ink", "film", "cure"] } else { &["depth", "width", "open", "burr", "level", "ground", "rosin"] };
+        for (k, v) in names.iter().zip(&nums) {
             t.set(*k, *v)?;
         }
         t.set("words", words)?;
@@ -366,6 +378,8 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
     });
     // the etching tools (etch.rs, `--@ etch`)
     crate::etch::methods(m);
+    // ink and wiping (ink.rs, `--@ press`)
+    crate::ink::methods(m);
 }
 
 /// A cell as a fingernail finds it: (mean depth µm, mean width µm, open share, burr height µm,
@@ -455,6 +469,10 @@ pub(crate) fn probe(p: &Plate, place: &str, r: (usize, usize, usize, usize)) -> 
     // its coats and bites (`--@ etch`)
     if p.coats().is_some() {
         out.push_str(&crate::etch::probe(p, r));
+    }
+    // its ink (`--@ press`), aged to its clock
+    if let Some(k) = p.inking() {
+        out.push_str(&crate::ink::probe(p, r, k.aged_to));
     }
     out
 }

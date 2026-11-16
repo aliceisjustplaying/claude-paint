@@ -73,6 +73,19 @@ pub fn verb_plate<R: EffectValue>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio
     verb(st, kind, f)
 }
 
+/// `unmarked_verb`, for a printer's tool taken up or refolded beside a plate (ink.rs: a
+/// tarlatan): it touches no surface, so a plate in hand doesn't refuse it.
+pub fn unmarked_verb_plate<R: EffectValue>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PLATE.with(|d| d.set(self.0));
+        }
+    }
+    let _restore = Restore(PLATE.with(|d| d.replace(true)));
+    unmarked_verb(st, kind, f)
+}
+
 /// `verb`, for a tool a paper mask is modeled for (paint's `sheet.rs`): a
 /// pastel stick, the finger, a dry brush, a puff, a tap. Other marking verbs
 /// refuse while a sheet lies on the picture.

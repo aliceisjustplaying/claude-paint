@@ -188,6 +188,13 @@ pub const ETCH_MARK: &str = "--@ etch";
 /// so it installs them only beside the paper-and-pastel switch (`PAPER_MARK`): without that it
 /// is accepted and installs nothing.
 pub const DAMP_PAPER_MARK: &str = "--@ damp-paper";
+/// The press switch, in the head of a session file (notes/plan-intaglio.md §5–§6, phase P3b;
+/// ink.rs): a painting whose log has it may mix etching inks (`ink{}`), warm a plate, ink it by
+/// card or dabber, wipe it with tarlatan (`tarlatan{}`), the palm and a retroussage cloth, and
+/// clean the ink off. A new painting has it; a log without it replays as it was painted, with
+/// none of it. It builds on the plate and damp-paper switches (`PLATE_MARK`,
+/// `DAMP_PAPER_MARK`): without them it is accepted and installs nothing.
+pub const PRESS_MARK: &str = "--@ press";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -983,6 +990,9 @@ impl Session {
         }
         if self.st.borrow().tubes.damp_paper {
             let _ = writeln!(s, "{DAMP_PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.press {
+            let _ = writeln!(s, "{PRESS_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1785,6 +1795,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.charcoal = true;
         b.wet_pastel = true;
         b.damp_paper = true;
+        b.press = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1879,6 +1890,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.damp_paper = head(DAMP_PAPER_MARK);
+    b.press = head(PRESS_MARK);
     Ok(b)
 }
 

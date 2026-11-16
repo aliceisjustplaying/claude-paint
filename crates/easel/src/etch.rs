@@ -55,7 +55,11 @@ fn etching(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
     if k.kind == Kind::Plate && !st.borrow().tubes.etch {
         return err(format!("{verb}: etching, and this painting doesn't etch (its log's head has no {:?} line)", crate::session::ETCH_MARK));
     }
-    in_hand(st, k, verb)
+    let r = in_hand(st, k, verb)?;
+    if let Some(p) = st.borrow().plate.as_ref() {
+        crate::ink::refuse_inked(p).map_err(|e| mlua::Error::runtime(format!("{verb}: {e}")))?;
+    }
+    Ok(r)
 }
 
 /// The plate in hand, to read.

@@ -44,6 +44,7 @@ mod studio;
 mod surfaces;
 mod plate;
 mod etch;
+mod ink;
 mod time;
 mod world;
 

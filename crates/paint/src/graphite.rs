@@ -289,6 +289,20 @@ impl Cell {
     /// `add_pastel` of a deposit of grains `g`: the eraser takes it as
     /// readily as `g.lift`, and a share `g.carbon` of it is bare carbon.
     pub(crate) fn add_grains(&mut self, q: f32, color: Rgb, volume: f32, g: crate::pastel::Grains) {
+        self.add_grains_as(q, color, volume, g, false);
+    }
+
+    /// `add_grains` of a patch that covers `q` of the cell, its `volume`
+    /// over that share (a crumb pressed flat, with the crumb area switch:
+    /// `crate::pastel::lay_crumbs_of`). Laid as a layer (`g.layer`, the
+    /// crumb layer switch), it lies at its own depth, volume / q, over the
+    /// loose pastel on the share of the cell that pastel covers, rather
+    /// than at the depths a smeared volume would give (`layered_patch`).
+    pub(crate) fn add_patch(&mut self, q: f32, color: Rgb, volume: f32, g: crate::pastel::Grains) {
+        self.add_grains_as(q, color, volume, g, true);
+    }
+
+    fn add_grains_as(&mut self, q: f32, color: Rgb, volume: f32, g: crate::pastel::Grains, patch: bool) {
         let a1 = (self.a + (1.0 - self.a) * q).min(0.995);
         let old = if self.optics.is_some() { self.loose } else { self.a * (1.0 - q) };
         let added = if self.optics.is_some() { volume } else { q };
@@ -298,7 +312,13 @@ impl Cell {
             if g.s > 0.0 && self.optics.is_some() {
                 // with the pastel K–M switch: particles, not paint films
                 let s_old = if self.s > 0.0 { self.s } else { g.s };
-                self.r = if g.layer {
+                self.r = if g.layer && patch {
+                    // (the loose pastel covers the cell's coverage, less
+                    // what of it is fixed)
+                    let v = self.loose + self.bound;
+                    let l = if v > 0.0 { self.a * self.loose / v } else { 0.0 };
+                    layered_patch(self.r, l, color, volume, q, g.s)
+                } else if g.layer {
                     layered(self.r, self.loose, color, volume, g.s)
                 } else {
                     crate::dry::km_mix(self.r, old * s_old, color, added * g.s)
@@ -407,6 +427,20 @@ impl Cell {
 /// loose pastel they lie over it as a layer (Kubelka's two-layer formula,
 /// `dry::km_layer`, of their thickness where they cover); where they fall
 /// beside it, they lie side by side with it (an area mix).
+/// `layered` of a patch covering `q` of the cell with `added` µm over the
+/// cell (`added / q` deep where it lies), over loose pastel covering `l` of
+/// the cell: the two fall independently, so the patch lies over the
+/// loose pastel on l·q of the cell and beside it on (1 − l)·q.
+fn layered_patch(under: Rgb, l: f32, color: Rgb, added: f32, q: f32, s: f32) -> Rgb {
+    let (l, q) = (l.clamp(0.0, 1.0), q.clamp(0.0, 1.0));
+    let both = 1.0 - (1.0 - l) * (1.0 - q);
+    if !(both > 0.0) || !(q > 0.0) || !(added > 0.0) {
+        return under;
+    }
+    let over = crate::dry::km_layer(color, s * added / q, under);
+    [0, 1, 2].map(|k| ((l * (1.0 - q) * under[k] + l * q * over[k] + (1.0 - l) * q * color[k]) / both).clamp(0.0, 1.0))
+}
+
 fn layered(under: Rgb, loose: f32, color: Rgb, added: f32, s: f32) -> Rgb {
     let p = crate::pastel::PARTICLE_UM;
     let l = 1.0 - (-loose.max(0.0) / p).exp();

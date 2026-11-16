@@ -623,14 +623,19 @@ impl Canvas {
         // what was pushed ahead drops where the blade lifts
         // (on open paper, not the sheet; crumbs on wet paint are lost in it)
         let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
+        let mut caught = Vec::new();
         if pushed > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
             let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0x5C2A);
-            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, pushed, col, carry.grains(), &mut rng, CRUMB_MAX_UM, px_um2);
+            let mut spread = self.crumb_spread();
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, pushed, col, carry.grains(), &mut rng, CRUMB_MAX_UM, px_um2, spread.as_mut());
+            caught = spread.map(|sp| sp.caught).unwrap_or_default();
             self.film = film;
         }
         self.drawing = Some(dr);
         self.px = pxs;
+        // (with the crumb area switch, the patches that reach a sheet stay on it)
+        self.sheet_catch_lying(&caught, col, carry.grains().lies);
         taken * px_um2 * 1e-9
     }
 
@@ -669,6 +674,8 @@ impl Canvas {
         let mut pxs = std::mem::take(&mut self.px);
         let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
         let mut last_band: Vec<usize> = Vec::new();
+        // (with the crumb area switch: what lands on a sheet laid on the picture)
+        let mut caught: Vec<(usize, f32, Rgb)> = Vec::new();
         let um_to_mg = px_um2 * 1e-9 * PASTEL_MG_MM3;
         for &(c, dir) in &steps {
             let e = (-dir.1, dir.0);
@@ -719,7 +726,9 @@ impl Canvas {
                 let hmax = front.iter().map(|&i| self.height[i]).fold(f32::MIN, f32::max);
                 let bed: Vec<(usize, f32, bool)> = front.iter().map(|&i| (i, 1.0 + (hmax - self.height[i]), false)).collect();
                 let film = std::mem::take(&mut self.film);
-                crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
+                let mut spread = self.crumb_spread();
+                crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2, spread.as_mut());
+                caught.extend(spread.map(|sp| sp.caught).unwrap_or_default().into_iter().map(|(i, v)| (i, v, col)));
                 self.film = film;
                 ahead = 0.0;
             }
@@ -732,11 +741,17 @@ impl Canvas {
         let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
         if ahead > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
-            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
+            let mut spread = self.crumb_spread();
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2, spread.as_mut());
+            caught.extend(spread.map(|sp| sp.caught).unwrap_or_default().into_iter().map(|(i, v)| (i, v, col)));
             self.film = film;
         }
         self.drawing = Some(dr);
         self.px = pxs;
+        // (with the crumb area switch, the patches that reach a sheet stay on it)
+        for (i, v, c) in caught {
+            self.sheet_catch_lying(&[(i, v)], c, carry.grains().lies);
+        }
         // hand time: brushing at about 100 mm/s
         (kept_um * px_um2 * 1e-9, total_px / s * self.mm_per_unit / 100.0 + 0.3)
     }
@@ -1053,9 +1068,14 @@ impl Canvas {
                 let bed: Vec<(usize, f32, bool)> = beds[k].iter().map(|&(i, b, wet)| (i, amount[b] * share(b), wet)).filter(|e| e.1 > 0.0).collect();
                 let v: f32 = bed.iter().map(|e| e.1).sum();
                 if v > 0.0 {
-                    // (what falls on wet paint is lost in it: still on the picture)
-                    crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, v, col, grains, &mut rng, dmax, px_um2);
-                    *laid += v;
+                    // (what falls on wet paint is lost in it: still on the
+                    // picture; with the crumb area switch, what reaches the
+                    // mask is caught and what falls past the window is off it)
+                    let mut spread = self.crumb_spread();
+                    crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, v, col, grains, &mut rng, dmax, px_um2, spread.as_mut());
+                    let (on_sheet, off) = spread.map(|sp| (sp.caught, sp.off)).unwrap_or_default();
+                    *laid += v - off - on_sheet.iter().map(|e| e.1).sum::<f32>();
+                    caught.extend(on_sheet.into_iter().map(|(i, v)| (i, v, col)));
                 }
                 caught.extend(on_mask[k].iter().map(|&(i, b)| (i, amount[b] * share(b), col)).filter(|e| e.1 > 0.0));
             };

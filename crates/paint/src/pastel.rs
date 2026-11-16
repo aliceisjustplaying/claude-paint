@@ -607,14 +607,103 @@ pub struct Laid {
 #[allow(clippy::too_many_arguments)]
 #[cfg(test)]
 pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
-    lay_crumbs_of(d, film, pxs, bed, vol, color, Grains::PASTEL, rng, dmax, px_um2)
+    lay_crumbs_of(d, film, pxs, bed, vol, color, Grains::PASTEL, rng, dmax, px_um2, None)
+}
+
+/// Where a crumb pressed flat may lie beyond the pixel it falls in, with
+/// the crumb area switch (`Canvas::with_crumb_area`): the window's pixels
+/// across and down, the wet paint over each (`wet.vol`, µm) and where a
+/// sheet laid on the picture lies (`Sheet::over`). What lands on the sheet
+/// is handed back in `caught` (pixel, µm over it in the volume it came
+/// as), for the sheet to keep (`Canvas::sheet_catch_lying`), and what falls
+/// off the window in `off` (µm over a pixel, summed: off the picture, not
+/// laid).
+pub(crate) struct Spread<'a> {
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) wet: &'a [f32],
+    pub(crate) over: Option<&'a [bool]>,
+    pub(crate) caught: Vec<(usize, f32)>,
+    pub(crate) off: f32,
+}
+
+impl Canvas {
+    /// The crumbs' spread over this canvas with the crumb area switch,
+    /// nothing caught yet; None without it (`lay_crumbs_of`).
+    pub(crate) fn crumb_spread(&self) -> Option<Spread<'_>> {
+        self.crumb_area.then(|| Spread { w: self.f.w, h: self.f.h, wet: &self.wet.vol, over: self.sheet.as_ref().map(|s| &s.over[..]), caught: Vec::new(), off: 0.0 })
+    }
+}
+
+/// The pixels a crumb's patch of `area_px` (in pixels) covers, centered at
+/// (`x`, `y`) (pixels, from the window's corner): each pixel's share of
+/// the patch, summing to 1, and the pixel itself as (column, row), which
+/// may lie off the window. A patch inside its pixel is all there. Each
+/// column's share is its chord of the disc integrated over eight strips,
+/// renormalised to the whole: the patch keeps its area and volume.
+fn patch_pixels(x: f32, y: f32, area_px: f32, out: &mut Vec<(i64, i64, f32)>) {
+    out.clear();
+    let r = (area_px / std::f32::consts::PI).sqrt();
+    let (ix, iy) = (x.floor(), y.floor());
+    if x - r >= ix && x + r <= ix + 1.0 && y - r >= iy && y + r <= iy + 1.0 {
+        out.push((ix as i64, iy as i64, 1.0));
+        return;
+    }
+    const STRIPS: usize = 8;
+    let (cx0, cx1) = ((x - r).floor() as i64, (x + r).floor() as i64);
+    let (cy0, cy1) = ((y - r).floor() as i64, (y + r).floor() as i64);
+    let mut total = 0.0f32;
+    for cx in cx0..=cx1 {
+        for cy in cy0..=cy1 {
+            let mut a = 0.0f32;
+            for k in 0..STRIPS {
+                let u = cx as f32 + (k as f32 + 0.5) / STRIPS as f32;
+                let dx = u - x;
+                let hh = r * r - dx * dx;
+                if hh <= 0.0 {
+                    continue;
+                }
+                let hh = hh.sqrt();
+                let (lo, hi) = ((y - hh).max(cy as f32), (y + hh).min(cy as f32 + 1.0));
+                if hi > lo {
+                    a += (hi - lo) / STRIPS as f32;
+                }
+            }
+            if a > 0.0 {
+                out.push((cx, cy, a));
+                total += a;
+            }
+        }
+    }
+    if total <= 0.0 {
+        out.clear();
+        out.push((ix as i64, iy as i64, 1.0));
+        return;
+    }
+    for e in out.iter_mut() {
+        e.2 /= total;
+    }
 }
 
 /// `lay_crumbs` of grains `g` (a stick's, `Grains::of`, or what a dry tool
 /// carried, `Carried::grains`): `vol` and what is lost are in the volume
 /// they came as.
+///
+/// With `spread` (the crumb area switch, `Canvas::with_crumb_area`) a crumb
+/// lies as a patch of its own area in mm², whatever the pixels: pressed
+/// flat by the face into a layer of particles PARTICLE_UM thick, it covers
+/// A = (its volume as it lies) / PARTICLE_UM, as a disc about a point drawn
+/// uniformly within the pixel it fell in, and each pixel the disc reaches
+/// takes its share of the crumb's volume and is covered by its share of
+/// the disc (the pixel's coverage; patches fall independently, so they
+/// overlap one another and what was there by chance). Without it the crumb
+/// was pressed into its one pixel whatever the pixel's size: a crumb larger
+/// than a pixel covered only that pixel, so a finer render laid the same
+/// crumbs over less of the paper, paler and more broken. With it, crumbs
+/// over a sheet stay on it (`Spread::caught`) and the share of a patch
+/// off the window is off the picture (`Spread::off`).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, g: Grains, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
+pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, g: Grains, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32, mut spread: Option<&mut Spread>) -> f32 {
     let mut cum = Vec::with_capacity(bed.len());
     let mut total = 0.0f32;
     for &(_, g, _) in bed {
@@ -628,6 +717,7 @@ pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs:
     let r = (amin / amax).sqrt();
     let mut left = vol * px_um2; // µm³
     let mut lost = 0.0;
+    let mut patch = Vec::new();
     while left > 0.0 {
         // inverse CDF of A^(-3/2) on [amin, amax]
         let u = rng.f();
@@ -640,27 +730,65 @@ pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs:
         let k = cum.partition_point(|&c| c < t).min(bed.len() - 1);
         let (i, _, wet) = bed[k];
         let dv = v / px_um2;
+        if let Some(sp) = spread.as_deref_mut() {
+            // pressed flat: a patch of its own area, over the pixels it reaches
+            let (x, y) = ((i % sp.w) as f32 + rng.f(), (i / sp.w) as f32 + rng.f());
+            let area_px = v * g.lies / PARTICLE_UM / px_um2;
+            patch_pixels(x, y, area_px, &mut patch);
+            for &(cx, cy, share) in &patch {
+                let dvj = dv * share;
+                if cx < 0 || cy < 0 || cx >= sp.w as i64 || cy >= sp.h as i64 {
+                    sp.off += dvj;
+                    continue;
+                }
+                let j = cy as usize * sp.w + cx as usize;
+                if sp.over.is_some_and(|o| o[j]) {
+                    sp.caught.push((j, dvj));
+                    continue;
+                }
+                if sp.wet[j] > 1e-5 {
+                    lost += dvj;
+                    continue;
+                }
+                lay_crumb_at(d, film, pxs, j, (area_px * share).min(1.0), dvj * g.lies, color, g, true);
+            }
+            continue;
+        }
         if wet {
             lost += dv;
             continue;
         }
         // (as it lies in the tooth)
         let dv = dv * g.lies;
-        if g.carbon > 0.0 && d.optics() {
-            d.carbon = true;
-        }
-        let c = &mut d.cells[i];
-        if c.film < 0.0 || film[i] > c.film + 1e-4 {
-            c.restart(film[i], pxs[i]);
-        }
         // pressed flat into the hollow by the face going over it: particles
         // about PARTICLE_UM thick, as the contact's own deposit
         let q = 1.0 - (-dv / PARTICLE_UM).exp();
-        let before = (c.a, c.reflectance());
-        lay_into(c, q, color, dv, g);
-        pxs[i] = c.repaint(pxs[i], before);
+        lay_crumb_at(d, film, pxs, i, q, dv, color, g, false);
     }
     lost
+}
+
+/// A crumb's `dv` µm (as it lies) over pixel `i`, covering `q` of it: a
+/// patch of its own area (`patch`, the crumb area switch) or, as it was,
+/// its volume as particles over the pixel.
+#[allow(clippy::too_many_arguments)]
+fn lay_crumb_at(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], i: usize, q: f32, dv: f32, color: Rgb, g: Grains, patch: bool) {
+    if g.carbon > 0.0 && d.optics() {
+        d.carbon = true;
+    }
+    let c = &mut d.cells[i];
+    if c.film < 0.0 || film[i] > c.film + 1e-4 {
+        c.restart(film[i], pxs[i]);
+    }
+    let before = (c.a, c.reflectance());
+    if patch {
+        c.add_patch(q, color, dv, g);
+        c.note_pastel(dv, g.index, g.carbon);
+        c.loose += dv;
+    } else {
+        lay_into(c, q, color, dv, g);
+    }
+    pxs[i] = c.repaint(pxs[i], before);
 }
 
 /// Lay `dv` µm (as it lies in the tooth) of a deposit of grains `g`
@@ -678,6 +806,17 @@ pub(crate) fn lay_into(c: &mut crate::graphite::Cell, q: f32, color: Rgb, dv: f3
 #[inline]
 fn bearing(o: f32, mu: f32) -> f32 {
     if o <= 0.0 { 0.0 } else { 1.0 - (-o / mu.max(1e-3)).exp() }
+}
+
+/// What a stick overlapping pores of mean depth `mu` by `o` µm meets where
+/// `v` µm of pastel fills them from the bottom up: the material ratio of
+/// paper it files (to the fill line) and of the pastel crust under it.
+#[inline]
+fn filled_bearing(o: f32, mu: f32, v: f32) -> (f32, f32) {
+    let fill_at = if v <= 0.0 { f32::INFINITY } else { mu * (mu / v).max(1.0).ln() };
+    let a_paper = bearing(o.min(fill_at), mu);
+    let a_fill = if o > fill_at { (-fill_at / mu).exp() * bearing(o - fill_at, CRUST_UM) } else { 0.0 };
+    (a_paper, a_fill)
 }
 
 /// The overlap left in the micro-relief at a pixel once the surface has
@@ -799,6 +938,7 @@ impl Canvas {
         let s_lay = if self.pastel_km { stick.lying_scatter() } else { 0.0 };
         let grains = Grains { index: n_lay, s: s_lay, layer: s_lay > 0.0, ..Grains::of(stick) };
         let crumbs = Grains { layer: grains.layer && self.pastel_crumb_layer, ..grains };
+        let crumb_area = self.crumb_area;
         for k in 0..=steps {
             if wet_tip {
                 let w = stick.wetness();
@@ -830,10 +970,16 @@ impl Canvas {
             let mut caught: Vec<(usize, f32)> = Vec::new();
             let mut worn_um3 = 0.0f32;
             let mut wet_um3 = 0.0f32;
+            // (crumbs off the window, µm over a pixel: off the picture)
+            let mut off_um3 = 0.0f32;
             // (the water a wet tip laid, µm over a pixel)
             let mut water_um3 = 0.0f32;
             {
-                let d = self.drawing_mut();
+                let (fw, fh) = (self.f.w, self.f.h);
+                let d = self.drawing.as_deref_mut().expect("the drawing was made above");
+                // (with the crumb area switch, a crumb lies over the pixels
+                // its patch reaches: their wet paint and the sheet over them)
+                let mut spread = self.crumb_area.then(|| Spread { w: fw, h: fh, wet: &self.wet.vol, over: self.sheet.as_ref().map(|s| &s.over[..]), caught: Vec::new(), off: 0.0 });
                 // (a stick drawing's layout once pastel lands in the tooth:
                 // its cells' loose and bound pastel are kept, `Drawing::sticks`)
                 let mut laid = false;
@@ -863,10 +1009,15 @@ impl Canvas {
                     }
                     let v = c.loose + c.bound;
                     // the pastel in the pores fills them from the bottom up,
-                    // to this depth below the top envelope
-                    let fill_at = if v <= 0.0 { f32::INFINITY } else { mu * (mu / v).max(1.0).ln() };
-                    let a_paper = bearing(o.min(fill_at), mu);
-                    let a_fill = if o > fill_at { (-fill_at / mu).exp() * bearing(o - fill_at, CRUST_UM) } else { 0.0 };
+                    // to this depth below the top envelope (with the crumb
+                    // area switch, over the share of the pixel it covers, at
+                    // its depth there: the rest is bare tooth)
+                    let (a_paper, a_fill) = if crumb_area && v > 0.0 && c.a > 1e-4 {
+                        let (p, f) = filled_bearing(o, mu, v / c.a);
+                        (c.a * p + (1.0 - c.a) * bearing(o, mu), c.a * f)
+                    } else {
+                        filled_bearing(o, mu, v)
+                    };
                     let bound_share = if v > 0.0 { c.bound / v } else { 0.0 };
                     let mut dv = ds_um * stick.wear * (grit_wear * a_paper + CRUST_WEAR * bound_share * a_fill);
                     if slurry > 0.0 {
@@ -926,9 +1077,13 @@ impl Canvas {
                 let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
                 laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, crumbs, &mut rng, crumb_max, px_um2);
+                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, crumbs, &mut rng, crumb_max, px_um2, spread.as_mut());
                 for &(i, g) in &last_sheet_bed {
                     caught.push((i, to_sheet * g / gs));
+                }
+                if let Some(sp) = spread {
+                    caught.extend(sp.caught);
+                    off_um3 += sp.off;
                 }
                 carried -= give;
                 d.sticks |= laid;
@@ -945,7 +1100,7 @@ impl Canvas {
             }
             // (µm of volume per area over mm² of pixel: 10⁻³ mm³)
             let worn_mm3 = worn_um3 * a_px_mm2 * 1e-3;
-            out.volume_mm3 += worn_mm3 - wet_um3 * a_px_mm2 * 1e-3;
+            out.volume_mm3 += worn_mm3 - (wet_um3 + off_um3) * a_px_mm2 * 1e-3;
             out.on_wet += wet_um3 * a_px_mm2 * 1e-3;
             // the stick wears flat against the paper where it touched
             let bmin = under.iter().map(|&(_, b)| b).fold(f32::MAX, f32::min);
@@ -966,9 +1121,18 @@ impl Canvas {
             let a_px_mm2 = px * px;
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
-            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, crumbs, &mut rng, crumb_max, px_um2);
+            let (fw, fh) = (self.f.w, self.f.h);
+            self.drawing_mut();
+            let d = self.drawing.as_deref_mut().expect("the drawing was made above");
+            let mut spread = self.crumb_area.then(|| Spread { w: fw, h: fh, wet: &self.wet.vol, over: self.sheet.as_ref().map(|s| &s.over[..]), caught: Vec::new(), off: 0.0 });
+            let lost = lay_crumbs_of(d, &film, &mut pxs, &last_bed, carried, stick.color, crumbs, &mut rng, crumb_max, px_um2, spread.as_mut());
+            let (caught, off) = spread.map(|sp| (sp.caught, sp.off)).unwrap_or_default();
             self.px = pxs;
             self.film = film;
+            out.volume_mm3 -= off * a_px_mm2 * 1e-3;
+            if !caught.is_empty() {
+                self.sheet_catch_lying(&caught, stick.color, grains.lies);
+            }
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
             out.on_wet += lost * a_px_mm2 * 1e-3;
             carried = 0.0;
@@ -3011,5 +3175,143 @@ mod tests {
             }
             assert!(out[0] < out[1], "over loose {} vs over fixed {}", out[0], out[1]);
         }
+    }
+
+    /// A hatch of white pastel over a 20 mm patch of a dark sheet, laid at
+    /// `width` px across a 30 mm sheet: its blocks' mean reflectance (red),
+    /// 5 mm a side, two hatch spacings.
+    fn hatch_blocks(width: usize, crumb_area: bool) -> Vec<f32> {
+        let mut c = Canvas::new_window(width, 1.0, [0.2, 0.25, 0.4], None).with_size_mm(30.0).with_paper(Paper::drawing(4)).with_crumb_area(crumb_area);
+        let u = c.mm_per_unit;
+        let mut st = Stick::round([0.9; 3], 0.8, 12.0);
+        // strokes 2.5 mm apart across the patch and beyond it, at 1.2 N
+        for k in 0..11 {
+            let y = (2.5 + 2.5 * k as f32) / u;
+            let pts = [StrokePoint { x: 2.0 / u, y, pose: pose(1.2, 55.0), speed: 70.0 }, StrokePoint { x: 28.0 / u, y: y + 0.5 / u, pose: pose(1.2, 55.0), speed: 70.0 }];
+            c.stick_stroke(&mut st, &pts);
+        }
+        let f = c.window();
+        let px = c.px_mm();
+        let mut sums = vec![(0.0f64, 0usize); 16];
+        for (i, p) in c.pixels().iter().enumerate() {
+            let (x, y) = ((i % f.w) as f32 * px + 0.5 * px, (i / f.w) as f32 * px + 0.5 * px);
+            if (5.0..25.0).contains(&x) && (5.0..25.0).contains(&y) {
+                let b = ((y - 5.0) / 5.0) as usize * 4 + ((x - 5.0) / 5.0) as usize;
+                sums[b].0 += p[0] as f64;
+                sums[b].1 += 1;
+            }
+        }
+        sums.iter().map(|&(s, n)| (s / n as f64) as f32).collect()
+    }
+
+    /// The crumb area switch: a crumb pressed flat covers its own area,
+    /// so a patch's mean reflectance is the same at any pixel size, within
+    /// what sampling allows: three standard errors of the mean difference
+    /// between the two renders' 5 mm blocks, paired block by block (the
+    /// stick wearing from row to row is the same in both). Without it a
+    /// finer render's crumbs, each packed into one pixel, cover less: its
+    /// patch is darker (the sheet showing through) by far more than that.
+    #[test]
+    fn a_patch_reflects_the_same_at_any_width_with_the_crumb_area_switch() {
+        // (the mean difference of paired blocks and its standard error)
+        let paired = |a: &[f32], b: &[f32]| {
+            let d: Vec<f32> = a.iter().zip(b).map(|(x, y)| x - y).collect();
+            let n = d.len() as f32;
+            let m = d.iter().sum::<f32>() / n;
+            let var = d.iter().map(|v| (v - m).powi(2)).sum::<f32>() / (n - 1.0);
+            (m, (var / n).sqrt())
+        };
+        // 0.33 and 0.17 mm a pixel (a 540 mm sheet at 1600 and 3200 px)
+        let (d, se) = paired(&hatch_blocks(90, true), &hatch_blocks(180, true));
+        let (d_old, _) = paired(&hatch_blocks(90, false), &hatch_blocks(180, false));
+        assert!(d.abs() <= 3.0 * se, "with the switch: 90 px less 180 px {d}, standard error {se}");
+        assert!(d_old > 10.0 * se.max(1e-3), "without it a finer render is darker: 90 px less 180 px {d_old}, standard error {se}");
+    }
+
+    /// A crumb's patch keeps its area over the pixels it reaches: inside
+    /// its pixel all of it is there, and across pixels the shares sum to
+    /// one, each no more than the pixel's own area over the patch's.
+    #[test]
+    fn a_crumbs_patch_keeps_its_area_over_the_pixels() {
+        let mut out = Vec::new();
+        patch_pixels(3.5, 4.5, 0.2, &mut out);
+        assert_eq!(out, vec![(3, 4, 1.0)]);
+        for &(x, y, a) in &[(3.5f32, 4.5f32, 6.0f32), (0.1, 0.9, 2.0), (7.99, 2.01, 30.0), (5.0, 5.0, 1.0)] {
+            patch_pixels(x, y, a, &mut out);
+            let sum: f32 = out.iter().map(|e| e.2).sum();
+            assert!((sum - 1.0).abs() < 1e-5, "{x},{y} {a}: {out:?}");
+            assert!(out.iter().all(|e| e.2 * a <= 1.0 + 0.02), "{x},{y} {a}: {out:?}");
+            assert!(out.len() > 1, "{x},{y} {a}: {out:?}");
+        }
+    }
+
+    /// Luminance (linear Y) of 5 mm blocks over the 20 mm middle of a 30
+    /// mm sheet laid at `width` px.
+    fn lum_blocks(c: &Canvas) -> Vec<f32> {
+        let f = c.window();
+        let px = c.px_mm();
+        let mut sums = vec![(0.0f64, 0usize); 16];
+        for (i, p) in c.pixels().iter().enumerate() {
+            let (x, y) = ((i % f.w) as f32 * px + 0.5 * px, (i / f.w) as f32 * px + 0.5 * px);
+            if (5.0..25.0).contains(&x) && (5.0..25.0).contains(&y) {
+                let b = ((y - 5.0) / 5.0) as usize * 4 + ((x - 5.0) / 5.0) as usize;
+                sums[b].0 += (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) as f64;
+                sums[b].1 += 1;
+            }
+        }
+        sums.iter().map(|&(s, n)| (s / n as f64) as f32).collect()
+    }
+
+    /// A near-black hatch, then a light one over it, on a 30 mm sheet at
+    /// `width` px with the drawing's optics and the K–M switch: the blocks'
+    /// luminance under the light hatch and over it.
+    fn light_over_dark(width: usize, crumb_area: bool, layer: bool) -> (Vec<f32>, Vec<f32>) {
+        let mut c = Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(30.0).with_paper(Paper::drawing(4)).with_drawing_optics(true).with_pastel_km_mix(true).with_pastel_crumb_layer(layer).with_crumb_area(crumb_area);
+        let u = c.mm_per_unit;
+        let mut hatch = |c: &mut Canvas, st: &mut Stick, force: f32| {
+            for k in 0..11 {
+                let y = (2.5 + 2.5 * k as f32) / u;
+                let pts = [StrokePoint { x: 2.0 / u, y, pose: pose(force, 40.0), speed: 70.0 }, StrokePoint { x: 28.0 / u, y: y + 0.5 / u, pose: pose(force, 40.0), speed: 70.0 }];
+                c.stick_stroke(st, &pts);
+            }
+        };
+        let mut dark = Stick::round([0.05, 0.03, 0.02], 0.75, 12.0);
+        hatch(&mut c, &mut dark, 2.0);
+        hatch(&mut c, &mut dark, 2.0);
+        let under = lum_blocks(&c);
+        let mut light = Stick::round([0.85, 0.8, 0.75], 0.75, 12.0);
+        hatch(&mut c, &mut light, 2.0);
+        hatch(&mut c, &mut light, 2.0);
+        (under, lum_blocks(&c))
+    }
+
+    /// Both switches: each crumb a patch of its own area, laid as a layer
+    /// over the loose pastel it lands on. A light hatched over a loose dark
+    /// one shows (it lightens it by more than 0.02 in Y, about 2 L*, at
+    /// each width, and more than the same crumbs mixed in), and what the
+    /// passage looks like, dark and light, is the same at 0.33 and 0.17 mm
+    /// a pixel within three standard errors of the paired 5 mm blocks.
+    #[test]
+    fn a_light_over_loose_dark_shows_alike_at_any_width_with_crumb_area_and_layer() {
+        let paired = |a: &[f32], b: &[f32]| {
+            let d: Vec<f32> = a.iter().zip(b).map(|(x, y)| x - y).collect();
+            let n = d.len() as f32;
+            let m = d.iter().sum::<f32>() / n;
+            let var = d.iter().map(|v| (v - m).powi(2)).sum::<f32>() / (n - 1.0);
+            (m, (var / n).sqrt())
+        };
+        let mean = |b: &[f32]| b.iter().sum::<f32>() / b.len() as f32;
+        let (u1, o1) = light_over_dark(90, true, true);
+        let (u2, o2) = light_over_dark(180, true, true);
+        for (under, over) in [(&u1, &o1), (&u2, &o2)] {
+            assert!(mean(over) - mean(under) > 0.02, "the light shows: {} over {}", mean(over), mean(under));
+        }
+        let (d_under, se_under) = paired(&u1, &u2);
+        assert!(d_under.abs() <= 3.0 * se_under, "the dark: 90 px less 180 px {d_under}, standard error {se_under}");
+        let (d_over, se_over) = paired(&o1, &o2);
+        assert!(d_over.abs() <= 3.0 * se_over, "the light over it: 90 px less 180 px {d_over}, standard error {se_over}");
+        // (the crumbs mixed into the dark instead show less)
+        let (mu, mo) = light_over_dark(180, true, false);
+        assert!(mean(&o2) - mean(&u2) > mean(&mo) - mean(&mu) + 0.02, "layered {} over {}, mixed {} over {}", mean(&o2), mean(&u2), mean(&mo), mean(&mu));
     }
 }

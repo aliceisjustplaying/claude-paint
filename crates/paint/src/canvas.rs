@@ -258,6 +258,8 @@ pub struct Canvas {
     /// A stroke's crumbs lie over loose pastel as a layer
     /// (`with_pastel_crumb_layer`).
     pub(crate) pastel_crumb_layer: bool,
+    /// A pastel crumb covers its own area, not its pixel (`with_crumb_area`).
+    pub(crate) crumb_area: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -350,6 +352,7 @@ impl Canvas {
             wet_pastel: false,
             pastel_km: false,
             pastel_crumb_layer: false,
+            crumb_area: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -529,6 +532,26 @@ impl Canvas {
 
     pub fn pastel_crumb_layer(&self) -> bool {
         self.pastel_crumb_layer
+    }
+
+    /// A crumb a pastel stick sheds, or a dry tool drops (`pastel::
+    /// lay_crumbs_of`), pressed flat by the face going over it, lies as a
+    /// patch of its own area (its volume over PARTICLE_UM) over the pixels
+    /// it reaches, not packed into the one pixel it falls in; and the stick
+    /// meets the tooth filled where the pastel covers it and bare beside
+    /// it. What a stroke covers, the color it leaves and the paper showing
+    /// through no longer change with the pixel's size, only the detail
+    /// does. Off, a crumb larger than a pixel covered only that pixel, so a
+    /// finer render was paler and more broken than a coarse one. With the
+    /// crumb layer switch (`with_pastel_crumb_layer`) each patch lies over
+    /// the loose pastel it lands on as a layer of its own coverage and depth.
+    pub fn with_crumb_area(mut self, enabled: bool) -> Self {
+        self.crumb_area = enabled;
+        self
+    }
+
+    pub fn crumb_area(&self) -> bool {
+        self.crumb_area
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

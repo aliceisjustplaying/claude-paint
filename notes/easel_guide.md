@@ -1514,6 +1514,64 @@ use("painting")
   refuses to receive an etched plate.
 - **Physics and estimates:** notes/research/etch_physics.md.
 
+## Damp paper: a printer's sheets
+
+A painting begun with damp paper (its log's head says `--@ damp-paper`, beside `--@ paper`)
+keeps a sheet's own water, as a printer damps a sheet to print on. An older painting
+replays as it was painted, and `soak`, `blot`, `pack`, `cover`, `uncover` and `damp_of`
+don't exist in it. The numbers and their sources are in notes/research/damp_paper.md.
+
+```lua
+pr = sheet{name="proof", size=430, aspect=4/3, paper={grammage=250}}
+soak(pr, {minutes=20, drain=30})  -- in the tray 20 min, held up by an edge to drip 30 s
+blot(pr)                          -- between two fresh blotters: no longer shiny
+pack({pr, pr2}, {hours=10, dry=4})  -- overnight under a board with 4 dry sheets: one dampness
+uncover(pr)                       -- out of the pack, lying on the bench: it dries now
+mc, word, t = damp_of(pr)         -- 0.4 (g water per g fiber), "damp", {width=, height=, ...}
+```
+
+- **Every verb takes a surface** (what `sheet{}` or `receive` returned, or its name). It
+  must be a blank sheet of paper: a drawn or painted sheet, or the linen painting, is
+  refused. A sheet put aside is taken up for the verb and put aside again (as `use` does
+  it), so it is aged to the clock first; the current surface stays current.
+- **`soak(s, {minutes=, drain=})`** lays it in a tray: water goes in through both faces as
+  fast as its sizing lets it (`paper={cobb=}`: Cobb 25 g/m² takes 50 g/m² in a minute, in
+  √time), up to what its fibers and pores hold. Lifted out, it keeps a film of water on
+  each face, thinning the longer it drips (30 s if `drain` isn't given). The minutes pass
+  on the clock. **`soak(s, {mist=<g/m²>})`** sprays water on instead: unsized and Japan
+  papers are only misted.
+- **`blot(s, {passes=, blotter={mm=, grammage=}})`** presses it between two fresh blotters
+  (a 0.8 mm cotton blotter if not named). They take the standing water and, as they draw,
+  some of what is in its pores: a soaked 250 g/m² sheet comes to about 0.4 g/g with one
+  pass. Each pass takes 20 s of hand time.
+- **`pack({s1, s2, ...}, {hours=, dry=})`** interleaves the sheets (with `dry` dry sheets of
+  the first's make) under a board: they come to one dampness, the water shared between
+  them, and stay covered while the hours pass. A printer's pack of a pint of water to 35
+  sheets of 250 g/m² BFK gives each about 0.56 g of water per g of paper.
+- **`cover(s)`** puts it under plastic or blotters: it keeps its water. **`uncover(s,
+  {faces=1})`** lays it on the bench (one face open) or hangs it up (`faces=2`). A soaked,
+  blotted or misted sheet lies on the bench, one face open, until covered.
+- **Drying.** An open face loses water as a wet surface does in the studio's air (about
+  0.7 g/m² a minute): a blotted 250 g/m² sheet lying on the bench stays damp for about half
+  an hour, one fresh from the tray for hours. Once its fibers start to give up their own water it dries more slowly, toward the
+  studio's moisture (about 0.08 g/g).
+- **`damp_of(s)`** feels it: its moisture content (g of water per g of dry fiber), a word
+  (`"shiny"`: water standing on it; `"damp"`: soft through, ready to print; `"drying"`:
+  stiffening and shrinking; `"dry"`), and a table: `mc`, `water` (g/m²), `standing`,
+  `width` and `height` now and `made_width`, `made_height` as made (mm), `stiffness`
+  (against the dry sheet's, about 0.22 when damp), `z_mpa`, `faces`, and `plastic` (true
+  while damp: a shape pressed into it now sets as it dries). A look changes nothing.
+- **Size.** A sheet grows as its fibers take water and shrinks as they give it up: across
+  the machine direction (its width) about four times as much as along it (its height) for
+  a machine-made wove sheet, equally for a laid or Japan sheet. A damp machine-made sheet
+  is about 2.5 % wider than it was dry. Water past the fibers' saturation, in the pores,
+  grows it no more, so a sheet keeps its size while it is damp and starts to shrink as it
+  dries.
+- **Between sessions.** A damp sheet handed off (`handoff`) arrives drier by its time on
+  the way (`receive{after=}`) if it was left open, as it left if covered. Saves and
+  checkpoints keep its water.
+
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

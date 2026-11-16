@@ -19,6 +19,7 @@ mod pass_feedback;
 mod ground_cache;
 mod board;
 mod check;
+mod damp;
 mod depth;
 mod display;
 mod draw_edges;

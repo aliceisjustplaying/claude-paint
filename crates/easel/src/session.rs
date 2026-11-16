@@ -180,6 +180,14 @@ pub const PLATE_MARK: &str = "--@ plate";
 /// it replays as it was painted. It builds on the plate switch (`PLATE_MARK`): without that it
 /// is accepted and installs nothing.
 pub const ETCH_MARK: &str = "--@ etch";
+/// The damp-paper switch, in the head of a session file (notes/plan-intaglio.md P3a; damp.rs):
+/// a sheet of paper keeps its own water, as a printer damps it: `soak` in a tray and drain,
+/// `blot`, `pack` damp sheets overnight, `cover` and `uncover`, and `damp_of` to feel it; it
+/// dries on the clock, and its size and stiffness follow its water. A new painting has it; a
+/// log without it replays as it was painted, with none of it. Its verbs wet sheets of paper,
+/// so it installs them only beside the paper-and-pastel switch (`PAPER_MARK`): without that it
+/// is accepted and installs nothing.
+pub const DAMP_PAPER_MARK: &str = "--@ damp-paper";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -532,6 +540,10 @@ impl Session {
                 // the named-surfaces switch's verbs make sheets of paper: only beside this one
                 if self.st.borrow().tubes.surfaces {
                     crate::surfaces::install(&self.lua, self.st.clone())?;
+                }
+                // the damp-paper switch's verbs wet sheets of paper: only beside this one too
+                if self.st.borrow().tubes.damp_paper {
+                    crate::damp::install(&self.lua, self.st.clone())?;
                 }
                 // (no chunk has run: every global is the easel's own)
                 self.own = global_values(&self.lua)?;
@@ -968,6 +980,9 @@ impl Session {
         }
         if self.st.borrow().tubes.etch {
             let _ = writeln!(s, "{ETCH_MARK}");
+        }
+        if self.st.borrow().tubes.damp_paper {
+            let _ = writeln!(s, "{DAMP_PAPER_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1769,6 +1784,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.oils = true;
         b.charcoal = true;
         b.wet_pastel = true;
+        b.damp_paper = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1862,6 +1878,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.oils = oils;
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
+    b.damp_paper = head(DAMP_PAPER_MARK);
     Ok(b)
 }
 

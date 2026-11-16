@@ -42,6 +42,7 @@ pub mod spectral;
 pub mod wet;
 pub mod wet_pastel;
 pub mod climate;
+pub mod damp;
 pub mod bristle;
 pub mod engine7;
 pub mod handling;

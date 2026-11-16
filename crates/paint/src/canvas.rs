@@ -253,6 +253,9 @@ pub struct Canvas {
     pub(crate) drawing_optics: bool,
     /// Pastel takes water (`with_wet_pastel`, `crate::wet_pastel`).
     pub(crate) wet_pastel: bool,
+    /// A sheet's own water (`crate::damp`, the damp-paper switch): None
+    /// until a damp-paper verb wets it.
+    pub(crate) damp: Option<crate::damp::Damp>,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -343,6 +346,7 @@ impl Canvas {
             sealed_drawing_guide: false,
             drawing_optics: false,
             wet_pastel: false,
+            damp: None,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,

@@ -1126,9 +1126,12 @@ use(k)
 k:ground("hard", {um=4})                        -- rolled over the face
 n = needle{tip=40, cone=30}
 r = k:needle(n, {{100,200},{900,200}}, {force=0.3})   -- through the ground: r.touched, r.width (the window)
-k:bite{acid="ferric", baume=36, minutes=10}     -- face down by default; 10 minutes pass on the clock
+k:immerse{acid="ferric", baume=36}             -- into the bath (face down by default): it bites on the clock
+use(study)                                      -- ... while you draw on another surface, or wait
+use(k)
+r = k:lift()                                    -- out, rinsed and dried: r.minutes it lay there, r.depth
 k:stop_out(rect(0, 400, 1000, 300))             -- varnish: no acid there
-k:bite{acid="ferric", baume=36, minutes=30, rock=true}
+k:bite{acid="ferric", baume=36, minutes=30, rock=true}   -- in, 30 minutes, out, in one
 k:clean()                                       -- solvent: ground, varnish, rosin off
 k:aquatint{box=0.6, wait=30, minutes=1}         -- the dust box: wait s after stirring, minutes in it
 k:melt()
@@ -1154,9 +1157,37 @@ use("painting")
 - **`k:stop_out(mask)`.** Stopping-out varnish brushed where the mask (made while the plate
   is in hand) is at least half. No acid reaches there until `k:clean()`. Hand time is its
   area at 160 mm²/s (an estimate).
-- **`k:bite{acid=, …, minutes=}`** puts the plate in its tray for `minutes` of the shared
-  clock: the minutes pass as `wait` passes them, for every surface, with 2 minutes of
-  handling.
+- **`k:immerse{acid=, …}`** puts the plate into its tray, and **`k:lift()`** takes it out.
+  - **The bath is on the session's clock.** While the plate lies in it, it bites through
+    whatever the session does meanwhile: work on another surface, `wait`, paint drying.
+  - **The bite** is worked out when the plate comes out, from the minutes it lay there, on
+    the plate's own clock (the session's clock, which a resting surface, a save and a
+    handoff keep). The minutes are read to the millisecond.
+  - **Hand time.** Lowering the plate in takes seconds, which count as bath time. Lifting it
+    out, rinsing and drying it takes 2 minutes of hand time, after the bite.
+  - **While it is in,** the plate can't be worked or felt: its tools refuse with "the plate
+    "key" is in its ferric bath (12 min so far): lift it out first (k:lift())".
+    - A second `k:immerse` is refused the same way: lift it out first, even to change
+      baths. `k:lift()` on a plate that isn't in a bath is refused too.
+    - `look` and `probe` show the plate as it would come out now, and leave it in. `probe`
+      adds the bath and its minutes so far. `status` lists every plate in a bath.
+  - **Rocking and feathering** are not counted as hand time: a rocked tray stands for a
+    rocker, and the feather's sweeps are short. Working elsewhere during a feathered bite
+    is allowed.
+  - **Out, stopped out, back in.** Taken out, stopped out and put back into the same acid at
+    the same strength, the plate goes back into the tray it came out of, still loaded with
+    metal. Lines under the varnish keep the depth of the first bath.
+  - **A plate left in.** A plate left in its bath keeps biting for as long as the session's
+    clock runs, through saves, replays and handoffs. A session's log can always be taken up
+    again, so the plate stays in until it is lifted out, and then it has bitten the whole
+    time, as a plate forgotten in a tray has.
+    - Past a day the steps lengthen. A bath stops biting once its oxidant is spent (under a
+      thousandth of what it was made up with), and the lift says so.
+    - A bite past the plate's thickness is reported as holed: the model doesn't open the
+      back.
+  - **`k:bite{…, minutes=}`** is in, `minutes`, out, in one. It is the same as
+    `k:immerse{…}`, `wait(minutes)`, `k:lift()`, bit for bit, and at most a day; for longer,
+    use immerse and lift. It is refused while the plate is in a bath.
   - **`acid`:**
     - `"ferric"`: ferric chloride, strength `baume=` (default 38 °Bé) or `molar=`
     - `"nitric"`: nitric acid, `parts=` of water to one of acid (default 8) or `molar=`
@@ -1166,8 +1197,11 @@ use("painting")
     a tank) or `"up"` (in a tray, nitric's and Dutch's default).
   - **`rock=true`** or `{tilt=, period=}` rocks the tray. **`feather=true`** or seconds
     between sweeps (nitric only, face up) sweeps the bubbles.
-  - **`fresh=true`** makes a fresh bath. Otherwise the plate's tray keeps its acid between
-    bites and slows as it takes up metal.
+  - **`fresh=true`** makes a fresh bath. Otherwise, going back into the same acid at the
+    same strength, the plate's tray keeps its acid between bites and slows as it takes up
+    metal.
+  - `k:immerse` returns `molar` (the oxidant left in the tray), `loaded` (g/L), `litres`,
+    `since` (the plate's clock), `fresh` and `washed`.
   - **The rate** is the oxidant's mass transfer, worked out from the CRC viscosities and
     standard convection correlations, with no fitted constant.
     - Ferric chloride face down at 20 °C bites about 1 µm/min. It is fastest near 2 M and
@@ -1178,9 +1212,10 @@ use("painting")
   - **Lines** bite down and sideways under the ground (etch factor 1.2 for ferric), so a
     line widens by 2·depth/K. A narrow line bites slower as it deepens.
   - **Bitten lines have no burr:** the acid takes the needle's.
-  - Loose (unmelted) rosin floats off.
-  - **The result:** `rate` (µm/min at the start), `layer` (µm), `bubbles`, `depth`, `metal`
-    (µm³ taken), `loaded` (g/L of metal in the bath), `molar`, `washed`.
+  - Loose (unmelted) rosin floats off as the plate goes in.
+  - **The result** of `k:lift()` and `k:bite`: `rate` (µm/min at the start), `layer` (µm),
+    `bubbles`, `depth`, `metal` (µm³ taken), `loaded` (g/L of metal in the bath), `molar`,
+    `minutes` (in the bath), `washed`, `spent`.
 - **`k:aquatint{box=, wait=, minutes=}`** puts the plate in the rosin dust box: `box` m
   tall (0.6), `wait` s after the cloud was stirred (30), `minutes` in it (1).
   - **Grain size.** Grains settle at their Stokes speed, so the largest still falling
@@ -1209,8 +1244,14 @@ use("painting")
     coats, the deepest bite, the ink a wipe's yarns would leave (a guide to the tone), and
     the tray.
 - **Saves, checkpoints, replay and handoff** keep the coats and the tray in the plate's
-  section (`PLAT` version 2; version 1 plates still read). A session that doesn't etch
-  refuses to receive an etched plate.
+  section (`PLAT` version 2; version 1 plates still read). They also keep the bath a plate
+  lies in and when it went in, so a plate saved or handed off in its bath comes out with
+  the bite it would have had without the save.
+  - A plate handed off in its bath travels in its tray. It bites through the `after=`
+    minutes on the way, and `receive` says so.
+  - A save keeps no Lua heap. After `easel finish` reads one, take the plate up by name
+    (`use("key")`).
+  - A session that doesn't etch refuses to receive an etched plate.
 - **Physics and estimates:** notes/research/etch_physics.md.
 
 ## The journal

@@ -1390,7 +1390,7 @@ mc, word, t = damp_of(pr)         -- 0.4 (g water per g fiber), "damp", {width=,
 ## Steam and sifted pastel
 
 A painting begun with steam and sift (its log's head says `--@ steam-sift`, beside
-`--@ paper` and `--@ wet-pastel`) has Degas's steam and Cassatt's 1914 trick of crushed
+`--@ paper` and `--@ wet-pastel`) has steam from a kettle played over pastel, and crushed
 pastel sifted onto a sheet dampened by vapour. An older painting replays as it was painted,
 and `steam` and `sift` don't exist in it. The numbers and their sources are in
 notes/research/steam_sift.md.

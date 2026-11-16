@@ -1905,7 +1905,7 @@ impl Server {
         let ((px0, px1), (py0, py1)) = (span(x0, x1, f.x0, f.w), span(y0, y1, f.y0, f.h));
         // a plate: its lines, burr and level (plate.rs)
         if let Some(p) = self.s.st.borrow().plate.as_ref() {
-            return Ok(plate::probe(p, &place, (px0, py0, px1, py1)));
+            return Ok(plate::probe(p, c.clock(), &place, (px0, py0, px1, py1)));
         }
         let (plain, lit, stages) = (c.seen(), c.seen_lit(GALLERY_LIGHT.0, GALLERY_LIGHT.1, 1.0), c.stages());
         let (mut sums, mut counts) = ([[0.0f64; 3]; 2], [0usize; 4]);

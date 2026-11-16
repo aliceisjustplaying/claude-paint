@@ -245,3 +245,35 @@ fn an_inked_plate_is_cleaned_before_it_is_worked() {
     assert!(e.contains("inked"), "{e}");
     run(&mut s, "c = k:clean_ink()\nassert(c.taken > 0)\nk:drypoint(n, {{100, 700}, {900, 700}})");
 }
+
+/// A plate lying in its acid (`--@ etch`'s `k:immerse{}`) takes no ink, warmth or tarlatan until
+/// it is lifted out; an inked plate doesn't go into the bath; a plate bitten on the clock,
+/// cleaned and inked comes back whole from a save.
+#[test]
+fn a_plate_in_its_bath_is_lifted_before_it_is_inked() {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    let d = darkest(&s);
+    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nt = tarlatan{{}}\nk:ground(\"hard\")\nk:needle(needle{{tip=40, cone=30}}, {{{{100, 700}}, {{900, 700}}}})\nk:immerse{{acid=\"ferric\", baume=36}}\nwait(5)"));
+    for src in ["k:warm(40)", "k:ink(black)", "t:wipe(k)", "k:hand_wipe()", "k:retrousse()", "k:clean_ink()"] {
+        let e = s.run(src).unwrap_err();
+        assert!(e.contains("in its ferric bath") && e.contains("k:lift()"), "{src}: {e}");
+    }
+    run(&mut s, "k:lift()\nk:clean()\nk:warm(40)\nk:ink(black)\nt:wipe(k, nil, {passes=2})");
+    let e = s.run("k:immerse{acid=\"ferric\", baume=36}").unwrap_err();
+    assert!(e.contains("inked"), "{e}");
+    let p = plate(&s);
+    assert!(p.inked() && p.coats().is_some() && p.in_bath().is_none());
+    let log = s.program("press");
+    let dir = std::path::PathBuf::from(format!("out/easel/ink-bath-test-{}", std::process::id()));
+    let abs = crate::session::root().join(&dir);
+    let _ = std::fs::remove_dir_all(&abs);
+    std::fs::create_dir_all(&abs).unwrap();
+    let path = abs.join("live.ckpt");
+    assert!(crate::save::write(&s, &log, &path).unwrap());
+    let back = crate::save::read(&path).unwrap();
+    assert!(plates(&back.session) == plates(&s), "an etched, inked plate through a save");
+    assert!(plates(&replay(&log).unwrap()) == plates(&s), "and through a replay");
+    let _ = std::fs::remove_dir_all(&abs);
+}

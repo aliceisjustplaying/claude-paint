@@ -114,6 +114,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.damp_paper {
         kv("damp_paper", "1".to_string());
     }
+    if st.tubes.steam_sift {
+        kv("steam_sift", "1".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -329,6 +332,11 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
         None => false,
         Some(&"1") => true,
         Some(v) => return Err(format!("the save's damp_paper={v:?} isn't 1")),
+    };
+    tubes.steam_sift = match h.get("steam_sift") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's steam_sift={v:?} isn't 1")),
     };
     if surfaces.is_some() && !(tubes.surfaces && paper) {
         return Err(format!("{}: the save holds several surfaces, but its header has not the named-surfaces switch", path.display()));

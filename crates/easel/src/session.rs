@@ -174,6 +174,14 @@ pub const SURFACES_MARK: &str = "--@ surfaces";
 /// so it installs them only beside the paper-and-pastel switch (`PAPER_MARK`): without that it
 /// is accepted and installs nothing.
 pub const DAMP_PAPER_MARK: &str = "--@ damp-paper";
+/// The steam-and-sift switch, in the head of a session file (notes/cassatt_support.md gap 6;
+/// steam.rs): `steam(mask, {seconds=})` plays a kettle's jet over the sheet, its water binding
+/// loose pastel as it dries; `sift(stick or pile, mask, {amount=, grain=})` drops crushed
+/// pastel as crumbs, loose on a dry sheet (a tap takes them), stuck and clustered on a damp
+/// one. A new painting has it; a log without it replays as it was painted, with none of it.
+/// Its verbs work on a sheet of paper, so it installs them only beside the paper-and-pastel
+/// switch (`PAPER_MARK`): without that it is accepted and installs nothing.
+pub const STEAM_SIFT_MARK: &str = "--@ steam-sift";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -527,6 +535,10 @@ impl Session {
                 // the damp-paper switch's verbs wet sheets of paper: only beside this one too
                 if self.st.borrow().tubes.damp_paper {
                     crate::damp::install(&self.lua, self.st.clone())?;
+                }
+                // the steam-and-sift switch's verbs work on a sheet of paper: only beside this one too
+                if self.st.borrow().tubes.steam_sift {
+                    crate::steam::install(&self.lua, self.st.clone())?;
                 }
                 // (no chunk has run: every global is the easel's own)
                 self.own = global_values(&self.lua)?;
@@ -959,6 +971,9 @@ impl Session {
         }
         if self.st.borrow().tubes.damp_paper {
             let _ = writeln!(s, "{DAMP_PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.steam_sift {
+            let _ = writeln!(s, "{STEAM_SIFT_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1759,6 +1774,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.charcoal = true;
         b.wet_pastel = true;
         b.damp_paper = true;
+        b.steam_sift = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1851,6 +1867,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.damp_paper = head(DAMP_PAPER_MARK);
+    b.steam_sift = head(STEAM_SIFT_MARK);
     Ok(b)
 }
 

@@ -20,6 +20,7 @@ mod ground_cache;
 mod board;
 mod check;
 mod damp;
+mod steam;
 mod depth;
 mod display;
 mod draw_edges;

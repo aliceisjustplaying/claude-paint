@@ -41,6 +41,7 @@ mod session;
 mod state_dump;
 mod studio;
 mod time;
+mod work_clock;
 mod world;
 
 use paint::Canvas;

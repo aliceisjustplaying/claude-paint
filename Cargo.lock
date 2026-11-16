@@ -159,6 +159,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "image",
+ "libc",
  "mimalloc",
  "mlua",
  "paint",

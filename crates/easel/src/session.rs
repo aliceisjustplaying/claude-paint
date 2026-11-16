@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use crate::work_clock::Work;
 use std::time::{Duration, Instant};
 
 /// Marks the start of a chunk in a session file.
@@ -116,10 +117,15 @@ pub fn canonical_tables(engine: u32) -> bool {
     engine >= 3
 }
 
-/// The longest a chunk of a live session may run (the longest of 2,502 painters' chunks on
-/// 2026-09-27 took 94 s). A chunk that runs longer is stopped like a failed one: nothing it
-/// did is kept. Replays have no limit: a chunk in the log succeeded once and must replay the
-/// same on a slower or busier machine.
+/// The most computing a chunk of a live session may do (work_clock.rs: its thread's CPU time
+/// plus the engine pool's spread over the pool's threads, what it would take on the machine
+/// idle), set when it was a wall-clock limit: the longest of 2,502 painters' chunks on
+/// 2026-09-27 took 94 s of wall time, and this is some six times that. On an idle machine a
+/// chunk's work is at most its wall time, so it is the same budget; on a busy one a chunk
+/// waiting for a CPU is not charged for the wait, so what a chunk may do doesn't depend on
+/// what else the machine runs. It is there to stop a runaway chunk (an endless loop), which
+/// is stopped like a failed one: nothing it did is kept. Replays have no limit: a chunk in
+/// the log succeeded once and must replay the same on a slower or busier machine.
 pub const CHUNK_LIMIT: Duration = Duration::from_secs(600);
 
 /// The head line naming the width a painting is painted at: a log without
@@ -129,12 +135,17 @@ pub const LEGACY_WIDTH: usize = crate::LIVE_WIDTH;
 /// The widths a painting may name.
 pub const WIDTHS: [usize; 2] = [2400, 4800];
 
+/// What a live chunk that did more computing than `limit` answers.
+pub fn stopped_message(limit: Duration) -> String {
+    format!("the chunk ran longer than {} minutes of computing and was stopped; nothing it did was kept", limit.as_secs().div_ceil(60))
+}
+
 /// A chunk's limit at a width: `CHUNK_LIMIT` at the legacy width, scaled with the pixel count
 /// above it, so a chunk that fit at 2400 px still fits at 4800.
 pub fn chunk_limit_for(width: usize) -> Duration {
     if width > LEGACY_WIDTH { CHUNK_LIMIT * ((width * width).div_ceil(LEGACY_WIDTH * LEGACY_WIDTH)) as u32 } else { CHUNK_LIMIT }
 }
-/// Lua instructions between two looks at the clock.
+/// Lua instructions between two looks at the work clock.
 const HOOK_EVERY: u32 = 1_000_000;
 
 /// How far the chunk a live session is running has got, for `status` while it runs (main.rs
@@ -145,6 +156,10 @@ pub struct Progress {
     /// line is looked at with the clock (`HOOK_EVERY`), so not inside one long verb.
     lines: AtomicUsize,
     line: AtomicUsize,
+    /// The computing the chunk has done (s, f64 bits; `work_clock`), looked at with the line,
+    /// and how much it may do (s).
+    work: AtomicU64,
+    limit: AtomicU64,
     /// Strokes and touches (`paint::Tally`) and the painting's clock (minutes, f64 bits) when
     /// the chunk began and after its last verb.
     marks0: AtomicU64,
@@ -156,13 +171,15 @@ pub struct Progress {
     kept: AtomicUsize,
 }
 
-pub static PROGRESS: Progress = Progress { lines: AtomicUsize::new(0), line: AtomicUsize::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
+pub static PROGRESS: Progress = Progress { lines: AtomicUsize::new(0), line: AtomicUsize::new(0), work: AtomicU64::new(0), limit: AtomicU64::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
 
 impl Progress {
-    fn begin(&self, lines: usize, st: &Studio) {
+    fn begin(&self, lines: usize, st: &Studio, limit: Duration) {
         let marks = st.canvas.as_ref().map_or(0, |c| { let t = c.tally(); t.strokes + t.touches });
         self.lines.store(lines, Ordering::Relaxed);
         self.line.store(0, Ordering::Relaxed);
+        self.work.store(0, Ordering::Relaxed);
+        self.limit.store(limit.as_secs(), Ordering::Relaxed);
         self.marks0.store(marks, Ordering::Relaxed);
         self.marks.store(marks, Ordering::Relaxed);
         self.clock0.store(st.clock.to_bits(), Ordering::Relaxed);
@@ -173,6 +190,8 @@ impl Progress {
     pub fn clear(&self) {
         self.lines.store(0, Ordering::Relaxed);
         self.line.store(0, Ordering::Relaxed);
+        self.work.store(0, Ordering::Relaxed);
+        self.limit.store(0, Ordering::Relaxed);
         self.marks0.store(0, Ordering::Relaxed);
         self.marks.store(0, Ordering::Relaxed);
         self.clock0.store(0, Ordering::Relaxed);
@@ -213,8 +232,11 @@ impl Progress {
             return format!("painting a chunk: starting, running for {}", minutes_seconds(elapsed.as_secs_f64()));
         }
         let at = if line > 0 { format!("at line {line} of {lines}") } else { format!("{lines} lines") };
+        // the computing it has done, once the work clock was looked at
+        let (work, limit) = (f64::from_bits(self.work.load(Ordering::Relaxed)), self.limit.load(Ordering::Relaxed));
+        let computing = if line > 0 && limit > 0 { format!(" ({} of the {} min of computing a chunk may do)", minutes_seconds(work), limit.div_ceil(60)) } else { String::new() };
         format!(
-            "painting a chunk ({at}): {marks} strokes and touches so far, {} on the painting's clock (now {}), running for {}",
+            "painting a chunk ({at}): {marks} strokes and touches so far, {} on the painting's clock (now {}), running for {}{computing}",
             minutes_seconds(spent), crate::time::time_of_day(clock), minutes_seconds(elapsed.as_secs_f64())
         )
     }
@@ -298,8 +320,9 @@ pub struct Session {
     /// failure ends it. A live session snapshots before every chunk so a
     /// failure can roll back.
     replay: bool,
-    /// When the running chunk must stop (live sessions only), and how long a chunk may run.
-    deadline: Rc<Cell<Option<Instant>>>,
+    /// The running chunk's work clock when it began and the computing it may do (live sessions
+    /// only), and the computing a chunk may do (`CHUNK_LIMIT`).
+    deadline: Rc<Cell<Option<(Work, Duration)>>>,
     pub chunk_limit: Duration,
     /// heap.lua's snap and restore, prelude.lua's per-chunk reset, the
     /// private objects snapshots skip and its after-chunk check (dropped
@@ -378,16 +401,18 @@ impl Session {
         let prelude: (Function, Table, Function, Function) = lua.load(include_str!("prelude.lua")).set_name("prelude.lua").call((id, getmt, getinfo, fail, canon))?;
         let st = Rc::new(RefCell::new(Studio::new(width, tubes)));
         api::install(&lua, st.clone())?;
-        let deadline = Rc::new(Cell::new(None::<Instant>));
+        let deadline = Rc::new(Cell::new(None::<(Work, Duration)>));
         let d = deadline.clone();
-        let limit_min = chunk_limit_for(width).as_secs() / 60;
         lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |lua, _| match d.get() {
-            Some(t) if Instant::now() > t => Err(mlua::Error::runtime(format!(
-                "the chunk ran longer than {limit_min} minutes and was stopped; nothing it did was kept"
-            ))),
-            // a live chunk: the line of it running (its outermost frame; a function an
-            // earlier chunk made is that chunk's)
-            Some(_) => {
+            None => Ok(mlua::VmState::Continue),
+            Some((start, limit)) => {
+                let work = Work::now().since(&start);
+                PROGRESS.work.store(work.to_bits(), Ordering::Relaxed);
+                if work > limit.as_secs_f64() {
+                    return Err(mlua::Error::runtime(stopped_message(limit)));
+                }
+                // a live chunk: the line of it running (its outermost frame; a function an
+                // earlier chunk made is that chunk's)
                 let mut line = None;
                 for level in 0..200 {
                     let Some(found) = lua.inspect_stack(level, |f| {
@@ -401,7 +426,6 @@ impl Session {
                 }
                 Ok(mlua::VmState::Continue)
             }
-            None => Ok(mlua::VmState::Continue),
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
@@ -587,13 +611,13 @@ impl Session {
         let had_canvas = self.st.borrow().canvas.is_some();
         self.st.borrow_mut().live = !self.replay;
         if !self.replay {
-            PROGRESS.begin(src.lines().count(), &self.st.borrow());
+            PROGRESS.begin(src.lines().count(), &self.st.borrow(), self.chunk_limit);
         }
         let t0 = Instant::now();
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
         let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
-        let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
+        let deadline = (!self.replay).then(|| (Work::now(), self.chunk_limit));
         self.deadline.set(deadline);
         self._serials.capped.set(false);
         // Everything that can fail before the chunk is kept is inside this guard: the chunk,
@@ -2467,12 +2491,95 @@ mod progress {
 
     #[test]
     fn a_kept_chunk_is_reported_as_in_the_log() {
-        let p = Progress { lines: AtomicUsize::new(6), line: AtomicUsize::new(5), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
+        let p = Progress { lines: AtomicUsize::new(6), line: AtomicUsize::new(5), work: AtomicU64::new(0), limit: AtomicU64::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
         assert!(p.report(Duration::from_secs(3)).starts_with("painting a chunk (at line 5 of 6)"));
         p.keep(2);
         assert_eq!(p.report(Duration::from_secs(75)), "the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s");
         p.clear();
         assert!(p.report(Duration::from_secs(1)).starts_with("painting a chunk: starting"));
+    }
+
+    #[test]
+    fn a_running_chunk_reports_the_computing_it_has_done() {
+        let p = Progress { lines: AtomicUsize::new(6), line: AtomicUsize::new(0), work: AtomicU64::new(0), limit: AtomicU64::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
+        p.begin(6, &Studio::new(32, Palette::tube_box()), chunk_limit_for(2400));
+        // the work clock not looked at yet: nothing said of it
+        assert!(!p.report(Duration::from_secs(3)).contains("computing"));
+        p.line.store(4, Ordering::Relaxed);
+        p.work.store(130.4f64.to_bits(), Ordering::Relaxed);
+        let r = p.report(Duration::from_secs(500));
+        assert!(r.starts_with("painting a chunk (at line 4 of 6)"), "{r}");
+        assert!(r.ends_with("running for 8 min 20 s (2 min 10 s of the 10 min of computing a chunk may do)"), "{r}");
+    }
+}
+
+/// The live chunk limit counts computing (work_clock.rs), not wall time.
+#[cfg(test)]
+mod chunk_limit {
+    use super::*;
+    use crate::work_clock::{FAKE, Work};
+
+    /// A live session whose work clock is set by its chunks: `nap(s)` waits `s` seconds of
+    /// wall time, as a chunk waits for a CPU on a busy machine, and `compute(s)` puts `s`
+    /// seconds of computing on the clock.
+    fn session(limit: Duration) -> Session {
+        let s = Session::new(32).unwrap();
+        s.lua.globals().set("nap", s.lua.create_function(|_, secs: f64| Ok(std::thread::sleep(Duration::from_secs_f64(secs)))).unwrap()).unwrap();
+        let compute = s.lua.create_function(|_, secs: f64| {
+            FAKE.with(|f| f.set(f.get().map(|w| Work { thread: w.thread + secs, ..w })));
+            Ok(())
+        });
+        s.lua.globals().set("compute", compute.unwrap()).unwrap();
+        FAKE.with(|f| f.set(Some(Work { thread: 0.0, pool: 0.0 })));
+        let mut s = s;
+        s.chunk_limit = limit;
+        s
+    }
+
+    /// Lua work enough for the hook to look at the clock a few times (`HOOK_EVERY`).
+    const SPIN: &str = "local x = 0 for j = 1, 1000000 do x = x + j end";
+
+    #[test]
+    fn waiting_for_the_machine_does_not_count() {
+        let mut s = session(Duration::from_millis(300));
+        let t0 = Instant::now();
+        // over the limit in wall time, the hook looking after every wait
+        s.run(&format!("for i = 1, 4 do nap(0.15) {SPIN} end kept = 1")).unwrap();
+        assert!(t0.elapsed() > Duration::from_millis(300));
+        s.run("assert(kept == 1)").unwrap();
+        FAKE.with(|f| f.set(None));
+    }
+
+    #[test]
+    fn a_chunk_that_computes_past_the_limit_is_stopped_and_kept_nothing() {
+        let mut s = session(Duration::from_secs(600));
+        let e = s.run(&format!("kept = 1 compute(599) {SPIN} compute(2) {SPIN} {SPIN}")).unwrap_err();
+        assert!(e.contains(&stopped_message(Duration::from_secs(600))), "{e}");
+        assert!(e.contains("the chunk ran longer than 10 minutes of computing and was stopped; nothing it did was kept"), "{e}");
+        s.run("assert(kept == nil)").unwrap();
+        FAKE.with(|f| f.set(None));
+    }
+
+    #[test]
+    fn a_replay_has_no_limit() {
+        let mut s = Session::replay(32).unwrap();
+        s.lua.globals().set("compute", s.lua.create_function(|_, secs: f64| {
+            FAKE.with(|f| f.set(f.get().map(|w| Work { thread: w.thread + secs, ..w })));
+            Ok(())
+        }).unwrap()).unwrap();
+        FAKE.with(|f| f.set(Some(Work { thread: 0.0, pool: 0.0 })));
+        s.chunk_limit = Duration::from_secs(1);
+        s.run(&format!("compute(5) {SPIN} {SPIN}")).unwrap();
+        FAKE.with(|f| f.set(None));
+    }
+
+    #[test]
+    fn an_endless_loop_is_stopped_by_the_machines_own_clock() {
+        let mut s = Session::new(32).unwrap();
+        s.chunk_limit = Duration::from_millis(200);
+        let e = s.run("x = 0 while true do x = x + 1 end").unwrap_err();
+        assert!(e.contains("minutes of computing and was stopped; nothing it did was kept"), "{e}");
+        s.run("assert(x == nil)").unwrap();
     }
 }
 

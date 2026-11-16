@@ -87,7 +87,7 @@ const FINES_SHARE: f64 = 0.5;
 /// Vine's lift from the adhesion law (`crate::adhesion`) with water bridges
 /// of the kind `bridge`: `VINE_LIFT` as painted before the water-bridge
 /// switch (`Bridge::Smooth`; the law gives 0.853 there), and with it its
-/// splinters held to the summits that touch, 0.960 (pastel_lift.md §5).
+/// splinters held to the summits that touch, 0.960 (pastel_lift.md §7).
 pub fn vine_lift(bridge: crate::adhesion::Bridge) -> f32 {
     match bridge {
         crate::adhesion::Bridge::Smooth => VINE_LIFT,

@@ -129,7 +129,7 @@ print(f"  {'vine or bone black (carbon)':40} A   6.0  lift {stick_take(A_CARBON)
 # that touch: the asperity regime (Halsey & Levine 1998; Charlaix &
 # Ciccotti 2010), measured as pull-off forces of rough particles far below
 # 4πγR and nearly independent of humidity (Jones et al. 2002, 2003;
-# Moutinho et al. 2017; Rabinovich et al. 2002). pastel_lift.md §5.
+# Moutinho et al.; Rabinovich et al. 2002). pastel_lift.md §7.
 #
 # The fibre: at the bridge's scale its surface is cellulose fibril
 # aggregates, 15–25 nm across (AFM, Fahlén & Salmén 2003, 2005): a cylinder

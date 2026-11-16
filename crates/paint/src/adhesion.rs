@@ -20,7 +20,7 @@
 //!   the summits that touch, a fibre's cellulose fibril aggregate under a
 //!   particle's nanometre roughness (about 19 nN), as long as the Kelvin
 //!   diameter is below the surfaces' roughness (to about 95 % RH);
-//!   notes/research/pastel_lift.md §5.
+//!   notes/research/pastel_lift.md §7.
 //!
 //! The share the eraser takes is the chance its pull beats the hold.
 

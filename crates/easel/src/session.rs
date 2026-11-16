@@ -179,7 +179,7 @@ pub const PASTEL_LIFT_MARK: &str = "--@ pastel-lift";
 /// The water-bridge switch, in the head of a session file: the film of water that holds
 /// a particle to the paper is held to the summits that touch, about 19 nN, not taken at a
 /// smooth 0.1 µm asperity, 90 nN (paint's `adhesion::Bridge::Asperity`, notes/research/
-/// pastel_lift.md §5). The kneaded eraser takes vine charcoal 0.96 a press rather than
+/// pastel_lift.md §7). The kneaded eraser takes vine charcoal 0.96 a press rather than
 /// 0.85 and compressed 0.62 rather than 0.48, and with the pastel lift switch a pastel's
 /// whiting 0.76 rather than 0.61. A new painting has it; a log without it replays as it
 /// was painted.

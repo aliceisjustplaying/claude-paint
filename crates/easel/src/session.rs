@@ -166,6 +166,13 @@ pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// none of it. Its verbs are a sheet of paper's, so it installs them only beside the
 /// paper-and-pastel switch (`PAPER_MARK`): without that it is accepted and installs nothing.
 pub const SURFACES_MARK: &str = "--@ surfaces";
+/// The tracing switch, in the head of a session file (notes/plan-intaglio.md §7, gap 4 of
+/// notes/cassatt_support.md; trace.rs): a painting whose log has it may trace a study's drawn
+/// lines onto another of its surfaces (`trace`). A new painting has it; a log without it replays
+/// as it was painted, with no `trace` global. It acts between named surfaces, so it installs
+/// only beside the named-surfaces switch (`SURFACES_MARK`): without that it is accepted and
+/// installs nothing.
+pub const TRACE_MARK: &str = "--@ trace";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -515,6 +522,10 @@ impl Session {
                 // the named-surfaces switch's verbs make sheets of paper: only beside this one
                 if self.st.borrow().tubes.surfaces {
                     crate::surfaces::install(&self.lua, self.st.clone())?;
+                    // (tracing acts between them: only beside them)
+                    if self.st.borrow().tubes.trace {
+                        crate::trace::install(&self.lua, self.st.clone())?;
+                    }
                 }
                 // (no chunk has run: every global is the easel's own)
                 self.own = global_values(&self.lua)?;
@@ -941,6 +952,9 @@ impl Session {
         }
         if self.st.borrow().tubes.surfaces {
             let _ = writeln!(s, "{SURFACES_MARK}");
+        }
+        if self.st.borrow().tubes.trace {
+            let _ = writeln!(s, "{TRACE_MARK}");
         }
         if self.st.borrow().tubes.wet_pastel {
             let _ = writeln!(s, "{WET_PASTEL_MARK}");
@@ -1735,6 +1749,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.paper_presets = true;
         b.pastel_area_strokes = true;
         b.surfaces = true;
+        b.trace = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1822,6 +1837,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.pastel_area_strokes = head(PASTEL_AREA_STROKES_MARK);
     b.surfaces = head(SURFACES_MARK);
+    b.trace = head(TRACE_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

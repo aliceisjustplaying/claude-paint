@@ -25,7 +25,7 @@ const SMUDGE_KEYS: &[&str] = &["force", "pad", "speed", "angle", "passes", "patt
 const PENCIL_META: &str = "easel.pencil";
 
 /// The lead a pencil table stands for.
-fn lead_of(p: &Table) -> Result<Lead> {
+pub(crate) fn lead_of(p: &Table) -> Result<Lead> {
     let kind: String = p.get::<Option<String>>("kind")?.unwrap_or_else(|| "graphite".into());
     match kind.as_str() {
         "chalk" => Ok(Lead::chalk()),
@@ -97,7 +97,7 @@ fn validate_pastel_marks(st: &S, pts: &[(f32, f32)], sketch: Option<(bool, usize
 
 /// Whether `p` is a pastel stick (`pastel(pile)`): only with the
 /// paper-and-pastel switch, so without it a pencil's methods are as they were.
-fn is_stick(st: &S, p: &Table) -> Result<bool> {
+pub(crate) fn is_stick(st: &S, p: &Table) -> Result<bool> {
     Ok(st.borrow().paper && p.get::<Option<String>>("kind")?.as_deref() == Some("stick"))
 }
 

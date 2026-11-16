@@ -41,6 +41,7 @@ mod session;
 mod state_dump;
 mod studio;
 mod surfaces;
+mod trace;
 mod time;
 mod world;
 

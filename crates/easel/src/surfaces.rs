@@ -326,7 +326,7 @@ fn wake_up(st: &S, rested: f64) -> Result<()> {
 
 /// Make surface `to` current: the hand time spent on the one put aside goes on the clock
 /// first, and the one taken up is aged to the clock.
-fn take_up(st: &S, to: usize) -> Result<()> {
+pub(crate) fn take_up(st: &S, to: usize) -> Result<()> {
     crate::time::flush(st, true);
     let rested = swap(&mut st.borrow_mut(), to).map_err(|e| mlua::Error::runtime(format!("the surfaces couldn't be changed over: {e}")))?;
     wake_up(st, rested)
@@ -362,7 +362,7 @@ fn valid_name(n: &str) -> bool {
 
 /// A surface's name from what a verb was given: the surface (what `sheet{}` returned) or its
 /// name.
-fn name_of(v: &Value, verb: &str) -> Result<String> {
+pub(crate) fn name_of(v: &Value, verb: &str) -> Result<String> {
     match v {
         Value::String(n) => Ok(n.to_str()?.to_string()),
         Value::UserData(u) if u.is::<SurfaceU>() => Ok(u.borrow::<SurfaceU>()?.name.clone()),
@@ -370,7 +370,7 @@ fn name_of(v: &Value, verb: &str) -> Result<String> {
     }
 }
 
-fn no_surface(s: &Surfaces, verb: &str, name: &str) -> mlua::Error {
+pub(crate) fn no_surface(s: &Surfaces, verb: &str, name: &str) -> mlua::Error {
     mlua::Error::runtime(format!("{verb}: there is no surface called {name:?} (there are: {})", s.names().join(", ")))
 }
 

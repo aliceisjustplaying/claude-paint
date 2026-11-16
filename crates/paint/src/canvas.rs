@@ -578,6 +578,34 @@ impl Canvas {
         }
     }
 
+    /// A memo of `give_mpa_per_um` over window pixels [x0, x1) × [y0, y1),
+    /// for a stroke that comes down on them step after step: on a drumming
+    /// sheet each give is a sum of Bessel functions. `None` where the give
+    /// is a constant (or the window too large to keep).
+    pub(crate) fn gives_over(&self, x0: usize, y0: usize, x1: usize, y1: usize) -> Option<Gives> {
+        let (x1, y1) = (x1.min(self.f.w), y1.min(self.f.h));
+        let drums = self.paper.as_ref().is_some_and(|p| p.drum.is_some());
+        let n = x1.saturating_sub(x0) * y1.saturating_sub(y0);
+        (drums && n > 0 && n <= 1 << 22).then(|| Gives { x0, y0, w: x1 - x0, h: y1 - y0, v: vec![f32::NAN; n] })
+    }
+
+    /// `give_mpa_per_um(i)`, kept in `memo` when it covers the pixel (the
+    /// same bits: a give depends only on where the pixel is).
+    #[inline]
+    pub(crate) fn give_memo(&self, i: usize, memo: &mut Option<Gives>) -> f32 {
+        if let Some(g) = memo {
+            let (x, y) = (i % self.f.w, i / self.f.w);
+            if x >= g.x0 && y >= g.y0 && x - g.x0 < g.w && y - g.y0 < g.h {
+                let v = &mut g.v[(y - g.y0) * g.w + (x - g.x0)];
+                if v.is_nan() {
+                    *v = self.give_mpa_per_um(i);
+                }
+                return *v;
+            }
+        }
+        self.give_mpa_per_um(i)
+    }
+
     /// Use a woven linen support.
     pub fn with_linen(mut self, l: Linen) -> Self {
         self.linen = Some(l);
@@ -882,6 +910,16 @@ impl Canvas {
         image::save_buffer(path.as_ref(), &buf, w as u32, h as u32, image::ColorType::Rgb8)
             .map_err(std::io::Error::other)
     }
+}
+
+/// A stroke's memo of the surface's give over a window of pixels
+/// (`Canvas::gives_over`).
+pub(crate) struct Gives {
+    x0: usize,
+    y0: usize,
+    w: usize,
+    h: usize,
+    v: Vec<f32>,
 }
 
 #[cfg(test)]

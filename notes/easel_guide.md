@@ -1329,6 +1329,64 @@ use(k)
   a receive without it says the hash, and a replay that finds another file there refuses
   it. `name=` renames it on arrival.
 
+## Tracing a study onto another surface
+
+A painting begun with tracing (its log's head says `--@ trace`, beside `--@ surfaces`) may
+trace a study's drawn lines onto another of its surfaces. An older painting replays as it
+was painted, with no `trace`.
+
+```lua
+st = sheet{name="study", size=300, aspect=4/3, paper={grammage=160}}
+use(st); h = pencil("2B"); h:line(pts, {pressure=0.6}); use("painting")
+r = trace(st, {coat=chalk(), pressure=0.5})                -- by way of tracing paper, its back chalked
+red = pastel(pile{{"red earth", 1}}, {kind="hard"})
+trace(st, {coat=red, through="study", mirror=true})        -- the study's own back in red chalk, flipped
+trace(st, {pressure=0.7})                                  -- a blind stylus: into the guide only
+trace(st, {by="window", tool=pencil("HB"), pressure=0.4})  -- held to the light and drawn straight on
+print(r.lines, r.length, r.width, r.moved, r.coat, r.seconds)
+```
+
+- **What is followed.** The study's `drawing_guide()`: the tracer runs a point down the
+  middle of every line that reads at least `level=` (0.25; an eraser's ghost is passed over).
+  It follows each line as a hand steers down a tunnel as wide as the line. It goes at the
+  steering law's speed, which is slow for a fine line (about 5 mm/s on a 0.4 mm line), and
+  strays to either side by about a quarter of the line's width. Through tracing paper the
+  line is traced twice, so the strays add. The time goes on the clock.
+- **`by="transfer"`** (the default). A sheet whose back is rubbed with `coat=` is laid on
+  `onto` and its lines are gone over with a stylus.
+  - **The sheet** is a 90 g/m² natural tracing paper (`through="tracing"`), or the study
+    itself with its own back coated (`through="study"`, a sheet only).
+  - **The coat** is a pencil or chalk, or a pastel or charcoal stick. It fills the back's
+    tooth once the excess is wiped off: about 1 µm on tracing paper, 6 µm on a drawing paper.
+  - **The stylus** is a ball 1 mm across (`tip=` mm), or `tool=` a pencil, whose point is the
+    ball.
+  - **Its force** is `pressure=` (5 N at 1), or `force=` N.
+  - **The line** is as wide as the ball's contact. More force widens it, slowly: the papers
+    compress until their pores close, and there the width stops (about 0.4 mm at 0.5 N and
+    0.6 mm at 5 N, for a 1 mm ball through tracing paper onto drawing paper).
+  - **What lands.** Where the ball's sink reaches the sheet's fiber tops, half the coat that
+    touches comes away. It lies in the tooth as loose grains of the coat: faint, and soft to
+    the finger and the eraser like the stick's own. The back loses exactly what the sheet
+    gains, and a crossing line finds less coat.
+  - **Into the guide.** Every traced line goes into `onto`'s drawing guide, so a painting can
+    be worked into it.
+  - **No coat:** the stylus is blind and lays the guide alone, a mask to paint into.
+- **`by="window"`**: the lines are drawn straight onto `onto` with `tool=` (a pencil or
+  chalk) at `pressure=`. That is a real line, and the pencil wears. Both surfaces must be
+  sheets of paper.
+- **Where it goes.** `onto=` is a surface or its name (the current one by default). `at={x, y}`
+  puts the study's middle there, in `onto`'s units (by default, its middle). `mirror=true`
+  flips the tracing over, as for a plate, so a print comes out the right way round. The
+  surfaces lie at one pixel pitch, so a line keeps its size in mm.
+- **The surfaces.** The study is read where it rests, and nothing about it changes. `onto` is
+  taken up for the trace if it isn't current, and the surface that was current is taken up
+  again after.
+- **What it returns:** `lines` and `length` (mm) followed, the line's `width` (mm), the coat
+  `moved` and the coat the back `coat` held (mm³), and the `seconds` it took.
+- **Not modelled:** the dent a stylus leaves, the tracing paper's own pencil line, how
+  clearly a line shows through the paper, and what the coat takes off the stick. The numbers
+  and their sources: notes/research/tracing.md.
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

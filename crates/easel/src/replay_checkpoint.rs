@@ -945,7 +945,9 @@ print(counter,rand(),drying(300,300))
                 for name in ["v", "c"] {
                     assert_eq!(s.held_stick(name).unwrap(), plain.held_stick(name).unwrap());
                 }
-                assert_eq!(s.held_stick("c").unwrap().0.lift, paint::charcoal::COMPRESSED_LIFT);
+                // (a new painting's, with the water-bridge switch: compressed is
+                // taken 0.623, pastel_lift.py §5, not the 0.48 painted before it)
+                assert!((s.held_stick("c").unwrap().0.lift - 0.623).abs() < 1e-3, "{}", s.held_stick("c").unwrap().0.lift);
                 assert_eq!(s.program("charcoal"), source);
             }
         }

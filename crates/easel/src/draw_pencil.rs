@@ -877,7 +877,9 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     // (the charcoal switch's `charcoal()`: a stick of the same kind)
     if st.borrow().tubes.charcoal {
         let km = st.borrow().tubes.pastel_km_mix && st.borrow().tubes.drawing_optics;
-        install_charcoal(lua, meta.clone(), km)?;
+        // (and with the water-bridge switch, its lift from the bridge held to the summits)
+        let bridge = if st.borrow().tubes.water_bridge { paint::adhesion::Bridge::Asperity } else { paint::adhesion::Bridge::Smooth };
+        install_charcoal(lua, meta.clone(), km, bridge)?;
     }
     // p:side(pts, {force=, pressure=, speed=, roll=}): the stick laid nearly
     // flat across the stroke, a piece `length` mm long (p:snap breaks one off)
@@ -1272,7 +1274,7 @@ const CHARCOAL_KEYS: &[&str] = &["kind", "diameter", "length"];
 /// stick's methods and the pencil's, and the finger, the eraser, a puff and
 /// fixative work on it as on pastel. Vine lifts readily; compressed is
 /// darker and lays fine particles the eraser takes less readily.
-fn install_charcoal(lua: &Lua, meta: Table, km: bool) -> Result<()> {
+fn install_charcoal(lua: &Lua, meta: Table, km: bool, bridge: paint::adhesion::Bridge) -> Result<()> {
     lua.globals().set("charcoal", lua.create_function(move |lua, a: Value| {
         let o = match a {
             Value::Nil => None,
@@ -1293,9 +1295,10 @@ fn install_charcoal(lua: &Lua, meta: Table, km: bool) -> Result<()> {
             return err("charcoal: diameter is the stick's width in mm, a number");
         }
         let stick = match kind.as_str() {
-            // (Winsor & Newton's medium willow, Ø8; General's ¼-inch square)
-            "vine" | "willow" => paint::pastel::Stick::vine(dia.unwrap_or(8.0).clamp(2.0, 16.0)),
-            "compressed" => paint::pastel::Stick::compressed(dia.unwrap_or(6.35).clamp(3.0, 15.0)),
+            // (Winsor & Newton's medium willow, Ø8; General's ¼-inch square; each
+            // as readily lifted as the water bridge makes it: paint's `charcoal::vine_lift`)
+            "vine" | "willow" => paint::pastel::Stick { lift: paint::charcoal::vine_lift(bridge), ..paint::pastel::Stick::vine(dia.unwrap_or(8.0).clamp(2.0, 16.0)) },
+            "compressed" => paint::pastel::Stick { lift: paint::charcoal::compressed_lift(bridge), ..paint::pastel::Stick::compressed(dia.unwrap_or(6.35).clamp(3.0, 15.0)) },
             k => return err(format!("charcoal: kind {k:?}: vine (willow: a charred twig, loose and light) or compressed (charcoal pressed with a binder: darker, finer)")),
         };
         let p = lua.create_table()?;
@@ -1620,6 +1623,44 @@ mod tests {
             std::fs::remove_file(path).unwrap();
             assert_eq!(restored.st.borrow().tubes.pastel_lift, enabled);
             assert_eq!(restored.canvas().unwrap().pastel_lift(), enabled);
+        }
+    }
+
+    /// The water-bridge switch (`WATER_BRIDGE_MARK`, paint's `adhesion::Bridge`): a new
+    /// painting's charcoal is as readily lifted as the bridge held to the summits makes it,
+    /// vine 0.960 and compressed 0.623 (pastel_lift.py §5), and with the pastel lift switch a
+    /// white pastel 0.763. A log with charcoal but not the line keeps 0.85 and 0.48, and
+    /// with the pastel lift switch 0.608. Either switch alone, both and neither; the log
+    /// and a save keep it.
+    #[test]
+    fn a_new_paintings_water_bridge_is_held_to_the_summits() {
+        use crate::session::{PASTEL_LIFT_MARK, WATER_BRIDGE_MARK, box_for};
+        assert!(box_for(None).unwrap().water_bridge);
+        for (bridge, lift) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mark = |on: bool, m: &str| if on { format!("{m}\n") } else { String::new() };
+            let head = format!("--@ engine 9\n--@ drawing-optics\n--@ paper\n--@ charcoal\n{}{}", mark(lift, PASTEL_LIFT_MARK), mark(bridge, WATER_BRIDGE_MARK));
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!((tubes.water_bridge, tubes.pastel_lift), (bridge, lift));
+            let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            let out = run(&mut s, r#"v = charcoal() k = charcoal("compressed") p = pastel(pile{{"lead white", 1}}) print(v.lift, k.lift, p.lift)"#);
+            let got: Vec<&str> = out.split_whitespace().collect();
+            let num = |i: usize| got[i].parse::<f32>().unwrap();
+            let (vine, compressed) = if bridge { (0.960, 0.623) } else { (paint::charcoal::VINE_LIFT, paint::charcoal::COMPRESSED_LIFT) };
+            assert!((num(0) - vine).abs() < 0.001 && (num(1) - compressed).abs() < 0.001, "{out}");
+            match (lift, bridge) {
+                (false, _) => assert_eq!(got[2], "nil", "{out}"),
+                (true, false) => assert!((num(2) - 0.608).abs() < 0.003, "{out}"),
+                (true, true) => assert!((num(2) - 0.763).abs() < 0.003, "{out}"),
+            }
+            let program = s.program("bridge");
+            assert_eq!(program.lines().any(|l| l == WATER_BRIDGE_MARK), bridge);
+            assert_eq!(box_for(Some(&program)).unwrap().water_bridge, bridge);
+            let path = std::env::temp_dir().join(format!("easel-water-bridge-{}-{bridge}-{lift}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!((restored.st.borrow().tubes.water_bridge, restored.st.borrow().tubes.pastel_lift), (bridge, lift));
         }
     }
 

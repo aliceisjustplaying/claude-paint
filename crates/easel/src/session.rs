@@ -176,6 +176,14 @@ pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
 /// as readily lifted as it was (`paint::Canvas::with_pastel_lift`). A new painting has
 /// it; a log without it replays as it was painted, every pastel at 0.55.
 pub const PASTEL_LIFT_MARK: &str = "--@ pastel-lift";
+/// The water-bridge switch, in the head of a session file: the film of water that holds
+/// a particle to the paper is held to the summits that touch, about 19 nN, not taken at a
+/// smooth 0.1 µm asperity, 90 nN (paint's `adhesion::Bridge::Asperity`, notes/research/
+/// pastel_lift.md §5). The kneaded eraser takes vine charcoal 0.96 a press rather than
+/// 0.85 and compressed 0.62 rather than 0.48, and with the pastel lift switch a pastel's
+/// whiting 0.76 rather than 0.61. A new painting has it; a log without it replays as it
+/// was painted.
+pub const WATER_BRIDGE_MARK: &str = "--@ water-bridge";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
 /// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
@@ -968,6 +976,9 @@ impl Session {
         if self.st.borrow().tubes.pastel_lift {
             let _ = writeln!(s, "{PASTEL_LIFT_MARK}");
         }
+        if self.st.borrow().tubes.water_bridge {
+            let _ = writeln!(s, "{WATER_BRIDGE_MARK}");
+        }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1732,7 +1743,8 @@ fn box_list() -> String {
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise for sharpening a pastel
 /// pencil (`PASTEL_SHARPEN_MARK`), their lakes' dry colors (`DRY_LAKES_MARK`), a
 /// gritted ground on paper (`GRIT_MARK`) and a stick's hatching over an area
-/// (`PASTEL_AREA_STROKES_MARK`), and a pastel's eraser lift (`PASTEL_LIFT_MARK`). New paintings are of
+/// (`PASTEL_AREA_STROKES_MARK`), a pastel's eraser lift (`PASTEL_LIFT_MARK`) and the water bridge the eraser pulls
+/// against (`WATER_BRIDGE_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`). The drain and oils switches (`DRAIN_MARK`,
 /// `OILS_MARK`): a new one's on, an existing one's its log's.
@@ -1768,6 +1780,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.wet_pastel = true;
         b.pastel_km_mix = true;
         b.pastel_lift = true;
+        b.water_bridge = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1861,6 +1874,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.pastel_km_mix = head(PASTEL_KM_MARK);
     b.pastel_lift = head(PASTEL_LIFT_MARK);
+    b.water_bridge = head(WATER_BRIDGE_MARK);
     Ok(b)
 }
 

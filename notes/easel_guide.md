@@ -732,11 +732,12 @@ feel(x, y)                     -- what a fingertip feels there
   so an erased passage takes pastel again. How readily it lifts a stick's
   pastel comes from its particles: the eraser pulls a particle off the
   fibre if it pulls harder than the fibre holds it, and in the studio's
-  air a film of water at each contact holds it too. Whiting (a tint's
-  chalk) is taken about 0.61 a press; dense, high-index pigments
-  (vermilion, the iron reds) a little more, carbon blacks and ultramarine
-  a little less; vine charcoal, coarser, more than any pastel. Pastel a
-  finger, a brush or a puff moves keeps its lift where it is laid.
+  air a film of water at each contact holds it too, held to the tiny
+  summits where particle and fibre touch. Whiting (a tint's chalk) is
+  taken about 0.76 a press; dense, high-index pigments (vermilion, the
+  iron reds) a little more, carbon blacks and ultramarine a little less;
+  vine charcoal, coarser, more than any pastel. Pastel a finger, a brush
+  or a puff moves keeps its lift where it is laid.
 - **The finger** picks up loose pastel and lays it down along its path as fine
   grains pressed into the pores: colors drag into each other and the passage
   covers more for its thickness. It leaves fixed pastel where it is.
@@ -955,7 +956,10 @@ begun before the lakes' dry colors came (its head has no `--@ dry-lakes`)
 replays its lake sticks and paper tones, and those of the pigments whose
 index was corrected, in the colors it was painted with. One begun before
 the eraser's lift came from adhesion (no `--@ pastel-lift`) replays every
-pastel at the lift it was painted with (0.55, moved pastel too). The numbers (how hard a stick is, how fast it wears, what dry pigment
+pastel at the lift it was painted with (0.55, moved pastel too); one begun
+before the water bridge was held to the summits that touch (no
+`--@ water-bridge`) replays it with the bridge it was painted with
+(whiting 0.61). The numbers (how hard a stick is, how fast it wears, what dry pigment
 looks like) are estimates, not measurements (notes/pastel.md); the lakes'
 dry colors are fitted to measured powders
 (notes/research/dry_pigment_optics.md §6), and the eraser's lift is derived
@@ -974,14 +978,15 @@ v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v
 ```
 
 - **Vine** is soft and black, its splinters lying loose on the tooth: the
-  kneaded eraser takes it a little more readily than graphite, a finger
+  kneaded eraser takes nearly all of what it reaches (0.96 a press), more
+  readily than graphite, a finger
   smears it far, a dry brush or a puff lifts it. The stick is mostly pores,
   so a stroke lays little: it reads grey where the line is broken and the
   paper shows. It is for laying in and correcting.
 - **Compressed** is darker (half its carbon is fine soot packed with gum,
   so its facets reflect less), covers far more per stroke, and lays finer
-  particles, which hold to the fibres about as hard as the eraser pulls:
-  the eraser lightens it and leaves a stain. Its gum binds nothing once
+  particles, which hold to the fibres nearly as hard as the eraser pulls:
+  the eraser lightens it and leaves a stain (0.62 a press). Its gum binds nothing once
   dry (at the studio's 50 % humidity), so the finger and a puff move it as
   they move vine.
 - Charcoal is matte: no graphite sheen, and no veil of reflected light over
@@ -1012,7 +1017,10 @@ replays its mixing as it was painted, averaging the colors
 
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it
-was painted and has no `charcoal`. Its color, how much a stroke covers and
+was painted and has no `charcoal`. One begun before the water bridge was
+held to the summits that touch (its head has `--@ charcoal` but no
+`--@ water-bridge`) replays the eraser on its charcoal as it was painted
+(vine 0.85 a press, compressed 0.48). Its color, how much a stroke covers and
 how the eraser takes it come from carbon's optics, the stick's porosity
 and the particles' adhesion; vine's hardness is wood charcoal's measured
 one; compressed's hardness and both wear rates are estimates

@@ -5,7 +5,9 @@ How readily one press of a kneaded eraser takes a pastel stick's deposit: the ce
 stick laid at `PASTEL_LIFT` = 0.55, a number derived from nothing. Charcoal's lifts (#321)
 came from adhesion (charcoal.md §4). This note puts pastel on the same law.
 
-Switch: `--@ pastel-lift` (every new painting). A log without it replays at 0.55.
+Switch: `--@ pastel-lift` (every new painting). A log without it replays at 0.55. The
+water bridge in the law is held to the summits that touch with a second switch,
+`--@ water-bridge` (§7), which moves charcoal with pastel.
 Code: `crates/paint/src/adhesion.rs` (the law), `Palette::pastel_lift` (a stick),
 `pastel::Carried` (moved pastel). Numbers: `uv run notes/research/pastel_lift.py`, written
 separately from the Rust so that each checks the other.
@@ -131,7 +133,8 @@ coarser than whiting's fines.
   (pastel_brushing.md §1). Measured on rough contacts, then, the bridge adds about
   20–30 nN. The law's 2πγa·2 at a = 0.1 µm adds 90 nN. With a 25 nN bridge instead,
   whiting would lift about 0.75 and vine about 0.95. Pastel and charcoal share this term,
-  so changing it is one revision for both, not a pastel-only change. It isn't made here.
+  so changing it is one revision for both, not a pastel-only change. It is made in §7,
+  behind its own switch.
 
 ## 6. Moved pastel
 
@@ -140,12 +143,99 @@ its lift (`pastel::Carried`, volume-weighted over everything carried). Charcoal 
 did this (estimates-audit-2 C10). Lift belongs to the particles, not the gesture. Without
 the switch, moved pastel is laid at 0.55, as before.
 
+## 7. The water bridge held to the summits that touch (`--@ water-bridge`)
+
+§1 takes the bridge at one smooth 0.1 µm asperity: 4πγa = 90 nN. That is the
+smooth-sphere law, F = 4πγR cos θ, and it holds only where both surfaces are smooth on
+the scale of the meniscus. At 50 % RH the Kelvin diameter is 1.53 nm; a paper fibre and
+a pastel or charcoal particle are rough far above that, so water condenses only between
+the summits that touch. This is the asperity regime (Halsey & Levine 1998; Charlaix &
+Ciccotti 2010). Code: `adhesion::Bridge::Asperity`, `adhesion::bridge_radius`; numbers:
+`pastel_lift.py` §5.
+
+**What measurement says** [M]:
+- *Rough particles, humid air, pull-off far below 4πγR.* Irregular grains of 40–65 µm on
+  a smooth glass slide (Ra 4 nm) at 30–40 % RH: 55–150 nN in all (centrifuge, Nagaashi,
+  Aoki & Nakamura 2021, table 5), against the 10–20 µN that 4πγR gives at their size;
+  glass beads (Ra 24 nm) 560 nN.
+- *Rough particles show little humidity dependence.* Limestone and hydrated alumina
+  particles, particle on particle, 10–90 % RH: no notable change; 5–15 nN in dry air for
+  all five powders (Jones, Pollock, Geldart & Verlinden 2003). Arizona road dust of
+  15–50 µm on solar glass: the force rises with RH on smooth glass but hardly on rough
+  (22–321 nm rms), and it doesn't grow with particle size (Moutinho et al.). AFM tips
+  and silica spheres on glass and silicon: the rise with RH depends on roughness (Jones,
+  Pollock, Cleaver & Hodges 2002). Nanoscale roughness limits meniscus formation at low
+  humidity (Rabinovich et al. 2002). Changes of tip geometry on the sub-10 nm scale
+  change the force–humidity curve completely (Farshchi-Tabrizi et al. 2006).
+- *From a measured roughness spectrum.* Persson & Biele (2021) compute the capillary
+  pull-off of a rough particle on a flat at about 40 % RH from a measured fracture
+  surface's spectrum (granite, self-affine, H 1, extrapolated to the atomic scale): 47 nN,
+  independent of size; 13 and 6 nN for spectra ×2 and ×3 rougher (meteorites).
+
+**The derivation** [D]:
+- *The fibre's summit:* at the bridge's scale a fibre's surface is cellulose fibril
+  aggregates, 15–25 nm across by AFM (18 nm in spruce wood, 23 nm in kraft pulp; Fahlén
+  & Salmén 2003, 2005): a cylinder, a_f = 10 nm (7.5–12.5).
+- *The particle's summit:* 47 nN = 4πγa_p gives a_p = 52 nm for a fracture surface
+  (Persson & Biele). The meteorite spectra give 15 and 7 nm. Jones's limestone, with no
+  notable humidity dependence, wants no larger. Coccolith calcite's faces are smoother
+  (rms 0.45–2.8 nm over 200 nm; JACS 2026), but chalk's carry clay laths 1–4 nm thick
+  (*GCA* 2012). A sawdust char is 7 nm rms over 2 µm. Take a_p = 52 nm
+  (15–100) [D from a proxy surface; no AFM of a whiting or vine particle was found].
+- *The geometry:* a sphere a_p crossing a cylinder a_f. The gap is
+  x²(1/a_p + 1/a_f)/2 + y²/2a_p; water fills it where it is below d_K, at the Laplace
+  pressure 2γ/d_K. The area π d_K/√(c₁c₂) gives 2πγ·2a, with a = [(1/a_p + 1/a_f)/a_p]^(−1/2).
+  For wetted surfaces the bridge is 2πγa(cos θ_p + cos θ_f), §1's form, with a in place of
+  the smooth asperity: **a = 20.9 nm, 18.9 nN** (7.8–30 nN over the ranges).
+- *Humidity:* the bridge is the summits' while d_K is below the fibrils' size. At 2a_f =
+  20 nm the gaps between fibrils fill and one meniscus takes the particle whole: the
+  spherical regime, a jump (Charlaix & Ciccotti). That happens at **94.8 % RH**. Below it
+  the bridge doesn't change with humidity. Above the 0.16 % RH where water first condenses,
+  this matches the plateaus measured on rough contacts.
+
+**Results** (50 % RH):
+
+| | smooth (§4) | held to the summits | over a_p 15–100 nm |
+|---|---|---|---|
+| bridge | 90.5 nN | 18.9 nN | 7.8–30 nN |
+| whiting | 0.608 | **0.763** | 0.742–0.791 |
+| ultramarine | 0.572 | 0.742 | |
+| lead white | 0.599 | 0.758 | |
+| vermilion | 0.690 | 0.804 | |
+| bone black | 0.548 | 0.727 | |
+| vine (R 1.5 µm) | 0.85 | **0.960** | 0.948–0.972 |
+| compressed's fines (R 0.1 µm) | 0.10 | 0.286 | |
+| compressed (f = 0.5) | 0.48 | **0.623** | |
+
+The proposal this answers estimated 25 nN, whiting about 0.75 and vine about 0.95. The
+derivation lands a little below on the bridge and a little above on the lifts, inside its
+own range.
+
+The practitioners' order (vine, then graphite, then compressed; charcoal.md §4) now holds
+by lift alone: vine 0.96, graphite 0.9, compressed 0.62.
+
+**One caveat** [open]. Nagaashi's 10–150 nN, the law's rough hold, was measured in air at
+30–40 % RH, so it may already hold some of the water. Persson & Biele read the measured
+forces as mostly capillary. If they are right, adding any bridge counts some water
+twice, and the lifts would be higher still. The bridge here is the smaller error either
+way.
+
+**The switch.** `--@ water-bridge` (every new painting), not a reuse of `--@ pastel-lift`.
+Charcoal (#321, `--@ charcoal`) may merge first, and its logs must keep 0.85 and 0.48.
+Folding the bridge into `--@ pastel-lift` would keep them only while no painting with
+that line exists: once #331 merged and was painted with, its whiting at 0.61 would
+replay differently. It would also tie charcoal to a pastel switch. The palette carries
+the switch (`Palette::water_bridge`) and a save its header (`water_bridge=1`). The canvas
+needs no engine bit: a stick's lift is set where it is made, and the cells keep it.
+
 ## Estimates left, and why
 
 - The pigments' own size distributions. The engine has one size for all pigments; a
   measured distribution per pigment would change pure-pigment sticks.
-- The fibre asperity radius, 0.1 µm (0.05–0.2). It is the same for charcoal; Nagaashi's
-  effective contact radii are 0.14–0.5 µm.
+- The fibre asperity radius, 0.1 µm (0.05–0.2), without `--@ water-bridge`. It is the same
+  for charcoal; Nagaashi's effective contact radii are 0.14–0.5 µm. With the switch, the
+  particle's summit radius (52 nm, from a granite fracture surface's spectrum as a proxy):
+  an AFM roughness spectrum of a whiting grain, a pigment and a vine splinter would set it.
 - The organics' wetting (permanent alizarin, bitumen).
 - The class split for Tabor–Winterton's ω_e at n 1.85.
 - The lognormal spread of the hold (a decade), the eraser's Hamaker constant (6.5) and
@@ -167,4 +257,37 @@ the switch, moved pastel is laid at 0.55, as before.
   Brogdon-Grantham, "Imaging rough paper to evaluate methods for soot removal",
   *Microscopy Today* 30(1) (2022) 30–33, doi:10.1017/S1551929521001516.
 - Whiting's size distribution: wet_pastel.md §1 (Art-Chimie, Omya, Kenzai specifications).
+- §7, the water bridge:
+  - Nagaashi, Aoki & Nakamura, "Cohesion of regolith: Measurements of meteorite powders",
+    *Icarus* (2021), doi:10.1016/j.icarus.2021.114357, arXiv:2101.11837 (table 5; measured at 30–40 % RH).
+  - Persson & Biele, "On the stability of spinning asteroids", arXiv:2110.15258 (2021):
+    the capillary pull-off of rough "granite" particles, 47/13/6 nN.
+  - Jones, Pollock, Geldart & Verlinden, "Inter-particle forces in cohesive powders
+    studied by AFM: effects of relative humidity, particle size and wall adhesion",
+    *Powder Technol.* 132 (2003) 196–210, doi:10.1016/S0032-5910(03)00072-X (abstract).
+  - Jones, Pollock, Cleaver & Hodges, "Adhesion forces between glass and silicon surfaces
+    in air studied by AFM: effects of relative humidity, particle size, roughness, and
+    surface treatment", *Langmuir* 18 (2002) 8045–8055, doi:10.1021/la0259196.
+  - Moutinho, Jiang, To, Perkins, Muller, Al-Jassim & Simpson, "Adhesion mechanisms on
+    solar glass: effects of relative humidity, surface roughness, and particle shape and
+    size", accepted manuscript (DOE public access, OSTI 1375106),
+    https://www.osti.gov/servlets/purl/1375106.
+  - Rabinovich, Adler, Esayanur, Ata, Singh & Moudgil, "Capillary forces between surfaces
+    with nanoscale roughness", *Adv. Colloid Interface Sci.* 96 (2002) 213–230,
+    doi:10.1016/S0001-8686(01)00082-3 (abstract).
+  - Farshchi-Tabrizi, Kappl, Cheng, Gutmann & Butt, "On the adhesion between fine
+    particles and nanocontacts: an atomic force microscope study", *Langmuir* 22 (2006)
+    2171–2184, doi:10.1021/la052760z (abstract).
+  - Charlaix & Ciccotti, "Capillary condensation in confined media", *Handbook of
+    Nanophysics* (2010), ch. 12 (the asperity, roughness and spherical regimes, after
+    Halsey & Levine 1998).
+  - Fahlén & Salmén 2003 (*J. Mater. Sci.*) and 2005 (*Biomacromolecules* 6:433), fibril
+    aggregates 15–25 nm by AFM, as cited by later papers (the originals weren't reached).
+  - "Spatial relations between coccoliths and their confining membrane during crystal
+    morphogenesis", *J. Am. Chem. Soc.* 148 (2026) 14526 (coccolith calcite rms
+    roughness); "Nano sized clay detected on chalk particle surfaces", *Geochim.
+    Cosmochim. Acta* (2012) (AFM; laths 1–4 nm thick).
+  - Sawdust biochar, AFM Rq 7.1 nm over 1.6–2 µm: "Sawdust-derived biochar and Ag₂O
+    nanoparticles for adsorptive desulfurization…", *J. Nanostructures* (Univ. Kashan),
+    https://jns.kashanu.ac.ir/article_115665.html.
 - estimates-audit-2.md (branch `notes/estimates-audit-2`), engine-wide fault 2.

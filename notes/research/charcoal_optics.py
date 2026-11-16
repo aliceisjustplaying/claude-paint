@@ -281,6 +281,21 @@ if __name__ == "__main__":
     fine_wet = P(1.5 * math.pi * W_ec * 0.1e-6 / (A_pc * 0.1e-6 / (6 * D0 ** 2) + bridge(0.1e-6)), sigma)
     print(f"COMPRESSED_LIFT, the share of fines f = C_FINES {C_FINES}, water on both as for vine: {fine_wet:.2f} f + {vine_lift:.2f} (1 − f) = {fine_wet * C_FINES + vine_lift * (1 - C_FINES):.2f} (bounds {fine_wet:.2f}–{vine_lift:.2f} over f)")
     print(f"  (the same mix dry, estimates-audit-2 C4: {fine_dry * C_FINES + P(Fv / F_rough, sigma) * (1 - C_FINES):.2f}; inconsistent with vine's water term, not used)")
+    # The water bridge held to the summits that touch (the water-bridge
+    # switch; pastel_lift.md §7, pastel_lift.py §5). 4πγa at a smooth 0.1 µm
+    # asperity is the smooth-sphere law; the fibre and the splinter are rough
+    # far above the 1.5 nm Kelvin diameter, so water condenses only where
+    # their summits touch: a splinter's summit a_p (52 nm, Persson & Biele
+    # 2021's fracture-surface spectrum) crossing a fibre's cellulose fibril
+    # aggregate a_f (10 nm radius, Fahlén & Salmén), an elliptical meniscus,
+    # the bridge of a sphere of radius [(1/a_p + 1/a_f)/a_p]^(−1/2). It holds
+    # until the Kelvin diameter passes the fibrils' size, 2a_f.
+    A_P, A_F = 52e-9, 10e-9
+    summit = lambda R, a_p=A_P, a_f=A_F: 1 / math.sqrt((1 / min(R, a_p) + 1 / a_f) / min(R, a_p))
+    print(f"held to the summits: a {summit(1.5e-6) * 1e9:.1f} nm, the bridge {bridge(summit(1.5e-6)) * 1e9:.1f} nN (a_p 15–100 nm: {bridge(summit(1.5e-6, 15e-9)) * 1e9:.1f}–{bridge(summit(1.5e-6, 100e-9)) * 1e9:.1f}); spherical above {math.exp(-2 * gamma * 18.0e-6 / (8.314 * 293.0 * 2 * A_F)) * 100:.1f} % RH")
+    vine_s = P(Fv / (F_rough + bridge(summit(VINE_D / 2 * 1e-6))), sigma)
+    fine_s = P(1.5 * math.pi * W_ec * 0.1e-6 / (A_pc * 0.1e-6 / (6 * D0 ** 2) + bridge(summit(0.1e-6))), sigma)
+    print(f"  vine {vine_s:.3f} (a_p 100–15 nm: {P(Fv / (F_rough + bridge(summit(VINE_D / 2 * 1e-6, 100e-9))), sigma):.3f}–{P(Fv / (F_rough + bridge(summit(VINE_D / 2 * 1e-6, 15e-9))), sigma):.3f}); fines {fine_s:.3f}; compressed {fine_s * C_FINES + vine_s * (1 - C_FINES):.3f}")
     print("pastel (chalk and pigment 1–20 µm, rough, dry): ", f"{P(1.5 * math.pi * W_ec * 0.5e-6 / F_rough, sigma):.2f}–{P(1.5 * math.pi * W_ec * 10e-6 / F_rough, sigma):.2f}", "(the engine's 0.55, an engine-wide question)")
     # Gum arabic's glass transition, pure gum: 62 °C at aw 0.33, 42.6 °C at
     # aw 0.54 (Righetto & Netto 2005, Int. J. Food Prop. 8:337); sticky only

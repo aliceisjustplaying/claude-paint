@@ -389,10 +389,15 @@ pub(crate) fn ks_of(r: f32) -> f32 {
     (1.0 - r) * (1.0 - r) / (2.0 * r)
 }
 
-/// K/S → R∞ (Kubelka–Munk).
+/// K/S → R∞ (Kubelka–Munk), 1 + K/S − √((K/S)² + 2 K/S), written as its
+/// equal 1 / (1 + K/S + √(K/S (K/S + 2))) (the two multiply to 1): the
+/// difference of two near-equal numbers loses all of R∞ in f32 once K/S is
+/// large (a channel a pigment all but absorbs, its K/S raised further by a
+/// fixative's resin: 10⁴–10⁷), and could come out a rounding step below
+/// zero; the sum keeps R∞ to its last bits, in (0, 1] for any K/S ≥ 0.
 #[inline]
 pub(crate) fn r_of(ks: f32) -> f32 {
-    1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
+    1.0 / (1.0 + ks + (ks * (ks + 2.0)).sqrt())
 }
 
 /// Two intimately mixed particle beds by Kubelka–Munk: K and S add by
@@ -518,6 +523,30 @@ pub fn spectral_reflectance(parts: &[(crate::spectral::SpectralPigment, f32, f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R∞ of K/S (`r_of`) is Kubelka–Munk's closed form, worked in f64, to
+    /// f32's precision (2 ulp) over the whole range a pastel cell reaches, a near
+    /// black channel (K/S 5·10³ at R 10⁻⁴) whose K/S a fixative's resin
+    /// raises a thousandfold among it: never below zero, never above one,
+    /// falling as K/S rises, and the inverse of `ks_of`.
+    #[test]
+    fn r_infinity_keeps_its_bits_for_any_absorption() {
+        let mut last = f32::INFINITY;
+        for i in 0..=200_000 {
+            let ks = 1e-6f32 * 10f32.powf(i as f32 * 13.0 / 200_000.0);
+            let r = r_of(ks);
+            let k = f64::from(ks);
+            // (in f64, and as the sum: the difference loses digits there too past K/S 10⁴)
+            let want = 1.0 / (1.0 + k + (k * (k + 2.0)).sqrt());
+            assert!(r > 0.0 && r <= 1.0 && r <= last, "{ks}: {r}");
+            assert!((f64::from(r) - want).abs() <= 4e-7 * want, "{ks}: {r} against {want}");
+            last = r;
+        }
+        assert_eq!(r_of(0.0), 1.0);
+        for r in [1e-4f32, 0.003, 0.05, 0.4, 0.9, 0.9999] {
+            assert!((r_of(ks_of(r)) - r).abs() <= 1e-6 * r.max(0.01), "{r}: {}", r_of(ks_of(r)));
+        }
+    }
 
     /// Ultramarine is deep in oil and pale and bright dry; vermilion barely
     /// changes.

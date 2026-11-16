@@ -169,6 +169,15 @@ pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// it was painted. It rides on the drawing's optics (`DRAWING_OPTICS_MARK`):
 /// without them it does nothing.
 pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
+/// The pastel crumb layer switch, in the head of a session file: a stick's
+/// crumbs lie over the loose pastel they land on as a layer, as its face
+/// deposit does, instead of mixing into it (paint's
+/// `Canvas::with_pastel_crumb_layer`): they settle where the face doesn't
+/// touch, so nothing rubs them in, and a light laid over a loose dark
+/// shows. A new painting has it; a log without it replays as it was
+/// painted. It rides on the pastel K–M switch (`PASTEL_KM_MARK`): without
+/// it it does nothing.
+pub const PASTEL_CRUMB_LAYER_MARK: &str = "--@ pastel-crumb-layer";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
 /// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
@@ -957,6 +966,9 @@ impl Session {
         }
         if self.st.borrow().tubes.pastel_km_mix {
             let _ = writeln!(s, "{PASTEL_KM_MARK}");
+        }
+        if self.st.borrow().tubes.pastel_crumb_layer {
+            let _ = writeln!(s, "{PASTEL_CRUMB_LAYER_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1757,6 +1769,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.charcoal = true;
         b.wet_pastel = true;
         b.pastel_km_mix = true;
+        b.pastel_crumb_layer = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1849,6 +1862,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.charcoal = head(CHARCOAL_MARK);
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.pastel_km_mix = head(PASTEL_KM_MARK);
+    b.pastel_crumb_layer = head(PASTEL_CRUMB_LAYER_MARK);
     Ok(b)
 }
 

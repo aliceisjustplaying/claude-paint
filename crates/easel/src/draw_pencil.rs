@@ -2531,4 +2531,45 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         }
         assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
     }
+
+    /// The pastel crumb layer switch: a new painting's log has it, and a
+    /// light stick laid over loose dark pastel shows lighter than in a log
+    /// with only the K–M line (whose crumbs mix into the dark, as it was
+    /// painted); the log replays bit for bit and a save keeps it.
+    #[test]
+    fn pastel_crumb_layer_comes_with_its_log_head_line() {
+        use crate::session::{PASTEL_CRUMB_LAYER_MARK, PASTEL_KM_MARK, box_for};
+        let older = format!("--@ engine 9\n--@ paper\n--@ drawing-optics\n{PASTEL_KM_MARK}\n");
+        assert!(!box_for(Some(&older)).unwrap().pastel_crumb_layer);
+        assert!(box_for(Some(&format!("{older}{PASTEL_CRUMB_LAYER_MARK}\n"))).unwrap().pastel_crumb_layer);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_CRUMB_LAYER_MARK}\n"))).unwrap().pastel_crumb_layer, "only in the head");
+        assert!(box_for(None).unwrap().pastel_crumb_layer, "a new painting has it");
+        let src = r#"d = pastel(pile{{"bone black", 1}})
+            for k = 1, 3 do d:stroke({{150, 400}, {850, 400}}, {force=2}) end
+            w = pastel(pile{{"lead white", 3}, {"yellow ochre", 1}})
+            for k = 1, 3 do w:stroke({{150, 400}, {850, 400}}, {force=2}) end"#;
+        let painted = |log: Option<&str>| {
+            let mut s = Session::with_box(W, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, src);
+            s
+        };
+        let (old, s) = (painted(Some(&older)), painted(None));
+        assert!(!old.canvas().unwrap().pastel_crumb_layer() && s.canvas().unwrap().pastel_crumb_layer());
+        let lum = |c: &paint::Canvas| c.pixels().iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
+        assert!(lum(&s.canvas().unwrap()) > lum(&old.canvas().unwrap()), "the light shows over the dark");
+        let program = s.program("crumbs");
+        assert!(program.lines().any(|l| l == PASTEL_CRUMB_LAYER_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+        let path = std::env::temp_dir().join(format!("easel-pastel-crumbs-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.pastel_crumb_layer && restored.canvas().unwrap().pastel_crumb_layer());
+        assert_eq!(restored.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+    }
 }

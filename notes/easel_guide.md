@@ -1000,6 +1000,20 @@ painting begun before this came (its head has no `--@ pastel-km-mix`)
 replays its mixing as it was painted, averaging the colors
 (notes/research/pastel_mixing.md).
 
+**A stroke's crumbs lie on top.** Most of what a stick lays comes off as
+crumbs that settle in the hollows under its face, where the face doesn't
+touch them. Nothing rubs them into the pastel already there, so they lie
+over it as a layer, as the stroke's own face deposit does: a light laid
+over loose dark pastel (or over a smudged passage) shows and builds up
+pass by pass, without needing `fix()` first. Only the tools that rub (the
+finger, a dry brush, a knife, a puff, a paste) mix intimately. Over a full
+tooth a stroke still lays less each pass, and a pencil lays little over
+worked pastel (it touches only the paper left above the fill); fixative
+still gives tooth back. A painting begun before this came (its head has no
+`--@ pastel-crumb-layer`) replays as it was painted: its crumbs mix into
+the loose pastel, so a light over a loose dark hardly shows
+(notes/research/pastel_layering.md).
+
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it
 was painted and has no `charcoal`. Its color, how much a stroke covers and

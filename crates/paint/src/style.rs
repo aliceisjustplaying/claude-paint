@@ -235,7 +235,7 @@ impl Style {
                             // (written with the drain and oils switches on to
                             // keep the paint's packing and wax, below;
                             // prepared, they are off)
-                            return cached.with_drain(false).with_oils(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material);
+                            return cached.with_drain(false).with_oils(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_pastel_crumb_layer(self.palette.pastel_crumb_layer).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material);
                         }
                     }
                 }
@@ -267,7 +267,7 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
+        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_pastel_crumb_layer(self.palette.pastel_crumb_layer).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
     }
 
     /// A sheet of paper of this style's width, with its ground layers (if
@@ -275,7 +275,7 @@ impl Style {
     /// whose key describes a linen support: a sheet is laid afresh.
     pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
         let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
-        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
+        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_pastel_crumb_layer(self.palette.pastel_crumb_layer).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
     }
 
     /// This style's ground layers laid on `c`, bottom first.

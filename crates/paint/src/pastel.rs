@@ -794,10 +794,11 @@ impl Canvas {
         let (mut shed, mut thick, mut paste_water, mut slurry, mut keep) = (SHED, PARTICLE_UM, 0.0f32, 0.0f32, 1.0f32);
         // (and with the K–M switch, its particles' scattering as they lie:
         // its face deposit lies over the loose pastel as a layer, its crumbs
-        // mix into it)
+        // mix into it; with the crumb layer switch they lie over it too, as
+        // they settle where the face doesn't touch and nothing rubs them in)
         let s_lay = if self.pastel_km { stick.lying_scatter() } else { 0.0 };
         let grains = Grains { index: n_lay, s: s_lay, layer: s_lay > 0.0, ..Grains::of(stick) };
-        let crumbs = Grains { layer: false, ..grains };
+        let crumbs = Grains { layer: grains.layer && self.pastel_crumb_layer, ..grains };
         for k in 0..=steps {
             if wet_tip {
                 let w = stick.wetness();
@@ -2897,5 +2898,118 @@ mod tests {
             assert!(out[0] > out[1], "over loose {} vs over fixed {}", out[0], out[1]);
         }
     }
-}
 
+    /// A stick's crumbs over loose pastel, with the crumb layer switch
+    /// (`Canvas::with_pastel_crumb_layer`): they settle where the face isn't
+    /// in contact, so they lie over what is there instead of being mixed
+    /// into it.
+    mod crumb_layer {
+        use super::*;
+
+        fn paper(layer: bool) -> Canvas {
+            Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4)).with_drawing_optics(true).with_pastel_km_mix(true).with_pastel_crumb_layer(layer)
+        }
+
+        /// The band's mean luminance (linear Y).
+        fn lum(c: &Canvas) -> f32 {
+            let f = c.window();
+            let (mut s, mut n) = (0.0, 0.0);
+            for (i, p) in c.pixels().iter().enumerate() {
+                let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+                if x > 300.0 && x < 700.0 && y > 490.0 && y < 510.0 {
+                    s += 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+                    n += 1.0;
+                }
+            }
+            s / n
+        }
+
+        /// Three heavy passes of a near-black stick, loose (or worked over
+        /// by the finger).
+        fn dark_ground(layer: bool, smudged: bool) -> Canvas {
+            let mut c = paper(layer);
+            let mut st = Stick::round([0.05, 0.03, 0.02], 0.75, 12.0);
+            line(&mut c, &mut st, 900.0, 2.0, 30.0);
+            for _ in 0..3 {
+                line(&mut c, &mut st, 500.0, 2.0, 30.0);
+            }
+            if smudged {
+                for k in 0..6 {
+                    let y = 470.0 + 12.0 * k as f32;
+                    c.rub(&[(150.0, y), (850.0, y)], 1.0, None, 80.0);
+                }
+            }
+            c
+        }
+
+        /// A light stick laid over loose dark pastel, or over the same
+        /// smudged: a layer of lighter particles over a darker bed can only
+        /// lighten it, pass after pass, and four passes lighten it visibly
+        /// (by more than 0.02 in Y, about 2 L* here, a just-noticeable
+        /// difference). Without the switch the stroke's crumbs, most of what
+        /// it lays (`SHED`), mix into the dark bed by Kubelka–Munk, where a
+        /// little dark swamps a lot of light, so the same strokes barely
+        /// show.
+        #[test]
+        fn a_light_laid_over_loose_dark_pastel_shows() {
+            for smudged in [false, true] {
+                let mut rise = Vec::new();
+                for layer in [true, false] {
+                    let mut c = dark_ground(layer, smudged);
+                    let mut st = Stick::round([0.85, 0.8, 0.75], 0.75, 12.0);
+                    line(&mut c, &mut st, 900.0, 2.0, 30.0);
+                    let y0 = lum(&c);
+                    let mut ys = vec![y0];
+                    for _ in 0..4 {
+                        line(&mut c, &mut st, 500.0, 2.0, 30.0);
+                        ys.push(lum(&c));
+                    }
+                    if layer {
+                        assert!(ys.windows(2).all(|w| w[1] >= w[0] - 1e-4), "smudged {smudged}: never darker {ys:?}");
+                    }
+                    rise.push(ys[4] - y0);
+                }
+                assert!(rise[0] > 0.02, "smudged {smudged}: the light shows {rise:?}");
+                assert!(rise[0] > rise[1] + 0.02, "smudged {smudged}: more than mixed in {rise:?}");
+            }
+        }
+
+        /// On bare paper the crumbs land on nothing: the switch changes no
+        /// pixel (to rounding).
+        #[test]
+        fn the_crumb_layer_changes_nothing_on_bare_paper() {
+            let (mut on, mut off) = (paper(true), paper(false));
+            assert!(on.pastel_crumb_layer() && !off.pastel_crumb_layer());
+            let st = Stick::round([0.7, 0.3, 0.2], 0.75, 12.0);
+            line(&mut on, &mut st.clone(), 500.0, 2.0, 30.0);
+            line(&mut off, &mut st.clone(), 500.0, 2.0, 30.0);
+            let d = on.pixels().iter().zip(off.pixels()).map(|(a, b)| (0..3).map(|q| (a[q] - b[q]).abs()).fold(0.0f32, f32::max)).fold(0.0f32, f32::max);
+            assert!(d < 1e-4, "{d}");
+        }
+
+        /// It rides on the K–M switch: without it, it stays off.
+        #[test]
+        fn the_crumb_layer_needs_the_km_switch() {
+            let c = Canvas::new_window(64, 1.0, [0.55; 3], None).with_paper(Paper::drawing(4)).with_drawing_optics(true).with_pastel_crumb_layer(true);
+            assert!(!c.pastel_crumb_layer());
+        }
+
+        /// Pastel over loose charcoal still comes out greyer than over fixed
+        /// charcoal (charcoal.md §6): a stroke's layer is thin, and the
+        /// charcoal shows through it and between its particles.
+        #[test]
+        fn pastel_over_loose_charcoal_still_muddies() {
+            let mut out = Vec::new();
+            for fixed in [false, true] {
+                let mut c = paper(true);
+                line(&mut c, &mut Stick::vine(6.0), 500.0, 1.5, 40.0);
+                if fixed {
+                    c.fix_pastel(None, 0.15);
+                }
+                line(&mut c, &mut Stick::round([0.75, 0.6, 0.1], 0.8, 12.0), 500.0, 1.5, 40.0);
+                out.push(lum(&c));
+            }
+            assert!(out[0] < out[1], "over loose {} vs over fixed {}", out[0], out[1]);
+        }
+    }
+}

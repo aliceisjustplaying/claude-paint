@@ -255,6 +255,9 @@ pub struct Canvas {
     pub(crate) wet_pastel: bool,
     /// Pastel in the tooth mixes by Kubelka–Munk (`with_pastel_km_mix`).
     pub(crate) pastel_km: bool,
+    /// A stroke's crumbs lie over loose pastel as a layer
+    /// (`with_pastel_crumb_layer`).
+    pub(crate) pastel_crumb_layer: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -346,6 +349,7 @@ impl Canvas {
             drawing_optics: false,
             wet_pastel: false,
             pastel_km: false,
+            pastel_crumb_layer: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -509,6 +513,22 @@ impl Canvas {
 
     pub fn pastel_km_mix(&self) -> bool {
         self.pastel_km
+    }
+
+    /// A stick's crumbs lie over the loose pastel they land on as a layer,
+    /// as its face deposit does (Kubelka's two-layer formula), instead of
+    /// mixing into it intimately. They settle where the face is not in
+    /// contact (`pastel::lay_crumbs_of`'s bed: under the face, clear of
+    /// it), so nothing rubs them into what is there; only a tool that
+    /// rubs (the finger, a brush, a blade) mixes. It rides on the pastel
+    /// K–M switch (`with_pastel_km_mix`): without it it stays off.
+    pub fn with_pastel_crumb_layer(mut self, enabled: bool) -> Self {
+        self.pastel_crumb_layer = enabled && self.pastel_km;
+        self
+    }
+
+    pub fn pastel_crumb_layer(&self) -> bool {
+        self.pastel_crumb_layer
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

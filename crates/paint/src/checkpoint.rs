@@ -241,6 +241,9 @@ const WET_PASTEL_V: u64 = 2;
 const PASTEL_KM: u64 = 1 << 46;
 const PASTEL_KM_MARK: u64 = 0x584d4b50;
 const PASTEL_KM_V: u64 = 1;
+/// A stroke's crumbs lie over loose pastel as a layer
+/// (`Canvas::with_pastel_crumb_layer`): a bit of the engine word, no section.
+const PASTEL_CRUMB_LAYER: u64 = 1 << 51;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -697,7 +700,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.pastel_km { PASTEL_KM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.oils { OILS } else { 0 } | if self.wet_pastel { WET_PASTEL } else { 0 } | if self.pastel_km { PASTEL_KM } else { 0 } | if self.pastel_crumb_layer { PASTEL_CRUMB_LAYER } else { 0 })?;
         if self.wet_pastel {
             put_u64(w, WET_PASTEL_MARK)?;
             put_u64(w, WET_PASTEL_V)?;
@@ -995,7 +998,8 @@ impl Canvas {
             c.oils = word & OILS != 0;
             c.wet_pastel = word & WET_PASTEL != 0;
             c.pastel_km = word & PASTEL_KM != 0;
-            match u32::try_from(word & !(PASTEL_KM | OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            c.pastel_crumb_layer = word & PASTEL_CRUMB_LAYER != 0;
+            match u32::try_from(word & !(PASTEL_CRUMB_LAYER | PASTEL_KM | OILS | WET_PASTEL | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!(c.liquid_film_levels || c.oils) || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
@@ -1038,6 +1042,9 @@ impl Canvas {
                 1 => None,
                 _ => return Err(bad("checkpoint paper sizing is invalid")),
             });
+        }
+        if c.pastel_crumb_layer && !c.pastel_km {
+            return Err(bad("checkpoint pastel crumb layer switch without the pastel mixing switch"));
         }
         if c.pastel_km {
             if !c.drawing_optics || get_u64(r)? != PASTEL_KM_MARK || get_u64(r)? != PASTEL_KM_V {
@@ -2491,6 +2498,39 @@ mod tests {
         off.write_state(&mut b0, "").unwrap();
         assert!(!b0.windows(8).any(|w| w == PASTEL_KM_MARK.to_le_bytes()));
         assert!(!Canvas::read_state(&mut Cursor::new(&b0)).unwrap().0.pastel_km_mix());
+    }
+
+    /// The pastel crumb layer switch: a checkpoint and a spill keep it; a
+    /// canvas without it writes no bit; the bit without the K–M switch is
+    /// refused.
+    #[test]
+    fn a_checkpoint_keeps_the_pastel_crumb_layer() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = crate::tests::drawing_paper(160).with_drawing_optics(true).with_pastel_km_mix(true).with_pastel_crumb_layer(true);
+        assert!(c.pastel_crumb_layer());
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        c.stick_stroke(&mut Stick::round([0.7, 0.6, 0.1], 0.8, 12.0), &[StrokePoint { x: 100.0, y: 400.0, pose, speed: 60.0 }, StrokePoint { x: 900.0, y: 400.0, pose, speed: 60.0 }]);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        assert!(Canvas::read_state(&mut Cursor::new(&b)).unwrap().0.pastel_crumb_layer());
+        let mut packed = Vec::new();
+        let mut spilled = c.pack(&mut packed).unwrap();
+        let mut disk = Vec::new();
+        spilled.spill(&mut disk).unwrap();
+        spilled.unspill(&mut Cursor::new(&disk)).unwrap();
+        assert!(Canvas::unpack(&mut Cursor::new(&packed), spilled).unwrap().pastel_crumb_layer());
+        // (without it: no bit; the bit set on a canvas without the K–M
+        // switch is refused)
+        let off = crate::tests::drawing_paper(160).with_drawing_optics(true);
+        let mut b0 = Vec::new();
+        off.write_state(&mut b0, "").unwrap();
+        assert!(!Canvas::read_state(&mut Cursor::new(&b0)).unwrap().0.pastel_crumb_layer());
+        let word = (off.engine as u64 | DRAWING_OPTICS).to_le_bytes();
+        let at: Vec<usize> = b0.windows(8).enumerate().filter(|(_, w)| *w == word).map(|(i, _)| i).collect();
+        assert_eq!(at.len(), 1, "the engine word");
+        let mut bad = b0.clone();
+        bad[at[0]..at[0] + 8].copy_from_slice(&(off.engine as u64 | DRAWING_OPTICS | PASTEL_CRUMB_LAYER).to_le_bytes());
+        assert!(Canvas::read_state(&mut Cursor::new(&bad)).is_err());
     }
 
     /// Another version of the section, a damaged frame, a canvas cut short, a

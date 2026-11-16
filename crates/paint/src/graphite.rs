@@ -14,7 +14,12 @@
 //!   reflectance `r`; the ground shows between them. It is written into the
 //!   dry picture, so every later layer of paint composites over it by
 //!   Kubelka–Munk (`Pigment::over`): a thin veil lets it show, body color
-//!   hides it. Graphite doesn't take on wet paint.
+//!   hides it. Graphite doesn't take on wet paint. With the pastel veil
+//!   switch neither is seen under the matte first-surface veil (`unveiled`):
+//!   graphite is opaque (its light goes in about 30 nm), so all it sends
+//!   back is its flakes' own surface reflection, which `flake` is; black
+//!   chalk is a bed of clay and carbon crumbs, which returns its R∞
+//!   (notes/research/paper_veil.md).
 //! - **Loose until painted over.** A kneaded eraser lifts it, better from the
 //!   tops than the hollows and never quite all of it; fixative binds it so the
 //!   eraser no longer lifts it; once paint has gone over it, it is sealed in
@@ -315,54 +320,27 @@ impl Cell {
         self.a = a1;
     }
 
-    /// The particle bed at this cell, loose or fixed (pastel and charcoal
-    /// alike: chalk, pigment and carbon particles), as it shows: the share
-    /// of the pixel it covers and its reflectance (`reflectance`'s, its
-    /// water's darkening with it). The picture's first-surface veil
-    /// (`canvas::haze`) isn't over it, with the pastel veil switch
-    /// (`Canvas::with_pastel_veil`): Mie's scattering of each particle
-    /// already holds its surface's reflection, and the bed's R∞ is all it
-    /// returns; a powder has no smooth surface for a second one (charcoal.md
-    /// §2). Graphite's flakes and black chalk (`non_pastel`) keep the veil.
-    /// None where there is none.
-    pub(crate) fn bare_bed(&self) -> Option<(f32, Rgb)> {
-        self.bed(None)
-    }
-
-    /// The bare carbon at this cell (charcoal, loose or fixed: `carbon`),
-    /// `bare_bed`'s rule for carbon alone, as the charcoal switch had it
-    /// before the pastel veil switch (its colors as laid, dry). None where
-    /// there is none.
+    /// The bare carbon at this cell (charcoal, loose or fixed: a bed of
+    /// particles, `carbon`): the share of the pixel it covers and its
+    /// reflectance. The picture's first-surface veil (`canvas::haze`) isn't
+    /// over it: Mie's scattering of each opaque particle already holds its
+    /// facets' reflection, and the bed's R∞ is all it returns (charcoal.md
+    /// §2). None where there is none. (The rule of logs without the pastel
+    /// veil switch; with it, nothing drawn is veiled: `Canvas::unveiled`.)
     pub(crate) fn bare_carbon(&self) -> Option<(f32, Rgb)> {
         if (self.carbon <= 0.0 && self.carbon_bound <= 0.0) || self.a <= 0.0 {
             return None;
         }
-        let Some(_) = self.optics else { return Some((self.a * self.carbon, self.r)) };
-        self.bed(Some((self.carbon_bound, self.carbon)))
-    }
-
-    /// The bed of `bare_bed`, or with `carbon` (its bound and loose shares)
-    /// only that much of it, at its dry colors (`bare_carbon`).
-    fn bed(&self, carbon: Option<(f32, f32)>) -> Option<(f32, Rgb)> {
-        let optics = self.optics?;
-        if self.a <= 0.0 {
-            return None;
-        }
+        let Some(optics) = self.optics else { return Some((self.a * self.carbon, self.r)) };
         let b = 1.0 - (-self.bound / crate::pastel::PARTICLE_UM).exp();
         let l = 1.0 - (-self.loose / crate::pastel::PARTICLE_UM).exp();
         let base = (1.0 - b) * (1.0 - l);
         let total = self.non_pastel * base + b * (1.0 - l) + l;
-        let (cb, cl) = carbon.unwrap_or((1.0, 1.0));
-        let (wb, wl) = (b * (1.0 - l) * cb, l * cl);
+        let (wb, wl) = (b * (1.0 - l) * self.carbon_bound, l * self.carbon);
         if total <= 0.0 || wb + wl <= 0.0 {
             return None;
         }
-        let (r, bound) = if carbon.is_none() && (self.water > 0.0 || self.gum > 0) {
-            (crate::wet_pastel::look(self, self.r), crate::wet_pastel::look(self, optics.bound))
-        } else {
-            (self.r, optics.bound)
-        };
-        Some((self.a * (wb + wl) / total, [0, 1, 2].map(|k| (bound[k] * wb + r[k] * wl) / (wb + wl))))
+        Some((self.a * (wb + wl) / total, [0, 1, 2].map(|k| (optics.bound[k] * wb + self.r[k] * wl) / (wb + wl))))
     }
 
     pub(crate) fn bind(&mut self, wet: f32) {
@@ -985,20 +963,59 @@ impl Canvas {
     }
 
     /// What the first-surface veil (`canvas::haze`, `k` of it) would add
-    /// over the bare carbon at window pixel `i`, per channel, to be taken
-    /// off again: charcoal open to the eye (drawn, not painted over, no
-    /// sheet on it) is a bed of particles, seen as its R∞ (`Cell::bare_carbon`).
-    /// None where there is none (all a painting without charcoal has).
-    /// With the pastel veil switch (`with_pastel_veil`) the same holds for
-    /// every particle bed, pastel and charcoal (`Cell::bare_bed`): one rule.
+    /// over what at window pixel `i` has no film surface of its own, per
+    /// channel, to be taken off again. Without the pastel veil switch that
+    /// is the bare carbon: charcoal open to the eye (drawn, not painted
+    /// over, no sheet on it) is a bed of particles, seen as its R∞
+    /// (`Cell::bare_carbon`); None where there is none (all a painting
+    /// without charcoal has).
+    ///
+    /// With the switch (`with_pastel_veil`), the veil is a film's alone
+    /// (notes/research/paper_veil.md): nothing drawn and not painted over
+    /// is veiled, pastel, charcoal, black chalk or graphite (a particle bed
+    /// returns its R∞, its particles' surfaces in it; graphite is opaque,
+    /// all its reflection its own surface's, and that is what its flakes'
+    /// reflectance is), and nor is the paper where its own surface is open
+    /// (`paper_open`): its tone is the whole sheet's reflectance, its
+    /// fibres' surfaces in it. Exactly k·(1 − p) on bare paper, or on paper
+    /// with only a drawing on it: seen as it is, p.
     pub(crate) fn unveiled(&self, i: usize, k: f32) -> Option<Rgb> {
-        let d = self.drawing.as_ref().filter(|d| d.carbon || self.pastel_veil)?;
+        if self.pastel_veil {
+            if self.sheet_over(i) {
+                return None;
+            }
+            let open = self.paper_open(i);
+            // the drawing here, if not painted over: (coverage, reflectance)
+            let (a, r) = match self.drawing.as_ref().map(|d| &d.cells[i]) {
+                Some(c) if c.a > 0.0 && c.film >= 0.0 && self.film[i] <= c.film + 1e-4 => (c.a, c.reflectance()),
+                _ => (0.0, [0.0; 3]),
+            };
+            if open <= 0.0 && a <= 0.0 {
+                return None;
+            }
+            // the pixel is the drawing's share at r over what is under it
+            // (`cover`): (1 − a)(1 − under) = 1 − a − p + a·r
+            let p = self.px[i];
+            return Some([0, 1, 2].map(|q| k * (open * (1.0 - a - p[q] + a * r[q]).max(0.0) + a * (1.0 - r[q]))));
+        }
+        let d = self.drawing.as_ref().filter(|d| d.carbon)?;
         let c = &d.cells[i];
         if c.film < 0.0 || self.film[i] > c.film + 1e-4 || self.sheet_over(i) {
             return None;
         }
-        let (share, r) = if self.pastel_veil { c.bare_bed()? } else { c.bare_carbon()? };
+        let (share, r) = c.bare_carbon()?;
         Some(r.map(|r| share * k * (1.0 - r)))
+    }
+
+    /// The share of window pixel `i` where the paper's own surface is open,
+    /// with no film surface over it: 1 on a bare sheet, falling to 0 as a
+    /// film of paint (or a ground) fills its pores (`micro_um`'s rule: a
+    /// film thinner than the pores leaves them open). 0 off paper.
+    pub(crate) fn paper_open(&self, i: usize) -> f32 {
+        match (&self.paper, self.micro.get(i)) {
+            (Some(_), Some(&m)) => 1.0 - (self.film[i] * crate::surface::COAT_UM / m.max(1e-3)).min(1.0),
+            _ => 0.0,
+        }
     }
 
     pub(crate) fn drawing_mut(&mut self) -> &mut Drawing {

@@ -381,10 +381,11 @@ impl Canvas {
             return None;
         }
         // (paper is matte: its first-surface veil, as a matte surface's; with
-        // the pastel veil switch, not over the pastel it caught, a bed of
-        // particles: `Cell::bare_bed`)
+        // the pastel veil switch none, neither over the paper, whose tone is
+        // the whole sheet's reflectance, nor over what it caught:
+        // `Canvas::unveiled`)
         if self.pastel_veil {
-            return Some(cover(crate::canvas::haze(s.tone, 0.0), s.a[i], s.r[i]));
+            return Some(cover(s.tone, s.a[i], s.r[i]));
         }
         Some(crate::canvas::haze(cover(s.tone, s.a[i], s.r[i]), 0.0))
     }

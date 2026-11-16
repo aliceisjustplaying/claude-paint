@@ -2822,50 +2822,48 @@ mod tests {
             assert_eq!(c.seen()[i], crate::canvas::haze(c.look_px(i), c.gloss[i]));
         }
 
-        /// With the pastel veil switch every particle bed is seen as charcoal
-        /// is, with no first-surface veil: where pastel covers a cell, pale
-        /// or dark, loose or fixed, the picture takes the veil off its share,
-        /// exactly k·(1 − R) of its area; charcoal is seen as before; paint
-        /// over it brings the veil back. A sheet laid over the picture keeps
-        /// its own paper's veil, but not over the pastel it caught.
+        /// With the pastel veil switch only a film is veiled: a sheet with
+        /// pastel on it, pale or dark, loose or fixed, or charcoal, black
+        /// chalk or graphite, is seen as it is, its pixels exactly; paint
+        /// over the drawing brings the veil back, as a film thick enough to
+        /// fill the paper's pores does over bare paper, the veil growing
+        /// with the film. A sheet laid over the picture has none, over its
+        /// paper or the pastel it caught.
         #[test]
-        fn with_the_switch_no_pastel_is_veiled() {
-            let k = crate::canvas::SURFACE_REFLECTANCE;
-            for (color, fixed) in [([0.1f32, 0.1, 0.1], false), ([0.85, 0.8, 0.7], false), ([0.1, 0.3, 0.6], true)] {
+        fn with_the_switch_only_a_film_is_veiled() {
+            use crate::graphite::Lead;
+            let marks: [&dyn Fn(&mut Canvas); 6] = [
+                &|c| stroke(c, &mut Stick::round([0.1, 0.1, 0.1], 0.8, 8.0), 400.0),
+                &|c| stroke(c, &mut Stick::round([0.85, 0.8, 0.7], 0.8, 8.0), 400.0),
+                &|c| { stroke(c, &mut Stick::round([0.1, 0.3, 0.6], 0.8, 8.0), 400.0); fix(c) },
+                &|c| stroke(c, &mut Stick::vine(8.0), 400.0),
+                &|c| { c.draw(&Lead::chalk(), &crate::graphite::hand_line(&[(200.0, 400.0), (800.0, 400.0)], &[1.0], false, true, 0.0, 5), 0.0, 11); },
+                &|c| { c.draw(&Lead::pencil("4B").unwrap(), &crate::graphite::hand_line(&[(200.0, 400.0), (800.0, 400.0)], &[1.0], false, true, 0.0, 5), 0.0, 11); },
+            ];
+            for mark in marks {
                 let mut c = paper().with_pastel_veil(true);
                 assert!(c.pastel_veil());
-                stroke(&mut c, &mut Stick::round(color, 0.8, 8.0), 400.0);
-                if fixed {
-                    fix(&mut c);
-                }
+                mark(&mut c);
                 let seen = c.seen();
                 let d = c.drawing.as_ref().unwrap();
-                assert!(!d.carbon);
-                let mut n = 0;
-                for i in centre(&c) {
-                    let veiled = crate::canvas::haze(c.px[i], c.gloss[i]);
-                    let Some((share, r)) = d.cells[i].bare_bed() else {
-                        assert_eq!(seen[i], veiled);
-                        continue;
-                    };
-                    n += 1;
-                    for q in 0..3 {
-                        let want = veiled[q] - share * k * (1.0 - c.gloss[i]) * (1.0 - r[q]);
-                        assert!((seen[i][q] - want).abs() < 1e-6 && seen[i][q] < veiled[q], "{i}: {:?} {veiled:?} {share}", seen[i]);
-                        assert!((r[q] - color[q]).abs() < 0.08, "{r:?} {color:?}");
-                    }
-                }
-                assert!(n > 20, "{n} pastel cells");
-                let i = centre(&c).into_iter().find(|&i| c.drawing.as_ref().unwrap().cells[i].bare_bed().is_some()).unwrap();
+                assert!(centre(&c).into_iter().filter(|&i| d.cells[i].a > 0.3).count() > 20, "drawn");
+                let worst = seen.iter().zip(&c.px).map(|(s, p)| (0..3).map(|q| (s[q] - p[q]).abs()).fold(0.0f32, f32::max)).fold(0.0f32, f32::max);
+                assert!(worst < 1e-6, "nothing on the sheet is veiled: {worst}");
+                let i = centre(&c).into_iter().find(|&i| c.drawing.as_ref().unwrap().cells[i].a > 0.3).unwrap();
                 c.film[i] += 1.0;
                 assert_eq!(c.seen()[i], crate::canvas::haze(c.look_px(i), c.gloss[i]), "painted over: the veil is back");
             }
-            // charcoal: the rule it had, the same picture with the switch or without
-            let (mut on, mut off) = (paper().with_pastel_veil(true), paper());
-            stroke(&mut on, &mut Stick::vine(8.0), 400.0);
-            stroke(&mut off, &mut Stick::vine(8.0), 400.0);
-            assert_eq!(on.seen(), off.seen());
-            // a sheet's caught pastel: its paper veiled, the pastel not
+            // a film over bare paper: none while it is thinner than the pores, all of it once it fills them
+            let mut c = paper().with_pastel_veil(true);
+            let (i, m) = (100, c.micro[100]);
+            let veil = |c: &Canvas| crate::canvas::haze(c.px[i], c.gloss[i])[1] - c.seen()[i][1];
+            let full = crate::canvas::haze(c.px[i], c.gloss[i])[1] - c.px[i][1];
+            assert!(full > 0.0 && (veil(&c) - full).abs() < 1e-7, "bare: all of it off");
+            c.film[i] = 0.5 * m / crate::surface::COAT_UM;
+            assert!((veil(&c) - 0.5 * full).abs() < 1e-6, "half the pores filled: half of it");
+            c.film[i] = 1.2 * m / crate::surface::COAT_UM;
+            assert_eq!(c.seen()[i], crate::canvas::haze(c.px[i], c.gloss[i]), "filled: a film's surface");
+            // a sheet laid over the picture, and the pastel it caught
             let mut c = paper().with_pastel_veil(true);
             let f = c.frame();
             let mask = Mask::full(f);
@@ -2874,8 +2872,23 @@ mod tests {
             let sheet = c.sheet.as_ref().unwrap();
             let i = (0..sheet.a.len()).find(|&i| sheet.over[i] && sheet.a[i] > 0.3).expect("the sheet caught pastel");
             let (a, r) = (sheet.a[i], sheet.r[i]);
-            let want = crate::graphite::cover(crate::canvas::haze([0.7; 3], 0.0), a, r);
-            assert_eq!(c.seen()[i], want);
+            assert_eq!(c.seen()[i], crate::graphite::cover([0.7; 3], a, r));
+            // off paper (a linen canvas, its ground a film): the drawing unveiled, the ground veiled
+            let mut c = Canvas::new_window(96, 1.0, [0.8; 3], None).with_size_mm(72.0).with_drawing_optics(true).with_pastel_veil(true);
+            let bare = c.seen()[100];
+            assert_eq!(bare, crate::canvas::haze(c.px[100], c.gloss[100]));
+            c.draw(&Lead::pencil("4B").unwrap(), &crate::graphite::hand_line(&[(200.0, 400.0), (800.0, 400.0)], &[1.0], false, true, 0.0, 5), 0.0, 11);
+            let seen = c.seen();
+            let d = c.drawing.as_ref().unwrap();
+            let k = crate::canvas::SURFACE_REFLECTANCE;
+            for i in centre(&c) {
+                let (a, r) = (d.cells[i].a, d.cells[i].reflectance());
+                let want = crate::canvas::haze(c.px[i], c.gloss[i]);
+                for q in 0..3 {
+                    let w = want[q] - a * k * (1.0 - c.gloss[i]) * (1.0 - r[q]);
+                    assert!((seen[i][q] - w).abs() < 1e-6, "{i}: {:?} {w}", seen[i]);
+                }
+            }
         }
 
         /// What the finger moves of vine is laid again as vine: at vine's

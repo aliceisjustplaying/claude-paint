@@ -170,13 +170,15 @@ pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// without them it does nothing.
 pub const PASTEL_KM_MARK: &str = "--@ pastel-km-mix";
 /// The pastel veil switch, in the head of a session file: no first-surface
-/// veil over pastel, loose or fixed, as there was none over charcoal
+/// veil but a paint film's (paint's `Canvas::with_pastel_veil`). None over
+/// pastel, loose or fixed, as there was none over charcoal
 /// (`CHARCOAL_MARK`): a bed of chalk and pigment particles returns its R∞,
-/// its particles' surface reflection already in it (paint's
-/// `Canvas::with_pastel_veil`). Paint, paper and graphite keep the veil. A
-/// new painting has it; a log without it replays as it was painted. It
-/// rides on the drawing's optics (`DRAWING_OPTICS_MARK`): without them it
-/// does nothing.
+/// its particles' surface reflection already in it. None over black chalk
+/// or graphite, nor over bare paper, whose tone is the whole sheet's
+/// reflectance (notes/research/paper_veil.md). Paint keeps it. A new
+/// painting has it; a log without it replays as it was painted. It rides on
+/// the drawing's optics (`DRAWING_OPTICS_MARK`): without them it does
+/// nothing.
 pub const PASTEL_VEIL_MARK: &str = "--@ pastel-veil";
 /// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
 /// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its

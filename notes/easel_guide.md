@@ -1000,15 +1000,20 @@ painting begun before this came (its head has no `--@ pastel-km-mix`)
 replays its mixing as it was painted, averaging the colors
 (notes/research/pastel_mixing.md).
 
-**No veil over pastel.** A bed of pastel, loose or fixed, has no smooth
-surface to reflect light off the top as paint's has: what it returns is its
-particles' own color, as with charcoal. So pastel shows no veil of
-reflected light, and its darks are deep (a dark pastel about 7–10 L*
-darker than under a veil; a pale one hardly changes). Paint over it brings
-the veil back; the paper between the marks and graphite keep theirs. A
-painting begun before this came (its head has no `--@ pastel-veil`) shows
-its pastel veiled, as it was painted, and its charcoal unveiled
-(notes/research/pastel_surface.md).
+**No veil but paint's.** Only a film of paint has a smooth surface that
+lays a veil of reflected light over its color. A bed of pastel, loose or
+fixed, has none: what it returns is its particles' own color, as with
+charcoal, so its darks are deep (a dark pastel about 7–10 L* darker than
+under a veil; a pale one hardly changes). Nor have black chalk (crumbs of
+clay and carbon) or graphite (its flakes' shine is all the light it sends
+back), nor the paper itself: a sheet's tone is all it reflects, its fibres'
+surfaces in it, so a bare sheet is seen as its tone (a colored sheet 1–5 L*
+darker than under a veil, a white one 0.4). Paint over the drawing brings
+the veil back, and over bare paper it comes as the film fills the paper's
+pores. A painting begun before this came (its head has no `--@ pastel-veil`)
+shows its pastel, paper, graphite and black chalk veiled, as it was painted,
+and its charcoal unveiled (notes/research/pastel_surface.md,
+notes/research/paper_veil.md).
 
 Charcoal is there in a painting begun since it came, with paper (its log's
 head says `--@ charcoal` with `--@ paper`); an older painting replays as it

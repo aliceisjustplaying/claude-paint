@@ -911,9 +911,9 @@ pub struct Palette {
     /// Pastel in the tooth mixes by Kubelka–Munk (`Canvas::with_pastel_km_mix`;
     /// an easel log's `--@ pastel-km-mix`): new paintings.
     pub pastel_km_mix: bool,
-    /// No first-surface veil over a particle bed, pastel or charcoal
-    /// (`Canvas::with_pastel_veil`; an easel log's `--@ pastel-veil`): new
-    /// paintings.
+    /// No first-surface veil but a paint film's: none over pastel, charcoal,
+    /// black chalk, graphite or bare paper (`Canvas::with_pastel_veil`; an
+    /// easel log's `--@ pastel-veil`): new paintings.
     pub pastel_veil: bool,
     /// `body_of` joins a limb to the nearest other limb, and only when it
     /// starts within its own width of it (`Outline::body`): new paintings.

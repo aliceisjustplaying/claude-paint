@@ -255,7 +255,7 @@ pub struct Canvas {
     pub(crate) wet_pastel: bool,
     /// Pastel in the tooth mixes by Kubelka–Munk (`with_pastel_km_mix`).
     pub(crate) pastel_km: bool,
-    /// No first-surface veil over any particle bed (`with_pastel_veil`).
+    /// No first-surface veil but a film's (`with_pastel_veil`).
     pub(crate) pastel_veil: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
@@ -514,13 +514,18 @@ impl Canvas {
         self.pastel_km
     }
 
-    /// No first-surface veil (`haze`) over pastel, loose or fixed: a bed
-    /// of chalk and pigment particles returns what Mie and Kubelka–Munk
-    /// give it, its particles' surface reflection already in it, as
-    /// charcoal's does (`Cell::bare_bed`, `unveiled`). The veil stays over
-    /// paint and paper, over graphite, and comes back where paint covers
-    /// the pastel. It needs the drawing's separate optics
-    /// (`with_drawing_optics`); without them it stays off.
+    /// No first-surface veil (`haze`) but a film's (`unveiled`): none over
+    /// pastel, loose or fixed (a bed of chalk and pigment particles returns
+    /// what Mie and Kubelka–Munk give it, its particles' surface reflection
+    /// already in it, as charcoal's does), nor over black chalk (a bed of
+    /// clay and carbon crumbs) or graphite (opaque: all it reflects is its
+    /// own surface's, its flakes' reflectance), nor over the paper where a
+    /// film doesn't cover its pores (`paper_open`: its tone is the whole
+    /// sheet's reflectance, its fibres' surfaces in it; a size film follows
+    /// the fibres). The veil stays over paint and grounds, and comes back
+    /// where paint covers the drawing (notes/research/paper_veil.md). It
+    /// needs the drawing's separate optics (`with_drawing_optics`); without
+    /// them it stays off.
     pub fn with_pastel_veil(mut self, enabled: bool) -> Self {
         self.pastel_veil = enabled && self.drawing_optics;
         self

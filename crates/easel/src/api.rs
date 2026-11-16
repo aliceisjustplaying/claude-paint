@@ -3717,3 +3717,80 @@ mod paper_presets_tests {
         assert_eq!(tone(&replay), tone(&live));
     }
 }
+
+// The pastel veil switch over bare paper, black chalk and graphite
+// (notes/research/paper_veil.md): tiny canvases.
+#[cfg(test)]
+mod paper_veil_tests {
+    use crate::session::{DRAWING_OPTICS_MARK, PAPER_MARK, PAPER_PRESETS_MARK, PASTEL_VEIL_MARK, Session, box_for};
+
+    fn session(veil_off: bool) -> Session {
+        let head = format!("--@ engine 9\n{PAPER_MARK}\n{PAPER_PRESETS_MARK}\n{DRAWING_OPTICS_MARK}\n{}", if veil_off { format!("{PASTEL_VEIL_MARK}\n") } else { String::new() });
+        Session::replay_with(48, box_for(Some(&head)).unwrap()).unwrap().with_paper(true).unwrap()
+    }
+
+    fn mean(v: &[paint::Rgb]) -> paint::Rgb {
+        let n = v.len() as f32;
+        [0, 1, 2].map(|q| v.iter().map(|p| p[q]).sum::<f32>() / n)
+    }
+
+    fn y_l(p: paint::Rgb) -> (f32, f32) {
+        let y = 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+        (y, if y > 0.008856 { 116.0 * y.cbrt() - 16.0 } else { 903.3 * y })
+    }
+
+    /// Every named sheet, bare: an older log sees its tone under the matte
+    /// veil (k = 0.04 × (1 − 0.05)); with the switch it is seen as its
+    /// tone, the whole sheet's reflectance, exactly. (Prints the numbers
+    /// of paper_veil.md §5.)
+    #[test]
+    fn a_bare_sheet_is_seen_as_its_tone_with_the_switch() {
+        let names: Vec<String> = std::iter::once(", paper={}".to_string()).chain(paint::paper::PRESETS.iter().map(|p| format!(", paper={:?}", p.name))).collect();
+        for name in names {
+            let src = format!("canvas{{size=64, aspect=1, seed=3{name}}}");
+            let (mut old, mut new) = (session(false), session(true));
+            old.run(&src).unwrap();
+            new.run(&src).unwrap();
+            assert!(!old.canvas().unwrap().pastel_veil() && new.canvas().unwrap().pastel_veil());
+            let (o, n) = (old.canvas().unwrap(), new.canvas().unwrap());
+            assert_eq!(o.pixels(), n.pixels(), "{name}: the same sheet");
+            let (so, sn) = (o.seen(), n.seen());
+            let k = 0.04 * (1.0 - 0.05);
+            for ((a, b), p) in so.iter().zip(&sn).zip(o.pixels()) {
+                for q in 0..3 {
+                    assert!((a[q] - (p[q] + k * (1.0 - p[q]))).abs() < 1e-6, "{name}: veiled before");
+                    assert!((b[q] - p[q]).abs() < 1e-6, "{name}: its tone with the switch");
+                }
+            }
+            let ((yo, lo), (yn, ln)) = (y_l(mean(&so)), y_l(mean(&sn)));
+            eprintln!("{:16} Y {yo:.3} -> {yn:.3}  L* {lo:.1} -> {ln:.1}  (dL* {:.1})", if name == ", paper={}" { "drawing paper" } else { &name[8..] }, lo - ln);
+        }
+    }
+
+    /// A swatch of black chalk and of a 4B pencil, hatched over a band of
+    /// the plain sheet: with the switch seen as laid, flakes and paper
+    /// with no veil, darker than an older log by the veil's k·(1 − R).
+    #[test]
+    fn black_chalk_and_graphite_are_seen_without_the_veil_with_the_switch() {
+        for lead in ["chalk()", "pencil(\"4B\")", "pencil(\"HB\")", "pencil(\"2H\")"] {
+            let src = format!("canvas{{size=64, aspect=1, seed=3, paper={{}}}}\nh = {lead}\nfor i = 1, 3 do h:hatch(rect(250, 250, 500, 500), {{pressure=1, spacing=4, angle=0.3 * i}}) end");
+            let (mut old, mut new) = (session(false), session(true));
+            old.run(&src).unwrap();
+            new.run(&src).unwrap();
+            let (o, n) = (old.canvas().unwrap(), new.canvas().unwrap());
+            assert_eq!(o.pixels(), n.pixels(), "{lead}: the same drawing");
+            let (so, sn) = (o.seen(), n.seen());
+            let w = o.window();
+            let band: Vec<usize> = (0..so.len()).filter(|&i| (320.0..680.0).contains(&w.ux(i % w.w)) && (320.0..680.0).contains(&w.uy(i / w.w))).collect();
+            for &i in &band {
+                for q in 0..3 {
+                    assert!((sn[i][q] - o.pixels()[i][q]).abs() < 1e-6, "{lead}: seen as laid");
+                }
+            }
+            let pick = |v: &[paint::Rgb]| mean(&band.iter().map(|&i| v[i]).collect::<Vec<_>>());
+            let ((yo, lo), (yn, ln)) = (y_l(pick(&so)), y_l(pick(&sn)));
+            assert!(yn < yo, "{lead}: darker without the veil");
+            eprintln!("{lead:14} swatch Y {yo:.3} -> {yn:.3}  L* {lo:.1} -> {ln:.1}");
+        }
+    }
+}

@@ -241,7 +241,7 @@ const WET_PASTEL_V: u64 = 2;
 const PASTEL_KM: u64 = 1 << 46;
 const PASTEL_KM_MARK: u64 = 0x584d4b50;
 const PASTEL_KM_V: u64 = 1;
-/// No veil over a particle bed (`Canvas::with_pastel_veil`): a bit of the
+/// No veil but a paint film's (`Canvas::with_pastel_veil`): a bit of the
 /// engine word, no section.
 const PASTEL_VEIL: u64 = 1 << 47;
 

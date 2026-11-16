@@ -278,6 +278,8 @@ pub struct Canvas {
     /// The drain switch (`with_drain`): an absorbent ground drains paint as
     /// its pigment packs (`bristle::ground_drain`).
     pub(crate) drain: bool,
+    /// A strainer's bar holds the sheet beside it up (`with_strainer_edge`).
+    pub(crate) strainer_edge: bool,
     /// A sheet of paper laid over part of the picture (`sheet.rs`).
     pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
@@ -346,6 +348,7 @@ impl Canvas {
             receptive: None,
             soak: None,
             drain: false,
+            strainer_edge: false,
             sheet: None,
         }
     }
@@ -388,6 +391,21 @@ impl Canvas {
     /// The drain switch (`with_drain`).
     pub fn drain(&self) -> bool {
         self.drain
+    }
+
+    /// On a sheet over a strainer, the bar holds the sheet beside it up:
+    /// the give falls from the bar's into the bay's over the few mm the
+    /// plate bends on its foundation (`Paper::give_at`), where before it
+    /// kept the bar's give 2.7 mm into the bay and then dropped, a hard line
+    /// along each bar (`Paper::give_at_unheld`). It does nothing off a
+    /// strainer. A checkpoint keeps it (a bit of the engine word).
+    pub fn with_strainer_edge(mut self, enabled: bool) -> Self {
+        self.strainer_edge = enabled;
+        self
+    }
+
+    pub fn strainer_edge(&self) -> bool {
+        self.strainer_edge
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {
@@ -552,7 +570,8 @@ impl Canvas {
                 let f = &self.f;
                 let px = self.px_mm();
                 let (x, y) = ((i % f.w + f.x0) as f32 + 0.5, (i / f.w + f.y0) as f32 + 0.5);
-                p.give_at(x * px, y * px, f.full_w as f32 * px, f.full_h as f32 * px)
+                let (xm, ym, w, h) = (x * px, y * px, f.full_w as f32 * px, f.full_h as f32 * px);
+                if self.strainer_edge { p.give_at(xm, ym, w, h) } else { p.give_at_unheld(xm, ym, w, h) }
             }
             Some(p) => p.z_mpa / p.caliper_um().max(10.0),
             None => 10.0,

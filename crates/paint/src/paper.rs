@@ -267,6 +267,40 @@ fn drum_sink(beta: f64) -> f64 {
     0.5 - 2.0 / beta * bessel_k1(beta) * (bessel_i0(beta) - 1.0)
 }
 
+/// How much of the bar's pressure a flat facet resting on the bar keeps a
+/// distance `s` mm into the bay, 0..1: the plate (bending stiffness `d`
+/// N·mm, tension `t` N/mm), pinned at the bar's edge (w = w'' = 0), pressed
+/// down through the sheet's and cloth's own give `k` N/mm³ toward the
+/// facet's depth δ: D w'''' − T w'' = k (δ − w), so the pressure k(δ − w)
+/// is kδ·φ(s). Its roots λ, Dλ⁴ − Tλ² + k = 0, are complex for a sheet of
+/// any stiffness on canvas (T² < 4Dk): λ = e^{±iψ/2}/L, L = (D/k)^¼ the
+/// length on that foundation, cos ψ = T/(2√(Dk)), so
+/// φ = e^{−s cos(ψ/2)/L} sin(ψ + s sin(ψ/2)/L) / sin ψ, from 1 at the edge
+/// (Hetényi, Beams on Elastic Foundation, 1946, §§ 10, 17: a beam on a
+/// Winkler foundation under axial tension). Past its first zero the sheet
+/// would pull up off the facet: there the bar holds none of it (0). A
+/// sheet so thin that tension rules (T² ≥ 4Dk) has two real roots and no
+/// zero.
+fn edge_hold(s: f64, d: f64, t: f64, k: f64) -> f64 {
+    let disc = t * t - 4.0 * d * k;
+    if disc < 0.0 {
+        let psi = (t / (2.0 * (d * k).sqrt())).acos();
+        let l = (d / k).sqrt().sqrt();
+        let (al, be) = ((0.5 * psi).cos() / l, (0.5 * psi).sin() / l);
+        if be * s >= std::f64::consts::PI - psi {
+            return 0.0;
+        }
+        (-al * s).exp() * (psi + be * s).sin() / psi.sin()
+    } else {
+        let (hi, lo) = (((t + disc.sqrt()) / (2.0 * d)).sqrt(), ((t - disc.sqrt()) / (2.0 * d)).sqrt());
+        if hi - lo < 1e-9 * hi {
+            // a double root: the limit, (1 + λs/2) e^{−λs}
+            return (1.0 + 0.5 * hi * s) * (-hi * s).exp();
+        }
+        (lo * lo * (-hi * s).exp() - hi * hi * (-lo * s).exp()) / (lo * lo - hi * hi)
+    }
+}
+
 /// The bay's give away from the bars, MPa per µm, for a sheet of bending
 /// stiffness `d_nmm` N·mm on canvas at tension `t_n_per_mm` under a patch
 /// of radius `a_mm`: p over the sink, 2T / (a² h(a/ℓ)) N/mm³.
@@ -495,11 +529,35 @@ impl Paper {
     /// size sets only the whole sheet's sink under the hand (millimeters,
     /// the felt "drum"), which carries the stick down with the surface
     /// round it. Exact for a patch clear of the bars (more than a in from
-    /// one). Nearer, where the facet rests partly on the bar, the mirror's
-    /// continuation: it firms the sheet up to the bar's own give at the
-    /// bar's edge, without a step (a rigid facet held up by the bar can't
-    /// sink into the bay beside it).
+    /// one).
+    ///
+    /// Nearer, the facet rests partly on the bar, and the bar holds the
+    /// sheet beside it up (`edge_hold`): the plate, pinned at the bar's
+    /// edge and pressed by the facet through the sheet's and cloth's own
+    /// give k, bends down into the bay over its length on that foundation,
+    /// (D/k)^¼, about 1.6 mm for the blue wove. That hold is a spring in
+    /// parallel with the drum, k·φ/(1 − φ) of the share φ of the bar's
+    /// pressure the facet keeps a distance s in: the give is the bar's at
+    /// its edge and falls smoothly into the bay's over a few mm (to a
+    /// tenth by about 3 mm). The drum in it is the patch's as close as it
+    /// can come clear of the bar (a in), however much nearer. (Before the
+    /// `--@ strainer-edge` switch, `give_at_unheld`.)
     pub fn give_at(&self, xm: f32, ym: f32, w_mm: f32, h_mm: f32) -> f32 {
+        self.give_drum(xm, ym, w_mm, h_mm, true)
+    }
+
+    /// The give as #319 had it, for logs before the `--@ strainer-edge`
+    /// switch: the mirror formula carried nearer than a patch's radius,
+    /// past where it holds. There it reaches the bar's own give about
+    /// 2.7 mm in from the bar's edge (for the blue wove) and keeps it to
+    /// the edge, and inside that it falls to a fifth of it within half a
+    /// millimeter: a hard line along the bar (notes/research/
+    /// cassatt_papers.md §1).
+    pub fn give_at_unheld(&self, xm: f32, ym: f32, w_mm: f32, h_mm: f32) -> f32 {
+        self.give_drum(xm, ym, w_mm, h_mm, false)
+    }
+
+    fn give_drum(&self, xm: f32, ym: f32, w_mm: f32, h_mm: f32, held: bool) -> f32 {
         let k = self.z_mpa / self.caliper_um().max(10.0);
         let Some(d) = self.drum else { return k };
         // the crossbars divide the longer side
@@ -508,6 +566,19 @@ impl Paper {
         let (l, b) = (d.bend_mm as f64, (d.patch_mm / d.bend_mm) as f64);
         let mirror = |r: f64| if r > 40.0 * l { 0.0 } else { bessel_k0(r / l) };
         let (x0, x1, y0, y1) = (x0 as f64, x1 as f64, y0 as f64, y1 as f64);
+        // the bar's hold on the sheet beside it (N/mm³ as MPa/µm), and the
+        // patch kept clear of the bar
+        let (hold, (x0, x1, y0, y1)) = if held {
+            let (kn, dn, t) = (k as f64 * 1e3, self.bending_nmm() as f64, CANVAS_TENSION_N_PER_MM as f64);
+            let spring = |s: f64| {
+                let phi = edge_hold(s, dn, t, kn);
+                if phi > 0.0 { k as f64 * phi / (1.0 - phi) } else { 0.0 }
+            };
+            let a = d.patch_mm as f64;
+            (spring(x0) + spring(x1) + spring(y0) + spring(y1), (x0.max(a), x1.max(a), y0.max(a), y1.max(a)))
+        } else {
+            (0.0, (x0, x1, y0, y1))
+        };
         let edges = mirror(2.0 * x0) + mirror(2.0 * x1) + mirror(2.0 * y0) + mirror(2.0 * y1);
         let corners = [(x0, y0), (x0, y1), (x1, y0), (x1, y1)].iter().map(|&(p, q)| mirror(2.0 * (p * p + q * q).sqrt())).sum::<f64>();
         let free = drum_sink(b);
@@ -516,7 +587,9 @@ impl Paper {
             return k;
         }
         let drum = d.bay_mpa_per_um as f64 * free / sink;
-        (1.0 / (1.0 / k as f64 + 1.0 / drum)) as f32
+        // (with no hold, the bay's give exactly as before)
+        let plate = if hold > 0.0 { hold + drum } else { drum };
+        (1.0 / (1.0 / k as f64 + 1.0 / plate)) as f32
     }
 
     /// Mean number of fibers over a point: c̄ = βω/δ.
@@ -961,8 +1034,8 @@ mod tests {
         sheets.push(Paper { z_mpa: 500.0, ..Paper::drawing(3) });
         let strainer = Mount::named("strainer").unwrap();
         let bar = STRAINER_BAR_MM;
-        for p in sheets {
-            let k = |q: Paper, x: f32, y: f32| q.give_at(x, y, w, h);
+        for (p, held) in sheets.iter().flat_map(|&p| [(p, false), (p, true)]) {
+            let k = |q: Paper, x: f32, y: f32| if held { q.give_at(x, y, w, h) } else { q.give_at_unheld(x, y, w, h) };
             let mid = (0.5 * w, 0.5 * h);
             let (free, board, canvas) = (k(p, mid.0, mid.1), k(p.mounted(Mount::Board), mid.0, mid.1), k(p.mounted(Mount::Canvas), mid.0, mid.1));
             let s = p.mounted(strainer);
@@ -974,10 +1047,16 @@ mod tests {
                 assert_eq!(k(s, x, y), k(p.mounted(Mount::Canvas), x, y));
             }
             // inward from the bar, never firmer; as firm as over it just
-            // inside its edge, then softer at every step over the next few
-            // bending lengths past a patch's radius
+            // inside its edge (unheld, exactly; held by the bar, within its
+            // first few percent), then softer at every step over the next
+            // few bending lengths past a patch's radius
             let (l, a) = (s.drum.unwrap().bend_mm, s.drum.unwrap().patch_mm);
-            assert_eq!(k(s, bar + 0.1, mid.1), k(p.mounted(Mount::Canvas), mid.0, mid.1));
+            let firm = k(p.mounted(Mount::Canvas), mid.0, mid.1);
+            if held {
+                assert!(k(s, bar + 0.1, mid.1) < firm && k(s, bar + 0.1, mid.1) > 0.9 * firm, "{p:?}");
+            } else {
+                assert_eq!(k(s, bar + 0.1, mid.1), firm);
+            }
             let mut last = k(s, bar, mid.1);
             for f in [0.0, 0.5, 1.0, 1.5, 2.0, 3.0] {
                 let now = k(s, bar + a + f * l, mid.1);
@@ -987,7 +1066,7 @@ mod tests {
             // far in, the bay's own give, the same in a small bay
             let far = k(s, bar + a + 12.0 * l, mid.1);
             assert!((far / k(s, mid.0, mid.1) - 1.0).abs() < 1e-4, "{far}");
-            assert_eq!(k(s, mid.0, mid.1), s.give_at(150.0, 150.0, 300.0, 300.0));
+            assert_eq!(k(s, mid.0, mid.1), if held { s.give_at(150.0, 150.0, 300.0, 300.0) } else { s.give_at_unheld(150.0, 150.0, 300.0, 300.0) });
             // the drum is the bay's: no unmounted sheet has one
             assert_eq!(k(p, bar, mid.1), free);
             // a crossbar across the longer side is a bar
@@ -998,6 +1077,63 @@ mod tests {
         }
         assert_eq!(Mount::named("strainer"), Some(Mount::Strainer { bar_mm: STRAINER_BAR_MM, cross: 0 }));
         assert_eq!(Mount::named("stretcher"), None);
+    }
+
+    /// Across a strainer bar's inner edge the give falls from the bar's to
+    /// the bay's without a step: never faster than the plate bends on its
+    /// foundation, k/(D/k)^¼ per mm (the bar's hold φ falls at most 0.43/mm
+    /// against that bound's 0.63/mm for this sheet), and never firmer
+    /// further in. The hold is the plate's own solution: φ against an
+    /// independent finite-difference solve of D w'''' − T w'' = k(δ − w),
+    /// pinned at the bar (notes/research/strainer_edge.py, h = 0.02 mm).
+    /// #319's give, carried past where its mirrors hold, keeps the bar's
+    /// give 2.7 mm into the bay and then drops: it fails the same walk.
+    #[test]
+    fn the_give_falls_from_a_bar_without_a_step() {
+        // the bonnet's sheet: blue wove on a 540 × 675 mm strainer
+        let (w, h) = (540.0, 675.0);
+        let p = Paper::preset("blue wove").unwrap().paper(1).mounted(Mount::named("strainer").unwrap());
+        let bar = STRAINER_BAR_MM;
+        let k = p.give_at(270.0, 0.5 * bar, w, h);
+        let lf = (p.bending_nmm() as f64 / (k as f64 * 1e3)).powf(0.25);
+        let walk = |give: &dyn Fn(f32) -> f32| -> Result<(), String> {
+            let ds = 0.01f32;
+            let mut last = k;
+            for i in 1..=3000 {
+                let now = give(bar + i as f32 * ds);
+                if now > last {
+                    return Err(format!("firmer at {} mm in: {now} after {last}", i as f32 * ds));
+                }
+                if (last - now) as f64 > k as f64 * ds as f64 / lf {
+                    return Err(format!("a step at {} mm in: {last} to {now} over {ds} mm", i as f32 * ds));
+                }
+                last = now;
+            }
+            Ok(())
+        };
+        // down the middle of the top bar's edge, and along the left bar's
+        walk(&|y| p.give_at(270.0, y, w, h)).unwrap();
+        walk(&|x| p.give_at(x, 330.0, w, h)).unwrap();
+        assert!(walk(&|y| p.give_at_unheld(270.0, y, w, h)).is_err());
+        // the bar's hold against the plate's finite-difference solution
+        let (kn, d, t) = (k as f64 * 1e3, p.bending_nmm() as f64, CANVAS_TENSION_N_PER_MM as f64);
+        for (s, fd) in [(0.1, 0.957), (0.5, 0.787), (1.0, 0.589), (1.5, 0.418), (2.0, 0.276), (3.0, 0.081)] {
+            assert!((edge_hold(s, d, t, kn) - fd).abs() < 0.005, "φ({s}) = {} vs {fd}", edge_hold(s, d, t, kn));
+        }
+        // it lets go at its first zero (3.74 mm here) and holds none further in
+        assert!(edge_hold(3.7, d, t, kn) > 0.0 && edge_hold(3.8, d, t, kn) == 0.0 && edge_hold(12.0, d, t, kn) == 0.0);
+        // past it and a patch's radius, the bay's give exactly as before
+        for y in [bar + 7.0, bar + 10.0, 200.0, 337.5] {
+            assert_eq!(p.give_at(270.0, y, w, h).to_bits(), p.give_at_unheld(270.0, y, w, h).to_bits(), "{y}");
+        }
+        // a sheet so thin tension rules: two real roots, and their double
+        // root's limit
+        let thin = |s: f64| edge_hold(s, 1e-3, 0.13, 0.5);
+        assert!(thin(0.0) == 1.0 && thin(0.3) > thin(0.6) && thin(5.0) > 0.0);
+        let dd = 0.13 * 0.13 / (4.0 * 0.5);
+        for s in [0.1, 1.0, 3.0] {
+            assert!((edge_hold(s, dd, 0.13, 0.5) - edge_hold(s, dd * (1.0 - 1e-6), 0.13, 0.5)).abs() < 1e-4, "{s}");
+        }
     }
 
     /// The mounts' numbers, from the measured inputs (notes/research/

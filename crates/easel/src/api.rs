@@ -3450,4 +3450,53 @@ mod paper_presets_tests {
         assert_eq!(sheet(&replay), sheet(&live));
         assert_eq!(tone(&replay), tone(&live));
     }
+
+    /// The strainer-edge switch: a new painting's log has it, and pastel
+    /// drawn across a strainer bar's inner edge meets the bar's hold on the
+    /// sheet beside it (a log without it meets #319's give, firm 2.7 mm
+    /// into the bay); it changes nothing off a strainer, is read from the
+    /// head only, and replays and saves bit for bit.
+    #[test]
+    fn the_strainer_edge_comes_with_its_log_head_line() {
+        use crate::session::STRAINER_EDGE_MARK;
+        // a new painting's head without the line
+        let fresh = Session::replay_with(96, box_for(None).unwrap()).unwrap().with_paper(true).unwrap().program("t");
+        let older: String = fresh.lines().take_while(|l| !l.starts_with(MARK)).filter(|l| *l != STRAINER_EDGE_MARK).map(|l| format!("{l}\n")).collect();
+        assert!(older.contains(PAPER_PRESETS_MARK) && fresh.lines().any(|l| l == STRAINER_EDGE_MARK), "{fresh}");
+        assert!(!box_for(Some(&older)).unwrap().strainer_edge);
+        assert!(box_for(Some(&format!("{older}{STRAINER_EDGE_MARK}\n"))).unwrap().strainer_edge);
+        assert!(!box_for(Some(&format!("{older}{MARK} 1\n{STRAINER_EDGE_MARK}\n"))).unwrap().strainer_edge, "only in the head");
+        assert!(box_for(None).unwrap().strainer_edge, "a new painting has it");
+        // strokes across the top bar's inner edge (50 mm down a 200 mm sheet)
+        let src = |mount: &str| {
+            format!(
+                r#"canvas{{size=200, aspect=1, seed=3, paper={{preset="blue wove", mount="{mount}"}}}}
+                p = pastel(pile{{{{"lead white", 1}}}})
+                for x = 300, 700, 50 do p:stroke({{{{x, 150}}, {{x, 400}}}}, {{force=2}}) end"#
+            )
+        };
+        let painted = |log: Option<&str>, mount: &str| {
+            let mut s = Session::replay_with(96, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            s.run(&src(mount)).unwrap();
+            s
+        };
+        let (old, new) = (painted(Some(&older), "strainer"), painted(None, "strainer"));
+        assert!(!old.canvas().unwrap().strainer_edge() && new.canvas().unwrap().strainer_edge());
+        assert_ne!(old.canvas().unwrap().pixels(), new.canvas().unwrap().pixels());
+        let (old, new) = (painted(Some(&older), "board"), painted(None, "board"));
+        assert_eq!(old.canvas().unwrap().pixels(), new.canvas().unwrap().pixels(), "off a strainer, nothing");
+        let s = painted(None, "strainer");
+        let log = s.program("t");
+        assert!(log.lines().any(|l| l == STRAINER_EDGE_MARK), "{log}");
+        for (log, live) in [(log.clone(), &s), (older.clone(), &painted(Some(&older), "strainer"))] {
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_paper(true).unwrap();
+            replay.run(&src("strainer")).unwrap();
+            assert_eq!(replay.canvas().unwrap().pixels(), live.canvas().unwrap().pixels());
+        }
+        let path = std::env::temp_dir().join(format!("easel-strainer-edge-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &log, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.strainer_edge && restored.canvas().unwrap().strainer_edge());
+    }
 }

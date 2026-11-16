@@ -142,7 +142,10 @@ the sheet (`stiffness` stays the sheet's own; the mount's give adds to it):
   the stick, softer still
 - `"strainer"`: on canvas tacked to a wooden strainer. Over the bars (the
   outer 50 mm of the picture) it is as firm as on canvas. Between them the
-  sheet and canvas drum: they soften over the first centimeter or so in
+  sheet and canvas drum: a stick resting partly on a bar is held up beside
+  it, so the sheet goes from the bar's firmness to the bay's over about
+  3 mm, with no step (pastel drawn across a bar lays a little more over it
+  and fades into the bay); they soften over the first centimeter or so in
   from a bar, then give the same over the rest of the bay, whatever its
   size (the whole bay sinks millimeters under the hand, but that carries
   the stick and the surface round it down together).
@@ -163,6 +166,10 @@ be the "bite" painters describe.
 Named sheets and mounts are there in a painting begun since they came (its
 log's head says `--@ paper-presets`); in an older painting `preset=` and
 `mount=` are unknown keys and a sheet's name alone is refused.
+A painting on a strainer begun before the bar's hold came (its head has no
+`--@ strainer-edge`) keeps the bar's firmness about 3 mm into the bay and
+then drops, which draws a hard line along each bar's inner edge; it replays
+as it was painted (notes/research/cassatt_papers.md §1, "The bar's edge").
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)

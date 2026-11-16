@@ -68,6 +68,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         let st = st.clone();
         g.set("ink", lua.create_function(move |_, o: Option<Table>| make_ink(&st, o))?)?;
     }
+    let press_st = st.clone();
     g.set("tarlatan", lua.create_function(move |lua, o: Option<Table>| {
         if let Some(o) = &o {
             check_keys(o, &["stiff", "width", "seed"], "tarlatan")?;
@@ -93,6 +94,8 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         })?;
         Ok(TarlatanU { rag, st: st.clone() })
     })?)?;
+    // press{}: the press (press.rs)
+    crate::press::install(lua, press_st)?;
     Ok(())
 }
 

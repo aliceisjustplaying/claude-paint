@@ -40,7 +40,7 @@ fn rt(e: impl std::fmt::Display) -> mlua::Error {
 }
 
 /// Run `f` with the surface `v` names current, then make the one current before current again.
-fn on<R>(st: &S, v: &Value, verb: &str, f: impl FnOnce(&S) -> Result<R>) -> Result<R> {
+pub(crate) fn on<R>(st: &S, v: &Value, verb: &str, f: impl FnOnce(&S) -> Result<R>) -> Result<R> {
     let name = crate::surfaces::name_of(v, verb)?;
     let (was, to) = {
         let s = st.borrow();

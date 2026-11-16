@@ -230,6 +230,8 @@ The tests are `paper::tests::mounts_order_the_give`, `paper::tests::the_mounts_a
 | cream laid | lead white 1, yellow ochre 0.15, raw sienna 0.02, green earth 3 | #e5dac3 | 0.9 |
 | japan paper | lead white 1, yellow ochre 0.1, raw sienna 0.1, viridian 0.02 | #eae1ca | 0.6 |
 
+The fit is to the dry color itself, and the photograph is the whole sheet's appearance, its fibres' surface reflection in it: a painting with the pastel veil switch shows a bare sheet as exactly this color, an older log under the matte veil, 0.4–4.6 L* lighter (paper_veil.md).
+
 The tan sits 5 ΔE lighter and less yellow than the photograph. The dry earths can't reach that chroma at that lightness, so it is the closest the tubes give.
 
 ## Gaps

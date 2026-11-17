@@ -1733,9 +1733,11 @@ use("painting")
   - **Under the contact laws** (`--@ intaglio-contact`): the palm bears on the plate by its
     papillary ridges, about 60 µm high and 0.5 mm apart, and a drypoint burr fits under their
     furrows. Only a ridge riding the burr is propped up, so beside a line the palm is held off
-    for at most a sixth of its touches, and nowhere past about 0.2 mm: it wipes beside the
-    lines almost as on the open plate, and takes most of the ink piled by them. A burr taller
-    than the furrows props the whole skin. It is the same whichever way the palm moves.
+    for at most a sixth of its touches, and nowhere past about 0.3 mm: it wipes beside the
+    lines almost as on the open plate, and takes most of the ink piled by them. The ridge
+    riding a burr touches only its crest, a few µm either side, and leaves the ink on its
+    faces. A burr taller than the furrows props the whole skin. It is the same whichever way
+    the palm moves.
     Without the laws the palm is held off for 2–3 mm past a burr, keeping all of a heavy film
     there, with a ragged edge along a slanting line.
 - **`k:retrousse(pts, {passes=, width=, speed=})`.** A soft muslin (`width` mm, 40) passed
@@ -1779,10 +1781,13 @@ was printed.
   its core, and lifts the cloth by the rest, which settles back over a few tenths of a
   millimetre. Beside the burr the face still touches the plate, with fewer of its fibres in
   the ink (they spread as it swells), and takes the ink somewhat more slowly; over the burr's
-  top it is pressed hardest and wipes hardest. Right by the burr a yarn resting on its top
-  can't come down for some 0.06–0.1 mm, and the ink there stays: the drypoint's velvet. So a
-  line prints peaked, dark at its core with a narrow velvet and no band beside it, and a
-  hatch a few tenths of a millimetre apart stays open. The cloth stands clear of the plate only in that shade, or
+  crest it is pressed hardest and wipes hardest. The burr is a fin beside its groove, its
+  inner face the groove's wall carried on up: a yarn resting on its crest can't come down
+  onto its faces, nor for some 0.02 mm past its foot, nor into the line between two crests,
+  and the ink there stays and prints: the drypoint's velvet, the fin's own width either side
+  of the groove (some 0.07 mm a side for a 2 N line). So a line prints peaked, dark at its
+  core with a soft velvet and no band beside it, and a hatch a few tenths of a millimetre
+  apart stays open. The cloth stands clear of the plate only in that shade, or
   past a burr far taller than a drypoint's; there its loose fibre ends hang in and draw up
   some of the film. And the wipe's way matters: each point of the cloth's face carries the
   ink it has picked up and lays some back as it goes, so wiping across a line lays the line's

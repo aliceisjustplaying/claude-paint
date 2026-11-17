@@ -122,3 +122,38 @@ fn layers_split_repeats() {
     let l = s.layers();
     assert_eq!(l, vec![vec![(1, 1, 1.0), (2, 1, 1.0)], vec![(1, 1, 0.5)]]);
 }
+
+/// A slid pad rubs the cells under its middle one pass for a straight
+/// stroke, nearer its rim the chord over its width, and beyond it nothing;
+/// back over itself twice; round a corner it rubs the corner as it is
+/// carried (no gap, no pivot); worked in circles it rubs the middle by the
+/// circles' length over its width.
+#[test]
+fn a_slid_pad_rubs_by_the_length_it_slides() {
+    let p = tiny();
+    let t = |s: &[Stretch]| p.touches(s);
+    let one = t(&p.slide(&[pt(-5.0, 5.0), pt(25.0, 5.0)], &|_| 4.0, 1.0));
+    // (cell middles are 0.05 mm off the path's line: the chord there)
+    let chord = |u: f64| 2.0 * (4.0 - u * u).sqrt() / 4.0;
+    assert!((one[49 * 200 + 100] as f64 - chord(0.05)).abs() < 1e-5);
+    assert!((one[34 * 200 + 100] as f64 - chord(1.55)).abs() < 1e-5);
+    assert_eq!(one[25 * 200 + 100], 0.0);
+    let back = t(&p.slide(&[pt(-5.0, 5.0), pt(25.0, 5.0), pt(-5.0, 5.0)], &|_| 4.0, 1.0));
+    assert!((back[49 * 200 + 100] - 2.0 * one[49 * 200 + 100]).abs() < 1e-5);
+    // a corner: the cell at the corner's outside is rubbed as the pad passes it, once
+    let c = t(&p.slide(&[pt(2.0, 2.0), pt(10.0, 2.0), pt(10.0, 9.0)], &|_| 2.0, 1.0));
+    // (the cell at (10.45, 1.55) lies 0.45 mm off each leg: under the pad for its chord's part past
+    // the corner on the first leg and before it on the second, 2·(h − 0.45) over the 2 mm pad)
+    let h = (1.0f64 - 0.45 * 0.45).sqrt();
+    let v = c[15 * 200 + 104] as f64;
+    assert!((v - 2.0 * (h - 0.45) / 2.0).abs() < 1e-5, "{v}");
+    // a pad of 6 mm worked twice round a 1 mm circle over its middle: 2 × 2π mm over 6
+    let n = 64;
+    let pts: Vec<Point> = (0..=2 * n).map(|i| {
+        let a = i as f32 / n as f32 * std::f32::consts::TAU;
+        pt(10.0 + a.cos(), 5.0 + a.sin())
+    }).collect();
+    let r = t(&p.slide(&pts, &|_| 6.0, 100.0));
+    let len: f64 = pts.windows(2).map(|w| ((w[1].x - w[0].x) as f64).hypot((w[1].y - w[0].y) as f64)).sum();
+    assert!((r[50 * 200 + 100] as f64 - len / 6.0).abs() < 1e-3, "{} against {}", r[50 * 200 + 100], len / 6.0);
+}

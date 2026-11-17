@@ -26,6 +26,18 @@
 //! over itself touches them again, and a pad worked round in small circles
 //! touches the middle of each circle every time round.
 //!
+//! **A pad slid along a path** (`Plate::slide`). A round pad pressed flat
+//! and slid by the hand (a bunched tarlatan, the palm, a muslin, a dabber's
+//! face rubbed along) doesn't turn with the path: it is carried along it, and
+//! a point of the plate is rubbed for as far as the pad slides while the
+//! point is under it. A straight pass rubs the point under its middle for the
+//! pad's width (one pass, by the rag's own measure: `rag::LIFT` is a pass
+//! through the pad's middle), a point nearer its rim for the shorter chord
+//! there, and none beyond it. Back over the same way rubs it again; a pad
+//! worked round in small circles rubs the middle of each circle all the time.
+//! So each cell's share of a pass is the length of the path within the pad's
+//! radius of it over the pad's width.
+//!
 //! **A face dabbed** (`Plate::dabs`): a dabber or a poupée set down at each
 //! point touches the disc of its face there.
 
@@ -227,6 +239,56 @@ impl Plate {
                 }
             }
         }
+    }
+
+    /// A round pad `width(pose)` mm across slid along `pts` (mm), in
+    /// stretches of at most `step_mm`: each cell's share of a pass over each
+    /// stretch, the length of the stretch within the pad's radius of the
+    /// cell's middle over the pad's width (see the module's notes).
+    pub fn slide(&self, pts: &[Point], width: &dyn Fn(&Point) -> f64, step_mm: f64) -> Vec<Stretch> {
+        let p = self.pitch * 1e-3;
+        let step = step_mm.max(p);
+        let mut out = Vec::new();
+        for seg in pts.windows(2) {
+            let (a, b) = (seg[0], seg[1]);
+            let (dx, dy) = ((b.x - a.x) as f64, (b.y - a.y) as f64);
+            let len = dx.hypot(dy);
+            if len < 1e-3 {
+                continue;
+            }
+            let t = (dx / len, dy / len);
+            let n = ((len / step).ceil() as usize).max(1);
+            let l = len / n as f64;
+            for i in 0..n {
+                let u0 = i as f64 / n as f64;
+                let q = (a.x as f64 + dx * u0, a.y as f64 + dy * u0);
+                let e = (q.0 + t.0 * l, q.1 + t.1 * l);
+                let pose = pose_at(&a, &b, (i as f64 + 0.5) / n as f64);
+                let w = width(&pose).max(0.0);
+                let r = 0.5 * w;
+                let mut cells = Vec::new();
+                if r > 0.0 {
+                    let (x0, y0, x1, y1) = self.cells_near((q.0.min(e.0), q.1.min(e.1), q.0.max(e.0), q.1.max(e.1)), r + p);
+                    for y in y0..y1 {
+                        for x in x0..x1 {
+                            let (cx, cy) = self.mid_mm(x, y);
+                            let (ox, oy) = (cx - q.0, cy - q.1);
+                            let (s, u) = (ox * t.0 + oy * t.1, oy * t.0 - ox * t.1);
+                            if u.abs() >= r {
+                                continue;
+                            }
+                            let h = (r * r - u * u).sqrt();
+                            let over = (s + h).min(l) - (s - h).max(0.0);
+                            if over > 0.0 {
+                                cells.push((x, y, (over / w) as f32));
+                            }
+                        }
+                    }
+                }
+                out.push(Stretch { v: t, pose, len_mm: l, width_mm: w, cells });
+            }
+        }
+        out
     }
 
     /// A face `width(pose)` mm across set down at each of `pts`: the disc of

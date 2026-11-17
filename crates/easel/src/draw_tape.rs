@@ -6,6 +6,10 @@
 //! stencil({{400, 400}, {600, 400}, {500, 600}})   -- film over the canvas, this shape cut out
 //! lift_tape()                                  -- every piece lifted, with the paint on it
 //! ```
+//!
+//! Tape stays down across chunks and waits, and a save keeps it; lifting
+//! it parts the paint laid across its edges as that paint's drying state
+//! says (paint's `Canvas::lift_tape`).
 
 use crate::api::{S, check_keys, err, num, points};
 use mlua::{Lua, Result, Table, Value};
@@ -18,7 +22,7 @@ const TAPE_WIDTH_MM: f32 = 24.0;
 const TAPE_HAND_MM_S: f32 = 40.0;
 
 /// Refuse `call` while tape lies on the picture: what it would do there is
-/// not modeled (graphite and pastel on tape, waiting with paint on it).
+/// not modeled (graphite and pastel on tape).
 pub(crate) fn no_tape(st: &S, call: &str) -> Result<()> {
     if st.borrow().canvas.as_ref().is_some_and(|c| c.has_tape()) {
         return err(format!("{call}: tape lies on the picture; lift it first (lift_tape())"));
@@ -60,15 +64,17 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
     // lift_tape(): every piece of tape and stencil lifted with the paint on
-    // it; returns the wet paint it took, mm³
+    // it; returns the wet paint it took (mm³), the length of edge where wet
+    // paint parted and where a set film tore (mm), and the area beside it
+    // where a set film lifted off with it (mm²)
     {
         let st1 = st.clone();
         g.set("lift_tape", lua.create_function(move |_, ()| {
             crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
                 let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-                let mm3 = c.lift_tape().map(|l| l.taken_mm3).ok_or_else(|| mlua::Error::runtime("lift_tape: no tape lies on the picture"))?;
+                let l = c.lift_tape().ok_or_else(|| mlua::Error::runtime("lift_tape: no tape lies on the picture"))?;
                 c.tally_mut().secs += 3.0;
-                Ok(mm3)
+                Ok((l.taken_mm3, l.parted_mm, l.torn_mm, l.lifted_mm2))
             })
         })?)?;
     }

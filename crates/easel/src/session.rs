@@ -619,10 +619,6 @@ impl Session {
             if self.st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
                 return Err(mlua::Error::runtime("the chunk ended with a sheet laid on the picture: lift it (lift_sheet()) in the chunk that laid it"));
             }
-            // tape and stencils too (paint's tape.rs)
-            if self.st.borrow().canvas.as_ref().is_some_and(|c| c.has_tape()) {
-                return Err(mlua::Error::runtime("the chunk ended with tape on the picture: lift it (lift_tape()) in the chunk that laid it"));
-            }
             // the hand time the chunk spent goes on the clock before it ends
             crate::time::flush(&self.st, true);
             crate::replay_checkpoint::check()?;

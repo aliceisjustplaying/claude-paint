@@ -2614,7 +2614,6 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(0.0..=MAX_WAIT_MIN).contains(&minutes) {
                 return err(format!("wait({minutes}): want minutes from 0 to {MAX_WAIT_MIN} (10 years); days are fine: wait(3 * 24 * 60)"));
             }
-            draw_tape::no_tape(&st1, "wait")?;
             time::verb(&st1, Verb::Wait, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.wait(minutes as f32);
                 Ok(())
@@ -3443,8 +3442,8 @@ palette{dirty=0.2} wait(10) print(drying(20, 20))"#).unwrap_or_else(|e| panic!("
     }
 
     /// Tape on an oil painting: a stroke across it lays paint on both sides
-    /// and none reaches the canvas under it; lifting it takes its paint.
-    /// The chunk must lift it, and waiting with it down is refused.
+    /// and none reaches the canvas under it; lifting it takes its paint and
+    /// the wet paint across its edges parts there.
     #[test]
     fn tape_keeps_paint_off_what_it_covers_and_takes_its_paint_away() {
         let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap();
@@ -3453,14 +3452,11 @@ palette{dirty=0.2} wait(10) print(drying(20, 20))"#).unwrap_or_else(|e| panic!("
         s.run(r#"tape({{500, 0}, {500, 1000}}, {width=24})
 b:stroke({{150, 500}, {850, 500}}, {pressure=0.8})
 on = drying(500, 500)
-print(lift_tape() > 0)"#).unwrap_or_else(|e| panic!("{e}"));
+taken, parted, torn, lifted = lift_tape()
+print(taken > 0, parted > 0, torn == 0, lifted == 0)"#).unwrap_or_else(|e| panic!("{e}"));
+        assert!(s.st.borrow().out.contains("true\ttrue\ttrue\ttrue"), "{}", s.st.borrow().out);
         assert!(wet_at(&s, 500.0, 500.0) < 1e-3, "paint reached the canvas under the tape: {}", wet_at(&s, 500.0, 500.0));
-        assert!(wet_at(&s, 300.0, 500.0) > 1.0 && wet_at(&s, 700.0, 500.0) > 1.0);
-        let e = s.run(r#"tape({{0, 100}, {1000, 100}}, {width=12})"#).expect_err("a chunk ended with tape down");
-        assert!(e.contains("lift it (lift_tape())"), "{e}");
-        assert!(!s.canvas().unwrap().has_tape(), "the failed chunk kept its tape");
-        let e = s.run(r#"tape({{0, 100}, {1000, 100}}, {width=12}) wait(5)"#).expect_err("waited with tape down");
-        assert!(e.contains("wait: tape lies on the picture"), "{e}");
+        assert!(wet_at(&s, 300.0, 500.0) > 0.5 && wet_at(&s, 700.0, 500.0) > 0.5, "{} {}", wet_at(&s, 300.0, 500.0), wet_at(&s, 700.0, 500.0));
         // over wet paint it doesn't hold; a width is a tape's
         let e = s.run(r#"tape({{300, 0}, {300, 1000}}, {width=12}) lift_tape()"#).expect_err("taped wet paint");
         assert!(e.contains("still wet or tacky"), "{e}");
@@ -3519,6 +3515,36 @@ lift_sheet()"#).unwrap_or_else(|e| panic!("{e}"));
         assert!(near < far && (near - drawn.0) < 0.5 * (far - drawn.1), "fixed: {} -> {near}, loose: {} -> {far}", drawn.0, drawn.1);
         let e = s.run(r#"fix({{200, 500}, {300, 500}}, {seconds=1})"#).expect_err("a burst along a path");
         assert!(e.contains("seconds= is a burst at one point"), "{e}");
+    }
+
+    /// Tape stays down across chunks, a wait, a save and a reopen, and
+    /// lifts afterwards; the paint across its edge has set by then, and its
+    /// film tears there instead of parting as wet paint does.
+    #[test]
+    fn tape_survives_chunks_a_wait_and_a_save() {
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"tape({{500, 0}, {500, 1000}}, {width=24})"#).unwrap_or_else(|e| panic!("{e}"));
+        s.run(r#"p = pile{{"Prussian blue", 1}} b = brush("flat", 60) b:load(p, 1)
+b:stroke({{150, 500}, {850, 500}}, {pressure=0.8})"#).unwrap_or_else(|e| panic!("{e}"));
+        s.run("wait(5 * 24 * 60)").unwrap_or_else(|e| panic!("{e}"));
+        assert!(s.canvas().unwrap().has_tape());
+        let program = s.program("taped");
+        let path = std::env::temp_dir().join(format!("easel-tape-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut back = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(&path).unwrap();
+        assert!(back.canvas().unwrap().has_tape(), "the reopened painting lost its tape");
+        assert!(back.canvas().unwrap().stroke_film(), "the reopened painting lost its stroke film");
+        for t in [&mut s, &mut back] {
+            t.run(r#"taken, parted, torn, lifted = lift_tape() print(taken, parted, torn > 0)"#).unwrap_or_else(|e| panic!("{e}"));
+        }
+        assert_eq!(s.st.borrow().out.lines().last(), back.st.borrow().out.lines().last());
+        assert!(s.st.borrow().out.lines().last().unwrap().ends_with("true"), "{}", s.st.borrow().out);
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        s.canvas().unwrap().write_state(&mut a, "").unwrap();
+        back.canvas().unwrap().write_state(&mut b, "").unwrap();
+        assert!(a == b, "the reopened painting lifted its tape to other bits");
     }
 
     /// A blender stroke runs in a new painting, and a stroke takes the

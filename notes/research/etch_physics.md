@@ -229,9 +229,58 @@ Every mordant here bites at the rate its oxidant reaches the metal:
 | bitumen absorption and Urbach slope | 0.1 /µm at 550 nm, 0.3 eV | the "strong tea" test; no spectrum of a ground |
 | rosin absorption, loose powder's reflectance | 0.02 /µm at 450 nm, 0.6 | unmeasured |
 | yarn radius (for the tone guide) | 75 µm | IP §4.2 [E] |
-| hand times: bath, box, melt, clean | 2, 1, 2, 5 min | no timed account |
+| hand times: bath, box, melt | 2, 1, 2 min | no timed account |
+| solvent rag: cloth weight, saturation share, a solvent rag's pace | 150 g/m², 0.2, a tarlatan pass's | §8 |
 
 Each would be replaced by IP §9's bench measurements (Unknowns 4, 6 and 7) without rewriting the code. The tests read their expected numbers from the formulas.
+
+## 8. The solvent rag: cleaning a plate where the hand rubs [M] [D] [E]
+
+A printer takes a ground, stopping-out varnish, rosin or ink off with a cotton rag dampened with
+solvent (turpentine; petroleum spirit), rubbed over the plate by hand. Nothing dissolves where the
+rag doesn't go, so `k:clean` and `k:clean_ink` take the points the rag is moved along, as the
+tarlatan does, and act through the rag's own footprint: a pad (`rag::PAD_MM`, 40 mm, or `width=`)
+slid along them (`Plate::slide`; under the contact laws pressed soft, `slide_pressed`), each cell
+rubbed for its share of a pass.
+
+**What the face carries.** A damp rag's face lays its solvent under it: the cloth's weight,
+150 g/m² [E: cotton sheeting and jersey rags weigh 100–200 g/m²], times what a cloth wrung damp
+holds, 0.5 g a gram [M: cotton's water retention value, 0.45–0.55 g/g, ISO 23714; a hand-wrung
+cloth holds as much or more], over turpentine's 0.86 g/cm³ [M]: some 87 µm of solvent per area.
+
+**Coats.** The solvent dissolves a coat until it is saturated, 0.2 of its volume [E]: asphaltum
+and rosin dissolve freely in turpentine (stopping-out varnish *is* asphaltum in turpentine, and
+rosin the residue of turpentine's distillation [M, CAMEO]), but beeswax only partly at room
+temperature (two thirds of a beeswax sample in C9–C15 alkanes, a petroleum spirit's cut [M:
+Kastratović 2022]), and a hard ground is held by its wax. So a whole pass dissolves some 17 µm of
+coat [D]: a 4 µm ground comes off in one pass under the pad's middle (out to r·√(1 − (4/17)²) of a
+40 mm pad's radius on a straight stroke), a 20 µm varnish in two, a melted rosin grain's lens
+((2/3)·d/1.3², the look's) in one or two; loose rosin is swept off by any touch. The coats are
+taken from the top: varnish first, then what lies under it. The plate keeps a coat on a cell or
+not (its ground is laid where the roller crossed over half of a cell), so a coat the solvent
+doesn't dissolve through in one cleaning is left whole: the little it took dries back as the
+solvent evaporates in a few minutes (`rag::DAMP_HALF_MIN`) [E: a simplification of the thinned
+coat]. A cell left bare loses the acid's memory there, as the whole-plate clean did; what the acid
+opened stays as its openings. The rosin layer keeps the cells the rag took it off (its record's
+bit 1, then a bit a cell); old saves read as before.
+
+**Ink.** On the flat the rubbing mixes the solvent with the film f it meets, and the cloth drinks
+the mixture but for what a wiped smooth face keeps, 0.3 µm [M: a cellulose wiper over a wetted
+surface leaves 0.1–0.5 g/m² behind, US 8,778,086 and 9,345,376]: a whole pass keeps
+0.3/(f + 87) of the film, the power m of it for a share m [D]. A 10 µm film is down to 0.03 µm
+after one pass under the middle and gone after two. In an opening the solvent fills the space
+above the ink and joins it to the cloth, whose pores draw the ink up by capillarity, as
+retroussage's fibres do: Lucas–Washburn at the ink's own viscosity at the plate's warmth, for the
+time the pad lies over the point (its share of the pad's width over the speed) [D]. So a stiff
+ink stays deep in a line after a pass that empties a loose one (an 80 µm line of a 28 Pa·s ink
+keeps all but 34 µm of its depth for 0.2 s; a 0.3 Pa·s ink is drawn 335 µm), and a warm plate
+gives its ink up sooner. Ink thinner than an oil's monolayer, 2 nm [M: Langmuir films of
+triglycerides, 1.5–2.5 nm], is none: a plate rubbed over twice or three times is clean, and
+the plate's tools take it again. The rag keeps what it takes and lays nothing back. Set ink is
+taken as wet ink is [E: a cured linseed film swells in solvent but does not dissolve; a printer
+would use lye or a stripper, which the easel lacks].
+
+**Hand time** is the area rubbed (each pass counted) at a tarlatan pass's pace [E].
 
 ## Sources
 
@@ -249,4 +298,7 @@ Each would be replaced by IP §9's bench measurements (Unknowns 4, 6 and 7) with
 - Stop-out drying: Glasgow Print Studio, *Etching Handbook* (https://www.gpsart.co.uk/DownloadDocs/GPS_Etching_Handbook.pdf); MungoLux asphaltum varnish (https://mungolux.com/asphaltum-hard-ground_2).
 - Cox–Voinov and Tanner's law, ln(L/λ): D. Bonn, J. Eggers, J. Indekeu, J. Meunier, E. Rolley, "Wetting and spreading", *Rev. Mod. Phys.* 81, 739 (2009) (https://www.phys.ens.psl.eu/~foldingslidingstretchinglab/papers/Bonn_RMP_2009.pdf).
 - Sable rounds' hair lengths and widths: Rosemary & Co Series 33 (as in wet_pastel.md).
+- V. Kastratović, "Some aspects of beeswax hydrolysis", *Agriculture and Forestry* 68(4) (2022): beeswax's solubility in solvents at room temperature: http://www.agricultforest.ac.me/data/20221215-07%20Kastratovic.pdf
+- Cotton's water retention value (ISO 23714; 0.45–0.55 g/g for cotton): textile fibre handbooks.
+- US patents 8,778,086 and 9,345,376, "Method of cleaning residue from a surface using a high efficiency disposable cellulosic wiper": residue left by a wiper, 0.1–0.5 g/m².
 - The workshop facts (grounds, times, coverage, over-biting): IP §2–§4 and its sources (Kiekeben; Jackson's; sonic.net; UMBC).

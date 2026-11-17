@@ -35,7 +35,7 @@ fn bench(s: &Session) -> String {
 -- (each plate wiped alike: a fresh tarlatan of one seed, so only the press's setting differs)
 function inked(heavy)
   use(k)
-  k:clean_ink()
+  k:clean_ink({{{{0, 100}}, {{1000, 100}}, {{1000, 375}}, {{0, 375}}, {{0, 650}}, {{1000, 650}}}}, {{passes=3}})
   k:ink(black, {{{{0, 375}}, {{1000, 375}}}})
   local t = tarlatan{{stiff=0.7, seed=5}}
   t:wipe(k, {{{{0, 375}}, {{1000, 375}}}}, {{passes=5}})
@@ -217,7 +217,7 @@ use(c)
 c:aquatint{box=0.6, wait=30, minutes=1}
 c:melt()
 c:bite{acid="ferric", baume=38, minutes=3}
-c:clean()
+c:clean({{0, 40}, {1000, 40}, {1000, 140}, {0, 140}, {0, 240}, {1000, 240}, {1000, 340}, {0, 340}, {0, 395}, {1000, 395}}, {passes=3})
 for i, k in ipairs(inks) do c:ink(k, {{(i-0.5)*1000/3, 0}, {(i-0.5)*1000/3, c.H}}, {width=50}) end
 t = tarlatan{stiff=0.7}
 -- each stripe wiped in small circles within it, the cloth refolded to a clean face between

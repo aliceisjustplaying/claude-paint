@@ -243,7 +243,7 @@ fn an_inked_plate_is_cleaned_before_it_is_worked() {
     assert!(e.contains("inked"), "{e}");
     let e = s.run("k:ground(\"hard\", {{0, 375}, {1000, 375}})").unwrap_err();
     assert!(e.contains("inked"), "{e}");
-    run(&mut s, "c = k:clean_ink()\nassert(c.taken > 0)\nk:drypoint(n, {{100, 700}, {900, 700}})");
+    run(&mut s, "c = k:clean_ink({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})\nassert(c.taken > 0)\nk:drypoint(n, {{100, 700}, {900, 700}})");
 }
 
 /// A plate lying in its acid (`--@ etch`'s `k:immerse{}`) takes no ink, warmth or tarlatan until
@@ -256,11 +256,11 @@ fn a_plate_in_its_bath_is_lifted_before_it_is_inked() {
     run(&mut s, PLATE);
     let d = darkest(&s);
     run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nt = tarlatan{{}}\nk:ground(\"hard\", {{{{0, 375}}, {{1000, 375}}}})\nk:needle(needle{{tip=40, cone=30}}, {{{{100, 700}}, {{900, 700}}}})\nk:immerse{{acid=\"ferric\", baume=36}}\nwait(5)"));
-    for src in ["k:warm(40)", "k:ink(black)", "t:wipe(k)", "k:hand_wipe()", "k:retrousse()", "k:clean_ink()"] {
+    for src in ["k:warm(40)", "k:ink(black)", "t:wipe(k)", "k:hand_wipe()", "k:retrousse()", "k:clean_ink({{0, 100}, {1000, 100}})"] {
         let e = s.run(src).unwrap_err();
         assert!(e.contains("in its ferric bath") && e.contains("k:lift()"), "{src}: {e}");
     }
-    run(&mut s, "k:lift()\nk:clean()\nk:warm(40)\nk:ink(black, {{0, 375}, {1000, 375}})\nt:wipe(k, {{0, 375}, {1000, 375}}, {passes=2})");
+    run(&mut s, "k:lift()\nk:clean({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})\nk:warm(40)\nk:ink(black, {{0, 375}, {1000, 375}})\nt:wipe(k, {{0, 375}, {1000, 375}}, {passes=2})");
     let e = s.run("k:immerse{acid=\"ferric\", baume=36}").unwrap_err();
     assert!(e.contains("inked"), "{e}");
     let p = plate(&s);
@@ -311,11 +311,18 @@ fn ink_and_wipes_go_where_the_points_go() {
         ("k:hand_wipe(nil, {passes=2})", "no points"),
         ("k:hand_wipe({mask=rect(0, 0, 1000, 750)})", "options but no points"),
         ("k:retrousse(rect(0, 250, 1000, 100))", "no mask or region"),
+        ("k:clean_ink()", "no points"),
+        ("k:clean_ink({passes=3})", "options but no points"),
+        ("k:clean_ink({{0, 125}, {1000, 125}}, {mask=rect(0, 0, 1000, 750)})", "takes no mask"),
     ] {
         let e = s.run(src).unwrap_err();
         assert!(e.contains(words), "{src}: {e}");
     }
-    run(&mut s, "k:clean_ink()");
+    // a 10 mm rag rubbed twice along the left end of the band takes its ink there, not at the right
+    run(&mut s, "r = k:clean_ink({{0, 125}, {250, 125}}, {width=10, passes=2})\nassert(r.taken > 0 and r.kept == r.taken)");
+    let p = plate(&s);
+    assert!(p.ink_cell(c(3.0), c(5.0)).total() == 0.0 && p.ink_cell(c(35.0), c(5.0)).total() > 0.0);
+    run(&mut s, "k:clean_ink({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})");
     // a poupée dabbed at the middle inks its face's disc (20 mm) and not the corner
     run(&mut s, "k:ink(black, {{500, 375}}, {by=\"poupee\"})");
     let p = plate(&s);

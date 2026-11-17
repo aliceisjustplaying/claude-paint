@@ -14,7 +14,8 @@
 //! - `k:retrousse(pts, {passes=, width=, speed=})`: a soft muslin passed lightly along the points.
 //!
 //! Every one of them acts only where its tool goes: none takes a mask, a function or a region.
-//! - `k:clean_ink()`: solvent and a rag: all the ink off.
+//! - `k:clean_ink(pts, {passes=, width=, speed=})`: a rag dampened with solvent rubbed along the
+//!   points: the film and the ink it draws out of the lines, where it goes.
 //!
 //! The physics is paint's (`plate::inked`; notes/research/intaglio_physics.md §5): the ink is
 //! an oil film that dries on the shared clock; the tarlatan is a rag (`paint::rag::Rag`) whose
@@ -158,12 +159,13 @@ fn pressing(st: &S, k: &SurfaceU, verb: &str) -> Result<(f32, f32)> {
 
 /// A plate's tools refuse an inked plate: the printer cleans it first.
 pub(crate) fn refuse_inked(p: &Plate) -> std::result::Result<(), String> {
-    if p.inked() { Err("the plate is inked: clean it first (k:clean_ink())".into()) } else { Ok(()) }
+    if p.inked() { Err("the plate is inked: clean it first (k:clean_ink({{x, y}, ...}))".into()) } else { Ok(()) }
 }
 
 const INK_HOW: &str = "k:ink(black, {{x, y}, ...}, {by=\"card\" | \"dabber\" | \"poupee\", width=<mm>, force=<N>, speed=, dab=true | false}): where the card is dragged, or the dabber or poupée dabbed";
 const WIPE_HOW: &str = "t:wipe(k, {{x, y}, ...}, {pressure=, passes=, speed=}): the pad's path, in circles or strokes as the points go";
 const PALM_HOW: &str = "k:hand_wipe({{x, y}, ...}, {pressure=, passes=, whiting=, speed=}): the palm's path";
+const CLEAN_INK_HOW: &str = "k:clean_ink({{x, y}, ...}, {passes=, width=<the rag's pad, mm>, speed=}): the solvent rag's path over the inked plate";
 const RETRO_HOW: &str = "k:retrousse({{x, y}, ...}, {passes=, width=, speed=}): the muslin's path";
 
 /// Options a hand's tool no longer takes, refused with what to do instead.
@@ -331,7 +333,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         let pts = hand_path(&st, k, "ink", INK_HOW, &pts, o.as_ref(), ("force", tool.force() as f32, 0.1, 100.0), CARD_SPEED, least)?;
         let r = work(&st, move |p, now| {
             if p.coated() {
-                return Err("ink: the plate has a ground, varnish or rosin on it: clean it first (k:clean())".into());
+                return Err("ink: the plate has a ground, varnish or rosin on it: clean it first (k:clean({{x, y}, ...}))".into());
             }
             let r = p.ink(&ink, tool, &pts, now)?;
             Ok(((vec![r.added_um3 * 1e-9, r.film_um, r.fill, r.temp_c, r.eta, r.area_mm2, r.secs], false, false), r.secs))
@@ -376,12 +378,19 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         })?;
         table(lua, &WIPE_NAMES, &r)
     });
-    // k:clean_ink(): solvent and a rag
-    m.add_method("clean_ink", |lua, k, (): ()| {
+    // k:clean_ink(pts, {passes=, width=, speed=}): a solvent rag rubbed along the points
+    m.add_method("clean_ink", |lua, k, (pts, o): (Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
         pressing(&st, k, "clean_ink")?;
-        let r = work(&st, |p, _| Ok(((vec![p.clean_ink() * 1e-9, pace::CLEAN_S], false, false), pace::CLEAN_S)))?;
-        table(lua, &["taken", "seconds"], &r)
+        refuse_gone(o.as_ref(), "clean_ink", CLEAN_INK_HOW)?;
+        if let Some(o) = &o {
+            check_keys(o, &["passes", "width", "speed"], "clean_ink")?;
+        }
+        let pts = hand_path(&st, k, "clean_ink", CLEAN_INK_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.0, 1.0), crate::etch::RAG_MM_S, 2)?;
+        let n = passes(o.as_ref(), 1)?;
+        let width = crate::plate::opt(o.as_ref(), "width", PAD_MM, 5.0, 200.0, "the rag's pad in mm")? as f64;
+        let r = work(&st, move |p, now| Ok(wipe_rep(&p.clean_ink(&pts, width, n, now))))?;
+        table(lua, &WIPE_NAMES, &r)
     });
 }
 

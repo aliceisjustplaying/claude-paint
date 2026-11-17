@@ -16,7 +16,8 @@
 //!   `wait(minutes)`, `k:lift()`, bit for bit);
 //! - `k:aquatint{box=, wait=, minutes=}`: into the rosin dust box; `k:melt()`: heated until the
 //!   grains melt on;
-//! - `k:clean()`: solvent: ground, varnish and rosin off.
+//! - `k:clean(pts, {passes=, width=, speed=})`: a rag dampened with solvent rubbed along the
+//!   points: ground, varnish and rosin off where it dissolves through them.
 //!
 //! The physics is paint's (`etch`, `plate::etched`; notes/research/etch_physics.md). What the
 //! acid opens joins the plate's cells as its lines and pits, as the press will read them (phase
@@ -42,12 +43,14 @@ pub const NEEDLE_MM_S: f32 = 40.0;
 /// the plate and letting it cool, `etch::GROUND_WARM_S`, and the roller's path at its speed);
 /// taking the plate out of its tray, rinsing and drying it
 /// 2 min (lowering it in takes seconds, which are the bath's own: they are in its minutes);
-/// cranking the dust box 1 min; melting the rosin over a heater 2 min; cleaning off ground and
-/// varnish with solvent and rag 5 min.
+/// cranking the dust box 1 min; melting the rosin over a heater 2 min. A solvent rag's time is
+/// the area it rubs at a tarlatan pass's pace (`Plate::wash`).
 const LIFT_S: f64 = 120.0;
 const BOX_S: f64 = 60.0;
 const MELT_S: f64 = 120.0;
-const CLEAN_S: f64 = 300.0;
+/// A solvent rag's speed when none is given (mm/s) [E: rubbed as briskly as a tarlatan pad].
+pub(crate) const RAG_MM_S: f32 = 100.0;
+pub(crate) const CLEAN_HOW: &str = "k:clean({{x, y}, ...}, {passes=, width=<the rag's pad, mm>, speed=}): the solvent rag's path, back and forth or round where the coats should come off";
 const GROUND_HOW: &str = "k:ground(\"hard\", {{x, y}, ...}, {um=, roller=<mm>, speed=}): the roller's path over the plate, overlapping strokes to cover it";
 const STOP_HOW: &str = "k:stop_out({{x, y}, ...}, {brush=<mm>, load=<0 to 1>, pressure=<0 to 1, or a list along the points>, speed=}): the brush's stroke, dipped again for the next";
 /// Ferric chloride as a bath is made up when no strength is given: 38 °Bé (plan-intaglio §4.2's
@@ -333,10 +336,10 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
             let p = Rc::make_mut(s.plate.as_mut().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?);
             // (more ground rolled onto a plate that holds only ground: the same ground on more of it)
             if p.coated() && !p.only_ground() {
-                return Err(mlua::Error::runtime("ground: the plate has varnish, rosin, needle lines or the acid's work on it: clean it first (k:clean())"));
+                return Err(mlua::Error::runtime("ground: the plate has varnish, rosin, needle lines or the acid's work on it: clean it first (k:clean({{x, y}, ...}))"));
             }
             if p.only_ground() && p.ground_um() != um {
-                return Err(mlua::Error::runtime(format!("ground: the plate's ground is {} µm: roll more of the same (um={}), or clean it first (k:clean())", fmt_num(p.ground_um()), fmt_num(p.ground_um()))));
+                return Err(mlua::Error::runtime(format!("ground: the plate's ground is {} µm: roll more of the same (um={}), or clean it first (k:clean({{{{x, y}}, ...}}))", fmt_num(p.ground_um()), fmt_num(p.ground_um()))));
             }
             let r = p.apply(Op::Ground { um, roller_mm: roller, pts });
             let secs = r.secs + etch::GROUND_WARM_S;
@@ -477,7 +480,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         let name = k.name.clone();
         let r = work(&st, wait / 60.0 + minutes, BOX_S, move |p| {
             if p.ground_um() > 0.0 {
-                return Err("aquatint: the plate has a ground: the rosin goes on bare metal (k:clean() first)".into());
+                return Err("aquatint: the plate has a ground: the rosin goes on bare metal (k:clean({{x, y}, ...}) first)".into());
             }
             // (the grains' places: from the plate's name and its history)
             let seed = name.bytes().fold(p.ops.len() as u64, |h, b| h.wrapping_mul(0x100_0000_01B3).wrapping_add(b as u64));
@@ -499,15 +502,26 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         })?;
         table(lua, &["seconds"], &r)
     });
-    // k:clean(): ground, varnish and rosin off with solvent
-    m.add_method("clean", |lua, k, (): ()| {
+    // k:clean(pts, {passes=, width=, speed=}): a solvent rag rubbed along the points
+    m.add_method("clean", |lua, k, (pts, o): (Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
         etching(&st, k, "clean")?;
-        let r = work(&st, 0.0, CLEAN_S, |p| {
-            p.apply(Op::Clean);
-            Ok((vec![CLEAN_S], false, false))
+        if let Some(o) = &o {
+            check_keys(o, &["passes", "width", "speed"], "clean")?;
+        }
+        let pts = hand_path(&st, k, "clean", CLEAN_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.0, 1.0), RAG_MM_S, 2)?;
+        let passes = crate::plate::int_opt(o.as_ref(), "passes", 1, 50)?;
+        let pad = opt(o.as_ref(), "width", paint::rag::PAD_MM, 5.0, 200.0, "the rag's pad in mm")?;
+        let r = crate::time::verb_plate(&st, crate::time::Verb::Pass, move |s| {
+            let p = Rc::make_mut(s.plate.as_mut().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?);
+            let cell_mm2 = p.pitch_um() * p.pitch_um() * 1e-6;
+            let had = p.coat_cells();
+            let r = p.apply(Op::Wash { pad_mm: pad, passes, pts });
+            let left = p.coat_cells();
+            s.canvas.as_mut().ok_or_else(crate::api::no_canvas)?.tally_mut().secs += r.secs;
+            Ok((vec![had.saturating_sub(left) as f64 * cell_mm2, left as f64 * cell_mm2, r.length_mm, r.secs], false, false))
         })?;
-        table(lua, &["seconds"], &r)
+        table(lua, &["cleaned", "coated", "length", "seconds"], &r)
     });
 }
 

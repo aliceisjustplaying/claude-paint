@@ -279,7 +279,7 @@ pub(crate) fn hand_path(st: &S, k: &SurfaceU, verb: &str, how: &str, pts: &Value
     Ok((0..n).map(|i| Point { x: pts[i].0 * u, y: pts[i].1 * u, force: f[i], alt: 90.0, az: 0.0, speed: sp[i] }).collect())
 }
 
-fn int_opt(o: Option<&Table>, key: &str, default: u32, most: u32) -> Result<u32> {
+pub(crate) fn int_opt(o: Option<&Table>, key: &str, default: u32, most: u32) -> Result<u32> {
     let v = o.map(|o| num(o, key)).transpose()?.flatten().unwrap_or(default as f32);
     if v.fract() != 0.0 || !(1.0..=most as f32).contains(&v) {
         return err(format!("{key}: a whole number, 1 to {most}"));
@@ -308,7 +308,7 @@ fn apply(st: &S, op: Op) -> Result<Rep> {
     crate::time::verb_plate(st, crate::time::Verb::Pass, move |s| {
         let plate = Rc::make_mut(s.plate.as_mut().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?);
         if plate.coated() {
-            return Err(mlua::Error::runtime("the plate has a ground, varnish, rosin or the acid's work on it: clean it first (k:clean())"));
+            return Err(mlua::Error::runtime("the plate has a ground, varnish, rosin or the acid's work on it: clean it first (k:clean({{x, y}, ...}))"));
         }
         crate::ink::refuse_inked(plate).map_err(mlua::Error::runtime)?;
         let r = plate.apply(op);

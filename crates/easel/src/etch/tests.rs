@@ -16,7 +16,7 @@ k:needle(n, {{100, 500}, {900, 500}})
 b = k:bite{acid="ferric", baume=36, minutes=10}
 k:stop_out({{60, 500}, {940, 500}}, {pressure=0.85})
 k:bite{acid="ferric", baume=36, minutes=20, rock=true}
-k:clean()
+k:clean({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})
 a = k:aquatint{box=0.6, wait=30, minutes=1}
 k:melt()
 k:bite{acid="ferric", baume=36, minutes=3}"#;
@@ -101,7 +101,7 @@ fn a_plate_is_etched_on_the_clock() {
     // the drypoint tools want a clean plate; the needle a ground; a feather nitric
     let e = s.run("k:drypoint(n, {{100,100},{900,100}})").unwrap_err();
     assert!(e.contains("clean it first"), "{e}");
-    run(&mut s, "k:clean()");
+    run(&mut s, "k:clean({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})");
     let e = s.run("k:needle(n, {{100,100},{900,100}})").unwrap_err();
     assert!(e.contains("lay one first"), "{e}");
     let e = s.run("k:bite{acid=\"ferric\", minutes=1, feather=true}").unwrap_err();
@@ -406,7 +406,7 @@ fn a_plate_in_its_bath_refuses_work_and_is_seen_as_it_would_come_out() {
         ("k:bite{acid=\"ferric\", minutes=1}", "bite"),
         ("k:needle(n, {{100,700},{900,700}})", "needle"),
         ("k:stop_out({{100, 100}, {200, 100}})", "stop_out"),
-        ("k:clean()", "clean"),
+        ("k:clean({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})", "clean"),
         ("k:feel(500, 200)", "feel"),
         ("k:drypoint(n, {{100,700},{900,700}})", "drypoint"),
     ] {
@@ -444,6 +444,9 @@ fn hand_tools_go_where_the_points_go() {
         ("k:stop_out(rect(0, 400, 1000, 350))", "no mask or region"),
         ("k:stop_out(function(x, y) return 1 end)", "no function"),
         ("k:stop_out()", "no points"),
+        ("k:clean()", "no points"),
+        ("k:clean({passes=2})", "options but no points"),
+        ("k:clean(rect(0, 0, 1000, 750))", "no mask or region"),
     ] {
         let e = s.run(src).unwrap_err();
         assert!(e.contains(words) && e.contains("points it is moved along"), "{src}: {e}");
@@ -453,7 +456,7 @@ fn hand_tools_go_where_the_points_go() {
     let covered: f64 = r.out.trim().parse().unwrap();
     // (a 100 mm roller rolled 6 mm down the 30 mm plate reaches its whole height)
     assert!(covered > 99.0, "{covered}");
-    run(&mut s, "k:clean()");
+    run(&mut s, "k:clean({{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}, {passes=3})");
     let r = s.run("r = k:ground(\"hard\", {{0, 100}, {1000, 100}}, {roller=20})\nprint(r.covered)").unwrap();
     let covered: f64 = r.out.trim().parse().unwrap();
     // (a 20 mm roller along 4 mm down: 0 to 14 mm of the 30, to a cell of 1.5 mm)

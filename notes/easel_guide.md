@@ -1439,7 +1439,7 @@ use(k)
 r = k:lift()                                    -- out, rinsed and dried: r.minutes it lay there, r.depth
 k:stop_out({{120,420},{480,430},{860,410}}, {brush=3.9, load=1, pressure=0.6})  -- a brushstroke of varnish: no acid there
 k:bite{acid="ferric", baume=36, minutes=30, rock=true}   -- in, 30 minutes, out, in one
-k:clean()                                       -- solvent: ground, varnish, rosin off
+k:clean({{0,100},{1000,100},{1000,375},{0,375},{0,650},{1000,650}}, {passes=2})  -- a solvent rag where it goes
 k:aquatint{box=0.6, wait=30, minutes=1}         -- the dust box: wait s after stirring, minutes in it
 k:melt()
 k:bite{acid="nitric", parts=8, minutes=2, feather=true}   -- on zinc: sweep the bubbles
@@ -1456,7 +1456,7 @@ use("painting")
   - **Where the roller didn't go the plate is bare,** and the acid bites it as an open face.
   - **Thickness:** 4 µm by default (an estimate: 2–8). It covers whatever lines are already
     there. More of the same ground can be rolled onto a plate that holds only ground;
-    another thickness, or ground over varnish, rosin or needle lines, wants `k:clean()` first.
+    another thickness, or ground over varnish, rosin or needle lines, wants `k:clean(pts)` first.
   - **Hand time:** the roller's path at `speed` (100 mm/s), and 8 minutes to warm the plate
     and let it cool (estimates).
   - Points alone are needed: `k:ground("hard", {um=4})` is refused ("options but no
@@ -1474,7 +1474,7 @@ use("painting")
     `k:drypoint`.
 - **`k:stop_out(pts, {brush=, load=, pressure=, speed=})`.** Stopping-out varnish
   (asphaltum in turpentine) brushed along the points with a round brush. No acid reaches
-  the cells the strip covers over half of until `k:clean()`. It takes no mask, function or
+  the cells the strip covers over half of until a solvent rag takes it off (`k:clean`). It takes no mask, function or
   region: brush where the varnish should go.
   - **The brush:** `brush` is the round's width in mm (3.9, a size 6 sable); `load` how full
     its belly is (1). Its belly holds a cone of liquid 4.7 times as long as it is wide, 0.6
@@ -1565,8 +1565,19 @@ use("painting")
   - When the undercut reaches a dot's radius the dot is lost. The pits merge into an open
     bite and the tone falls: an over-bitten aquatint prints lighter.
   - Stop out between bites for stepped tones.
-- **`k:clean()`** takes ground, varnish and rosin off with solvent (5 minutes). What the acid
-  opened stays as the plate's lines and pits. The drypoint tools want a clean plate.
+- **`k:clean(pts, {passes=, width=, speed=})`** rubs a rag dampened with solvent along the
+  points: a pad `width` mm across (40), slid as a tarlatan is, `passes` times (1), at `speed`
+  (100 mm/s). It dissolves coats only where it goes, from the top down: a whole pass under the
+  pad's middle dissolves some 17 µm of coat (the 87 µm of turpentine a damp rag lays, saturated at
+  a fifth of its volume), less toward the pad's rim. A 4 µm ground comes off in one pass, a 20 µm
+  stopping-out varnish (and the ground under it) wants two, a melted rosin grain one or two, and
+  loose rosin goes at a touch. A coat it doesn't dissolve through in one cleaning stays whole, so
+  go over a varnished place with `passes=2`. Where a cell is left bare the acid's memory goes;
+  what it opened stays as the plate's lines and pits. `k:clean()`, a mask or a function is refused
+  with words saying to give the points. Reports `cleaned` and `coated` (mm² of plate cleared, and
+  still under a coat), `length`, `seconds` (the area rubbed at a tarlatan pass's pace). The
+  drypoint tools, ink and a new ground want the coats gone everywhere (`coated` 0): rub the rag
+  over the whole plate in overlapping strokes. Physics: etch_physics.md §8.
 - **What the acid opens joins the plate's cells,** in the same width bins as drypoint lines,
   so wiping and the press will read a bitten line as they read a drypoint one. The metal the
   acid takes is counted, and the tray holds it.
@@ -1665,7 +1676,7 @@ w = t:wipe(k, {{0,150},{1000,150},{0,450},{1000,450}}, {pressure=0.5, passes=2})
 k:hand_wipe({{0,300},{1000,300}}, {passes=2})            -- the palm, with whiting ({whiting=false}: without)
 k:retrousse({{300,250},{700,260}}, {width=20})           -- a soft muslin drawing ink up beside the lines
 print(k:feel(500, 300).words)                -- "wet ink, 12 µm in the lines and a film of 0.02 µm; …"
-k:clean_ink()                                -- solvent and a rag: all the ink off
+k:clean_ink({{0,100},{1000,100},{1000,375},{0,375},{0,650},{1000,650}}, {passes=2})  -- a solvent rag where it goes
 use("painting")
 ```
 
@@ -1704,7 +1715,7 @@ use("painting")
   - Reports `added` (mm³), `film` (µm), `fill`, `temp`,
   `viscosity`, `area` (mm²), `seconds`. A coated plate (ground, rosin) refuses ink. A plate
   still in its acid (`k:immerse{}`) refuses ink, warmth and the wipes until `k:lift()`, and
-  an inked plate refuses `k:immerse` and `k:bite` until `k:clean_ink()`.
+  an inked plate refuses `k:immerse` and `k:bite` until `k:clean_ink(pts)` has taken all its ink.
 - **`t:wipe(k, pts, {pressure=, passes=, speed=})`.** The pad (its `width`, 40 mm) is slid
   along the points: in strokes, back and forth, or round in circles, as the points go. It rubs
   each cell for as far as it slides while the cell is under it: a straight stroke one pass
@@ -1744,6 +1755,16 @@ use("painting")
   lightly along the points. Its fibre ends hang into the lines it passes over and draw ink up
   by capillarity (more from a warm plate), laying it on the plate within half a millimetre
   around: lines soften and spread where the cloth went.
+- **`k:clean_ink(pts, {passes=, width=, speed=})`.** A rag dampened with solvent rubbed along the
+  points (a pad `width` mm across, 40, `passes` times, at `speed`, 100 mm/s), as `k:clean` is. On
+  the flat the solvent mixes with the film and the cloth drinks it, leaving the 0.3 µm a wiped face
+  keeps: a 10 µm film is down to some 0.03 µm after a pass under the middle and gone after two. In
+  the lines the solvent joins the ink to the cloth, whose pores draw it up by capillarity at the
+  ink's own viscosity for the time the pad lies over the point: a stiff ink stays deep in a line
+  after a pass that empties a loose one, and a warm plate gives it up sooner. Ink below an oil's
+  monolayer is none. Nothing is taken where the rag doesn't go; `k:clean_ink()` is refused with
+  words saying to give the points. Reports as a wipe does (`kept` is what the rag took; it lays
+  nothing back). Set ink comes off as wet ink does (an estimate; a printer would need lye).
 - **Drying.** The ink dries as an oil film of its thickness, on the clock: it wipes for hours,
   and a day or two later it has set and nothing moves it. A plate handed off inked
   (`handoff`) arrives aged by its time on the way: received three days later, its ink has

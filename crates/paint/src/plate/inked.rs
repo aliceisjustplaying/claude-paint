@@ -540,32 +540,78 @@ pub fn cloth_lift(h: f64, c: f64, p: f64, b: f64) -> Lift {
     Lift { dx, u: u[..last].iter().map(|&v| v as f32).collect() }
 }
 
-/// How far (µm) a tarlatan yarn stands off the plate `d` µm from the middle
-/// of a burr `h` µm high whose top bears `c` µm either side (under the contact
-/// laws) [D, E]: a yarn is a bundle of fibres packed to some 0.6 of its
-/// section, all but as full as fibres pack, so below its own radius it keeps
-/// its round shape; the face's give is its crimp and hairs, which flex over
-/// the weave's pitch. That is how the engine already reaches into a line, by
-/// a yarn's chord (`yarn_dip_um`), and the same yarn resting on the fin's top
-/// falls away beside it as its circle, h − (R − √(R² − (d − c)²)), R the
-/// yarn's radius (`YARN_UM` [E]): over the fin's top and the line under it,
-/// h; none past √(2Rh) or so. In that shade only the ink standing above the
-/// yarn, and its loose fibre ends, are reached: the ink against the burr, a
-/// drypoint line's velvet. The yarn is taken lying along the fin, its round
-/// section across it, which shades least [E: a yarn crossing the fin is
-/// straight along its length and is held off further, by its bending].
-pub fn yarn_shade_um(h: f64, c: f64, d: f64) -> f64 {
+/// The surface of a burr's fin (µm over the plate) `s` µm from its crest
+/// (below zero toward its groove), under the contact laws [D]: the engine's
+/// fin is a ridge of triangular section `h` high (`Cell::burr_height`, the
+/// deposit laid by area, `Plate::deposit`), its inner face reaching `ei`
+/// across from its crest to the groove's rim and its outer face `eo` out to
+/// its toe; none past them. In ploughing the metal rises against the tool's
+/// face (the indenter touches its own pile-up: the contact in a scratch
+/// reaches above the plate), so the fin's inner face is the groove's wall
+/// carried on up, and its crest stands h·tan of that wall's angle from
+/// upright out from the rim (`Plate::fences`); the rest of its section,
+/// whose area is its side's share of the groove's, lies outside the crest.
+pub fn fin_um(h: f64, ei: f64, eo: f64, s: f64) -> f64 {
+    let e = if s < 0.0 { ei } else { eo };
+    if h <= 0.0 || e <= 0.0 || s.abs() >= e { 0.0 } else { h * (1.0 - s.abs() / e) }
+}
+
+/// How far (µm) a tarlatan yarn resting on a burr's crest stands off the
+/// plate `d` µm from it, the burr `h` µm high (under the contact laws) [D,
+/// E]: a yarn is a bundle of fibres packed to some 0.6 of its section, all
+/// but as full as fibres pack, so below its own radius it keeps its round
+/// shape; the face's give is its crimp and hairs, which flex over the
+/// weave's pitch. That is how the engine already reaches into a line, by a
+/// yarn's chord (`yarn_dip_um`), and the same yarn resting on the fin's
+/// crest falls away beside it as its circle, h − (R − √(R² − d²)), R the
+/// yarn's radius (`YARN_UM` [E]); none past √(2Rh) or so. The fin is a ridge
+/// (`fin_um`), not a table: over its faces, which fall away under the yarn
+/// far faster than its circle does (slopes of h/ei and h/eo, about 1.4 and
+/// 0.6 for a 2 N fin, against d/R), the yarn stands off them by this less
+/// the face's height, so the ink on the fin's own faces is shaded too, and
+/// only the crest is wiped. Over the groove between two crests, its circle
+/// stands it off the line's rims (a 2 N line's crests 0.115 mm apart under a
+/// yarn 0.15 mm across): it reaches none of the line's ink. In that shade only the ink
+/// standing above the yarn, and its loose fibre ends, are reached: the ink on
+/// and against the burr, a drypoint line's velvet. The yarn is taken lying
+/// along the fin, its round section across it, which shades least; a yarn
+/// crossing the fin is the cloth itself bent over it, its lift `cloth_lift`
+/// [D].
+pub fn yarn_shade_um(h: f64, d: f64) -> f64 {
     if h <= 0.0 {
         return 0.0;
     }
-    if d <= c {
-        return h;
-    }
-    let x = d - c;
+    let x = d.abs();
     if x >= YARN_UM {
         return (h - YARN_UM).max(0.0);
     }
     (h - (YARN_UM - (YARN_UM * YARN_UM - x * x).sqrt())).max(0.0)
+}
+
+/// How far (µm) the ridge of the palm riding a burr's crest stands off the
+/// burr's face `s` µm from its crest (`fin_um`'s faces, `ei` and `eo`), under
+/// the contact laws [D, E]: the ridge carries its share of the palm's load,
+/// P = p·λ a length (`p` Pa, λ the ridges' pitch), on the crest, and skin
+/// pressed by a two-dimensional wedge whose faces slope h/ei and h/eo touches
+/// it over a half-width a = 2P/(E*·(h/ei + h/eo)) [D: a two-dimensional punch
+/// of profile f on an elastic half-space carries P = (E*/2)∫x·f′(x)/√(a² −
+/// x²)dx over its contact (Johnson, *Contact Mechanics*, ch. 5), a·E*·tan β
+/// for a wedge whose faces slope tan β; the mean of the two faces' here]:
+/// some 6 µm either side of a 2 N fin's crest at 5 kPa, of faces 20 and 45 µm
+/// across. Below the contact's edge the face falls away under the skin: it
+/// stands off by the face's drop from there, h(|s| − a)/e, the least the
+/// skin, less pressed outside its contact, stands off [D, a bound]. That the
+/// riding ridge carries its own share is the estimate [E: a ridge propped by
+/// the burr carries more, by its own compression; doubling P doubles a].
+pub fn palm_on_fin_um(h: f64, ei: f64, eo: f64, s: f64, p: f64) -> f64 {
+    let e = if s < 0.0 { ei } else { eo };
+    if h <= 0.0 || e <= 0.0 || s.abs() >= e {
+        return 0.0;
+    }
+    let es = SKIN_PA / (1.0 - SKIN_NU * SKIN_NU);
+    // (its faces sloping h/ei and h/eo: the wedge's mean slope)
+    let a = 2.0 * p * RIDGE_PITCH_UM * 1e-6 / (es * (h / ei.max(1e-6) + h / eo.max(1e-6))) * 1e6;
+    (h * (s.abs() - a) / e).max(0.0)
 }
 
 /// The plate's polish under the contact laws (IP §5.4, "Plate tone"): a
@@ -760,9 +806,10 @@ struct Prop {
     v: f32,
     aux: f32,
     top: f32,
+    fin: f32,
 }
 
-const NO_PROP: Prop = Prop { v: 0.0, aux: 0.0, top: f32::INFINITY };
+const NO_PROP: Prop = Prop { v: 0.0, aux: 0.0, top: f32::INFINITY, fin: 0.0 };
 
 /// Props over cells near a burr (`Plate::gaps_of`): a slot of `SUB`² points
 /// for each cell that has one.
@@ -807,18 +854,46 @@ struct Fence {
     h: f64,
     c: f64,
     ring: bool,
+    /// Its faces' reach across from its crest (µm): `ei` toward its groove,
+    /// `eo` away from it (`Plate::across`); and which way across (along n =
+    /// (−t.1, t.0)) is away: ±1.
+    ei: f64,
+    eo: f64,
+    out: f64,
+}
+
+/// A line across (`Plate::across`): its centreline's offset from a cell's
+/// middle, its groove's width and its fin's base on each side (µm).
+struct Across {
+    o: f64,
+    w: f64,
+    base: [f64; 2],
+    /// The groove's section (µm²).
+    area: f64,
 }
 
 impl Fence {
     /// The distance (µm) from (x, y) to the piece.
+    #[cfg(test)]
     fn dist(&self, x: f64, y: f64) -> f64 {
+        self.signed(x, y).abs()
+    }
+
+    /// The distance (µm) from (x, y) to the piece, below zero on its
+    /// groove's side of its crest.
+    fn signed(&self, x: f64, y: f64) -> f64 {
         let (dx, dy) = (x - self.x, y - self.y);
         if self.ring {
             return dx.hypot(dy);
         }
         let along = (dx * self.t.0 + dy * self.t.1).abs();
-        let across = (dy * self.t.0 - dx * self.t.1).abs();
-        if along <= self.half { across } else { (along - self.half).hypot(across) }
+        let across = (dy * self.t.0 - dx * self.t.1) * self.out;
+        if along <= self.half { across } else { (along - self.half).hypot(across).copysign(across) }
+    }
+
+    /// The fin's surface (µm over the plate) `s` µm from its crest (`signed`).
+    fn fin(&self, s: f64) -> f64 {
+        fin_um(self.h, self.ei, self.eo, s)
     }
 }
 
@@ -1509,7 +1584,19 @@ impl Plate {
         any.then_some((flat, open))
     }
 
-    /// The burr's pieces, a cell each (`Fence`), as `shields` reads them.
+    /// The burr's pieces (`Fence`), as `shields` reads them: under the contact
+    /// laws, a cell's piece of a line's fin for each side its burr stands on.
+    ///
+    /// The fin stands where it was thrown, beside its groove: its base runs
+    /// from the groove's rim out (`Plate::deposit`), its inner face the
+    /// groove's wall carried on up (`fin_um`), so its crest lies w/2 + ei from
+    /// the line's centreline, w the groove's width and ei = h·w²/(4S) (the
+    /// wall's slope from upright in a V of the groove's width and section S),
+    /// and its outer face reaches the rest of its base out, all read from the
+    /// line's cells about it (`across`). It sat on the centreline itself, with
+    /// its top as wide as the cell's share of the base: a yarn resting on it
+    /// rested over the groove, and the fin's own cells were wiped as the open
+    /// plate.
     fn fences(&self) -> Vec<Fence> {
         let p = self.pitch;
         let mut out = Vec::new();
@@ -1533,14 +1620,31 @@ impl Plate {
                         };
                         // a straight line crosses a cell every p / max(|cos|, |sin|) along it
                         let half = if ring { 0.0 } else { 0.5 * p / t.0.abs().max(t.1.abs()) };
-                        // the fin's base over its length in the cell; its top bears over half the base
-                        // [E: the gap's span goes as 1/ln(2a/c), so a factor 2 here moves it some 15 %]
-                        let area = c.burr_area as f64 * p * p;
-                        let base = if ring { (area / std::f64::consts::PI).sqrt() } else { area / (2.0 * half) };
                         let (mx, my) = ((x as f64 + 0.5) * p, (y as f64 + 0.5) * p);
-                        // on the line's own centreline across it, not the cell's middle
-                        let o = if ring { 0.0 } else { self.centreline(x, y, c.dir, t) };
-                        out.push(Fence { x: mx - o * t.1, y: my + o * t.0, t, half, h: hb, c: (0.5 * base).clamp(1.0, 0.5 * p), ring });
+                        let line = if ring { None } else { self.across(x, y, c.dir, t) };
+                        match line {
+                            Some(l) => {
+                                // each side's fin on its own place across the line (bit 0: −n, bit 1: +n)
+                                for (bit, sgn, base) in [(1u8, -1.0f64, l.base[0]), (2, 1.0, l.base[1])] {
+                                    if c.side & bit == 0 || base <= 0.0 {
+                                        continue;
+                                    }
+                                    // its inner face the groove's wall carried on up, at the slope a
+                                    // V of the groove's width and section has, w²/(4S) from upright
+                                    let ei = (hb * l.w * l.w / (4.0 * l.area.max(1e-6))).clamp(0.5, 0.9 * base);
+                                    let o = l.o + sgn * (0.5 * l.w + ei);
+                                    out.push(Fence { x: mx - o * t.1, y: my + o * t.0, t, half, h: hb, c: (0.5 * base).max(1.0), ring, ei, eo: (base - ei).max(0.5), out: sgn });
+                                }
+                            }
+                            None => {
+                                // (a ring, or a burr with no groove of its line near: at its
+                                // cell's middle, its top over its share of the cell)
+                                let area = c.burr_area as f64 * p * p;
+                                let base = if ring { (area / std::f64::consts::PI).sqrt() } else { area / (2.0 * half) };
+                                let c = (0.5 * base).clamp(1.0, 0.5 * p);
+                                out.push(Fence { x: mx, y: my, t, half, h: hb, c, ring, ei: c, eo: c, out: 1.0 });
+                            }
+                        }
                     }
                 }
             }
@@ -1548,27 +1652,38 @@ impl Plate {
         out
     }
 
-    /// How far (µm) the centreline of the line through cell (x, y), of
-    /// direction `dir` (way `t`), lies from the cell's middle across it (along
-    /// n = (−t.1, t.0)): the line's own groove is found nearest the cell
-    /// across it (a burr thrown by a leaning needle stands up to a few cells
-    /// off its groove), and the centreline is the centroid of the groove's
-    /// volume in the cells of that line within one cell along and three and
-    /// a half across of that (wide enough for the whole of a 4 N groove from
-    /// its edge). The groove is laid across its width at a quarter of a cell
-    /// (`Plate::deposit`), so its centroid finds the line to within that. A
-    /// piece of burr placed at its cell's middle instead followed a staircase
-    /// of ±p/2 along a slanting line, and so did the film beside it.
-    fn centreline(&self, x: usize, y: usize, dir: u8, t: (f64, f64)) -> f64 {
+    /// The line through cell (x, y), of direction `dir` (way `t`), across it
+    /// (along n = (−t.1, t.0)), from its cells about it: its centreline's
+    /// offset from the cell's middle (µm), its groove's width (µm) and section
+    /// (µm²), and its fin's base on each side (µm; −n, +n). The line's own
+    /// groove is found nearest the cell across it (a burr thrown by a
+    /// leaning needle stands up to a few cells off its groove); the
+    /// centreline is the centroid of the groove's volume in the cells of that
+    /// line within one cell along and three and a half across of that (wide
+    /// enough for the whole of a 4 N groove from its edge). The groove is laid
+    /// across its width at a quarter of a cell (`Plate::deposit`), so its
+    /// centroid finds the line to within that. Its width is its openings'
+    /// (Σ share·width over Σ share), its length in the window Σ share·p²/w
+    /// (three cells either way along), its section its openings' volume over
+    /// that length, and each side's base the area of the burr joined to its
+    /// groove over that length, within six cells across (a 4 N fin's toe
+    /// stands 0.15 mm out). A piece of burr placed at its cell's middle
+    /// instead followed a staircase of ±p/2 along a slanting line, and so did
+    /// the film beside it.
+    fn across(&self, x: usize, y: usize, dir: u8, t: (f64, f64)) -> Option<Across> {
+        // (the width and the fins are summed over three cells either way along: a window one
+        // cell either way holds one cell of a diagonal line's middle and two beside it, which
+        // read its fins half as wide again as they are)
+        const ALONG: f64 = 3.0;
         let p = self.pitch;
         let n = (-t.1, t.0);
-        let same = |xx: i64, yy: i64| -> Option<f64> {
+        let same = |xx: i64, yy: i64| -> Option<Cell> {
             if xx < 0 || yy < 0 || xx >= self.w as i64 || yy >= self.h as i64 {
                 return None;
             }
             let o = self.cell(xx as usize, yy as usize);
             let turn = (o.dir as i64 - dir as i64).rem_euclid(180);
-            (o.dir != 255 && turn.min(180 - turn) <= 3 && o.groove_vol() > 0.0).then_some(o.groove_vol() as f64)
+            (o.dir != 255 && turn.min(180 - turn) <= 3).then_some(o)
         };
         // the line's groove nearest across: a step of a cell along n at a time, either way
         let mut at = None;
@@ -1576,27 +1691,82 @@ impl Plate {
             for sgn in [1i64, -1] {
                 let (ox, oy) = ((j * sgn) as f64 * n.0, (j * sgn) as f64 * n.1);
                 let (gx, gy) = (x as i64 + ox.round() as i64, y as i64 + oy.round() as i64);
-                if same(gx, gy).is_some() {
+                if same(gx, gy).is_some_and(|o| o.groove_vol() > 0.0) {
                     at = Some((gx, gy));
                     break 'find;
                 }
             }
         }
-        let Some((gx, gy)) = at else { return 0.0 };
-        let (mut sv, mut so) = (0.0f64, 0.0f64);
-        for dy in -4i64..=4 {
-            for dx in -4i64..=4 {
+        let (gx, gy) = at?;
+        let (mut sv, mut so, mut open, mut wsum, mut gvol) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        for dy in -7i64..=7 {
+            for dx in -7i64..=7 {
                 let (ox, oy) = (dx as f64, dy as f64);
-                if (ox * t.0 + oy * t.1).abs() > 1.0 || (ox * n.0 + oy * n.1).abs() > 3.5 {
+                let along = (ox * t.0 + oy * t.1).abs();
+                if along > ALONG || (ox * n.0 + oy * n.1).abs() > 3.5 {
                     continue;
                 }
-                if let Some(v) = same(gx + dx, gy + dy) {
-                    sv += v;
-                    so += v * (((gx + dx - x as i64) as f64 * n.0 + (gy + dy - y as i64) as f64 * n.1) * p);
+                if let Some(o) = same(gx + dx, gy + dy)
+                    && o.groove_vol() > 0.0
+                {
+                    if along <= 1.0 {
+                        let v = o.groove_vol() as f64;
+                        sv += v;
+                        so += v * (((gx + dx - x as i64) as f64 * n.0 + (gy + dy - y as i64) as f64 * n.1) * p);
+                    }
+                    open += o.open_share() as f64;
+                    wsum += o.wsum.iter().sum::<f32>() as f64;
+                    gvol += o.groove_vol() as f64;
                 }
             }
         }
-        if sv > 0.0 { so / sv } else { 0.0 }
+        if sv <= 0.0 || open <= 0.0 || wsum <= 0.0 {
+            return None;
+        }
+        let o = so / sv;
+        let w = wsum / open;
+        // the window's length along the line (µm): its openings' area over their width
+        let len = open * p * p / w;
+        let area = gvol * p * p / len;
+        // the fin on each side: the line's burr cells joined to its groove (8-connected,
+        // within `ALONG` cells along and six across), so a crossing line's burr, or a parallel
+        // line's beyond a gap, isn't counted as this one's
+        let inside = |dx: i64, dy: i64| {
+            let (ox, oy) = (dx as f64, dy as f64);
+            (ox * t.0 + oy * t.1).abs() <= ALONG && (ox * n.0 + oy * n.1).abs() <= 6.0
+        };
+        let mut seen = [[false; 15]; 15];
+        let mut todo: Vec<(i64, i64)> = Vec::new();
+        for dy in -7i64..=7 {
+            for dx in -7i64..=7 {
+                if inside(dx, dy) && same(gx + dx, gy + dy).is_some_and(|o| o.groove_vol() > 0.0) {
+                    seen[(dy + 7) as usize][(dx + 7) as usize] = true;
+                    todo.push((dx, dy));
+                }
+            }
+        }
+        let mut base = [0.0f64; 2];
+        while let Some((dx, dy)) = todo.pop() {
+            let Some(c) = same(gx + dx, gy + dy) else { continue };
+            for (k, bit) in [1u8, 2].into_iter().enumerate() {
+                if c.side & bit != 0 && c.burr_area > 0.0 {
+                    // (a cell holding both sides' burr gives each half its area)
+                    let share = if c.side == 3 { 0.5 } else { 1.0 };
+                    base[k] += share * c.burr_area as f64 * p * p / len;
+                }
+            }
+            for (ex, ey) in [(-1i64, -1i64), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                let (nx, ny) = (dx + ex, dy + ey);
+                if nx.abs() > 7 || ny.abs() > 7 || !inside(nx, ny) || seen[(ny + 7) as usize][(nx + 7) as usize] {
+                    continue;
+                }
+                if same(gx + nx, gy + ny).is_some_and(|o| o.burr_area > 0.0) {
+                    seen[(ny + 7) as usize][(nx + 7) as usize] = true;
+                    todo.push((nx, ny));
+                }
+            }
+        }
+        Some(Across { o, w, base, area })
     }
 
     /// Each cell within `reach(piece)` of a piece of burr, with what the
@@ -1615,7 +1785,7 @@ impl Plate {
             for y in y0..y1 {
                 for x in x0..x1 {
                     let i = y * self.w + x;
-                    let mid = f.dist((x as f64 + 0.5) * p, (y as f64 + 0.5) * p);
+                    let mid = f.signed((x as f64 + 0.5) * p, (y as f64 + 0.5) * p);
                     let mut put = |j: Option<usize>, g: Option<Prop>| {
                         let Some(g) = g else { return };
                         if out.idx[i] == u32::MAX {
@@ -1628,13 +1798,13 @@ impl Plate {
                             None => e.iter_mut().for_each(|v| join(v, g)),
                         }
                     };
-                    if mid > fine + p {
+                    if mid.abs() > fine + p {
                         put(None, prop(k, mid));
                         continue;
                     }
                     for j in 0..SUB * SUB {
                         let (sx, sy) = ((x as f64 + ((j % SUB) as f64 + 0.5) / SUB as f64) * p, (y as f64 + ((j / SUB) as f64 + 0.5) / SUB as f64) * p);
-                        put(Some(j), prop(k, f.dist(sx, sy)));
+                        put(Some(j), prop(k, f.signed(sx, sy)));
                     }
                 }
             }
@@ -1659,14 +1829,16 @@ impl Plate {
         let reach = |k: usize| ridges.reach(fences[k].h) + ridges.a + tall[k].map_or(0.0, |t| t.1);
         let prop = |k: usize, d: f64| {
             let f = &fences[k];
-            let top = if d <= f.c { 0.0 } else { f32::INFINITY };
+            // over the fin the ridge riding its crest, standing off its faces below its contact
+            let top = if -f.ei <= d && d <= f.eo { palm_on_fin_um(f.h, f.ei, f.eo, d, p) as f32 } else { f32::INFINITY };
+            let d = d.abs();
             if let Some((over, span)) = tall[k]
                 && d < span
             {
-                return Some(Prop { v: 1.0, aux: palm_gap_um(over, f.c, p, span, d) as f32, top });
+                return Some(Prop { v: 1.0, aux: palm_gap_um(over, f.c, p, span, d) as f32, top, fin: 0.0 });
             }
             let s = ridges.shield(f.h, d);
-            (s > 0.0 || top == 0.0).then_some(Prop { v: s as f32, aux: f.h as f32, top })
+            (s > 0.0 || top.is_finite()).then_some(Prop { v: s as f32, aux: f.h as f32, top, fin: 0.0 })
         };
         let join = |e: &mut Prop, g: Prop| {
             if g.v > e.v || (g.v == e.v && g.aux > e.aux) {
@@ -1695,17 +1867,21 @@ impl Plate {
         todo.dedup();
         use rayon::prelude::*;
         lifts.extend(todo.par_iter().map(|&(h, c)| ((h, c), cloth_lift(h as f64 / 4.0, c as f64 / 2.0, p, b))).collect::<Vec<_>>());
-        let prop = |k: usize, d: f64| {
-            let (h, c) = (keys[k].0 as f64 / 4.0, keys[k].1 as f64 / 2.0);
+        let prop = |k: usize, s: f64| {
+            let f = &fences[k];
+            let h = keys[k].0 as f64 / 4.0;
+            let d = s.abs();
             let u = lifts[&keys[k]].at(d);
-            let top = if d <= c && h > 0.0 { (u - h) as f32 } else { f32::INFINITY };
-            let shade = yarn_shade_um(h, c, d);
-            (u > 0.0 || top.is_finite() || shade > 0.0).then_some(Prop { v: u as f32, aux: shade as f32, top })
+            let on = -f.ei <= s && s <= f.eo && h > 0.0;
+            let top = if on { (u - h) as f32 } else { f32::INFINITY };
+            let shade = yarn_shade_um(h, d);
+            (u > 0.0 || top.is_finite() || shade > 0.0).then_some(Prop { v: u as f32, aux: shade as f32, top, fin: f.fin(s) as f32 })
         };
         let join = |e: &mut Prop, g: Prop| {
             e.v = e.v.max(g.v);
             e.aux = e.aux.max(g.aux);
             e.top = e.top.min(g.top);
+            e.fin = e.fin.max(g.fin);
         };
         self.gaps_of(&fences, &|k| lifts[&keys[k]].reach(), &prop, &join, 300.0)
     }
@@ -1985,15 +2161,31 @@ impl Plate {
                     // gap, where its loose fibre ends hang
                     touch: Box::new(move |pr: &Prop| {
                         let (u, shade) = (pr.v as f64, pr.aux as f64);
-                        let open = if u >= face.delta || shade > 0.0 {
+                        let gap = if u >= face.delta || shade > 0.0 {
                             // a true gap: past the face's squeeze, or in a yarn's shade by the fin
                             // (`yarn_shade_um`), where it meets only the ink above the gap
-                            Touch { r: 0.0, off: face.fibres(u.min(face.delta - 1e-9)), g: (u - face.delta).max(shade), hair: 1.0 }
+                            Some(Touch { r: 0.0, off: face.fibres(u.min(face.delta - 1e-9)), g: (u - face.delta).max(shade), hair: 1.0 })
                         } else {
-                            Touch { r: face.fibres(u), ..FULL_TOUCH }
+                            None
                         };
-                        let flat = if pr.top.is_finite() { Touch { r: face.fibres(pr.top as f64), ..FULL_TOUCH } } else { open };
-                        (flat, open)
+                        let open = gap.unwrap_or(Touch { r: face.fibres(u), ..FULL_TOUCH });
+                        // (in the openings: a yarn resting on a crest stands `shade` over the plate
+                        // there by its own circle, its dip and all, so it reaches none of an
+                        // opening's ink; its chord dips into an opening only where it lies on the
+                        // opening's rims, `yarn_dip_um`, as it does in a true gap's)
+                        let lines = match gap {
+                            Some(t) if shade > 0.0 => Touch { g: t.g.max(shade + YARN_UM), ..t },
+                            _ => open,
+                        };
+                        // over a fin: the yarn on its crest, squeezing the face there, stands off its
+                        // faces by its circle less their height; it meets their ink only above that
+                        let flat = if pr.top.is_finite() {
+                            let g = shade - pr.fin as f64;
+                            if g > 0.0 { Touch { r: 0.0, off: face.fibres(pr.top as f64), g, hair: 1.0 } } else { Touch { r: face.fibres(pr.top as f64), ..FULL_TOUCH } }
+                        } else {
+                            open
+                        };
+                        (flat, lines)
                     }),
                     // the fibre ends in a gap: retroussage's capillary rise in a touch, over the
                     // share of the plate their tips touch
@@ -2219,7 +2411,9 @@ impl Plate {
                     // under the ridge riding it)
                     touch: Box::new(|pr: &Prop| {
                         let open = Touch { r: 1.0 - pr.v as f64, off: pr.v as f64, g: pr.aux as f64, hair: 0.0 };
-                        (if pr.top == 0.0 { FULL_TOUCH } else { open }, open)
+                        // (over a fin, the ridge on its crest: whole on its contact, off the faces below)
+                        let top = if pr.top <= 0.0 { FULL_TOUCH } else { Touch { r: 0.0, off: 1.0, g: pr.top as f64, hair: 0.0 } };
+                        (if pr.top.is_finite() { top } else { open }, open)
                     }),
                     wick: None,
                 };

@@ -514,11 +514,14 @@ fn mean_cv(v: &[f64]) -> (f64, f64) {
 /// only a ridge riding it (`palm_gaps`): it is held off a share of its touches
 /// within a ridge's contact and reach of the line, at most 2a/λ (a its
 /// contact's half-width, λ the ridges' pitch), and nowhere past a + reach(h)
-/// (some 0.22 mm here). So beside the line it leaves at most (1 − q)^(−n·2a/λ)
-/// of the open plate's film after n passes of split q; from 0.3 mm on, the
-/// open plate's own (no outline where a cell's points are partly propped:
-/// the un-propped points touch whole); even along the line; the line keeps
-/// its ink; and it is the same whichever way the palm moves.
+/// from the fin's crest (which stands some 0.08 mm off the line). So beside
+/// the line, past the fin (whose faces only the ridge on its crest comes
+/// near, `palm_on_fin_um`: from 0.2 mm, at these 0.1 mm cells), it leaves at
+/// most (1 − q)^(−n·2a/λ) of the open plate's film after n passes of split
+/// q; from 0.3 mm on, the open plate's own (no outline where a cell's points
+/// are partly propped: the un-propped points touch whole); even along the
+/// line; the line keeps its ink; and it is the same whichever way the palm
+/// moves.
 #[test]
 fn the_palm_wipes_beside_a_burr_but_where_a_ridge_rides_it() {
     // (ten laps round 31 mm under an 80 mm palm: some four passes, every way)
@@ -539,8 +542,9 @@ fn the_palm_wipes_beside_a_burr_but_where_a_ridge_rides_it() {
             let m = mean_cv(&band_films(&new, side, d, d + 0.1)).0;
             assert!((m - far).abs() < 0.01 * far, "{d} mm: {m} against {far}");
         }
-        // nearer, held off only where a ridge rides the burr, and even along the line
-        for k in 1..3 {
+        // nearer, past the fin (its toe 0.13 mm out, and half a cell), held off only where a
+        // ridge rides the burr, and even along the line
+        for k in 2..3 {
             let (d0, d1) = (0.1 * k as f64, 0.1 * (k + 1) as f64);
             let (m, cv) = mean_cv(&band_films(&new, side, d0, d1));
             assert!(m >= far * 0.999 && m <= most * far, "{d0} mm: {m} µm, the open plate {far}, at most {}", most * far);
@@ -779,8 +783,9 @@ fn the_cloths_lee_is_a_yarns_shade() {
 /// than on the open plate (`Face::fibres` above 1), and it wipes the film on
 /// the fin's top faster than the open plate's, not at the share it bears
 /// beside it (as it did: the top kept 1.1 µm after a first pass against the
-/// open plate's 0.3). Every point within the top's half-width of a piece of a
-/// 2 N line's burr reads so; points beside it read the lifted face's fewer.
+/// open plate's 0.3). Every point on a piece of a 2 N line's fin (within its
+/// faces' reach from its crest, `Fence::ei` toward its groove and `eo` away)
+/// reads so; points beside it read the lifted face's fewer.
 #[test]
 fn the_cloth_presses_hardest_on_the_burrs_top() {
     let p = burred(0.0, &|_| {});
@@ -793,10 +798,11 @@ fn the_cloth_presses_hardest_on_the_burrs_top() {
             let Some(slot) = g.get(y * 200 + x) else { continue };
             for (j, pr) in slot.iter().enumerate() {
                 let (sx, sy) = ((x as f64 + ((j % SUB) as f64 + 0.5) / SUB as f64) * 100.0, (y as f64 + ((j / SUB) as f64 + 0.5) / SUB as f64) * 100.0);
-                if fences.iter().any(|f| f.dist(sx, sy) < 0.9 * f.c) {
+                let on = |f: &Fence, k: f64| -k * f.ei < f.signed(sx, sy) && f.signed(sx, sy) < k * f.eo;
+                if fences.iter().any(|f| on(f, 0.9)) {
                     assert!(pr.top.is_finite() && face.fibres(pr.top as f64) > 1.0, "on the top: {pr:?}");
                     tops += 1;
-                } else if fences.iter().all(|f| f.dist(sx, sy) > 1.1 * f.c) && pr.v > 0.0 {
+                } else if fences.iter().all(|f| !on(f, 1.1)) && pr.v > 0.0 {
                     assert!(!pr.top.is_finite() && face.fibres(pr.v as f64) < 1.0, "beside it: {pr:?}");
                     beside += 1;
                 }
@@ -840,17 +846,21 @@ fn a_burr_is_as_tall_wherever_its_line_lies_in_its_cells() {
     }
 }
 
-/// The lee along a slanting line (`Plate::fences`, `Plate::centreline`): a
-/// piece of burr sits on its line's centreline, not at its cell's middle, so
-/// a cell's film beside a line at 1.4° or 5.7° depends on its distance from
-/// the line, not on where the line crosses its row. The needle is held as the
-/// easel holds it by default, pulled at 55°, which throws burr up to four
-/// cells off the groove: those pieces too belong on the centreline (placed at
-/// their cells' middles they printed a dash of velvet by each row step). At the easel's 42 µm
-/// cells, wiped twice along the line, the cells in each 20 µm band from 0.1
-/// to 0.4 mm off (past the yarn's shade, whose steep edge a band 20 µm wide
-/// can't hold even) vary along it by no more than the open plate's creases
-/// make them vary.
+/// The lee along a slanting line (`Plate::fences`, `Plate::across`): a piece
+/// of burr stands where its fin does, measured from its line's centreline,
+/// not from its cell's middle, so a cell's film beside a line at 1.4° or 5.7°
+/// depends on its distance from the line, not on where the line crosses its
+/// row. Its crest lies w/2 + the reach of its inner face (the groove's wall
+/// carried on up) off the centreline, and its base is its side's section over
+/// half its height, read from the line's cells to a tenth or so (their
+/// lattice) and on average to 5 %. The needle is held as the easel holds it
+/// by default, pulled at 55°, which throws burr up to four cells off the
+/// groove: those pieces too are placed from the centreline (placed at their
+/// cells' middles they printed a dash of velvet by each row step). At the
+/// easel's 42 µm cells, wiped twice along the line, the cells in each 20 µm
+/// band from past the yarn's shade (0.16 mm, whose steep edge a band 20 µm
+/// wide can't hold even) to 0.4 mm off vary along it by no more than the open
+/// plate's creases make them vary.
 #[test]
 fn the_lee_is_even_along_a_slanting_line() {
     for deg in [1.4f64, 5.7] {
@@ -860,19 +870,27 @@ fn the_lee_is_even_along_a_slanting_line() {
         let (c, s) = (a.cos() as f32, a.sin() as f32);
         let az = deg as f32;
         let pts = vec![Point { x: 5.0 - 4.5 * c, y: 5.0 - 4.5 * s, force: 2.0, alt: 55.0, az, speed: 25.0 }, Point { x: 5.0 + 4.5 * c, y: 5.0 + 4.5 * s, force: 2.0, alt: 55.0, az, speed: 25.0 }];
-        p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
+        let rep = p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
         let pitch = 10.0 / 240.0;
-        // every piece of burr lies on the line's centreline (away from its ends, where the
-        // groove tapers)
+        let g = crate::plate::groove_streams(p.hardness_pa(), 25.0, 30.0, 2.0, 35.0, 0.0);
+        assert!(g.chip == 0.0 && (g.w - rep.width_um).abs() < 1e-6 && (g.burr_l - g.burr_r).abs() < 1e-9);
+        let half = g.burr_l / g.burr_h;
+        let crest = (0.5 * g.w + half) * 1e-3;
+        let mut halves = Vec::new();
         for f in p.fences() {
             let (fx, fy) = (f.x * 1e-3 - 5.0, f.y * 1e-3 - 5.0);
-            if (fx * a.cos() + fy * a.sin()).abs() > 4.0 {
+            if (fx * a.cos() + fy * a.sin()).abs() > 3.0 {
                 continue;
             }
             let across = (fy * a.cos() - fx * a.sin()).abs();
-            // (to the quarter cell the groove is laid at)
-            assert!(across < 0.25 * pitch, "{deg}°: a piece of burr {across} mm off the line at ({}, {}) mm", f.x * 1e-3, f.y * 1e-3);
+            // (to the quarter cell the groove is laid at, and the fin's base to the share the
+            // cells its toe grazes make of it: a tenth of a cell here)
+            assert!((across - crest).abs() < 0.25 * pitch + 0.15 * half * 1e-3, "{deg}°: a piece of burr {across} mm off the line at ({}, {}) mm, its fin's crest {crest}", f.x * 1e-3, f.y * 1e-3);
+            assert!((f.c / half - 1.0).abs() < 0.15, "{deg}°: the fin's half base {} µm against {half}", f.c);
+            halves.push(f.c);
         }
+        let mean = halves.iter().sum::<f64>() / halves.len() as f64;
+        assert!(halves.len() > 200 && (mean / half - 1.0).abs() < 0.05, "{deg}°: the fins' half base {mean} µm on average against {half}");
         p.ink(&black(), InkTool::of(Inker::Card), &[pt(-25.0, 5.0, 10.0), pt(35.0, 5.0, 10.0)], 0.0).unwrap();
         let lines = p.ink_um3().0;
         let mut t = Rag::tarlatan(40.0, 3, 0.7);
@@ -894,8 +912,15 @@ fn the_lee_is_even_along_a_slanting_line() {
             mean_cv(&v)
         };
         let (_, open) = band(2.0, 3.0);
-        for k in 0..15 {
-            let d0 = 0.1 + 0.02 * k as f64;
+        // (past the yarn's shade: its crest's place, w/2 + its inner face's reach, the
+        // groove's wall carried on up, w²/(4S) of its height from upright, and √(2Rh) beyond,
+        // and half a cell)
+        let area = 2.0 * g.burr_l;
+        let edge = (crest * 1e3 - half + g.burr_h * g.w * g.w / (4.0 * area) + (2.0 * YARN_UM * g.burr_h).sqrt()) * 1e-3 + 0.5 * pitch;
+        let first = (edge / 0.02).ceil() as usize;
+        assert!((7..=8).contains(&first), "{deg}°: the shade's edge {edge} mm");
+        for k in first..20 {
+            let d0 = 0.02 * k as f64;
             let (m, cv) = band(d0, d0 + 0.02);
             assert!(cv < open + 0.03, "{deg}°, {d0:.2} mm off: {m} µm varies by {cv} along the line, the open plate by {open}");
         }
@@ -1073,7 +1098,7 @@ fn a_gap_under_the_cloth_keeps_its_film() {
     }
     // the yarn stands clear of the plate beside the tallest piece of burr
     let tall = p.fences().iter().map(|q| q.h).fold(0.0, f64::max);
-    assert!(yarn_shade_um(tall, 20.0, 60.0) > 0.0, "{tall} µm shades the plate beside it");
+    assert!(yarn_shade_um(tall, 60.0) > 0.0, "{tall} µm shades the plate beside it");
     p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let ring: Vec<Point> = (0..=72).map(|i| {
         let a = i as f32 / 24.0 * std::f32::consts::TAU;
@@ -1094,5 +1119,3 @@ fn a_gap_under_the_cloth_keeps_its_film() {
     }
     assert!(least > 0.7 * open && least > 1.4 * POLISH_HOLD_UM, "the thinnest film by the crossing {least} µm, the open plate {open}");
 }
-
-

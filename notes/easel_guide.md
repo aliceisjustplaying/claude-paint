@@ -1373,7 +1373,16 @@ use("painting")
     - Below copper's critical 60° (measured 45–85°) it ploughs: all of the groove's metal
       goes into burr, 0.75 × the depth high (an estimate: no burr has been measured).
     - Pushed or held upright, it cuts a chip and leaves a clean line with no burr. The verb
-      says so.
+      says so, and how much of the groove left as chip.
+    - **Under the contact laws** (a painting begun with them, `--@ intaglio-contact` below):
+      each stream of metal across the groove meets the cone's face at its own slope,
+      steepest at the front. The streams the face meets steeper than 60° cut and the rest
+      plough. An upright 30° needle ploughs and throws its burr both sides, as printmakers
+      say. A fine point held upright cuts most of its groove. Pushed, the middle cuts and
+      the flanks plough. A light line inside the rounded point always ploughs. `beta` is
+      the steepest the face met the metal at. The azimuth turns the short way between
+      points, so a needle following a line round past due left (±180°) is not swung
+      round through 0° and pushed between two points.
   - **The burr's side.** Leaning to one side throws the burr to the other; leaning past
     its half-angle, all of it.
   - **The result** is a table: `width`, `depth`, `burr`, `beta`, `cut`, `ploughed`,
@@ -1667,6 +1676,13 @@ use("painting")
   only a few µm into a fine line and right into an open bite, parts from the film it touches
   taking half (with whiting nearly all), and is held off past a burr further than the cloth.
   Two passes with whiting take a tarlatan's tone to almost nothing: the bare metal shines.
+  - **Under the contact laws** (`--@ intaglio-contact`): the skin is propped up only by the
+    gap a burr opens in its contact. That is some 0.4–0.6 mm either side of a 40 µm burr at
+    the default pressure, standing highest by the burr and closing smoothly. The palm takes
+    only the ink standing above that gap, so the tone it leaves by a burr fades
+    smoothly within a millimetre, the drypoint's velvet. It is the same whichever way the
+    palm moves. Without the laws the palm is held off for 2–3 mm past a burr, keeping
+    all of a heavy film there, with a ragged edge along a slanting line.
 - **`k:retrousse(mask, {passes=})`.** A soft cloth's fibre ends hang into the lines and draw
   ink up by capillarity (more from a warm plate), laying it on the plate within half a
   millimetre around: lines soften and spread.
@@ -1686,6 +1702,26 @@ use("painting")
   tarlatans are held with the rags: a failed chunk puts them back. A session without the switch
   refuses to receive an inked plate.
 - **Physics and estimates:** notes/research/intaglio_physics.md §5.6.
+
+### The contact laws: `--@ intaglio-contact`
+
+A painting whose log's head also says `--@ intaglio-contact` (new paintings do; it needs
+`--@ plate`, and without it is accepted and changes nothing) makes its plates under the
+contact laws. Each plate keeps the laws it was made under: in its save, through a replay and
+through a handoff, whichever session it goes to. A painting begun before them replays as it
+was printed.
+
+- **The drypoint needle** ploughs or cuts stream by stream across its groove, along azimuths
+  that turn the short way (above, "Plough or cut").
+- **The palm** is held off past a burr by the gap the burr opens, and reaches only the ink
+  above that gap (above, `k:hand_wipe`).
+- **The tarlatan's lee** past a burr runs evenly along a slanting line: each cell's piece of
+  burr reaches as far along the line as the cell's share of it. Without the laws the pieces
+  of a slanting line left gaps between them.
+- **A plate's save** under them is `PLAT` version 4: its laws, then the layout it would
+  otherwise have. A plate made without them is written as before.
+- **Physics and estimates:** notes/research/intaglio_physics.md §1.2 ("Stream by stream")
+  and §5.6.
 
 ### The press
 

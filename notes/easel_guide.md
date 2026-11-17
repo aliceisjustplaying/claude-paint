@@ -1438,13 +1438,20 @@ tap()                                  -- dry crumbs fall; stuck ones stay
   dry grain's hold, about 43 µm and up: with a 0.5 mm sieve a little over half of what was
   sifted; `tap{g=1}` (tilting the sheet upright) sheds crumbs over 0.2 mm; `blow` takes
   them as it takes heaped pastel. The fines stay, a ghost of the color.
-- **On a damp sheet** (steamed, or a damp sheet's own water, `--@ damp-paper`) the crumbs
-  drink the water into their pores and a liquid bridge holds each to the sheet: a tap at
-  100 g leaves anything under 0.6 mm, and `blow` moves none of them: a hard blow from the
+- **Wet** (steamed, or a damp sheet's own water, `--@ damp-paper`), the crumbs drink the
+  water into their pores, and how the water then lies sets their hold, for `tap` and `blow`
+  alike, sifted or drawn. Where water still stands past the pores, or the sheet beneath holds
+  some, a liquid bridge at each crumb's own radius holds it: a tap at 100 g leaves anything
+  under 0.6 mm (none of a stroke's crumbs falls), and `blow` moves none: a hard blow from the
   lips can't break the bridge even of a 0.5 mm crumb, and a bulb close in only lifts the
-  larger crumbs on a ring a few mm across. This holds wherever the pastel is wet, sifted
-  or drawn. Dry, a heap blows as before. Where water still stands once they have drunk, the
-  drops it dries into gather the crumbs smaller than themselves into clusters: the more
+  larger crumbs on a ring a few mm across. Where the water is only in the pores (a heap
+  steamed after it was sifted, thicker than the water condensed; late in drying), it bridges
+  only at the grain each crumb touches: a tap at 100 g sheds crumbs over about 87 µm (dry:
+  43), and a hard blow moves most of a heap, as it moves a dry one. A puff that moves the
+  larger wet crumbs leaves the record of the largest at what it left, so the same puff again
+  moves far less. Dry, a heap taps and blows as before; a painting without the switch taps
+  and blows wet pastel as if dry, as it always did. Where water still stands once they have
+  drunk, the drops it dries into gather the crumbs smaller than themselves into clusters: the more
   water, the larger (about 10 µm over a 4 µm film, 30 µm over 19 µm). On a sized sheet the
   condensed drops sink in within half a minute, so sift a patch straight after steaming
   it; sifted later the crumbs still stick, but singly. As it dries, the gum binds them:

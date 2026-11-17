@@ -846,6 +846,12 @@ pub(crate) struct Surf {
     /// stroke never lifts its own paint back, only up to its pickup share
     /// of the paint that was there before it (`exchange`).
     pub(crate) stroke_split: bool,
+    /// With the stroke split, the mean of the clump factor (`clump_factor`)
+    /// over the hairs touching at this step of a stroke, each weighted by
+    /// the paint its law would lay (`drag_on`): each hair's factor is
+    /// divided by it, so clumps move paint across the brush's width without
+    /// changing what the whole brush lays. 1 elsewhere.
+    pub(crate) clump_mean: f32,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1123,6 +1129,7 @@ impl Canvas {
             layers: self.engine >= crate::PIGMENT_MIXER,
             touch_split: self.touch_split,
             stroke_split: self.stroke_split,
+            clump_mean: 1.0,
         }
     }
 
@@ -1533,6 +1540,11 @@ pub(crate) unsafe fn drag_on(
                 shift[order[k].1] = (0.5 * (hi - lo)).clamp(-half_max, half_max);
             }
         }
+        // (with the stroke split, the clumps average to 1 over the hairs
+        // touching this step: `clump_step_mean`)
+        if sf.stroke_split {
+            sf.clump_mean = clump_step_mean(&sf, held, &contact, id, rb);
+        }
         for (bi, b) in held.bristles.iter_mut().enumerate() {
             let Some((cur, reach)) = contact[bi] else { continue };
             // a pointed tool's hair that has just come down lays its share
@@ -1666,6 +1678,61 @@ pub(crate) fn wander(t: f32, seed: u64) -> f32 {
     let a = crate::rng::hash2(i as i64, 0, seed);
     let b = crate::rng::hash2(i as i64 + 1, 0, seed);
     (a + (b - a) * f) * 2.0 - 1.0
+}
+
+/// Engine 4: how far the paint on a hair (its `hide`) is stiff enough to
+/// hold hairs together in clumps: none in fluid paint, rising steeply in
+/// stiff (solvent makes it flow).
+#[inline]
+pub(crate) fn clump_stiffen(hide: &Prop) -> f32 {
+    let ps = (hide[1] * (1.0 - hide[3]).powi(2)).clamp(0.0, 1.0);
+    ((ps - 0.4) / 0.6).clamp(0.0, 1.0)
+}
+
+/// Engine 4: the factor on what a hair at root offset `rx` lays in a
+/// stroke `id` with paint stiffened `stiffen > 0` (`clump_stiffen`). The
+/// hairs gather into clumps, a few to a clump, more the stiffer the paint:
+/// bands across the brush, one random level per band per stroke. A clump
+/// lays more and the gaps between clumps less.
+#[inline]
+pub(crate) fn clump_factor(tool: &Tool, rx: f32, stiffen: f32, id: u32) -> f32 {
+    let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
+    let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
+    let u = (rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
+    let (b0, f) = (u.floor(), u - u.floor());
+    let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
+    let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
+    let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
+    1.0 + 0.6 * stiffen * (2.0 * band - 1.0)
+}
+
+/// With the stroke split, the clumps' `Surf::clump_mean` for one step of a
+/// stroke: the mean of `clump_factor` over the hairs touching (`contact`,
+/// each hair's point this step), each weighted by what its hairs' law
+/// would lay over the step without clumps (its paint times
+/// `1 − exp(−travel/run)`, as `exchange`). Clumping is the hairs pulled
+/// together by the paint's surface tension: it moves paint and contact
+/// across the brush's width, it doesn't make or keep back paint, so the
+/// factors average to 1 over the brush. 1 when no hair touching clumps.
+pub(crate) fn clump_step_mean(sf: &Surf, held: &Held, contact: &[Option<((f32, f32), f32)>], id: u32, rb: f32) -> f32 {
+    let tool = &held.tool;
+    if !sf.stroke_split || !sf.clump || tool.point > 0.0 {
+        return 1.0;
+    }
+    let s = sf.scale;
+    let (mut sum, mut sum_w) = (0.0f64, 0.0f64);
+    for (b, ct) in held.bristles.iter().zip(contact) {
+        let Some((cur, _)) = ct else { continue };
+        let prev = b.prev[0].unwrap_or(*cur);
+        let seg = ((cur.0 - prev.0).powi(2) + (cur.1 - prev.1).powi(2)).sqrt();
+        let travel = (seg / s).max(rb / s * 0.5);
+        let w = ((b.vol + b.solvent) * (1.0 - (-travel / tool.run).exp())) as f64;
+        let stiffen = clump_stiffen(&b.hide);
+        let k = if stiffen > 0.0 { clump_factor(tool, b.rx, stiffen, id) } else { 1.0 };
+        sum += w * k as f64;
+        sum_w += w;
+    }
+    if sum_w > 0.0 && sum > 0.0 { (sum / sum_w) as f32 } else { 1.0 }
 }
 
 /// With the stroke split (`Surf::stroke_split`), paint `m` coats ploughed
@@ -1933,19 +2000,15 @@ pub(crate) unsafe fn exchange(
         // along its length (the variation averages out across the brush).
         // A pointed tip's few hairs lie together already.
         // (the paint as it is on the brush: solvent makes it flow)
-        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
-        // how far the paint is stiff enough to hold hairs together: none in
-        // fluid paint, rising steeply in stiff
-        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
+        // (how far the paint is stiff enough to hold hairs together: none in
+        // fluid paint, rising steeply in stiff)
+        let stiffen = clump_stiffen(&br.hide);
         let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
-            let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
-            let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
-            let u = (br.rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
-            let (b0, f) = (u.floor(), u - u.floor());
-            let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
-            let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
-            let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
-            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(liquid * 0.95)
+            // (with the stroke split, over the brush's width the clumps
+            // average to 1: `Surf::clump_mean`)
+            let k = clump_factor(tool, br.rx, stiffen, id);
+            let k = if sf.stroke_split { k / sf.clump_mean } else { k };
+            (dep_total * k).min(liquid * 0.95)
         } else {
             dep_total
         };
@@ -3851,17 +3914,20 @@ mod stroke_split {
     /// brush leaves it: with the switch a stroke gives the canvas exactly
     /// what it gives with no pickup at all (its hairs' law). Before it the
     /// trailing hairs lifted back a fifth or more of what the leading ones
-    /// laid, among the paint they had ploughed aside too.
+    /// laid, among the paint they had ploughed aside too. (The switch also
+    /// makes a stroke's clumps average to 1 over its width, so it changes
+    /// what a stroke lays with no pickup too: each is compared with its own
+    /// law, `a_strokes_clumps_move_its_paint_across_its_width_not_how_much_it_lays`.)
     #[test]
     fn on_bare_ground_a_stroke_lifts_none_of_its_own_paint() {
         for tool in [Tool::filbert(40.0), Tool::hog_flat(40.0)] {
             let none = Tool { pickup: 0.0, ..tool.clone() };
             let law = stroke(&mut canvas(true), none.clone(), &line());
-            assert_eq!(law, stroke(&mut canvas(false), none, &line()), "no pickup, the switch changes nothing");
+            let old_law = stroke(&mut canvas(false), none, &line());
             let split = stroke(&mut canvas(true), tool.clone(), &line());
             let old = stroke(&mut canvas(false), tool.clone(), &line());
             assert!((split - law).abs() <= 1e-4 * law, "{:?}: with the split {split} vs no pickup {law}", tool.kind);
-            assert!(old < 0.9 * law, "{:?}: before the split {old} vs {law}", tool.kind);
+            assert!(old < 0.9 * old_law, "{:?}: before the split {old} vs no pickup {old_law}", tool.kind);
         }
     }
 
@@ -3900,6 +3966,47 @@ mod stroke_split {
         let law = (1.0 - (-(mean_len + 60.0) / tool.run).exp()) / (1.0 - (-60.0 / tool.run).exp());
         let r = touch / strokes;
         assert!((r / law - 1.0).abs() < 0.15, "touch / stroke {r}, the law's {law}");
+    }
+
+    /// A stroke's clumps (`clump_factor`) are the hairs pulled together by
+    /// the paint's surface tension: they move paint across the brush's
+    /// width, they don't make or keep back paint. With the switch the same
+    /// stroke drawn as twelve different strokes (each its own clumps, and
+    /// with a steady hand, so nothing else differs) lays the same share of
+    /// its load, within 5 %, but not the same mark: across its width each
+    /// lays its paint in its own bands, by about as much as before. Before
+    /// the switch the bands' mean over a narrow brush wasn't 1, and the
+    /// share swung by half from stroke to stroke.
+    #[test]
+    fn a_strokes_clumps_move_its_paint_across_its_width_not_how_much_it_lays() {
+        for tool in [Tool::filbert(40.0), Tool::hog_flat(40.0)] {
+            let run = |split: bool| {
+                let (mut laid, mut marks) = (Vec::new(), Vec::new());
+                for pre in 0..12 {
+                    let mut c = after_strokes(canvas(split), pre);
+                    let g = line().shake(0.0);
+                    laid.push(stroke(&mut c, tool.clone(), &g));
+                    // the mark across the stroke's middle, a row at a time
+                    let w = c.f.w;
+                    let across: Vec<f32> = (188..213).map(|y| (110..130).map(|x| c.wet.vol[y * w + x]).sum::<f32>()).collect();
+                    let sum: f32 = across.iter().sum();
+                    marks.push(across.iter().map(|v| v / sum).collect::<Vec<f32>>());
+                }
+                let mean = laid.iter().sum::<f32>() / laid.len() as f32;
+                let swing = (laid.iter().cloned().fold(0.0, f32::max) - laid.iter().cloned().fold(1.0, f32::min)) / mean;
+                // how far each stroke's mark, as shares of what it laid
+                // there, is from the strokes' mean mark (summed over rows)
+                let rows = marks[0].len();
+                let mean_mark: Vec<f32> = (0..rows).map(|k| marks.iter().map(|m| m[k]).sum::<f32>() / marks.len() as f32).collect();
+                let apart = marks.iter().map(|m| m.iter().zip(&mean_mark).map(|(a, b)| (a - b).abs()).sum::<f32>()).sum::<f32>() / marks.len() as f32;
+                (swing, apart)
+            };
+            let (swing, apart) = run(true);
+            let (old_swing, old_apart) = run(false);
+            assert!(swing < 0.05, "{:?}: with the switch the share laid swings {swing}", tool.kind);
+            assert!(old_swing > 0.3, "{:?}: before it {old_swing}", tool.kind);
+            assert!(apart > 0.04 && apart > 0.7 * old_apart, "{:?}: the marks differ by {apart} across the width, before the switch {old_apart}", tool.kind);
+        }
     }
 
     /// On wet paint the stroke still lifts some of the paint that was there
@@ -3947,3 +4054,4 @@ mod stroke_split {
         assert!(!Canvas::new(50, 1.0, [1.0; 3]).with_engine(9).stroke_split());
     }
 }
+

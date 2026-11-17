@@ -33,7 +33,7 @@
 use super::Rect;
 use super::add::{Film, Paint7};
 use super::window::{self, COVER, CURE, HIDE0, Hit, LAT0, PACK, SOLV, VOL, Window};
-use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, fine_cover, grow, mix_cure};
+use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, clump_factor, clump_stiffen, fine_cover, grow, mix_cure};
 use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Prop, mix_into};
@@ -190,8 +190,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let seg = seg2.sqrt();
         let fine = tool.point > 0.0 && dep.is_none();
         // the brush side of the plough, fixed for the contact
-        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
-        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
+        let stiffen = clump_stiffen(&br.hide);
         let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
         let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
         let off = if dep.is_some() {
@@ -368,15 +367,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             dep_total
         };
         let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
-            let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
-            let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
-            let u = (br.rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
-            let b0 = floor(u);
-            let f = u - b0;
-            let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
-            let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
-            let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
-            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(liquid * 0.95)
+            // (with the stroke split, over the brush's width the clumps
+            // average to 1: `Surf::clump_mean`)
+            let k = clump_factor(tool, br.rx, stiffen, id);
+            let k = if sf.stroke_split { k / sf.clump_mean } else { k };
+            (dep_total * k).min(liquid * 0.95)
         } else {
             dep_total
         };

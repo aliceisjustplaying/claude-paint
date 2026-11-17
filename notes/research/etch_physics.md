@@ -231,6 +231,9 @@ Every mordant here bites at the rate its oxidant reaches the metal:
 | yarn radius (for the tone guide) | 75 µm | IP §4.2 [E] |
 | hand times: bath, box, melt | 2, 1, 2 min | no timed account |
 | solvent rag: cloth weight, saturation share, a solvent rag's pace | 150 g/m², 0.2, a tarlatan pass's | §8 |
+| the plate's polish under a thinned coat; a pinhole's radius; the least bared share that bites | Ra 0.1 µm, 2.5 µm, 10⁻⁴ | §8 |
+| cross-links taken as the cure (the sol of set ink) | — | §9 |
+| the caustic stripper's front, its rinse, a tray as strong as the paste | 50 µm/h, all it loosened | §9 |
 
 Each would be replaced by IP §9's bench measurements (Unknowns 4, 6 and 7) without rewriting the code. The tests read their expected numbers from the formulas.
 
@@ -256,13 +259,44 @@ Kastratović 2022]), and a hard ground is held by its wax. So a whole pass disso
 coat [D]: a 4 µm ground comes off in one pass under the pad's middle (out to r·√(1 − (4/17)²) of a
 40 mm pad's radius on a straight stroke), a 20 µm varnish in two, a melted rosin grain's lens
 ((2/3)·d/1.3², the look's) in one or two; loose rosin is swept off by any touch. The coats are
-taken from the top: varnish first, then what lies under it. The plate keeps a coat on a cell or
-not (its ground is laid where the roller crossed over half of a cell), so a coat the solvent
-doesn't dissolve through in one cleaning is left whole: the little it took dries back as the
-solvent evaporates in a few minutes (`rag::DAMP_HALF_MIN`) [E: a simplification of the thinned
-coat]. A cell left bare loses the acid's memory there, as the whole-plate clean did; what the acid
-opened stays as its openings. The rosin layer keeps the cells the rag took it off (its record's
-bit 1, then a bit a cell); old saves read as before.
+taken from the top: varnish first, then what lies under it. The rag carries off what it dissolves,
+so a coat it doesn't dissolve through is left thinner by that much, and the next pass starts on
+what is left: one pass under the middle of a flat pad leaves a 20 µm varnish 2.6 µm thick, and a
+second takes the rest. (Under the contact laws a pressed pad rubs the point under its middle
+3π/8 ≈ 1.18 of a pass, 20.5 µm, enough for the varnish in one.) The plate keeps, per cell, what the
+rag has taken of its varnish, of its ground and of its melted rosin. A melted grain is a lens
+whose face the solvent takes evenly: a spherical cap whose sphere shrinks about its centre, so its
+foot draws in to √(2ρ′h′ − h′²) (ρ′, h′ the sphere's radius and the cap's height less what was
+taken) [D, geometry], and the grain is gone once its height is taken. Loose rosin goes at a touch;
+the rosin layer keeps the cells the rag took it off (its record's bit 1, then a bit a cell). The
+solvent's residue (0.3 µm of solution at most a fifth coat, 0.06 µm) is left out [E: below the
+pinholed thickness that follows, it resists nothing]. A cell left bare loses the acid's memory
+there; what the acid opened stays as its openings.
+
+**A thinned coat** still keeps the acid off while it is continuous. It is first breached over the
+polished metal's summits: with the metal's heights Gaussian about their mean plane (σ =
+Ra·√(π/2), Ra 0.1 µm, `inked::POLISH_RA_UM` [E]) and the coat's face levelled by the solvent that
+thinned it, a coat t µm over the mean plane bares the share Φ(−t/σ) of the face [D]: 1 µm bares
+under 10⁻¹⁵, 0.5 µm 3·10⁻⁵, 0.2 µm 5 %, 0.1 µm 21 %. A cell bared over less than 10⁻⁴ holds [E: a
+ten-thousandth of the face bitten shows in no print]. Where it is bared more, each breach is a
+pinhole some 5 µm across (radius 2.5 µm [E: between a fine polish's scratches, a µm or two wide,
+and the 10 µm undulations the palm's skin conforms to]), the pinholes a Poisson field of number n
+with 1 − e^(−πnr₀²) the bared share, and the acid bites a pit under each, widening under the coat
+as it deepens as it does under a ground: its radius at depth y r₀ + √(z² − y²)/K, the pits a
+Boolean model of discs, the open share at depth y 1 − e^(−πn·r(y)²), their volume its integral and
+their width the union's mean chord (1 − c)/(2·n·r·c) (c the metal left at the face) [D]. The pit's
+mouth is the coat's thickness, its slot share by the pit's width (§3). This is foul-biting: a
+speckle of pits where the ground was rubbed too thin, merging into an open bite as they deepen.
+Needle lines under a varnish bite only once the varnish is gone (over a window the varnish lies as
+deep as the ground besides, so it is the last to pinhole). The model keeps one face bite per cell:
+a cell bitten through pinholes and then cleaned bare bites on as a bare face.
+
+**Saves.** The per-cell thinning goes in the plate's section under the laws word's bit 1
+(`PLAT` version 4: bit 0 the contact laws, bit 1 a plate with a coat thinned or a stripper on its
+ink, §9): each etched cell then carries three more words (what the rag took of its varnish,
+ground and rosin) and each ink cell what the stripper has loosened and whether it lies there. A
+plate with neither is written byte for byte as before; a save without the bit reads with whole
+coats and no stripper.
 
 **Ink.** On the flat the rubbing mixes the solvent with the film f it meets, and the cloth drinks
 the mixture but for what a wiped smooth face keeps, 0.3 µm [M: a cellulose wiper over a wetted
@@ -276,11 +310,61 @@ ink stays deep in a line after a pass that empties a loose one (an 80 µm line o
 keeps all but 34 µm of its depth for 0.2 s; a 0.3 Pa·s ink is drawn 335 µm), and a warm plate
 gives its ink up sooner. Ink thinner than an oil's monolayer, 2 nm [M: Langmuir films of
 triglycerides, 1.5–2.5 nm], is none: a plate rubbed over twice or three times is clean, and
-the plate's tools take it again. The rag keeps what it takes and lays nothing back. Set ink is
-taken as wet ink is [E: a cured linseed film swells in solvent but does not dissolve; a printer
-would use lye or a stripper, which the easel lacks].
+the plate's tools take it again. The rag keeps what it takes and lays nothing back. Ink past
+its gel point is taken only as far as it is sol (§9).
 
 **Hand time** is the area rubbed (each pass counted) at a tarlatan pass's pace [E].
+
+## 9. Set ink and the caustic stripper [M] [D] [E]
+
+Ink left on a plate dries as an oil film (`drying`, at engine 3's pace): past its gel point
+(cure `GEL`) it is a cross-linked network. A solvent swells such a network but cannot dissolve it;
+it can only take out the sol, the molecules not yet joined to it [M: Phenix 2002, *JAIC* 41,
+61–90: turpentine and white spirit are low to low-moderate swellers of linseed paint films, still
+short of equilibrium after 100 minutes on a 130–140 µm film; Baij et al. 2020, *Heritage Science*
+8:43, a review of solvent action on oil paint: leaching takes the low-molecular-weight fraction,
+the network stays].
+
+**How much is sol.** Past the gel point the sol falls as the Charlesby–Pinner law has it for
+chains joined at random, s + √s = 2·q_g/q, q the cross-links and q_g those at the gel point [M:
+A. Charlesby, S. H. Pinner, *Proc. R. Soc. A* 249, 367 (1959)], with the cross-links taken as the
+cure (the oxygen uptake `drying` follows is what cross-links the oil) [E]. A film just past its gel
+point is nearly all sol; at cure 0.3 it is 38 %, at 0.5 18 %, touch-dry (cure 1) 6 % [D]. Brief
+contact with acetone, ethanol or dichloroethane takes 3–4 % by weight from linseed films seven
+months old [M: as reported in Phenix & Sutherland 2001, "The cleaning of paintings: effects of
+organic solvents on oil paint films", *Reviews in Conservation* 2]; long immersion takes 15–45 %
+[M: Stolow; Baij et al. 2020, Fig. 7], which includes the products of ageing's chain scission,
+which `drying` doesn't follow.
+
+**The rag on set ink** (`Plate::clean_ink`). As a pass comes to a cell, what it can't take is fixed:
+the network, (1 − s) of the ink below any face a stripper has loosened, on the flat and in each
+opening. On the flat everything above the network is kept by RESIDUE/(f + SOLVENT) a whole pass as
+wet ink is (§8); in an opening the cloth's capillary draw takes the loosened face and the sol and
+stops at the network. The ink left holds less sol, so its cure rises to that of a film holding the
+sol that is left (s inverted: q = 2q_g/(s + √s)), and the next pass takes next to nothing. A
+touch-dry plate keeps some 94 % of its ink under any number of passes. That the sol
+mixes with the rag's solvent within a pass, as wet ink does, is a simplification [E: inside the
+network it must diffuse out; turpentine goes into a linseed film over tens of minutes at
+100 µm (Phenix), 0.3 µm in the 0.4 s the pad lies over a point; the measured brief take, 3–4 %,
+is of the order of the whole sol of a dry film].
+
+**The stripper.** A printer takes set ink off with a caustic stripper: sodium hydroxide in water,
+laid on as a paste or the plate laid in a tray of it. It hydrolyses the oil's ester links
+(saponification): what it has passed through is soap of the oil's fatty acids and loose fragments
+of the network, which water rinses off and a rag wipes as a liquid [M: caustic strippers break the
+paint film down chemically by hydrolysing its esters, where solvent strippers swell it]. Its front
+goes in from the face of each deposit (the film, and the ink in each opening) at a steady 50 µm an
+hour [E: Peel Away 1, a caustic paste of pH 12, takes up to 30 coats of oil, alkyd or lead paint in
+1–24 h at 10–32 °C (24–48 h at 2–9 °C), by its data sheet; 30 coats of a house paint's 40 µm dry
+film (1–2 mil a coat) in a day. A steady front, not one slowing as √t, as alkali takes an ester
+film by eroding its face]. So a 15 µm film is loosened in 18 minutes and the ink in an 80 µm line
+in an hour and a half. Copper is untouched by it [M: copper resists sodium hydroxide at room
+temperature]. The front goes in on the plate's clock while the stripper lies there (`wait` is the
+dwell), until a rinse under water, the whole plate's, washes off the stripper and all it has
+loosened [E: soap dissolves in water and the loose network goes with it], or a solvent rag wipes the
+stripper off where it goes, taking the loosened ink as wet ink. A tray of the stripper works as the
+paste does [E: the paste's strength; a stronger lye would go faster]. Temperature is left out
+[E: the data sheet's cold times are about twice its warm ones].
 
 ## Sources
 
@@ -302,3 +386,9 @@ would use lye or a stripper, which the easel lacks].
 - Cotton's water retention value (ISO 23714; 0.45–0.55 g/g for cotton): textile fibre handbooks.
 - US patents 8,778,086 and 9,345,376, "Method of cleaning residue from a surface using a high efficiency disposable cellulosic wiper": residue left by a wiper, 0.1–0.5 g/m².
 - The workshop facts (grounds, times, coverage, over-biting): IP §2–§4 and its sources (Kiekeben; Jackson's; sonic.net; UMBC).
+- A. Phenix, "The swelling of artists' paints in organic solvents. Part 2: comparative swelling powers of selected organic solvents and solvent mixtures", *JAIC* 41(1), 61–90 (2002): https://cool.culturalheritage.org/jaic/articles/jaic41-01-005.html
+- L. Baij, J. Hermans, B. Ormsby, P. Noble, P. Iedema, K. Keune, "A review of solvent action on oil paint", *Heritage Science* 8:43 (2020): https://doi.org/10.1186/s40494-020-00388-x (leaching and its amounts, Stolow's data, swelling and diffusion).
+- A. Phenix, K. Sutherland, "The cleaning of paintings: effects of organic solvents on oil paint films", *Reviews in Conservation* 2 (2001) (brief exposure takes 3–4 % by weight from seven-month-old linseed films), as cited in Baij et al.
+- A. Charlesby, S. H. Pinner, "Analysis of the solubility behaviour of irradiated polyethylene and other polymers", *Proc. R. Soc. Lond. A* 249, 367–386 (1959): the sol fraction of chains cross-linked at random.
+- Dumond, Peel Away 1 Paint Remover technical data sheet (pH about 12; up to 30 layers; 1–24 h, 24–48 h in the cold): https://www.arcat.com/datasheets/dumond/TDS_-_Peel_Away_1_Paint_Remover_-_UPDATED_2023_04.pdf
+- Paint stripper (caustic strippers hydrolyse the film's esters; solvent strippers swell it): https://en.wikipedia.org/wiki/Paint_stripper

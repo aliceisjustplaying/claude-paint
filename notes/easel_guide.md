@@ -1576,11 +1576,17 @@ use("painting")
   points: a pad `width` mm across (40), slid as a tarlatan is, `passes` times (1), at `speed`
   (100 mm/s). It dissolves coats only where it goes, from the top down: a whole pass under the
   pad's middle dissolves some 17 µm of coat (the 87 µm of turpentine a damp rag lays, saturated at
-  a fifth of its volume), less toward the pad's rim. A 4 µm ground comes off in one pass, a 20 µm
-  stopping-out varnish (and the ground under it) wants two, a melted rosin grain one or two, and
-  loose rosin goes at a touch. A coat it doesn't dissolve through in one cleaning stays whole, so
-  go over a varnished place with `passes=2`. Where a cell is left bare the acid's memory goes;
-  what it opened stays as the plate's lines and pits. `k:clean()`, a mask or a function is refused
+  a fifth of its volume), less toward the pad's rim; under the contact laws a pressed pad rubs the
+  point under its middle 1.18 of a pass (some 20.5 µm) and less toward its rim. A 4 µm ground comes
+  off in one pass, a 20 µm stopping-out varnish (and the ground under it) in one or two, a melted
+  rosin grain one or two, and loose rosin goes at a touch. The rag carries off what it dissolves:
+  a coat it doesn't dissolve through is left thinner by that much, and the next pass starts on
+  what is left. A melted grain's lens shrinks from its face and its foot draws in. A thinned coat
+  keeps the acid off while it is continuous; thinned to a few tenths of a µm the polished metal's
+  summits come through it (a coat t µm thick bares Φ(−t/σ) of the face, σ 0.125 µm: 0.5 µm bares
+  3·10⁻⁵, 0.2 µm 5 %), and over a cell bared beyond 10⁻⁴ the acid bites a pit under each
+  pinhole, widening under the coat as it deepens: foul-biting. Where a cell is left bare the
+  acid's memory goes; what it opened stays as the plate's lines and pits. `k:clean()`, a mask or a function is refused
   with words saying to give the points. Reports `cleaned` and `coated` (mm² of plate cleared, and
   still under a coat), `length`, `seconds` (the area rubbed at a tarlatan pass's pace). The
   drypoint tools, ink and a new ground want the coats gone everywhere (`coated` 0): rub the rag
@@ -1592,7 +1598,8 @@ use("painting")
   - A grounded plate is dark brown: a film of bitumen over the metal, from its optics.
   - Needle lines show bright metal through it, and bitten lines their walls.
   - Varnish is near black. Rosin speckles the face.
-  - `k:feel` adds the ground, the varnish and the rosin (`ground`, `rosin`). `probe` adds the
+  - `k:feel` adds the ground, the varnish and the rosin (`ground`, `rosin`): a thinned varnish
+    or ground with what is left of it, and a pinholed coat with the share bared. `probe` adds the
     coats, the deepest bite, the ink a wipe's yarns would leave (a guide to the tone), and
     the tray.
 - **Saves, checkpoints, replay and handoff** keep the coats and the tray in the plate's
@@ -1684,6 +1691,9 @@ k:hand_wipe({{0,300},{1000,300}}, {passes=2})            -- the palm, with whiti
 k:retrousse({{300,250},{700,260}}, {width=20})           -- a soft muslin drawing ink up beside the lines
 print(k:feel(500, 300).words)                -- "wet ink, 12 µm in the lines and a film of 0.02 µm; …"
 k:clean_ink({{0,100},{1000,100},{1000,375},{0,375},{0,650},{1000,650}}, {passes=2})  -- a solvent rag where it goes
+k:strip({{0,100},{1000,100},{1000,650},{0,650}})  -- caustic stripper brushed on where it goes (or k:strip_bath())
+wait(120)                                    -- it works on the clock
+k:rinse()                                    -- the whole plate under water: the stripper and what it loosened off
 use("painting")
 ```
 
@@ -1783,12 +1793,30 @@ use("painting")
   after a pass that empties a loose one, and a warm plate gives it up sooner. Ink below an oil's
   monolayer is none. Nothing is taken where the rag doesn't go; `k:clean_ink()` is refused with
   words saying to give the points. Reports as a wipe does (`kept` is what the rag took; it lays
-  nothing back). Set ink comes off as wet ink does (an estimate; a printer would need lye).
+  nothing back). Ink past its gel point is a cross-linked network the solvent swells but cannot
+  dissolve: the rag takes only its sol (nearly all of it just past the gel point, 18 % at cure
+  0.5, 6 % touch-dry) and the network stays; what is left holds no more sol, so further passes
+  take next to nothing. Ink a stripper has loosened comes off as wet ink, and the rag wipes the
+  stripper off where it goes. Physics: etch_physics.md §9.
+- **`k:strip(pts, {width=, speed=})`.** A caustic stripper (sodium hydroxide in water, a paste)
+  brushed along the points with a flat brush `width` mm wide (25), at `speed` (20 mm/s), laid on
+  the inked cells its edge covers over half of. **`k:strip_bath()`** lays the plate in a tray of
+  it: it lies on all the plate's ink (30 s of hand time). From then, on the clock, it loosens the
+  ink from the face of the film and of the ink in each line, 50 µm an hour (an estimate from a
+  caustic paste's data sheet), set or wet; `wait(minutes)` is the dwell. It does nothing to bare
+  copper. While it lies on the plate `k:ink` and `press` refuse it. Both report `area` (mm² of ink
+  it lies on) and `seconds`; `k:strip()`, a mask or a function is refused with words saying to
+  give the points.
+- **`k:rinse()`.** The plate rinsed under water, all over (a rinse is the whole plate's, 60 s of
+  hand time): the stripper and all the ink it has loosened wash off; ink it hasn't reached stays.
+  Reports as a wipe does. A plate whose ink has set refuses the plate's other tools with words
+  naming the stripper.
 - **Drying.** The ink dries as an oil film of its thickness, on the clock: it wipes for hours,
   and a day or two later it has set and nothing moves it. A plate handed off inked
   (`handoff`) arrives aged by its time on the way: received three days later, its ink has
   dried in.
-- **`k:feel`** adds the ink (`ink`, `film`, `cure` and words: wet, tacky or set); `probe` adds
+- **`k:feel`** adds the ink (`ink`, `film`, `cure` and words: wet, tacky or set, with the
+  stripper on it and how deep it has loosened the ink); `probe` adds
   the ink in the lines and the film over the area, and the plate's temperature. `look --surface`
   shows the ink as a Kubelka–Munk film over the metal, black in the lines.
 - **Hand time** is the area a tool passes over (each pass counted, a slid pad's by its share
@@ -1798,7 +1826,10 @@ use("painting")
   pass of hers touched each point four times at 555), a muslin 555.
 - **Saves, checkpoints, replay and handoff** keep the ink in the plate's section (`PLAT`
   version 3: version 2's layout, the coats with their bath slot, then the ink; versions 1 and
-  2 still read and are still written for plates never inked). The
+  2 still read and are still written for plates never inked). A plate a rag has left a coat
+  thinned on, or with a stripper on or through its ink, is written as version 4 with the laws
+  word's bit 1, its cells carrying what the rag took and what the stripper loosened; a plate with
+  neither is written as before, and older saves read with whole coats and no stripper. The
   tarlatans are held with the rags: a failed chunk puts them back. A session without the switch
   refuses to receive an inked plate.
 - **Physics and estimates:** notes/research/intaglio_physics.md §5.6.

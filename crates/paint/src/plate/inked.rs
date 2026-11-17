@@ -1946,10 +1946,13 @@ impl Plate {
                     // depth of a touch from under them
                     let depth = ct.wick.as_ref().map_or(0.0, |w| w(&ic));
                     let (mut flat, mut bins) = (0.0f64, [0.0f64; BINS]);
-                    for pr in g.iter() {
-                        let (tf, to) = (ct.touch)(pr);
+                    let touches: [(Touch, Touch); SUB * SUB] = std::array::from_fn(|j| (ct.touch)(&g[j]));
+                    let films = Self::sheltered(ic.film as f64, hold, &touches.map(|(tf, _)| tf));
+                    for (j, &(tf, to)) in touches.iter().enumerate() {
                         // the film: above the gap it is met for r + off of a touch, below it for r
-                        let above = if tf.g > 0.0 { (ic.film as f64 - tf.g.max(hold)).max(0.0).min(avail) } else { avail };
+                        let f = films[j];
+                        let avail = (f - hold).max(0.0);
+                        let above = if tf.g > 0.0 { (f - tf.g.max(hold)).max(0.0).min(avail) } else { avail };
                         flat += above * fr(m * (tf.r + tf.off)) + (avail - above) * fr(m * tf.r);
                         flat += FIBRE_END_SHARE * m * tf.hair * (avail - above).min(depth);
                         // the openings: the ink within g less reach for r + off, the rest of its reach for r
@@ -1970,6 +1973,37 @@ impl Plate {
             }
         }
         out
+    }
+
+    /// How a cell's film (`film` µm over the cell, the polish's `hold` under
+    /// it) lies over its `SUB`² points near a burr, given what a contact does
+    /// at each (`touches`): the ink a wipe can't reach stays where it is, so a
+    /// cell's film lies first where it is sheltered, under a gap no touch
+    /// comes down through (a yarn's shade, the fin's faces under the yarn or
+    /// the ridge riding its crest: `Touch::g` with `r` none), up to a common
+    /// level; and what is more than that shelter holds lies evenly over the
+    /// whole cell, above each gap [D: the film is one number a cell, its
+    /// points' share of it unrecorded; ink is taken off and laid on, not
+    /// moved about within a cell]. Spread evenly instead, each stroke met the
+    /// whole film at the cell's least sheltered point (a fin's crest), and
+    /// over a wipe's strokes the cell came down to that point's gap: a 42 µm
+    /// cell over a 2 N fin, mostly the fin's faces, kept 0.2 µm. With no
+    /// sheltered point the film lies evenly, as before.
+    fn sheltered(film: f64, hold: f64, touches: &[Touch; SUB * SUB]) -> [f64; SUB * SUB] {
+        let s: [f64; SUB * SUB] = touches.map(|t| if t.g > 0.0 && t.r <= 0.0 { t.g.max(hold) } else { hold });
+        let n = (SUB * SUB) as f64;
+        let mean = s.iter().sum::<f64>() / n;
+        if film >= mean {
+            return s.map(|v| v + film - mean);
+        }
+        // the level L with the mean of min(s, L) the film
+        let (mut lo, mut hi) = (0.0f64, s.iter().cloned().fold(0.0, f64::max));
+        for _ in 0..50 {
+            let l = 0.5 * (lo + hi);
+            if s.iter().map(|&v| v.min(l)).sum::<f64>() / n < film { lo = l } else { hi = l }
+        }
+        let l = 0.5 * (lo + hi);
+        s.map(|v| v.min(l))
     }
 
     /// Each cell's share of a full touch under the contact laws, on its film

@@ -48,6 +48,9 @@ pub(crate) struct Acc {
     pub j: usize,
     pub k: f32,
     pub a: [f32; PACK],
+    /// With the stroke split: the share of the sources' floors the paint
+    /// brings (`bristle::split_floor_take`).
+    pub own: f32,
 }
 
 #[derive(Default)]
@@ -81,7 +84,7 @@ impl Window {
         self.used.clear();
         let n = interior.2.saturating_sub(interior.0) * interior.3.saturating_sub(interior.1);
         if self.cells.len() < n {
-            self.cells.resize(n, Acc { parts: Default::default(), j: 0, k: 0.0, a: [0.0; PACK] });
+            self.cells.resize(n, Acc { parts: Default::default(), j: 0, k: 0.0, a: [0.0; PACK], own: 0.0 });
             self.stamp.resize(n, 0);
         }
     }
@@ -101,6 +104,7 @@ impl Window {
             cell.j = j;
             cell.k = k();
             cell.a.fill(0.0);
+            cell.own = 0.0;
             self.used.push(c as u32);
         }
         &mut self.cells[c]

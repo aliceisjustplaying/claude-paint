@@ -409,7 +409,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let tk = if exch {
                     (v * pickup * wt * fl).min(v)
                 } else {
-                    let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                    // (with the stroke split the floor holds this stroke's
+                    // own paint, so no rate needs to spare it)
+                    let own = if !sf.stroke_split && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                     (v * pickup * wt * own * fl).min((v - *sf.floor.add(i)).max(0.0))
                 };
                 if tk > 0.0 {
@@ -433,7 +435,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                 let cv = &mut *sf.cover.add(i);
                 *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                let before = *sf.vol.add(i);
                 film.lay(i, dep_per_w * wt * takes, &laying, sf.skim);
+                if sf.stroke_split {
+                    *sf.floor.add(i) += *sf.vol.add(i) - before;
+                }
                 *sf.stroke.add(i) = id;
             } else if dep_per_w > 0.0 {
                 let mut d = dep_per_w * wt * takes;
@@ -448,7 +454,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 if d > 0.0 {
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                    let before = *sf.vol.add(i);
                     film.lay(i, d * (1.0 - phi), &laying, sf.skim);
+                    if sf.stroke_split {
+                        *sf.floor.add(i) += *sf.vol.add(i) - before;
+                    }
                     if !sf.solv.is_null() {
                         *sf.solv.add(i) += d * phi * COAT_UM;
                     }
@@ -517,6 +527,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 // cure it had, the cover it brings (fine tools) and its
                 // solvent (µm), in the film's proportions (m ≤ v, so these
                 // never move more than is there)
+                let own = crate::bristle::split_floor_take(sf, i, v, out_m) / out_m;
                 let (hp, picked) = sf.take_with_lat(i, out_m);
                 let mut src = packed(sf, i, &hp, cure, picked.as_ref());
                 src[COVER] = src_cover;
@@ -524,6 +535,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 for &(tx, ty, j, mm) in &moves[..n_moves] {
                     let cell = win.cell(tx, ty, j, || unreachable!("a plough cell is started before its paint lands"));
                     accumulate(&mut cell.a, &src, mm);
+                    cell.own += own * mm;
                     cell.parts.add_parts(picked.as_ref().unwrap_or(&*sf.lat.add(i)), mm);
                 }
                 ploughed += out_m * px_area;
@@ -557,6 +569,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
             let cj = &mut *sf.cover.add(j);
             *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + c.a[COVER]).min(1.0) } else { 1.0 };
+            crate::bristle::split_floor_land(sf, tool, j, id, c.own);
             film.add(j, m, &Paint7::new(sf.lean, sf.drain, &lat, hide, c.a[CURE] * inv));
         }
         let had = br.vol + br.solvent;

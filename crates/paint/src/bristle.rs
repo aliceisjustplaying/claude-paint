@@ -841,6 +841,11 @@ pub(crate) struct Surf {
     /// The touch split (`Canvas::with_touch_split`): a touch lays the film a
     /// stroke lays at its start (`touch_on`).
     pub(crate) touch_split: bool,
+    /// The stroke split (`Canvas::with_stroke_split`): what a stroke's
+    /// hairs lay raises the stroke's floor (`floor`) on that pixel, so the
+    /// stroke never lifts its own paint back, only up to its pickup share
+    /// of the paint that was there before it (`exchange`).
+    pub(crate) stroke_split: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1117,6 +1122,7 @@ impl Canvas {
             reach_end: self.engine >= crate::REACH_END,
             layers: self.engine >= crate::PIGMENT_MIXER,
             touch_split: self.touch_split,
+            stroke_split: self.stroke_split,
         }
     }
 
@@ -1662,6 +1668,57 @@ pub(crate) fn wander(t: f32, seed: u64) -> f32 {
     (a + (b - a) * f) * 2.0 - 1.0
 }
 
+/// With the stroke split (`Surf::stroke_split`), paint `m` coats ploughed
+/// off pixel `i`, which held `v` coats: it takes its share of the pixel's
+/// floor with it (the stroke's own paint and the part of the earlier paint
+/// the stroke may not lift travel with the paint pushed), and returns that
+/// share for `split_floor_land` on the pixel it lands on.
+///
+/// # Safety
+/// `i` is inside `sf`'s buffer window, touched by the current stroke.
+#[inline]
+pub(crate) unsafe fn split_floor_take(sf: &Surf, i: usize, v: f32, m: f32) -> f32 {
+    if !sf.stroke_split || v <= 0.0 {
+        return 0.0;
+    }
+    unsafe {
+        let fl = &mut *sf.floor.add(i);
+        let moved = (*fl / v).clamp(0.0, 1.0) * m;
+        *fl -= moved;
+        moved
+    }
+}
+
+/// With the stroke split, before ploughed paint lands on pixel `j`: a pixel
+/// the stroke `id` hasn't touched takes its floor from the paint there now
+/// (as `exchange` does when a hair first touches it), and the floor rises
+/// by the share `own` the paint brings (`split_floor_take`).
+///
+/// # Safety
+/// `j` is inside `sf`'s buffer window.
+#[inline]
+pub(crate) unsafe fn split_floor_land(sf: &Surf, tool: &Tool, j: usize, id: u32, own: f32) {
+    if !sf.stroke_split {
+        return;
+    }
+    unsafe {
+        if *sf.touched.add(j) != id {
+            let v = *sf.vol.add(j);
+            let fl = if sf.dry.is_null() {
+                1.0
+            } else if sf.e7 {
+                let p = *sf.dry.add(j);
+                crate::drying::feel(v, p.cure, p.sub).0
+            } else {
+                crate::drying::fluid((*sf.dry.add(j)).cure)
+            };
+            *sf.touched.add(j) = id;
+            *sf.floor.add(j) = v * (1.0 - tool.pickup * fl);
+        }
+        *sf.floor.add(j) += own;
+    }
+}
+
 fn pickup_fraction(rate: f32, passes: f32) -> f32 {
     let rate = rate.clamp(0.0, 1.0);
     if passes <= 1.0 { rate } else { 1.0 - (1.0 - rate).powf(passes) }
@@ -1951,14 +2008,16 @@ pub(crate) unsafe fn exchange(
                 }
                 if v > 1e-6 {
                     let take = if pickup_passes > 1.0 {
-                        let own = if !exch && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                        let own = if !exch && !sf.stroke_split && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                         let rate = tool.pickup * wt * hunger * own * fl;
                         let take = v * pickup_fraction(rate, pickup_passes);
                         if exch { take.min(v) } else { take.min((v - *sf.floor.add(i)).max(0.0)) }
                     } else if exch {
                         (v * tool.pickup * wt * hunger * fl).min(v)
                     } else {
-                        let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                        // (with the stroke split the floor holds this
+                        // stroke's own paint, so no rate needs to spare it)
+                        let own = if !sf.stroke_split && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                         (v * tool.pickup * wt * hunger * own * fl).min((v - *sf.floor.add(i)).max(0.0))
                     };
                     if take > 0.0 {
@@ -1998,7 +2057,11 @@ pub(crate) unsafe fn exchange(
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                    let before = *sf.vol.add(i);
                     sf.lay(i, dep_per_w * wt * takes, &blat, bhide, bcure);
+                    if sf.stroke_split {
+                        *sf.floor.add(i) += *sf.vol.add(i) - before;
+                    }
                     *sf.stroke.add(i) = id;
                 } else if dep_per_w > 0.0 {
                     // a thinned load lays liquid: no more than what is left
@@ -2016,7 +2079,11 @@ pub(crate) unsafe fn exchange(
                     if d > 0.0 {
                         let cv = &mut *sf.cover.add(i);
                         *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                        let before = *sf.vol.add(i);
                         sf.lay(i, d * (1.0 - phi), &blat, bhide, bcure);
+                        if sf.stroke_split {
+                            *sf.floor.add(i) += *sf.vol.add(i) - before;
+                        }
                         if !sf.solv.is_null() {
                             *sf.solv.add(i) += d * phi * COAT_UM;
                         }
@@ -2098,7 +2165,9 @@ pub(crate) unsafe fn exchange(
                                     let cj = &mut *sf.cover.add(j);
                                     *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
                                     let picked = sf.pickup_lat(i, m).or_else(|| sf.layers.then(|| (*sf.lat.add(i)).clone()));
+                                    let own = split_floor_take(&sf, i, *sf.vol.add(i), m);
                                     let hd = sf.take(i, m);
+                                    split_floor_land(&sf, tool, j, id, own);
                                     sf.add(j, m, picked.as_ref().unwrap_or(&l), hd, cure);
                                 }
                             }
@@ -3732,5 +3801,149 @@ mod touch_split {
         }
         assert!(!Canvas::new(50, 1.0, [1.0; 3]).with_engine(6).with_touch_split(true).touch_split());
         assert!(!canvas(true).with_engine(5).touch_split());
+    }
+}
+
+
+#[cfg(test)]
+mod stroke_split {
+    use super::*;
+    use crate::color::hex;
+
+    fn canvas(split: bool) -> Canvas {
+        Canvas::new(400, 1.0, hex("#e8e0d0")).with_engine(9).with_size_mm(200.0).with_brush_skim(true).with_touch_split(true).with_stroke_split(split)
+    }
+
+    fn loaded(tool: Tool) -> Held {
+        let mut h = Held::new(tool, 7);
+        h.load(Paint::body(hex("#1c3c9c")), 0.6);
+        h
+    }
+
+    fn brush_vol(h: &Held) -> f32 {
+        h.bristles.iter().map(|b| b.vol).sum()
+    }
+
+    /// `pre` small strokes off to the side, so the next mark has another
+    /// stroke id (and so its own clumps, `engine7::exchange`).
+    fn after_strokes(mut c: Canvas, pre: usize) -> Canvas {
+        for _ in 0..pre {
+            let mut e = Held::new(Tool::filbert(10.0), 1);
+            c.drag(&mut e, &Gesture::line((50.0, 50.0), (60.0, 50.0)), None);
+        }
+        c
+    }
+
+    /// The share of its load the brush gave to the stroke `g`.
+    fn stroke(c: &mut Canvas, tool: Tool, g: &Gesture) -> f32 {
+        let mut h = loaded(tool);
+        let load = brush_vol(&h);
+        c.drag(&mut h, g, None);
+        (load - brush_vol(&h)) / load
+    }
+
+    fn line() -> Gesture {
+        Gesture::line((270.0, 500.0), (330.0, 500.0))
+    }
+
+    /// On bare ground there is nothing for a stroke to lift but its own
+    /// paint, and the film between brush and canvas splits once, where the
+    /// brush leaves it: with the switch a stroke gives the canvas exactly
+    /// what it gives with no pickup at all (its hairs' law). Before it the
+    /// trailing hairs lifted back a fifth or more of what the leading ones
+    /// laid, among the paint they had ploughed aside too.
+    #[test]
+    fn on_bare_ground_a_stroke_lifts_none_of_its_own_paint() {
+        for tool in [Tool::filbert(40.0), Tool::hog_flat(40.0)] {
+            let none = Tool { pickup: 0.0, ..tool.clone() };
+            let law = stroke(&mut canvas(true), none.clone(), &line());
+            assert_eq!(law, stroke(&mut canvas(false), none, &line()), "no pickup, the switch changes nothing");
+            let split = stroke(&mut canvas(true), tool.clone(), &line());
+            let old = stroke(&mut canvas(false), tool.clone(), &line());
+            assert!((split - law).abs() <= 1e-4 * law, "{:?}: with the split {split} vs no pickup {law}", tool.kind);
+            assert!(old < 0.9 * law, "{:?}: before the split {old} vs {law}", tool.kind);
+        }
+    }
+
+    /// How many hairs pass over a point is a property of how the brush is
+    /// drawn, not of the paint: one contact splits the film once. Doubling
+    /// the hairs leaves what a stroke lays as it was with the switch; before
+    /// it each extra hair lifted another share back.
+    #[test]
+    fn what_a_stroke_lays_does_not_depend_on_its_hair_count() {
+        let lay = |split: bool, bristles: usize| stroke(&mut canvas(split), Tool { bristles, ..Tool::filbert(40.0) }, &line().ramps(0.0, 0.0));
+        let (a, b) = (lay(true, 120), lay(true, 240));
+        assert!((a - b).abs() < 0.01 * a, "with the split: 120 hairs {a}, 240 hairs {b}");
+        let (a, b) = (lay(false, 120), lay(false, 240));
+        assert!(b < 0.95 * a, "before it: 120 hairs {a}, 240 hairs {b}");
+    }
+
+    /// A touch dragged d and a stroke of length d lay by the same split:
+    /// the touch the share 1 − exp(−(ℓ + d)/run) of its load (`touch_on`,
+    /// ℓ the pressed patch's mean length), the stroke's hairs 1 − exp(−d/run)
+    /// each. Over strokes (each has its own clumps) and without the
+    /// stroke's press-down and lift-off ramps, what they lay is in that
+    /// ratio.
+    #[test]
+    fn a_dragged_touch_and_a_stroke_lay_by_the_same_split() {
+        let tool = Tool::filbert(40.0);
+        let (mut touch, mut strokes) = (0.0f32, 0.0f32);
+        let n = 12;
+        for pre in 0..n {
+            strokes += stroke(&mut after_strokes(canvas(true), pre), tool.clone(), &line().ramps(0.0, 0.0));
+            let mut h = loaded(tool.clone());
+            let load = brush_vol(&h);
+            after_strokes(canvas(true), pre).touch(&mut h, &Touch::at(270.0, 500.0).pressure(0.8).drag(60.0, 0.0).angle(std::f32::consts::FRAC_PI_2), None);
+            touch += (load - brush_vol(&h)) / load;
+        }
+        let mean_len = root_area(tool.kind) * touch_half(&tool, 0.8, 1.0) * 0.5;
+        let law = (1.0 - (-(mean_len + 60.0) / tool.run).exp()) / (1.0 - (-60.0 / tool.run).exp());
+        let r = touch / strokes;
+        assert!((r / law - 1.0).abs() < 0.15, "touch / stroke {r}, the law's {law}");
+    }
+
+    /// On wet paint the stroke still lifts some of the paint that was there
+    /// (the brush gives the canvas less than with no pickup), but no more
+    /// than its pickup share of it, and it keeps all the stroke's own paint:
+    /// it gives more than before the switch.
+    #[test]
+    fn on_wet_paint_a_split_stroke_lifts_only_the_paint_that_was_there() {
+        let run = |split: bool, tool: Tool| {
+            let mut c = canvas(split);
+            let mut k = Knife::new(200.0);
+            k.load(Paint::body(hex("#f4efe2")), 1.0);
+            c.knife(&mut k, &[(300.0, 350.0), (300.0, 650.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+            let a = 1.0 / (c.f.scale * c.f.scale);
+            let before: f32 = c.wet.vol.iter().sum::<f32>() * a;
+            let mut h = loaded(tool);
+            let load = brush_vol(&h);
+            c.drag(&mut h, &line(), None);
+            let net = c.wet.vol.iter().sum::<f32>() * a - before;
+            assert!((net - (load - brush_vol(&h))).abs() < 1e-3 * load, "paint is conserved");
+            (net, before)
+        };
+        let tool = Tool::filbert(40.0);
+        let (net, before) = run(true, tool.clone());
+        let (law, _) = run(true, Tool { pickup: 0.0, ..tool.clone() });
+        assert!(net < law, "with pickup {net}, without {law}: it lifted nothing");
+        assert!(net > law - tool.pickup * before, "net {net}, without pickup {law}");
+        let (old, _) = run(false, tool);
+        assert!(net > old, "with the split {net}, before it {old}");
+    }
+
+    #[test]
+    fn the_switch_is_saved_and_needs_engine_7() {
+        for split in [false, true] {
+            let c = canvas(split);
+            assert_eq!(c.stroke_split(), split);
+            let mut saved = Vec::new();
+            c.write_state(&mut saved, "stroke").unwrap();
+            let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+            assert_eq!(restored.stroke_split(), split);
+            assert!(restored.touch_split());
+        }
+        assert!(!Canvas::new(50, 1.0, [1.0; 3]).with_engine(6).with_stroke_split(true).stroke_split());
+        assert!(!canvas(true).with_engine(5).stroke_split());
+        assert!(!Canvas::new(50, 1.0, [1.0; 3]).with_engine(9).stroke_split());
     }
 }

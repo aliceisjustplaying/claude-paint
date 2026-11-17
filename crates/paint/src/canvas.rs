@@ -273,6 +273,9 @@ pub struct Canvas {
     /// Engine 7: a touch lays the film a stroke lays where it starts, split
     /// from the same contact face (`bristle::touch_on`).
     pub(crate) touch_split: bool,
+    /// Engine 7: a stroke's hairs don't lift back the paint the same
+    /// stroke laid (`bristle::Surf::stroke_split`).
+    pub(crate) stroke_split: bool,
     /// While a blender pass with `blend_feather` runs: how much of the paint
     /// a bristle carries each pixel takes (0..1, see `Canvas::receptive`).
     pub(crate) receptive: Option<Vec<f32>>,
@@ -347,6 +350,7 @@ impl Canvas {
             blend_feather: false,
             brush_skim: false,
             touch_split: false,
+            stroke_split: false,
             receptive: None,
             soak: None,
             drain: false,
@@ -367,6 +371,7 @@ impl Canvas {
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.touch_split &= crate::engine7::active(v);
+        self.stroke_split &= crate::engine7::active(v);
         if v < crate::PIGMENT_MIXER {
             self.material = 0;
         }
@@ -508,6 +513,20 @@ impl Canvas {
 
     pub fn touch_split(&self) -> bool {
         self.touch_split
+    }
+
+    /// The film between a moving brush and the canvas splits once, where
+    /// the brush leaves it, so a stroke's hairs don't lift back the paint
+    /// its own hairs laid ahead of them: a stroke lays what its hairs' law
+    /// gives, and on wet paint lifts at most its pickup share of the paint
+    /// that was there before it (`bristle::exchange`). Engine 7 and later.
+    pub fn with_stroke_split(mut self, enabled: bool) -> Self {
+        self.stroke_split = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn stroke_split(&self) -> bool {
+        self.stroke_split
     }
 
     /// Physical width of the painting in mm (default 700).

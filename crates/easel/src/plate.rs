@@ -137,7 +137,9 @@ fn make(st: &S, o: Option<Table>) -> Result<SurfaceU> {
     let aspect = wmm / hmm;
     let mut c = paint::Canvas::new_window(px, aspect, Plate::bare_rgb(metal), None).with_engine(tubes.engine).with_size_mm(wmm).with_drain(tubes.drain).with_oils(tubes.oils);
     c.set_hand_time(Some(crate::time::SLICE_MIN));
-    let plate = Plate::new(metal, temper, wmm, hmm, thickness, bevel, px, c.window().h);
+    let mut plate = Plate::new(metal, temper, wmm, hmm, thickness, bevel, px, c.window().h);
+    // (the contact laws of a painting begun with them: kept with the plate, `--@ intaglio-contact`)
+    plate.contact = tubes.plate_contact;
     let h = c.height();
     let packed = Rc::new(crate::surfaces::Packed::rest(&c).map_err(|e| mlua::Error::runtime(format!("plate: the plate couldn't be put aside: {e}")))?);
     let recording_ground = crate::live_frames::ground_signature(&c);
@@ -276,6 +278,22 @@ fn apply(st: &S, op: Op) -> Result<Rep> {
     })
 }
 
+/// What a drypoint that cut a chip says: how much of its groove left as chip,
+/// and the attack angle only when all of it did (`beta` is the widest
+/// mark's, which may have ploughed where another part of the line cut).
+fn chip_words(r: &Rep) -> String {
+    let crit = fmt_num(paint::plate::BETA_C_DEG as f32);
+    if !r.2 {
+        return format!(
+            "drypoint: the needle cut a chip all along (its face met the metal at {}°, past its {crit}°: held upright with a fine point, or pushed): a clean line with no burr\n",
+            fmt_num(r.0[3].round() as f32)
+        );
+    }
+    let share = if r.0[4] > 0.0 { r.0[6] / r.0[4] } else { 0.0 };
+    let pct = if share < 0.01 { "under 1".to_string() } else { fmt_num((100.0 * share).round() as f32) };
+    format!("drypoint: the needle cut a chip from {pct}% of the groove (where its face met the metal steeper than {crit}°: held upright or pushed, or the middle of a fine point) and ploughed the rest into burr\n")
+}
+
 fn table(lua: &Lua, r: &Rep) -> Result<Table> {
     let t = lua.create_table()?;
     let names = ["width", "depth", "burr", "beta", "groove", "burr_volume", "chip", "flattened", "length", "seconds", "pressure", "scraped"];
@@ -301,13 +319,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         let pts = path(&st, k, "drypoint", &pts, o.as_ref(), 2.0, 20.0, TOOL_MM_S)?;
         let r = apply(&st, Op::Drypoint { tip_um: n.tip, cone_deg: n.cone, pts })?;
         if r.1 {
-            let beta = r.0[3];
-            st.borrow_mut().out.push_str(&format!(
-                "drypoint: the needle cut a chip (its attack angle {}° is past copper's {}°: held upright or pushed): a clean line with {} burr\n",
-                fmt_num(beta.round() as f32),
-                fmt_num(paint::plate::BETA_C_DEG as f32),
-                if r.2 { "some" } else { "no" }
-            ));
+            st.borrow_mut().out.push_str(&chip_words(&r));
         }
         table(lua, &r)
     });

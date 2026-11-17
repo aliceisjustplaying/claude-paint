@@ -1,6 +1,6 @@
 //! Tiny plates (40 × 30 mm beside a 64 px painting) for `--@ plate`.
 
-use crate::session::{PLATE_MARK, SURFACES_MARK, Session, box_for, parse_program};
+use crate::session::{INTAGLIO_CONTACT_MARK, PLATE_MARK, SURFACES_MARK, Session, box_for, parse_program};
 use crate::surfaces::MAIN;
 
 const W: usize = 64;
@@ -254,4 +254,93 @@ fn the_switch_comes_from_the_log_head() {
     let e = s.run(r#"plate{name="z", metal="zinc", temper="half-hard", size={30, 30}}"#).unwrap_err();
     assert!(e.contains("rolled"), "{e}");
     assert_eq!(s.st.borrow().surfaces.current_name(), MAIN);
+}
+
+/// A line drawn leftward, the needle pulled the way it goes at 55° as a painter
+/// sets it, each point's azimuth the line's way there: atan2 gives it as 180° or
+/// −180° by the sign of a hair's rise or fall.
+const LEFTWARD: &str = r#"r = k:drypoint(n, {{900, 300}, {700, 302}, {500, 299}, {300, 301}, {100, 300}}, {force=2, alt=55, azimuth={179.4, -179.7, 179.6, -179.5, 180}})
+print("chip=" .. r.chip .. " groove=" .. r.groove .. " beta=" .. r.beta)"#;
+
+fn contact_box(on: bool) -> paint::palette::Palette {
+    let mut b = box_for(None).unwrap();
+    b.plate_contact = on;
+    b
+}
+
+fn val(out: &str, key: &str) -> f64 {
+    out.split_whitespace().find_map(|w| w.strip_prefix(&format!("{key}="))).unwrap_or_else(|| panic!("{key} in {out}")).parse().unwrap()
+}
+
+/// The painter's fault: without the contact laws the azimuth is interpolated
+/// straight from 179.4° to −179.7°, swinging the needle round through 0° between
+/// two points, so it is pushed there and cuts a chip, while the line ploughs at 25°
+/// elsewhere. The message no longer quotes the ploughing 25° as the angle that cut.
+/// With the laws the azimuth turns the short way and the whole line ploughs.
+#[test]
+fn a_pulled_line_drawn_leftward_ploughs_under_the_contact_laws() {
+    let mut out = Vec::new();
+    for on in [false, true] {
+        let mut s = Session::with_box(W, contact_box(on)).unwrap().with_paper(true).unwrap();
+        run(&mut s, CANVAS);
+        run(&mut s, PLATE);
+        run(&mut s, "use(k)");
+        assert_eq!(plate(&s).contact, on);
+        out.push(s.run(LEFTWARD).unwrap().out);
+    }
+    let (old, new) = (&out[0], &out[1]);
+    assert!(val(old, "chip") > 0.0, "without the laws part of it cut: {old}");
+    assert!(old.contains("cut a chip from") && old.contains("% of the groove") && !old.contains("25°"), "{old}");
+    assert_eq!(val(new, "chip"), 0.0, "{new}");
+    assert!(!new.contains("cut a chip"), "{new}");
+    assert!((val(new, "beta") - 25.0).abs() < 0.01, "pulled at 55° with a 30° cone: 90 − 30 − 35 = 25°: {new}");
+    assert!((val(new, "groove") - val(old, "groove")).abs() < 1e-6 * val(old, "groove"), "the same groove");
+}
+
+/// The contact switch comes from the log's head and goes with the plate: a new
+/// painting has it and writes it; a log without it makes plates as before, and
+/// its plates save and read back as before; a plate made under it keeps it
+/// through a save, a replay and a handoff.
+#[test]
+fn the_contact_laws_come_from_the_log_head_and_stay_with_the_plate() {
+    assert!(box_for(None).unwrap().plate_contact);
+    let head = format!("--@ engine 9\n--@ paper\n{SURFACES_MARK}\n{PLATE_MARK}\n");
+    assert!(!box_for(Some(&head)).unwrap().plate_contact);
+    assert!(box_for(Some(&format!("{head}{INTAGLIO_CONTACT_MARK}\n--@ chunk 1\nx=1\n"))).unwrap().plate_contact);
+    assert!(!box_for(Some(&format!("{head}--@ chunk 1\n{INTAGLIO_CONTACT_MARK}\n"))).unwrap().plate_contact, "only before the first chunk");
+    let dir = Folder::new("contact");
+    let mut logs = Vec::new();
+    for on in [false, true] {
+        let mut s = Session::with_box(W, contact_box(on)).unwrap().with_paper(true).unwrap();
+        run(&mut s, CANVAS);
+        run(&mut s, PLATE);
+        run(&mut s, WORK);
+        run(&mut s, "use(k)\nk:drypoint(n, {{200, 700}, {800, 100}}, {force=1})");
+        let log = s.program("contact");
+        assert_eq!(log.lines().any(|l| l == INTAGLIO_CONTACT_MARK), on);
+        let r = replay(&log).unwrap();
+        assert!(plates(&r) == plates(&s) && plate(&r).contact == on, "the replay's plate is the painting's");
+        let path = dir.0.join(format!("{on}.ckpt"));
+        assert!(crate::save::write(&s, &log, &path).unwrap());
+        let back = crate::save::read(&path).unwrap();
+        assert!(plates(&back.session) == plates(&s) && back.session.st.borrow().tubes.plate_contact == on);
+        // the plate's own section: version 1 as before without the laws, 4 with them
+        let mut b = Vec::new();
+        plate(&s).write(&mut b).unwrap();
+        assert_eq!(u64::from_le_bytes(b[4..12].try_into().unwrap()), if on { 4 } else { 1 });
+        logs.push(log);
+    }
+    assert_eq!(logs[1].replace(&format!("{INTAGLIO_CONTACT_MARK}\n"), ""), logs[0]);
+    // a plate made under the laws keeps them in a session without them
+    let mut a = Session::with_box(W, contact_box(true)).unwrap().with_paper(true).unwrap();
+    run(&mut a, CANVAS);
+    run(&mut a, PLATE);
+    run(&mut a, WORK);
+    let sent = plate(&a);
+    let out = a.run(&format!("handoff(k, \"{}/key.surface\")", dir.1)).unwrap();
+    let sha = out.out.split("sha256=").nth(1).unwrap()[..64].to_string();
+    let mut b = Session::with_box(W, contact_box(false)).unwrap().with_paper(true).unwrap();
+    run(&mut b, CANVAS);
+    run(&mut b, &format!("k = receive(\"{}/key.surface\", {{after=60, sha256=\"{sha}\"}})\nuse(k)", dir.1));
+    assert!(plate(&b) == sent && plate(&b).contact);
 }

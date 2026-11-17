@@ -195,6 +195,16 @@ pub const DAMP_PAPER_MARK: &str = "--@ damp-paper";
 /// none of it. It builds on the plate and damp-paper switches (`PLATE_MARK`,
 /// `DAMP_PAPER_MARK`): without them it is accepted and installs nothing.
 pub const PRESS_MARK: &str = "--@ press";
+/// The intaglio-contact switch, in the head of a session file (paint's
+/// `plate::Plate::contact`): a plate made in a painting whose log has it keeps
+/// the contact laws. A drypoint needle ploughs or cuts stream by stream across its
+/// groove, along azimuths that turn the short way between points. A wipe
+/// past a burr is held off over the gap the burr leaves: for the palm, the
+/// gap an elastic skin stands over a ridge. The cloth's lee is held to each
+/// piece of burr's length. A new painting has it; a log without it replays as
+/// it was painted. It builds on the plate switch (`PLATE_MARK`): without
+/// that it is accepted and changes nothing.
+pub const INTAGLIO_CONTACT_MARK: &str = "--@ intaglio-contact";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -993,6 +1003,9 @@ impl Session {
         }
         if self.st.borrow().tubes.press {
             let _ = writeln!(s, "{PRESS_MARK}");
+        }
+        if self.st.borrow().tubes.plate_contact {
+            let _ = writeln!(s, "{INTAGLIO_CONTACT_MARK}");
         }
         // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
@@ -1796,6 +1809,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.wet_pastel = true;
         b.damp_paper = true;
         b.press = true;
+        b.plate_contact = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1891,6 +1905,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.wet_pastel = head(WET_PASTEL_MARK);
     b.damp_paper = head(DAMP_PAPER_MARK);
     b.press = head(PRESS_MARK);
+    b.plate_contact = head(INTAGLIO_CONTACT_MARK);
     Ok(b)
 }
 

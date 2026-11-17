@@ -320,20 +320,23 @@ fn printed_2n_line() -> (Vec<f64>, f64) {
 
 /// A printed drypoint line against real ones (notes/research/intaglio_physics.md
 /// §5.7: The Met's open-access scans, linearised): Rembrandt's pure drypoint
-/// *Clump of Trees with a Vista* (1652) has half-peak widths of 0.17–0.34 mm and
-/// OD above 0.3 over 0.17–0.57 mm; Whistler's *Weary* (1863) 0.21 mm and OD above
-/// 0.1 over 0.32 mm. Peaked, no plateau: hatching 0.1–0.3 mm apart stays open.
-/// The engine's 2 N line, wiped as a printer wipes it, is peaked too: its
-/// half-peak width no more than 0.35 mm and its OD no more than 0.15 at 0.3 mm
-/// off (it printed a plateau of OD 0.7–0.8 out there before the lee took the
-/// film by its fibres in it). It is a line: dark at its core, with velvet by
-/// the burr: the ink on the fin's faces and against them, which the yarn
-/// resting on its crest and the palm's ridge riding it can't reach and the
-/// damp sheet, pressed round the fin, takes. From below, by the scans: OD
-/// above 0.3 over at least Rembrandt's narrowest, 0.17 mm (it was 0.125 mm
-/// while the fin's own ink was wiped as the open plate). Its half-peak and its
-/// OD above 0.1 stay below the scans' (0.075 and 0.275 mm): its core prints
-/// twice its velvet's OD, and §5.7 says why that isn't bounded here.
+/// *Clump of Trees with a Vista* (1652) has half-peak widths of 0.17–0.34 mm,
+/// OD above 0.1 over 0.28–1.30 mm and OD above 0.3 over 0.17–0.57 mm, his
+/// heaviest strokes peaking at OD 1.15–1.27; Whistler's *Weary* (1863) 0.21 mm
+/// and OD above 0.1 over 0.32 mm. Peaked, no plateau: hatching 0.1–0.3 mm apart
+/// stays open. The engine's 2 N line, wiped as a printer wipes it, is peaked
+/// too: its half-peak width no more than 0.35 mm and its OD no more than 0.15
+/// at 0.3 mm off. It is a line: dark at its core, with velvet by the burr: the
+/// ink on the fin's faces and against them, which the yarn resting on its
+/// crest and the palm's ridge riding it can't reach and the damp sheet,
+/// pressed round the fin, takes. Printed as a print is seen (§6.7): its ink's
+/// split surface is matte, so its core reads at most what a matte black on
+/// uncoated paper reads (OD 1.2–1.3 dry), not the 2.2 a glossy film of its
+/// thickness would, and the velvet is above half of it; and the paper carries
+/// light sideways under it, so its edges fade over a few tenths of a mm.
+/// From below, by the scans: its half-peak, OD above 0.1 and OD above 0.3
+/// each at least Rembrandt's narrowest (0.17, 0.28 and 0.17 mm). None of it
+/// is fitted to them.
 #[test]
 fn a_printed_drypoint_line_is_peaked_like_real_ones() {
     let (od, um) = printed_2n_line();
@@ -348,4 +351,9 @@ fn a_printed_drypoint_line_is_peaked_like_real_ones() {
     assert!(od[(50.0 / um) as usize] > 0.1, "the velvet by the burr: {od:?}");
     let dark = width(0.3);
     assert!(dark >= 0.17, "OD above 0.3 over {dark} mm, Rembrandt's narrowest 0.17: {od:?}");
+    assert!(peak < 1.5, "a matte black on uncoated paper: OD {peak}");
+    assert!(half >= 0.17, "half-peak width {half} mm, Rembrandt's narrowest 0.17: {od:?}");
+    let faint = width(0.1);
+    assert!(faint >= 0.28, "OD above 0.1 over {faint} mm, Rembrandt's narrowest 0.28: {od:?}");
 }
+

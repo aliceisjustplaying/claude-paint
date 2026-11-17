@@ -1697,7 +1697,10 @@ use("painting")
     rolled dabber, 20 mm, at the dabber's pressure): dabbed once at each point, inking the
     disc of the face, 0.2 s a dab; dabbed again on the same place, it pushes the ink further.
     `dab=false` rubs the face along the points instead: it inks what it slides over, for the
-    time it slides there. Each leaves a 10 µm film.
+    time it slides there. Each leaves a 10 µm film. Under the contact laws a face is a rounded,
+    compliant wad: its pressure falls from the middle to nothing at its rim (Hertz), so it
+    fills the lines and lays its film fully only where it presses hard, thinning toward a soft
+    edge; pressed harder its contact widens as the cube root of the force.
   - Reports `added` (mm³), `film` (µm), `fill`, `temp`,
   `viscosity`, `area` (mm²), `seconds`. A coated plate (ground, rosin) refuses ink. A plate
   still in its acid (`k:immerse{}`) refuses ink, warmth and the wipes until `k:lift()`, and
@@ -1716,8 +1719,8 @@ use("painting")
   its rim (none if it is shallower than a yarn's radius). Past a burr the cloth is held off
   the plate for (B·h/p)^¼, half a millimetre or so either side: wiping across a drypoint
   line keeps that ink, the velvet of a drypoint; wiping along it doesn't (under the contact
-  laws the cloth drapes over the burr instead, the same whichever way the pad goes: below,
-  "The tarlatan's drape"). More `stiff`
+  laws the cloth's compressible face bears less beside the burr instead: below, "The tarlatan
+  beside a burr"). More `stiff`
   starch holds the cloth stiffer: less from wide lines. Reports `before`, `after`, `taken`,
   `laid`, `kept` (mm³: `kept` is what the cloth now holds, `before − after`), `film` and
   `lines` (µm left over the area), `seconds`, `temp`; `t.load`, `t.ink` (mm³ held).
@@ -1768,15 +1771,28 @@ was printed.
 - **The drypoint needle** ploughs or cuts stream by stream across its groove, along azimuths
   that turn the short way (above, "Plough or cut").
 - **The palm** is held off past a burr by the gap the burr opens, and reaches only the ink
-  above that gap (above, `k:hand_wipe`).
-- **The tarlatan's drape.** Past a burr the starched cloth bends as a beam lifted by it, and
-  lies off the plate for (72·B·h/p)^¼ either side: 1.5–2 mm past the burr of a 1–4 N line. It takes only
-  the ink standing above its drape, whichever way it moves (wiping along a line keeps its
-  velvet as wiping across does), and the drape runs evenly along a slanting line. Without the
-  laws the cloth was held off for (B·h/p)^¼ and only as far as it crossed the line, so a pad
-  wiped in circles took the velvet and a drypoint printed as thin as a pen line.
+  above that gap (above, `k:hand_wipe`). Where it comes down it touches whole: skin conforms
+  to the plate.
+- **The tarlatan beside a burr.** The cloth (softened for wiping: Peirce bending length 2–3 cm
+  by `stiff`) lies on its own face, a compressible layer of crimped yarns some 0.25 mm
+  thick that squeezes like any fibre mass. A burr squeezes that face over its top, nearly to
+  its core, and lifts the cloth by the rest, which settles back over a few tenths of a
+  millimetre. Beside the burr the face still touches the plate, but bears only part of the
+  pad's pressure, and takes the ink that much more slowly. So the cloth leaves a fine halo of
+  ink by each burred line, densest by the line and gone by a millimetre or so: the drypoint's
+  velvet. A hatch some 1.5 mm apart prints as lines with soft edges, not as a solid block.
+  The cloth never stands clear of the plate beside a drypoint burr at a hand's pressure; where
+  a very tall burr (a crossing) does lift it clear, its loose fibre ends hang in and draw up
+  some of the film. And the wipe's way matters: each point of the cloth's face carries the
+  ink it has picked up and lays some back as it goes, so wiping across a line lays the line's
+  ink on the side the pad goes to. Without the laws the cloth was held off for (B·h/p)^¼ and
+  only as far as it crossed the line, so a pad wiped in circles took the velvet and a
+  drypoint printed as thin as a pen line.
+- **Pads and faces are soft.** A tarlatan pad slid along rubs each point by the pressure under
+  it, falling to nothing at the pad's rim; a dabber or poupée lays a soft-edged footprint (above,
+  `by="dabber"`).
 - **The polish.** No wipe takes the film below the ink in the plate's finest scratches: half
-  its roughness, 0.05 µm on a plate polished to Ra 0.1 µm (an estimate). Printed, a faint
+  its roughness, 0.05 µm on a plate polished to Ra 0.1 µm (both estimates). Printed, a faint
   trace (OD about 0.01 in black); visible plate tone needs a lighter wipe.
 - **The sheet's size.** `press{}` places the plate by the sheet's size at the pull: a damp
   sheet is larger than as made (`damp_of(s)`'s `width` and `made_width`), so the print, dried,

@@ -371,14 +371,84 @@ naming the call:
 | `erase(m)`, `fix(m)`, `smudge(m)`, `lay_sheet(m)`, `r:wipe(m)` | the mask forms of these verbs; their path forms (and `fix()` over the whole surface) run |
 | `clip=` on `b:stroke`, `b:gesture`, `b:touch`, `b:spatter` and `o:paint` | a mark cut off at a mask's edge |
 | `canvas{style=, palette=}` | a styled canvas with its procedural trees, rocks and firs |
+| `o:inset(d)`, `o:offset(d)` on an outline | parallel curves computed from the drawn line |
+| `aerial(d, vis)` | a color shift computed from a distance |
 
 What runs: the points written in a chunk; `rand`, `randn`, `math.random`,
-`lerp`, `clamp`, `smoothstep`, `uneven` and `aerial`, which give numbers;
+`lerp`, `clamp`, `smoothstep` and `uneven`, which give numbers;
 `outline{}` with `o:paint`, `o:path`, `o:paths`, `o:strokes`, `o:at`,
-`o:inset`, `o:offset`, `o:length` and `o:corners`, which give points; the
+`o:length` and `o:corners`, which give points; the
 canvas and its ground or paper; piles, mixes and `palette{}`; loading and
-wiping tools; `wait`; `fix()`, `blow` and `tap`; and the questions
-`drying`, `soaked` and `feel`.
+wiping tools; `wait`; `fix()`, `blow` and `tap`; the questions
+`drying`, `soaked` and `feel`; and the gesture verbs below.
+
+### Gesture verbs
+
+These come with the switch. A painting begun before it has none of them
+(no `tape`, `stencil` or `lift_tape`, and the forms below are refused).
+
+```lua
+tape({{x, y}, ...}, {width=24})          -- a strip of masking tape, mm wide, along the points
+stencil({{x, y}, ...})                   -- stencil film over the canvas, the shape through the points cut out
+lift_tape()                              -- every piece lifted, with the paint on it; returns the wet paint taken, mm³
+lay_sheet({{x, y}, ...}, {grammage=, tone=})   -- paper: a sheet cut to the shape through the points
+fix({{x, y}, ...}, {distance=300, cone=25, speed=300})   -- fixative sprayed from a can along the points
+fix({{x, y}}, {distance=300, cone=25, seconds=0.5})      -- a burst at one point
+b:blend({{x, y}, ...}, {pressure=, ramps=, orient=, shake=, swell=})   -- a clean-blender stroke
+b:stroke(pts, {film="glaze"})            -- one stroke that lays a thin film; also film="scumble", and on b:gesture
+```
+
+- **Tape** (oil, not paper) is crepe-paper masking tape, 140 µm thick
+  (3M's 2090 is 0.137 mm), torn square at the ends of each span and pressed
+  down straight along it. It comes 1 to 100 mm wide; painter's rolls are 24
+  and 48 mm. It holds only on a touch-dry surface or bare ground: over paint
+  that is still wet or tacky it is refused. Where it lies, the surface the
+  brush, the knife and the rag meet is the tape's, raised by its thickness
+  (pieces laid over each other add up). Paint laid on it stays on it, a
+  tool picks paint up from it as from any surface, and paint pushed off it
+  lands beside it. `lift_tape()` takes every piece away with all the paint
+  on it, and leaves the picture under it as it was when the tape went down.
+- **A stencil** is a sheet of polyester stencil film, 190 µm thick (an
+  estimate), over the whole canvas with the closed shape through the points
+  cut out. Paint reaches the picture only through the hole. It lifts with
+  `lift_tape()`, like tape.
+- Tape and stencils are laid and lifted in one chunk: a chunk that ends
+  with them down fails. While they are down, `wait`, a pencil's lines,
+  `erase` and `fix()` over the whole surface are refused.
+- **A frisket** (`lay_sheet` with points, on paper) is the paper sheet of
+  [Drawing](#drawing-pencil-chalk-pastel-and-eraser) cut along the closed shape through the points: it covers
+  what lies inside the cut, and its edge is the cut, sharp to the pixel.
+- **Spray** (`fix` with points) is fixative from an aerosol can whose nozzle
+  moves along the points `distance` mm off the picture (50 to 1000; cans
+  say 300–400), throwing a full cone `cone` degrees across (5 to 90;
+  aerosol actuators 20–30), at `speed` mm/s (20 to 2000; about 300 is a
+  sweep). With one point it is a burst of `seconds` (0.05 to 10). The can
+  delivers 0.6 g/s, about 0.4 of it propellant that flashes off. The spray
+  lands as the cone's geometry gives: most under the nozzle, falling off to
+  nothing at distance × tan(cone/2) from it (67 mm at the defaults), so one
+  sweep lays a band about 13 cm wide, its middle about half a light coat.
+  Where it lands, its droplets (about 50 µm) spread into spots. The share of
+  the surface the spots reach binds that share of the loose drawing and
+  pastel, and the rest stays loose. The more spray lands, the more of the
+  bound pastel the resin wets and darkens: a light coat (20 g/m²) wets 0.15
+  of it, as `fix()` does over the whole surface. A paper sheet, tape or a
+  stencil keeps the spray off what it covers, and paint over a drawing
+  seals it. `fix` returns the solution laid on the canvas, g. Sources and
+  estimates: notes/research/masking_and_spray.md.
+- **A blender stroke** (`b:blend`) wipes the brush on the rag (nine tenths
+  of what it holds), then draws it through the wet paint along the points.
+  The hairs pick up wet paint and lay it down again further on, worked into
+  the wet film there rather than lying on top of it as a brushload does. It
+  lays no paint of its own. A badger (`brush("badger", w)`) is soft and
+  presses lightly. Any brush can be used.
+- **A film on one stroke** (`film=` on `b:stroke` and `b:gesture`): the
+  stroke adds no more than a thin film of wet paint to any spot, about
+  7.5 µm for `"glaze"` and 5 µm for `"scumble"` (the films of `work`'s
+  glaze and scumble hands). The hairs keep what they can't lay. Where the
+  hairs ride only the high points of the surface (light pressure, a stiff
+  brush, a rough ground), the film is broken. How much it shows depends on
+  the pile, as with those hands.
+- Hatching an area is the lines a pencil draws (`h:line`), one by one.
 
 A painting whose log's head has no `--@ gestures-only` line was begun
 before the switch and replays as it was painted, with all of the calls

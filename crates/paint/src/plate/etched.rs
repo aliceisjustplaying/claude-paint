@@ -102,6 +102,19 @@ pub struct Etch {
     pub net: Wrote,
     pub burr0: (f32, f32),
     pub lines: [Line; LINES],
+    /// What a solvent rag has dissolved of the cell's coats and not yet
+    /// through (µm, from each coat's face; 0: whole, `Plate::wash`): of its
+    /// stopping-out varnish, of its ground, and of its melted rosin's lenses.
+    pub stop_taken: f32,
+    pub ground_taken: f32,
+    pub rosin_taken: f32,
+}
+
+impl Etch {
+    /// Whether a rag has thinned any of its coats.
+    pub fn thinned(&self) -> bool {
+        self.stop_taken > 0.0 || self.ground_taken > 0.0 || self.rosin_taken > 0.0
+    }
 }
 
 /// Rosin dust laid on the plate: grains per µm² by size bin
@@ -246,6 +259,29 @@ pub struct Stopping {
     pub pts: Vec<Point>,
 }
 
+/// A melted rosin grain's lens over the plate (µm thick) under a dot of
+/// radius `r` µm: its grain's volume spread to `etch::MELT_SPREAD` times its
+/// diameter, (2/3)·d/MELT_SPREAD² (the look's).
+fn lens_um(r: f64) -> f64 {
+    2.0 / 3.0 * (2.0 * r / etch::MELT_SPREAD) / (etch::MELT_SPREAD * etch::MELT_SPREAD)
+}
+
+/// The radius (µm) left of a dot of radius `r` whose lens a solvent has
+/// dissolved `taken` µm into from its face, None once it is gone: a
+/// solvent takes a lens as a spherical cap whose face recedes evenly, the
+/// cap's sphere shrinking about its centre, so its foot draws in to
+/// √(2ρ′h′ − h′²) with ρ′ and h′ the sphere's radius and the cap's height
+/// less what was taken [D, geometry].
+fn thinned_lens(r: f64, taken: f64) -> Option<f64> {
+    let h = lens_um(r);
+    if taken >= h {
+        return None;
+    }
+    let rho = (r * r + h * h) / (2.0 * h);
+    let (rho1, h1) = (rho - taken, h - taken);
+    Some((2.0 * rho1 * h1 - h1 * h1).max(0.0).sqrt())
+}
+
 /// 64-bit mixing (splitmix64).
 fn mix(mut z: u64) -> u64 {
     z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -288,6 +324,11 @@ impl Coats {
 
     pub fn tiles_used(&self) -> usize {
         self.tiles.iter().filter(|t| t.is_some()).count()
+    }
+
+    /// Whether a solvent rag has left any coat thinned (`Etch::thinned`).
+    pub fn thinned(&self) -> bool {
+        self.tiles.iter().flatten().any(|t| t.iter().any(Etch::thinned))
     }
 }
 
@@ -348,9 +389,30 @@ impl Plate {
         x < self.w && y < self.h && self.coats.as_ref().is_some_and(|c| c.ground_um > 0.0 && c.laid.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1))
     }
 
-    /// The ground's thickness on cell (x, y) (µm; 0 where it isn't laid).
-    fn ground_at(&self, x: usize, y: usize) -> f64 {
-        if self.grounded(x, y) { self.ground_um() as f64 } else { 0.0 }
+    /// The ground's thickness on cell (x, y) (µm; 0 where it isn't laid): as
+    /// laid, less what a solvent rag has dissolved of it there.
+    pub fn ground_at(&self, x: usize, y: usize) -> f64 {
+        if self.grounded(x, y) { (self.ground_um() as f64 - self.etch(x, y).ground_taken as f64).max(0.0) } else { 0.0 }
+    }
+
+    /// The coat over cell (x, y)'s flat (µm): what is left of its stopping-out
+    /// varnish and of its ground.
+    pub fn coat_um(&self, x: usize, y: usize) -> f64 {
+        let e = self.etch(x, y);
+        let v = if e.stopped { (etch::STOP_UM - e.stop_taken as f64).max(0.0) } else { 0.0 };
+        v + self.ground_at(x, y)
+    }
+
+    /// The pinholes a thinned coat lets the acid through on cell (x, y), as
+    /// their number per µm² (each `etch::PINHOLE_UM` across at the face), where
+    /// they bare at least `etch::PINHOLE_LEAST` of it (`etch::bared_share`);
+    /// None where the coat holds, or there is none.
+    pub fn pinholes_at(&self, x: usize, y: usize) -> Option<f64> {
+        if !self.etch(x, y).stopped && !self.grounded(x, y) {
+            return None;
+        }
+        let p = etch::bared_share(self.coat_um(x, y));
+        (p >= etch::PINHOLE_LEAST).then(|| -(1.0 - p).max(1e-300).ln() / (std::f64::consts::PI * etch::PINHOLE_UM * etch::PINHOLE_UM))
     }
 
     /// The share of the plate's face the ground lies on.
@@ -375,7 +437,13 @@ impl Plate {
             if melted_only && !d.melted {
                 continue;
             }
-            out.extend(Self::layer_dots(d, x, y, self.w, area));
+            let dots = Self::layer_dots(d, x, y, self.w, area);
+            let taken = if d.melted { self.etch(x, y).rosin_taken as f64 } else { 0.0 };
+            if taken > 0.0 {
+                out.extend(dots.into_iter().filter_map(|(n, r)| thinned_lens(r, taken).map(|r| (n, r))));
+            } else {
+                out.extend(dots);
+            }
         }
         out
     }
@@ -618,15 +686,17 @@ impl Plate {
     /// `slide_pressed`) `passes` times (EP §8): each cell gets its share of a
     /// pass each time, and the solvent dissolves `etch::solvent_dissolves_um`
     /// of coat a whole pass, from the top down: stopping-out varnish
-    /// (`etch::STOP_UM`), then the ground or the rosin under it. A coat it
-    /// dissolves through in this cleaning comes off with the rag; one it
-    /// doesn't stays whole (the model keeps a coat on a cell or not: the
-    /// little the solvent took dries back as the solvent evaporates, and the
-    /// next cleaning starts on it again). Loose rosin is swept off by any
-    /// touch; a melted grain is a lens `(2/3)·d/MELT_SPREAD²` thick (the
-    /// look's). A cell left with no coat loses the acid's memory there, as
-    /// a whole clean does: what the acid opened stays as its openings.
-    /// Nothing happens where the rag doesn't go.
+    /// (`etch::STOP_UM`), then the ground or the rosin under it. The rag
+    /// carries off what it dissolves, so a coat it doesn't dissolve through is
+    /// left thinner by that much (`Etch::stop_taken`, `ground_taken`,
+    /// `rosin_taken`), and the next pass starts on what is left; a thinned
+    /// coat still resists the acid until pinholes open in it
+    /// (`pinholes_at`). Loose rosin is swept off by any touch; a melted
+    /// grain's lens (`lens_um`) is dissolved from its face, its foot drawing in
+    /// (`thinned_lens`), and goes once the solvent has taken its height. A
+    /// cell left with no coat loses the acid's memory there, as a whole clean
+    /// does: what the acid opened stays as its openings. Nothing happens
+    /// where the rag doesn't go.
     pub(super) fn wash(&mut self, pad_mm: f64, passes: u32, pts: &[Point]) -> Report {
         let pad = pad_mm.max(0.1);
         let st = if self.contact { self.slide_pressed(pts, &|_| pad, 0.25 * pad) } else { self.slide(pts, &|_| pad, 0.25 * pad) };
@@ -650,28 +720,42 @@ impl Plate {
             let mut e = self.etch(x, y);
             let was = e;
             if e.stopped {
-                if b < etch::STOP_UM {
+                let left = etch::STOP_UM - e.stop_taken as f64;
+                if b < left {
+                    e.stop_taken += b as f32;
+                    self.set_etch(x, y, e);
                     continue;
                 }
                 e.stopped = false;
-                b -= etch::STOP_UM;
+                e.stop_taken = 0.0;
+                b -= left;
             }
             let mut grounded = self.grounded(x, y);
-            let c = self.coats.as_mut().unwrap();
-            if grounded && b >= ground {
-                c.laid[i / 8] &= !(1 << (i % 8));
-                grounded = false;
+            if grounded {
+                let left = ground - e.ground_taken as f64;
+                if b >= left {
+                    let c = self.coats.as_mut().unwrap();
+                    c.laid[i / 8] &= !(1 << (i % 8));
+                    grounded = false;
+                    e.ground_taken = 0.0;
+                    b -= left;
+                } else {
+                    e.ground_taken += b as f32;
+                    b = 0.0;
+                }
             }
             let mut rosin = false;
             if !grounded {
+                let taken = e.rosin_taken as f64 + b;
+                let c = self.coats.as_mut().unwrap();
                 for dl in c.dust.iter_mut() {
                     let dots = Self::layer_dots(dl, x, y, w, area);
                     if dots.is_empty() {
                         continue;
                     }
-                    // the tallest grain's lens (a melted grain's radius is its spread's)
-                    let lens = dots.iter().map(|&(_, r)| 2.0 / 3.0 * (2.0 * r / etch::MELT_SPREAD) / (etch::MELT_SPREAD * etch::MELT_SPREAD)).fold(0.0, f64::max);
-                    if !dl.melted || b >= lens {
+                    // (the tallest grain's lens: a melted grain's radius is its spread's)
+                    let lens = dots.iter().map(|&(_, r)| lens_um(r)).fold(0.0, f64::max);
+                    if !dl.melted || taken >= lens {
                         if dl.gone.is_empty() {
                             dl.gone = vec![0u8; (w * h).div_ceil(8)];
                         }
@@ -680,6 +764,7 @@ impl Plate {
                         rosin = true;
                     }
                 }
+                e.rosin_taken = if rosin { taken as f32 } else { 0.0 };
             }
             if !grounded && !e.stopped && !rosin {
                 e = Etch::default();
@@ -806,8 +891,10 @@ impl Plate {
             l.wrote = put(&mut c, lam * w, w, lam * area, bv, ba, 0.0);
         }
         if e.z > 0.0 {
-            let dots = self.dots(x, y, true);
-            let n = etch::network(&dots, e.z as f64, k);
+            let n = match self.pinholes_at(x, y) {
+                Some(nh) => etch::pinholes(nh, etch::PINHOLE_UM, e.z as f64, k),
+                None => etch::network(&self.dots(x, y, true), e.z as f64, k),
+            };
             let (b0v, b0a) = e.burr0;
             let (bv, ba) = if b0v > 0.0 && b0a > 0.0 {
                 let h = 2.0 * b0v as f64 / b0a as f64;
@@ -832,14 +919,15 @@ impl Plate {
 
     /// The cells the bath reaches: where the ground lies, those with needle
     /// lines; where it doesn't (no ground, or cells its roller missed), every
-    /// cell of the face (between its dots, if it has any); never a stopped one.
+    /// cell of the face (between its dots, if it has any); never a stopped one;
+    /// and any whose thinned coat has pinholes (`pinholes_at`).
     fn exposed(&self) -> Vec<(usize, usize)> {
         let (x0, y0, x1, y1) = self.clip.unwrap_or((0, 0, self.w, self.h));
         let mut out = Vec::new();
         for y in y0..y1.min(self.h) {
             for x in x0..x1.min(self.w) {
                 let e = self.etch(x, y);
-                if !e.stopped && (!self.grounded(x, y) || e.lines.iter().any(|l| l.lam > 0.0)) {
+                if !e.stopped && (!self.grounded(x, y) || e.lines.iter().any(|l| l.lam > 0.0)) || self.pinholes_at(x, y).is_some() {
                     out.push((x, y));
                 }
             }
@@ -869,9 +957,11 @@ impl Plate {
         let (mut taken, mut deepest) = (0.0f64, 0.0f64);
         for (x, y) in cells {
             let t = self.ground_at(x, y);
+            let holes = self.pinholes_at(x, y);
             let mut e = self.etch(x, y);
             let before = self.cell(x, y).height() as f64;
-            if t > 0.0 {
+            let grounded = self.grounded(x, y);
+            if grounded && !e.stopped {
                 for l in e.lines.iter_mut().filter(|l| l.lam > 0.0) {
                     let mut z = l.z as f64;
                     for &(dose, delta) in doses {
@@ -880,7 +970,23 @@ impl Plate {
                     l.z = z as f32;
                     deepest = deepest.max(z);
                 }
-            } else {
+            }
+            if holes.is_some() {
+                // (through a thinned coat's pinholes: each a pit under its mouth in the coat)
+                if e.z <= 0.0 {
+                    let c = self.cell(x, y);
+                    e.burr0 = (c.burr_vol, c.burr_area);
+                    e.net = Wrote { burr_vol: c.burr_vol, burr_area: c.burr_area, ..Wrote::default() };
+                }
+                let mouth = self.coat_um(x, y);
+                let mut z = e.z as f64;
+                for &(dose, delta) in doses {
+                    let g = etch::slot_share(2.0 * (etch::PINHOLE_UM + z / k), delta as f64);
+                    z = etch::advance(z, dose as f64, delta as f64, g, mouth);
+                }
+                e.z = z as f32;
+                deepest = deepest.max(z);
+            } else if !grounded && !e.stopped {
                 if e.z <= 0.0 {
                     let c = self.cell(x, y);
                     e.burr0 = (c.burr_vol, c.burr_area);
@@ -1166,7 +1272,9 @@ fn add_line(e: &mut Etch, l: Line) {
 
 // ---------------------------------------------------------------- persistence (PLAT v2)
 
-pub(super) fn write_etch(c: &Coats, w: &mut impl Write) -> io::Result<()> {
+/// The coats (`thin`: each etched cell then also carries what a rag took of
+/// its varnish, ground and rosin, `Etch::stop_taken` and the rest).
+pub(super) fn write_etch(c: &Coats, w: &mut impl Write, thin: bool) -> io::Result<()> {
     put32(w, c.ground_um.to_bits())?;
     put64(w, c.bitten_um3.to_bits())?;
     put64(w, c.dust.len() as u64)?;
@@ -1226,6 +1334,11 @@ pub(super) fn write_etch(c: &Coats, w: &mut impl Write) -> io::Result<()> {
                 }
                 wrote_bytes(&l.wrote, &mut buf);
             }
+            if thin {
+                for v in [e.stop_taken, e.ground_taken, e.rosin_taken] {
+                    buf.extend_from_slice(&v.to_bits().to_le_bytes());
+                }
+            }
         }
         w.write_all(&buf)?;
     }
@@ -1244,8 +1357,11 @@ fn wrote_bytes(o: &Wrote, buf: &mut Vec<u8>) {
 
 /// The bytes of one cell's etching state.
 const ETCH_BYTES: usize = 1 + 4 + 25 + 8 + LINES * (28 + 25);
+/// And what a rag took of its coats, on a thinned plate's.
+const THIN_BYTES: usize = 3 * 4;
 
-pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
+/// `write_etch` read back; without `thin` every coat is whole.
+pub(super) fn read_etch(p: &Plate, r: &mut impl Read, thin: bool) -> io::Result<Coats> {
     let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, format!("plate: {m}"));
     let f32_ = |r: &mut dyn Read| -> io::Result<f32> { Ok(f32::from_bits(get32(r)?)) };
     let mut c = Coats::new(p);
@@ -1319,7 +1435,7 @@ pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
     if used > c.tiles.len() as u64 {
         return Err(bad("more etched tiles than it has"));
     }
-    let mut buf = vec![0u8; TILE * TILE * ETCH_BYTES];
+    let mut buf = vec![0u8; TILE * TILE * (ETCH_BYTES + if thin { THIN_BYTES } else { 0 })];
     let mut last = None;
     for _ in 0..used {
         let i = get64(r)? as usize;
@@ -1353,7 +1469,10 @@ pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
             for l in e.lines.iter_mut() {
                 *l = Line { lam: rd(&mut at), w0: rd(&mut at), z: rd(&mut at), groove: rd(&mut at), gw: rd(&mut at), burr: rd(&mut at), burr_h: rd(&mut at), wrote: wr(&mut at) };
             }
-            if e.net.bin as usize >= BINS || e.lines.iter().any(|l| l.wrote.bin as usize >= BINS) {
+            if thin {
+                (e.stop_taken, e.ground_taken, e.rosin_taken) = (rd(&mut at), rd(&mut at), rd(&mut at));
+            }
+            if e.net.bin as usize >= BINS || e.lines.iter().any(|l| l.wrote.bin as usize >= BINS) || [e.stop_taken, e.ground_taken, e.rosin_taken].iter().any(|v| !v.is_finite() || *v < 0.0) {
                 return Err(bad("an etched cell is damaged"));
             }
         }

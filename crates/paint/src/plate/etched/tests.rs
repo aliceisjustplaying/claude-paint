@@ -505,3 +505,153 @@ fn a_solvent_rag_sweeps_loose_rosin_where_it_goes_and_a_save_keeps_it() {
     p.write(&mut b).unwrap();
     assert!(Plate::read(&mut &b[..]).unwrap() == p);
 }
+
+/// A coat the rag doesn't dissolve through is left thinner (EP §8): one pass
+/// under the pad's middle takes `solvent_dissolves_um` of a 20 µm varnish and
+/// leaves the rest, which still keeps the acid off; the second pass takes the
+/// rest, and the face bites. Toward the pad's rim a pass takes the chord's
+/// share of that, and the ground under the rag's edge is thinned, not bared.
+#[test]
+fn one_pass_thins_a_varnish_and_a_second_clears_it() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(varnish(5.0));
+    let (x, y) = (at(10.0), at(5.0));
+    let d = etch::solvent_dissolves_um();
+    p.apply(wash(4.0, 5.0, 0.0, 20.0, 1));
+    let e = p.etch(x, y);
+    // (the middle row lies 0.05 mm off the path: its share is √(1 − 0.025²))
+    let m = (1.0f64 - 0.025 * 0.025).sqrt();
+    assert!(e.stopped && (e.stop_taken as f64 - m * d).abs() < 1e-3, "{} against {}", e.stop_taken, m * d);
+    assert!((p.coat_um(x, y) - (etch::STOP_UM - m * d)).abs() < 1e-3 && p.pinholes_at(x, y).is_none());
+    let kept = p.cell(x, y);
+    p.bite(ferric(10.0, 20.0));
+    assert!(p.cell(x, y) == kept, "a thinned varnish still resists");
+    p.apply(wash(4.0, 5.0, 0.0, 20.0, 1));
+    assert!(!p.etch(x, y).stopped && p.coat_um(x, y) == 0.0);
+    let before = p.cell(x, y).height();
+    p.bite(ferric(10.0, 20.0));
+    assert!(p.cell(x, y).height() < before, "bared, it bites");
+    // an 8 µm ground under the rag's rim: 1.95 mm off a 4 mm pad's path a pass rubs √(1 − 0.975²) of it
+    let mut g = tiny(Metal::Copper);
+    g.apply(rolled(8.0));
+    g.apply(wash(4.0, 5.0, 0.0, 20.0, 1));
+    let (gx, gy) = (at(10.0), at(5.0 + 1.95));
+    let share = (1.0f64 - (1.95f64 / 2.0).powi(2)).sqrt();
+    assert!(g.grounded(gx, gy) && (g.etch(gx, gy).ground_taken as f64 - share * d).abs() < 0.05 * share * d, "{} against {}", g.etch(gx, gy).ground_taken, share * d);
+    assert!(g.pinholes_at(gx, gy).is_none(), "{} µm of ground left", g.ground_at(gx, gy));
+}
+
+/// A thinned coat's pinholes (EP §8): over the plate's polish (σ = Ra·√(π/2))
+/// a varnish 1 µm thick bares nothing that shows and keeps the acid off, one
+/// 0.2 µm thick bares Φ(−0.2/σ) of the face, and the acid bites a pit under
+/// each pinhole as `etch::pinholes` has it.
+#[test]
+fn acid_follows_what_is_left_of_a_coat() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(varnish(5.0));
+    let y = at(5.0);
+    let (thick, thin) = ((at(8.0), y), (at(12.0), y));
+    for (c, left) in [(thick, 1.0f32), (thin, 0.2f32)] {
+        let e = Etch { stop_taken: etch::STOP_UM as f32 - left, ..p.etch(c.0, c.1) };
+        p.set_etch(c.0, c.1, e);
+    }
+    let sigma = crate::plate::inked::POLISH_RA_UM * (std::f64::consts::PI / 2.0).sqrt();
+    let phi = |t: f64| 0.5 * (1.0 - erf_(t / sigma / std::f64::consts::SQRT_2));
+    // (1 µm is 8σ: the Gaussian tail is under φ(8)/8)
+    let tail = (-32.0f64).exp() / (2.0 * std::f64::consts::PI).sqrt() / 8.0;
+    assert!(p.pinholes_at(thick.0, thick.1).is_none() && etch::bared_share(1.0) <= 2.0 * tail && tail < etch::PINHOLE_LEAST);
+    let t = p.coat_um(thin.0, thin.1);
+    assert!((t - 0.2).abs() < 1e-5);
+    let share = etch::bared_share(t);
+    assert!((share - phi(t)).abs() < 1e-6 && share > 0.03 && share < 0.08, "{share}");
+    let n = p.pinholes_at(thin.0, thin.1).unwrap();
+    assert!((1.0 - (-std::f64::consts::PI * n * etch::PINHOLE_UM * etch::PINHOLE_UM).exp() - share).abs() < 1e-9);
+    let kept = p.cell(thick.0, thick.1);
+    let before = p.cell(thin.0, thin.1);
+    p.bite(ferric(10.0, 20.0));
+    assert!(p.cell(thick.0, thick.1) == kept);
+    let e = p.etch(thin.0, thin.1);
+    assert!(e.z > 0.0 && e.stopped);
+    let want = etch::pinholes(n, etch::PINHOLE_UM, e.z as f64, Acid::Ferric.etch_factor());
+    let got: f32 = (0..BINS).map(|k| p.cell(thin.0, thin.1).vol[k] - before.vol[k]).sum();
+    assert!((got as f64 - want.vol).abs() < 1e-4 * want.vol.max(1e-6), "{got} against {}", want.vol);
+    assert!(want.share > share && want.vol > 0.0);
+}
+
+/// The normal CDF's erf, written out here so the test doesn't read the code's.
+fn erf_(x: f64) -> f64 {
+    // (a series: erf x = 2/√π Σ (−1)ⁿ x^(2n+1)/(n!(2n+1)), ample for |x| < 3)
+    let mut sum = 0.0;
+    let mut term = x;
+    for n in 0..60 {
+        sum += term / (2 * n + 1) as f64;
+        term *= -x * x / (n + 1) as f64;
+    }
+    2.0 / std::f64::consts::PI.sqrt() * sum
+}
+
+/// A plate saved with whole coats is written as before (no laws word, the
+/// version-2 layout), and one a rag has thinned carries what it took (the
+/// laws' bit 1) and reads back so; a save without the bit reads with whole
+/// coats.
+#[test]
+fn a_thinned_plate_reads_back_and_whole_coats_are_written_as_before() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(rolled(etch::GROUND_UM as f32));
+    p.apply(varnish(5.0));
+    let bytes = |p: &Plate| {
+        let mut b = Vec::new();
+        p.write(&mut b).unwrap();
+        b
+    };
+    let whole = bytes(&p);
+    assert_eq!(u64::from_le_bytes(whole[4..12].try_into().unwrap()), 2);
+    let back = Plate::read(&mut &whole[..]).unwrap();
+    assert!(back == p && back.coats().is_some_and(|c| !c.thinned()));
+    p.apply(wash(4.0, 5.0, 0.0, 20.0, 1));
+    assert!(p.coats().unwrap().thinned());
+    let thin = bytes(&p);
+    assert_eq!(u64::from_le_bytes(thin[4..12].try_into().unwrap()), 4);
+    assert_eq!(u64::from_le_bytes(thin[12..20].try_into().unwrap()), 2);
+    assert_eq!(Plate::read(&mut &thin[..]).unwrap(), p);
+}
+
+fn fnv(b: &[u8]) -> u64 {
+    b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &x| (h ^ x as u64).wrapping_mul(0x0100_0000_01b3))
+}
+
+/// The coated and the inked plates of `a_save_from_before_thinning_reads_with_whole_coats`.
+fn old_plates() -> (Plate, Plate) {
+    let mut p = tiny(Metal::Copper);
+    p.apply(rolled(etch::GROUND_UM as f32));
+    p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0, 5.0, 0.3), pt(16.0, 5.0, 0.3)] });
+    p.apply(varnish(7.0));
+    p.bite(ferric(5.0, 20.0));
+    let mut q = tiny(Metal::Copper);
+    q.apply(Op::Aquatint { per_um2: etch::dust_box(0.6, 30.0, 1.0).iter().map(|&v| v as f32).collect(), seed: 7 });
+    q.apply(Op::Melt);
+    q.bite(ferric(2.0, 20.0));
+    q.apply(Op::Clean);
+    let ink = crate::plate::inked::Ink { name: "black".into(), tubes: vec![("bone black".into(), 3.0)], oil: 0.1, stiff: 1.0, pvc: 0.45, k: [8.0, 8.5, 9.0], s: [0.5, 0.5, 0.5], drying: 0.4 };
+    q.ink(&ink, crate::plate::inked::InkTool::of(crate::plate::inked::Inker::Card), &[pt(0.0, 5.0, 10.0), pt(20.0, 5.0, 10.0)], 0.0).unwrap();
+    q.age_ink(30.0 * 24.0 * 60.0);
+    (p, q)
+}
+
+/// Saves from before a rag could thin a coat: a grounded, needled, varnished and bitten plate and
+/// an aquatinted, cleaned and inked one, written by this build, are byte for byte what the build
+/// before thinning wrote (their digests and lengths, taken from it at 0a38ee2b), so those saves
+/// read here, and they read with every coat whole and no stripper on the ink.
+#[test]
+fn a_save_from_before_thinning_reads_with_whole_coats() {
+    let (p, q) = old_plates();
+    let (mut a, mut b) = (Vec::new(), Vec::new());
+    p.write(&mut a).unwrap();
+    q.write(&mut b).unwrap();
+    assert_eq!((fnv(&a), a.len()), (0x8de2_d2bd_8b84_428d, 4_893_716));
+    assert_eq!((fnv(&b), b.len()), (0x51ff_4a65_d8a4_5489, 5_440_231));
+    let (pa, qb) = (Plate::read(&mut &a[..]).unwrap(), Plate::read(&mut &b[..]).unwrap());
+    assert!(pa == p && qb == q);
+    assert!(pa.coats().is_some_and(|c| !c.thinned()) && pa.etch(at(10.0), at(7.0)).stopped && pa.grounded(at(10.0), at(7.0)));
+    assert!(qb.inking().is_some_and(|k| !k.stripped()) && !qb.lye_on() && qb.inked());
+}

@@ -229,6 +229,10 @@ pub mod pace {
     pub const WARM_S: f64 = 60.0 + 4.0 * 15.0;
     /// A tarlatan refolded: as a rag (`rag::pace::REFOLD`).
     pub const REFOLD: f64 = crate::rag::pace::REFOLD;
+    /// A plate rinsed under the tap and dried, front and back [E].
+    pub const RINSE_S: f64 = 60.0;
+    /// A plate laid in a tray of stripper and taken out [E].
+    pub const BATH_S: f64 = 30.0;
 }
 
 /// Burnt plate oil's viscosity (Pa·s, 20 °C) at grade `stiff` (0 light .. 1 heavy).
@@ -1111,6 +1115,14 @@ pub struct InkCell {
     pub cure: f32,
     /// Which inks, as volume shares of 65535.
     pub mix: [u16; INKS],
+    /// How far a caustic stripper has loosened the ink from the face of the
+    /// film and from the face of the ink in each opening (µm; `Plate::strip`):
+    /// soap and loose network that water rinses and a rag wipes as liquid.
+    pub loose_film: f32,
+    pub loose_line: f32,
+    /// Whether the stripper lies on it, working (`Plate::strip`, until
+    /// `rinse` or a rag takes it off).
+    pub lye: bool,
 }
 
 impl InkCell {
@@ -1141,6 +1153,83 @@ impl InkCell {
         }
         self.mix = quantize(&v);
         self.cure = (self.cure * had + cure * add) / t;
+        // (fresh ink laid where a stripper was: the printer inks a rinsed plate (the easel
+        // refuses ink on one with stripper on it), and the front would start again from its face)
+        self.loose_film = 0.0;
+        self.loose_line = 0.0;
+        self.lye = false;
+    }
+}
+
+/// What of a cell's set or loosened ink a solvent rag's pass can't take
+/// (`Plate::clean_ink`, EP §9), fixed as the pass comes to it: the network
+/// (`etch::sol_share` of the cure, past the gel point) under the face the
+/// stripper has loosened, on the flat (µm) and in each opening (µm of depth).
+/// Wet ink that no stripper has touched has none.
+#[derive(Clone, Copy, Debug)]
+struct Floor {
+    sol: f64,
+    film: f64,
+    line: [f64; BINS],
+}
+
+impl Floor {
+    fn of(ic: &InkCell, c: &Cell) -> Option<Floor> {
+        let sol = crate::etch::sol_share(ic.cure as f64);
+        if sol >= 1.0 && ic.loose_film <= 0.0 && ic.loose_line <= 0.0 {
+            return None;
+        }
+        let f = ic.film as f64;
+        let film = (1.0 - sol) * (f - (ic.loose_film as f64).min(f));
+        let mut line = [0.0; BINS];
+        for k in 0..BINS {
+            let open = c.open[k] as f64;
+            if ic.line[k] > 0.0 && open > 0.0 {
+                let depth = ic.line[k] as f64 / open;
+                line[k] = (1.0 - sol) * (depth - (ic.loose_line as f64).min(depth));
+            }
+        }
+        Some(Floor { sol, film, line })
+    }
+
+    /// A share of a pass: on the flat everything above the network is kept by
+    /// `keep` as wet ink is (the loosened face as part of it); in each opening
+    /// the cloth draws `draw` µm up, from the loosened face first, and no
+    /// lower than the network.
+    fn rag(&self, out: &mut InkCell, c: &Cell, keep: f64, draw: f64) {
+        let f = out.film as f64;
+        out.film = (self.film + (f - self.film).max(0.0) * keep) as f32;
+        out.loose_film = (out.loose_film as f64 * keep) as f32;
+        for k in 0..BINS {
+            let open = c.open[k] as f64;
+            if out.line[k] <= 0.0 || open <= 0.0 {
+                continue;
+            }
+            let depth = out.line[k] as f64 / open;
+            out.line[k] = (open * (depth - draw).max(self.line[k].min(depth))) as f32;
+        }
+        out.loose_line = (out.loose_line as f64 - draw).max(0.0) as f32;
+    }
+
+    /// After the pass: the cure rises to that of a film holding the sol
+    /// that is left of what the stripper hasn't loosened (`etch::cure_of_sol`).
+    fn cure(&self, ic: &mut InkCell, c: &Cell) {
+        if self.sol >= 1.0 || ic.total() <= 0.0 {
+            return;
+        }
+        let f = ic.film as f64;
+        let (mut left, mut net) = (f - (ic.loose_film as f64).min(f), self.film);
+        for k in 0..BINS {
+            let open = c.open[k] as f64;
+            if ic.line[k] > 0.0 && open > 0.0 {
+                let depth = ic.line[k] as f64 / open;
+                left += open * (depth - (ic.loose_line as f64).min(depth));
+                net += open * self.line[k].min(depth);
+            }
+        }
+        if left > 0.0 {
+            ic.cure = ic.cure.max(crate::etch::cure_of_sol(((left - net) / left).max(0.0)) as f32);
+        }
     }
 }
 
@@ -1169,6 +1258,13 @@ pub struct Inking {
     pub warm_at: f64,
     /// The clock (minutes) its ink's cure is brought up to.
     pub aged_to: f64,
+}
+
+impl Inking {
+    /// Whether a stripper lies on any of its ink or has loosened any.
+    pub fn stripped(&self) -> bool {
+        self.tiles.iter().flatten().flat_map(|t| t.iter()).any(|c| c.total() > 0.0 && (c.lye || c.loose_film > 0.0 || c.loose_line > 0.0))
+    }
 }
 
 /// How ink goes on: a card's edge dragged along the points, or a dabber's or
@@ -1391,7 +1487,8 @@ impl Plate {
 
     /// Bring the ink's cure up to `now` (minutes on the plate's clock): each
     /// cell's ink dries as an oil film of its thickness (`drying::rate`),
-    /// at engine 3's pace (which every later engine keeps).
+    /// at engine 3's pace (which every later engine keeps). Where a caustic
+    /// stripper lies on it its front goes on in (`etch::CAUSTIC_UM_MIN`).
     pub fn age_ink(&mut self, now: f64) {
         let Some(k) = self.ink.as_deref_mut() else { return };
         let dt = (now - k.aged_to) as f32;
@@ -1401,9 +1498,18 @@ impl Plate {
         k.aged_to = now;
         let pace = Pace::of(3);
         let inks = k.inks.clone();
+        let front = (dt as f64 * crate::etch::CAUSTIC_UM_MIN) as f32;
         for t in k.tiles.iter_mut().flatten() {
             for c in t.iter_mut() {
                 let v = c.total();
+                if c.lye && v > 0.0 {
+                    // (the stripper's front goes on in from each deposit's face; no further than the film)
+                    c.loose_film = (c.loose_film + front).min(c.film);
+                    c.loose_line += front;
+                } else if v <= 0.0 {
+                    // (a cell a wipe has emptied keeps nothing of the stripper)
+                    (c.loose_film, c.loose_line, c.lye) = (0.0, 0.0, false);
+                }
                 if v <= 0.0 || c.cure >= 1.0 {
                     continue;
                 }
@@ -1590,11 +1696,18 @@ impl Plate {
     ///   for the time the pad lies over the point, m·pad/speed): the ink
     ///   sinks by that depth [D]. A stiff ink comes out of deep lines more
     ///   slowly than a loose one, and a warm plate gives it up sooner.
+    /// - **set ink** (EP §9): past its gel point the ink is a cross-linked
+    ///   network the solvent swells but cannot dissolve, holding its sol
+    ///   (`etch::sol_share`): the rag takes the sol as it takes wet ink, and
+    ///   the network stays. What it leaves holds less sol, as a further-cured
+    ///   film would (`etch::cure_of_sol`), so the next pass takes no more of
+    ///   it. Ink a stripper has loosened (`InkCell::loose_film`,
+    ///   `loose_line`) comes off as wet ink, from the face down.
     ///
-    /// A cell whose ink comes below an oil's monolayer
-    /// (`etch::MONOLAYER_UM`) holds none. What the rag takes it keeps: a
-    /// solvent rag is refolded as it fills and lays nothing back. Nothing
-    /// is taken where the rag doesn't go.
+    /// The rag wipes off any stripper where it goes (`InkCell::lye`). A cell
+    /// whose ink comes below an oil's monolayer (`etch::MONOLAYER_UM`) holds
+    /// none. What the rag takes it keeps: a solvent rag is refolded as it
+    /// fills and lays nothing back. Nothing is taken where the rag doesn't go.
     pub fn clean_ink(&mut self, pts: &[Point], pad_mm: f64, passes: u32, now: f64) -> WipeReport {
         self.age_ink(now);
         let temp = self.temp_c(now);
@@ -1610,7 +1723,8 @@ impl Plate {
             // it so far in the pass: a pass keeps RESIDUE/(f + SOLVENT) of that film, and draws
             // the lines' ink up by Washburn over its whole time there, shared out over the
             // stretches that rub it, so a pass is one pass however its path is cut up)
-            let mut met: std::collections::HashMap<(usize, usize), (f64, f64)> = std::collections::HashMap::new();
+            // (and for set or loosened ink, what of it the pass can't take: the network, `Floor`)
+            let mut met: std::collections::HashMap<(usize, usize), (f64, f64, Option<Floor>)> = std::collections::HashMap::new();
             for st in &stretches {
                 let secs = pad / (st.pose.speed as f64).max(1e-3);
                 for &(x, y, m) in &st.cells {
@@ -1624,19 +1738,24 @@ impl Plate {
                     let (eta, tau) = rheology(&inks, &sh, temp);
                     let mut out = ic;
                     let f = ic.film as f64;
-                    let seen = met.entry((x, y)).or_insert((f, 0.0));
-                    let (f0, t0) = *seen;
+                    let seen = met.entry((x, y)).or_insert_with(|| (f, 0.0, Floor::of(&ic, &c)));
+                    let (f0, t0, floor) = *seen;
                     seen.1 += m as f64 * secs;
                     let draw = capillary_um(eta, tau, t0 + m as f64 * secs) - capillary_um(eta, tau, t0);
-                    out.film = (f * (hr / (f0 + hs)).min(1.0).powf(m as f64)) as f32;
-                    for k in 0..BINS {
-                        let open = c.open[k] as f64;
-                        if out.line[k] <= 0.0 || open <= 0.0 {
-                            continue;
+                    if let Some(fl) = floor {
+                        fl.rag(&mut out, &c, (hr / (f0 + hs)).min(1.0).powf(m as f64), draw);
+                    } else {
+                        out.film = (f * (hr / (f0 + hs)).min(1.0).powf(m as f64)) as f32;
+                        for k in 0..BINS {
+                            let open = c.open[k] as f64;
+                            if out.line[k] <= 0.0 || open <= 0.0 {
+                                continue;
+                            }
+                            let depth = out.line[k] as f64 / open;
+                            out.line[k] = (open * (depth - draw).max(0.0)) as f32;
                         }
-                        let depth = out.line[k] as f64 / open;
-                        out.line[k] = (open * (depth - draw).max(0.0)) as f32;
                     }
+                    out.lye = false;
                     if out.film < mono as f32 {
                         out.film = 0.0;
                     }
@@ -1645,7 +1764,18 @@ impl Plate {
                             out.line[k] = 0.0;
                         }
                     }
+                    if out.total() <= 0.0 {
+                        (out.loose_film, out.loose_line) = (0.0, 0.0);
+                    }
                     *self.ink_cell_mut(x, y) = out;
+                }
+            }
+            // (what is left of set ink holds less sol: its cure is a further-cured film's)
+            for (&(x, y), &(_, _, floor)) in &met {
+                if let Some(fl) = floor {
+                    let c = self.cell(x, y);
+                    let ic = self.ink_cell_mut(x, y);
+                    fl.cure(ic, &c);
                 }
             }
         }
@@ -1653,6 +1783,103 @@ impl Plate {
         let taken = (before.0 + before.1) - (after.0 + after.1);
         let area_mm2 = self.union(&stretches).len() as f64 * unit * 1e-6;
         self.wipe_report(before, after, taken, 0.0, area_mm2, swept * 1e-6 / pace::TARLATAN_MM2_S, temp)
+    }
+
+    // ------------------------------------------------------------ the stripper
+
+    /// Whether a caustic stripper lies on the plate's ink anywhere.
+    pub fn lye_on(&self) -> bool {
+        self.ink.as_deref().is_some_and(|k| k.tiles.iter().flatten().flat_map(|t| t.iter()).any(|c| c.lye && c.total() > 0.0))
+    }
+
+    /// A caustic stripper (`etch::CAUSTIC_UM_MIN`) brushed along `pts` (mm;
+    /// each point's speed its own) with a flat brush `brush_mm` wide at `now`
+    /// (EP §9): the brush's edge sweeps the band it passes over
+    /// (`Plate::sweep`) and lays the paste on the inked cells it covers over
+    /// half of. From then, on the plate's clock, the stripper's front goes into
+    /// the ink there from the face of the film and of the ink in each opening
+    /// (`age_ink`), until water rinses it off (`rinse`) or a rag wipes it
+    /// (`clean_ink`): the dwell is the time between. Nothing happens where
+    /// the brush doesn't go, nor on bare metal (the copper is untouched by
+    /// it [M: copper resists sodium hydroxide at room temperature]). Returns
+    /// the inked area it laid on (mm²) and the hand time (s).
+    pub fn strip(&mut self, pts: &[Point], brush_mm: f64, now: f64) -> (f64, f64) {
+        self.age_ink(now);
+        let b = brush_mm.max(1.0);
+        let touched = self.touches(&self.sweep(pts, &|_| b, b));
+        let mut n = 0usize;
+        for (i, t) in touched.iter().enumerate() {
+            let (x, y) = (i % self.w, i / self.w);
+            if *t >= 0.5 && self.ink_cell(x, y).total() > 0.0 {
+                self.ink_cell_mut(x, y).lye = true;
+                n += 1;
+            }
+        }
+        let secs: f64 = pts.windows(2).map(|p| ((p[1].x - p[0].x) as f64).hypot((p[1].y - p[0].y) as f64) / (0.5 * (p[0].speed + p[1].speed) as f64).max(1e-3)).sum();
+        (n as f64 * self.pitch * self.pitch * 1e-6, secs)
+    }
+
+    /// The plate laid in a tray of the stripper at `now`: it lies on all its
+    /// ink, working from then as a brushed paste does (`strip`), until the
+    /// plate is rinsed. Returns the inked area (mm²).
+    pub fn strip_bath(&mut self, now: f64) -> f64 {
+        self.age_ink(now);
+        let a = self.pitch * self.pitch * 1e-6;
+        let Some(k) = self.ink.as_deref_mut() else { return 0.0 };
+        let mut n = 0usize;
+        for t in k.tiles.iter_mut().flatten() {
+            for c in t.iter_mut() {
+                if c.total() > 0.0 {
+                    c.lye = true;
+                    n += 1;
+                }
+            }
+        }
+        n as f64 * a
+    }
+
+    /// The plate rinsed under water at `now`, all over (a rinse is the whole
+    /// plate's): the stripper and the ink it has loosened wash off (soap of
+    /// the oil's fatty acids dissolves in water and the loose network goes
+    /// with it [E]); what it has not reached stays.
+    pub fn rinse(&mut self, now: f64) -> WipeReport {
+        self.age_ink(now);
+        let temp = self.temp_c(now);
+        let before = self.ink_um3();
+        let mono = crate::etch::MONOLAYER_UM;
+        let (w, h) = (self.w, self.h);
+        let mut area = 0usize;
+        for y in 0..h {
+            for x in 0..w {
+                let ic = self.ink_cell(x, y);
+                if ic.total() <= 0.0 || (!ic.lye && ic.loose_film <= 0.0 && ic.loose_line <= 0.0) {
+                    continue;
+                }
+                area += 1;
+                let c = self.cell(x, y);
+                let mut out = ic;
+                out.film = (ic.film - ic.loose_film.min(ic.film)).max(0.0);
+                for k in 0..BINS {
+                    let open = c.open[k] as f64;
+                    if out.line[k] <= 0.0 || open <= 0.0 {
+                        continue;
+                    }
+                    let depth = out.line[k] as f64 / open;
+                    out.line[k] = (open * (depth - ic.loose_line as f64).max(0.0)) as f32;
+                    if (out.line[k] as f64) < mono * open {
+                        out.line[k] = 0.0;
+                    }
+                }
+                if out.film < mono as f32 {
+                    out.film = 0.0;
+                }
+                (out.loose_film, out.loose_line, out.lye) = (0.0, 0.0, false);
+                *self.ink_cell_mut(x, y) = out;
+            }
+        }
+        let after = self.ink_um3();
+        let taken = (before.0 + before.1) - (after.0 + after.1);
+        self.wipe_report(before, after, taken, 0.0, area as f64 * self.pitch * self.pitch * 1e-6, pace::RINSE_S, temp)
     }
 
     // ------------------------------------------------------------ wiping
@@ -2812,7 +3039,7 @@ impl Plate {
                 }
                 let c = self.cell(cx, cy);
                 let fc = fine.cell(x, y);
-                let mut out = InkCell { cure: ic.cure, mix: ic.mix, ..InkCell::default() };
+                let mut out = InkCell { cure: ic.cure, mix: ic.mix, loose_film: ic.loose_film, loose_line: ic.loose_line, lye: ic.lye, ..InkCell::default() };
                 for b in 0..BINS {
                     if c.vol[b] > 0.0 {
                         out.line[b] = ic.line[b] / c.vol[b] * fc.vol[b];
@@ -2836,7 +3063,9 @@ impl Plate {
 
 /// The ink's part of a plate's section (`PLAT` version 3): the inks, the
 /// warmth, the clock it is aged to, then the tiles in use with their cells.
-pub(super) fn write_ink(k: &Inking, w: &mut impl Write) -> io::Result<()> {
+/// (`thin`: each ink cell then also carries what a stripper has loosened of it
+/// and whether it lies on it.)
+pub(super) fn write_ink(k: &Inking, w: &mut impl Write, thin: bool) -> io::Result<()> {
     put64(w, k.inks.len() as u64)?;
     for ink in &k.inks {
         put_str(w, &ink.name)?;
@@ -2865,6 +3094,12 @@ pub(super) fn write_ink(k: &Inking, w: &mut impl Write) -> io::Result<()> {
             for m in c.mix {
                 buf.extend_from_slice(&m.to_le_bytes());
             }
+            if thin {
+                for v in [c.loose_film, c.loose_line] {
+                    buf.extend_from_slice(&v.to_bits().to_le_bytes());
+                }
+                buf.push(c.lye as u8);
+            }
         }
         w.write_all(&buf)?;
     }
@@ -2872,8 +3107,11 @@ pub(super) fn write_ink(k: &Inking, w: &mut impl Write) -> io::Result<()> {
 }
 
 const INK_BYTES: usize = 4 * (BINS + 2) + 2 * INKS;
+/// And the stripper's, on a plate it has worked on.
+const STRIP_BYTES: usize = 4 * 2 + 1;
 
-pub(super) fn read_ink(p: &Plate, r: &mut impl Read) -> io::Result<Inking> {
+/// `write_ink` read back; without `thin` no stripper has touched the ink.
+pub(super) fn read_ink(p: &Plate, r: &mut impl Read, thin: bool) -> io::Result<Inking> {
     let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, format!("plate: {m}"));
     let f = |r: &mut dyn Read| -> io::Result<f32> { Ok(f32::from_bits(get32(r)?)) };
     let n = get64(r)?;
@@ -2909,7 +3147,7 @@ pub(super) fn read_ink(p: &Plate, r: &mut impl Read) -> io::Result<Inking> {
     if used > k.tiles.len() as u64 {
         return Err(bad("more ink tiles than it has"));
     }
-    let mut buf = vec![0u8; TILE * TILE * INK_BYTES];
+    let mut buf = vec![0u8; TILE * TILE * (INK_BYTES + if thin { STRIP_BYTES } else { 0 })];
     let mut last = None;
     for _ in 0..used {
         let i = get64(r)? as usize;
@@ -2935,7 +3173,21 @@ pub(super) fn read_ink(p: &Plate, r: &mut impl Read) -> io::Result<Inking> {
                 *m = u16::from_le_bytes(buf[at..at + 2].try_into().unwrap());
                 at += 2;
             }
-            if c.line.iter().chain([&c.film, &c.cure]).any(|v| !v.is_finite() || *v < 0.0) {
+            if thin {
+                let mut word = || {
+                    let v = f32::from_bits(u32::from_le_bytes(buf[at..at + 4].try_into().unwrap()));
+                    at += 4;
+                    v
+                };
+                (c.loose_film, c.loose_line) = (word(), word());
+                c.lye = match buf[at] {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(bad("an ink cell is damaged")),
+                };
+                at += 1;
+            }
+            if c.line.iter().chain([&c.film, &c.cure, &c.loose_film, &c.loose_line]).any(|v| !v.is_finite() || *v < 0.0) {
                 return Err(bad("an ink cell is damaged"));
             }
         }

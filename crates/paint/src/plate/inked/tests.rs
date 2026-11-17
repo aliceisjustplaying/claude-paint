@@ -1273,3 +1273,105 @@ fn vine_black_prints_as_its_strength_says() {
     let sc = crate::pigment::scatter_for(r, t.hiding);
     assert!((vine.s[1] - sc).abs() < 1e-6 && (crate::color::luminance(t.color) - 0.0158).abs() < 0.001);
 }
+
+/// Set ink and the solvent rag (EP §9): three months on the plate the ink is
+/// dry, a network holding its sol (`etch::sol_share`), and the rag takes only the
+/// sol: a whole pass keeps the network and RESIDUE/(f + SOLVENT) of the sol on
+/// the flat, and draws the lines' sol up by the capillary rise, no further.
+/// A second pass takes next to nothing. A wet plate wipes as before.
+#[test]
+fn set_ink_resists_the_solvent_rag() {
+    let mut p = square(20.0, 100.0);
+    cut(&mut p, 0, 200, 95, 105, 100.0, 80.0, 0.5);
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    let path = [pt(0.0, 10.0, 0.5), pt(20.0, 10.0, 0.5)];
+    let week = 90.0 * 24.0 * 60.0;
+    // wet, at once: as before (`a_solvent_rag_takes_ink_where_it_goes_...` checks the numbers)
+    let mut wet = p.clone();
+    wet.clean_ink(&path, 4.0, 1, 0.0);
+    assert!(wet.ink_cell(100, 100).film < 0.01 * p.ink_cell(100, 100).film);
+    p.age_ink(week);
+    let mid = p.ink_cell(100, 100);
+    assert!(p.ink_set(100, 100), "cure {}", mid.cure);
+    let s = crate::etch::sol_share(mid.cure as f64);
+    assert!(s > 0.0 && s < 0.1, "a dry film is mostly network: sol {s} at cure {}", mid.cure);
+    let r = p.clean_ink(&path, 4.0, 1, week);
+    let got = p.ink_cell(100, 100);
+    let (hs, hr) = (crate::etch::SOLVENT_UM, crate::etch::RESIDUE_UM);
+    let f = mid.film as f64;
+    let want = f * (1.0 - s) + f * s * hr / (f + hs);
+    assert!((got.film as f64 - want).abs() < 1e-3 * f, "film {} against {want} (of {f})", got.film);
+    let draw = capillary_um(black().eta(p.temp_c(week)), black().yield_pa(), 4.0 / 20.0);
+    for k in 0..BINS {
+        let open = p.cell(100, 100).open[k] as f64;
+        if open > 0.0 && mid.line[k] > 0.0 {
+            let depth = mid.line[k] as f64 / open;
+            let want = open * (depth - draw.min(s * depth));
+            assert!((got.line[k] as f64 - want).abs() < 0.01, "bin {k}: {} against {want}", got.line[k]);
+        }
+    }
+    assert!(got.total() > 0.6 * mid.total() && r.after_um3 > 0.9 * r.before_um3, "the set ink stays: {r:?}");
+    assert!(got.cure > mid.cure, "what is left holds less sol");
+    // a second pass: the sol is gone, the network stays
+    let r2 = p.clean_ink(&path, 4.0, 1, week);
+    assert!(r2.taken_um3 < 0.01 * r2.before_um3, "{r2:?}");
+}
+
+/// The caustic stripper (EP §9): brushed on, it loosens set ink from each
+/// deposit's face at `etch::CAUSTIC_UM_MIN` while it lies there; a rinse
+/// takes what it has loosened and no more, so after half the dwell the deepest
+/// line keeps the rest of its depth, and after the whole dwell the plate is
+/// bare. Nothing happens where the brush didn't go. A save keeps the
+/// stripper and what it has loosened.
+#[test]
+fn the_stripper_takes_set_ink_after_its_dwell() {
+    let mut p = square(20.0, 100.0);
+    cut(&mut p, 0, 200, 95, 105, 100.0, 80.0, 0.5);
+    cut(&mut p, 0, 200, 20, 30, 100.0, 80.0, 0.5);
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    let week = 7.0 * 24.0 * 60.0;
+    p.age_ink(week);
+    let mid = p.ink_cell(100, 100);
+    let far = p.ink_cell(100, 25);
+    assert!(p.ink_set(100, 100) && mid.lines() > 0.0 && far.lines() > 0.0);
+    // a 10 mm brush along y 10: rows 5..15 mm, not the lines at 2–3 mm
+    let (area, secs) = p.strip(&[pt(0.0, 10.0, 0.5), pt(20.0, 10.0, 0.5)], 10.0, week);
+    assert!(area > 0.0 && (secs - 1.0).abs() < 1e-6, "{area} {secs}");
+    assert!(p.lye_on() && p.ink_cell(100, 100).lye && !p.ink_cell(100, 25).lye);
+    let deepest = (0..BINS).filter(|&k| p.cell(100, 100).open[k] > 0.0).map(|k| mid.line[k] as f64 / p.cell(100, 100).open[k] as f64).fold(0.0, f64::max);
+    let dwell = deepest.max(mid.film as f64) / crate::etch::CAUSTIC_UM_MIN;
+    // half the dwell, saved and read back on the way, then rinsed
+    let mut half = p.clone();
+    half.age_ink(week + 0.5 * dwell);
+    let mut b = Vec::new();
+    half.write(&mut b).unwrap();
+    let back = Plate::read(&mut &b[..]).unwrap();
+    assert_eq!(back, half);
+    let mut half = back;
+    half.rinse(week + 0.5 * dwell);
+    let got = half.ink_cell(100, 100);
+    let gone = 0.5 * dwell * crate::etch::CAUSTIC_UM_MIN;
+    for k in 0..BINS {
+        let open = p.cell(100, 100).open[k] as f64;
+        if open > 0.0 && mid.line[k] > 0.0 {
+            let want = open * (mid.line[k] as f64 / open - gone).max(0.0);
+            assert!((got.line[k] as f64 - want).abs() < 1e-3 * open * deepest, "bin {k}: {} against {want}", got.line[k]);
+        }
+    }
+    assert!(!half.lye_on() && got.lines() > 0.0);
+    // the whole dwell: bare where it lay, untouched where it didn't
+    p.age_ink(week + dwell * 1.0001);
+    p.rinse(week + dwell * 1.0001);
+    assert_eq!(p.ink_cell(100, 100).total(), 0.0);
+    assert!(p.ink_cell(100, 25).line == far.line && p.ink_cell(100, 25).film == far.film);
+    // a solvent rag after the dwell takes the loosened film as wet ink, and the rag wipes the stripper off
+    let mut q = square(20.0, 100.0);
+    q.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    q.age_ink(week);
+    let f = q.ink_cell(100, 100).film as f64;
+    q.strip(&[pt(0.0, 10.0, 0.5), pt(20.0, 10.0, 0.5)], 10.0, week);
+    q.age_ink(week + f / crate::etch::CAUSTIC_UM_MIN + 1.0);
+    q.clean_ink(&[pt(0.0, 10.0, 0.5), pt(20.0, 10.0, 0.5)], 4.0, 2, week + f / crate::etch::CAUSTIC_UM_MIN + 1.0);
+    assert_eq!(q.ink_cell(100, 100).film, 0.0);
+    assert!(!q.ink_cell(100, 100).lye);
+}

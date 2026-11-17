@@ -709,6 +709,105 @@ pub const RESIDUE_UM: f64 = 0.3;
 /// solvent rag holds none.
 pub const MONOLAYER_UM: f64 = 0.002;
 
+// ---------------------------------------------------------------- set ink and the stripper
+
+/// The share of an oil film of cure `cure` (`drying`: `GEL` at its gel
+/// point, 1 touch-dry) that is sol, free molecules a solvent dissolves, the
+/// rest a cross-linked network it only swells (EP §9). Past the gel point
+/// the sol falls as the Charlesby–Pinner law has it for chains joined at
+/// random: s + √s = 2·q_g/q, q the cross-links and q_g those at the gel
+/// point [M: Charlesby & Pinner 1959, random cross-linking of chains of the
+/// most probable length], with the cross-links taken as the cure [E: the
+/// oil's oxygen uptake, which `drying` follows, is what cross-links it].
+/// Touch-dry a film is 6 % sol [D], as brief contact with a solvent takes
+/// 3–4 % by weight from linseed films some months old [M: Phenix &
+/// Sutherland 2001]. Before the gel point it is all sol.
+pub fn sol_share(cure: f64) -> f64 {
+    let g = crate::drying::GEL as f64;
+    if cure <= g {
+        return 1.0;
+    }
+    let r = (-1.0 + (1.0 + 8.0 * g / cure).sqrt()) / 2.0;
+    r * r
+}
+
+/// The cure whose sol share is `s` (`sol_share` inverted): a network whose
+/// sol a solvent has taken holds no more than a further-cured one would.
+pub fn cure_of_sol(s: f64) -> f64 {
+    let s = s.clamp(1e-12, 1.0);
+    2.0 * crate::drying::GEL as f64 / (s + s.sqrt())
+}
+
+/// A caustic paint stripper (sodium hydroxide in water, a paste) laid on set
+/// ink saponifies the oil's ester links from the face of each deposit
+/// inward, and what it has passed through is soap and loose fragments of the
+/// network that water rinses and a rag wipes as a liquid (EP §9). Its front
+/// goes in at a steady 50 µm an hour [E: Peel Away 1, a caustic paste of pH
+/// 12, takes up to 30 coats of oil paint in 1–24 h at 10–32 °C (its data
+/// sheet); 30 coats of 40 µm (house paint's dry film a coat, 1–2 mil) in a
+/// day. A steady front, not one slowing as √t, as alkali hydrolyses an
+/// ester film by eroding its face]. µm a minute.
+pub const CAUSTIC_UM_MIN: f64 = 50.0 / 60.0;
+
+/// Pinholes in a thinned coat (EP §8, "A thinned coat"). A coat over the
+/// metal resists the acid wherever it is continuous; dissolved down from
+/// its face it is first breached over the polished metal's summits. With
+/// the metal's heights Gaussian (σ = Ra·√(π/2), `inked::POLISH_RA_UM`) and the
+/// coat's face levelled by the solvent that thinned it, a coat `t` µm thick
+/// over the mean plane is bared over the share Φ(−t/σ) of the face [D]: a
+/// 0.5 µm coat over a plate of Ra 0.1 µm over 3·10⁻⁵ of it, 0.2 µm over 5 %.
+pub fn bared_share(t_um: f64) -> f64 {
+    let sigma = crate::plate::inked::POLISH_RA_UM * (PI / 2.0).sqrt();
+    if t_um <= 0.0 {
+        return 1.0;
+    }
+    0.5 * erfc_pos(t_um / sigma / std::f64::consts::SQRT_2)
+}
+
+/// erfc(x) for x ≥ 0, to a part in 10⁷ of itself out in the tail (Abramowitz &
+/// Stegun 7.1.26 is erfc's: its polynomial times e^(−x²)).
+fn erfc_pos(x: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.327_591_1 * x);
+    (((((1.061_405_429 * t - 1.453_152_027) * t) + 1.421_413_741) * t - 0.284_496_736) * t + 0.254_829_592) * t * (-x * x).exp()
+}
+
+/// A pinhole's radius at the face: the polish's summits are some 5 µm across
+/// [E: between a fine polish's scratches, a µm or two wide, and the 10 µm
+/// undulations the palm's skin conforms to (`inked::POLISH_RA_UM`)].
+pub const PINHOLE_UM: f64 = 2.5;
+
+/// Below this share of a cell bared, a thinned coat holds: a ten-thousandth
+/// of the face bitten is nothing a print shows [E].
+pub const PINHOLE_LEAST: f64 = 1e-4;
+
+/// The pits through a thinned coat's pinholes (number per µm², radius `r0`
+/// µm at the face), bitten `z` µm with etch factor `k`: each pinhole is a
+/// pit that the acid widens under the coat as it deepens, its radius at
+/// depth y r0 + √(z² − y²)/K (as `network`'s undercut), the pits a Boolean
+/// model of discs of number `n` [D]. The open share at depth y is
+/// 1 − e^(−πn·r(y)²), the pits hold its integral, and their width is the
+/// union's mean chord, (1 − c)/(2·n·r·c) with c the metal left at the face
+/// (πr/2 for a lone pit). The coat stays on its metal between the pits, so
+/// the face's level is the plate's.
+pub fn pinholes(n: f64, r0: f64, z: f64, k: f64) -> Network {
+    if z <= 0.0 || n <= 0.0 {
+        return Network::default();
+    }
+    let r = |y: f64| r0 + (z * z - y * y).max(0.0).sqrt() / k;
+    let open = |y: f64| 1.0 - (-PI * n * r(y).powi(2)).exp();
+    let steps = 64;
+    let h = z / steps as f64;
+    let mut s = open(0.0) + open(z);
+    for i in 1..steps {
+        s += if i % 2 == 1 { 4.0 } else { 2.0 } * open(i as f64 * h);
+    }
+    let vol = (s * h / 3.0).max(0.0);
+    let share = open(0.0);
+    let c = 1.0 - share;
+    let width = if c > 0.0 { ((1.0 - c) / (2.0 * n * r(0.0) * c)).min(OPEN_BITE_UM) } else { OPEN_BITE_UM };
+    Network { level: 0.0, share, width, vol }
+}
+
 // ---------------------------------------------------------------- the hand's tools on a ground
 
 /// A hard ground's leather roller: 150 mm long [P: "the ideal roller is

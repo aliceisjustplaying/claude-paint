@@ -1551,14 +1551,20 @@ impl Plate {
     /// made under the contact laws (`contact`): a word of its laws (bit 0,
     /// `contact`) and the version it would otherwise be written as, then that
     /// version's layout. A plate made without them is written as before.
+    /// Bit 1 of the laws word marks a plate a solvent rag has left a coat
+    /// thinned on or a stripper has worked on (`thin`): its etched cells carry
+    /// what the rag took of each coat and its ink cells what the stripper has
+    /// loosened and where it lies; a plate with neither is written as before,
+    /// and one read without the bit has whole coats and no stripper.
     pub fn write(&self, w: &mut impl Write) -> io::Result<()> {
         let v3 = self.ink.is_some();
         let v2 = v3 || self.coats.is_some() || self.ops.iter().any(Op::etching);
         let base = if v3 { 3 } else if v2 { 2 } else { 1 };
+        let thin = self.thin();
         w.write_all(PLAT_MAGIC)?;
-        if self.contact {
+        if self.contact || thin {
             put64(w, PLAT_V)?;
-            put64(w, 1)?;
+            put64(w, self.contact as u64 | (thin as u64) << 1)?;
         }
         put64(w, base)?;
         put64(w, self.metal.word())?;
@@ -1642,11 +1648,11 @@ impl Plate {
             // (version 3: whether it has coats, then them; then its ink)
             put64(w, self.coats.is_some() as u64)?;
             if let Some(c) = self.coats.as_deref() {
-                etched::write_etch(c, w)?;
+                etched::write_etch(c, w, thin)?;
             }
-            inked::write_ink(self.ink.as_deref().unwrap(), w)?;
+            inked::write_ink(self.ink.as_deref().unwrap(), w, thin)?;
         } else if v2 {
-            etched::write_etch(self.coats.as_deref().unwrap_or(&etched::Coats::default()), w)?;
+            etched::write_etch(self.coats.as_deref().unwrap_or(&etched::Coats::default()), w, thin)?;
         }
         Ok(())
     }
@@ -1664,14 +1670,15 @@ impl Plate {
         if !(1..=PLAT_V).contains(&v) {
             return Err(bad(&format!("a plate of version {v}: this build reads versions 1 to {PLAT_V}")));
         }
-        let mut contact = false;
+        let (mut contact, mut thin) = (false, false);
         if v == 4 {
             // (version 4: its laws, then the version its layout is)
             let laws = get64(r)?;
-            if laws != 1 {
+            if !(1..=3).contains(&laws) {
                 return Err(bad(&format!("laws {laws:#x} this build doesn't know")));
             }
-            contact = true;
+            contact = laws & 1 == 1;
+            thin = laws & 2 == 2;
             v = get64(r)?;
             if !(1..=3).contains(&v) {
                 return Err(bad(&format!("a version-4 plate laid out as version {v}")));
@@ -1791,19 +1798,27 @@ impl Plate {
             p.tiles[i] = Some(cells.into_boxed_slice());
         }
         if v == 2 {
-            p.coats = Some(Box::new(etched::read_etch(&p, r)?));
+            p.coats = Some(Box::new(etched::read_etch(&p, r, thin)?));
         } else if v == 3 {
             match get64(r)? {
                 0 => {}
-                1 => p.coats = Some(Box::new(etched::read_etch(&p, r)?)),
+                1 => p.coats = Some(Box::new(etched::read_etch(&p, r, thin)?)),
                 _ => return Err(bad("its coats' mark is damaged")),
             }
-            p.ink = Some(Box::new(inked::read_ink(&p, r)?));
+            p.ink = Some(Box::new(inked::read_ink(&p, r, thin)?));
         }
         if r.read(&mut [0u8; 1])? != 0 {
             return Err(bad("trailing data"));
         }
         Ok(p)
+    }
+}
+
+impl Plate {
+    /// Whether a solvent rag has left a coat thinned on the plate, or a
+    /// stripper lies on its ink or has loosened any (`write`'s laws bit 1).
+    fn thin(&self) -> bool {
+        self.coats.as_deref().is_some_and(etched::Coats::thinned) || self.ink.as_deref().is_some_and(inked::Inking::stripped)
     }
 }
 

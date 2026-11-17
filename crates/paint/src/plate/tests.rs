@@ -351,6 +351,7 @@ fn azimuths_turn_the_short_way_and_the_laws_are_kept() {
     assert!(back == new && back.contact);
     assert!(!Plate::read(&mut &bo[..]).unwrap().contact);
     let mut bad = bn.clone();
-    bad[12] = 2;
+    // (bit 1 is a thinned plate's: `etched::Etch::stop_taken` and the stripper's)
+    bad[12] = 4;
     assert!(Plate::read(&mut &bad[..]).is_err(), "laws it doesn't know");
 }

@@ -401,3 +401,149 @@ fn an_etched_and_inked_plate_reads_back_with_its_coats() {
     assert!(again == b);
     assert!(Plate::read(&mut &b[..b.len() - 1]).is_err());
 }
+
+/// The palm's gap past a burr (`palm_span_um`, `palm_gap_um`): a 40 µm burr
+/// whose top bears over 25 µm either side, under 5 kPa, by hand: a·F(a/c) =
+/// h·E*/(2p) = 40 × 0.4 MPa / 10 kPa = 1600 µm with F(r) = acosh r − √(1 −
+/// 1/r²), so a ≈ 568 µm (F(22.7) = 2.817). The gap is the burr's height on it
+/// and closes smoothly at a, as (a − x)^(3/2). Uniform pressure's span,
+/// h·E/(p(1 − ν²)) (`palm_lee_um`), is several times wider.
+#[test]
+fn the_palms_gap_past_a_burr_is_a_crack_opening() {
+    let (h, c, p) = (40.0, 25.0, 5e3);
+    let a = palm_span_um(h, c, p);
+    assert!((555.0..580.0).contains(&a), "{a}");
+    let es = SKIN_PA / (1.0 - SKIN_NU * SKIN_NU);
+    assert!((2.0 * p * a / es * ((a / c).acosh() - (1.0 - (c / a).powi(2)).sqrt()) - h).abs() < 1e-6);
+    assert_eq!(palm_gap_um(h, c, p, a, 10.0), h);
+    assert_eq!(palm_gap_um(h, c, p, a, a + 1.0), 0.0);
+    assert!((palm_gap_um(h, c, p, a, c + 1e-6) - h).abs() < 1e-3);
+    let near = |e: f64| palm_gap_um(h, c, p, a, a - e);
+    assert!((near(4.0) / near(2.0) - 2f64.powf(1.5)).abs() < 0.05, "{} {}", near(4.0), near(2.0));
+    let mut last = h;
+    for x in (30..560).step_by(10) {
+        let g = palm_gap_um(h, c, p, a, x as f64);
+        assert!(g <= last, "it falls away from the burr");
+        last = g;
+    }
+    assert!(palm_span_um(h, c, 2.0 * p) < a, "pressed harder it is held off less");
+    assert!(palm_lee_um(h, p) > 4.0 * a, "uniform pressure's span {} against {a}", palm_lee_um(h, p));
+}
+
+/// A slanting drypoint line with burr (a needle pulled the way it goes at 55°:
+/// it ploughs), inked by card, then one palm pass in circles; the plate under
+/// the contact laws or not. Returns it and the ink in its lines before the palm.
+fn palmed_slant(contact: bool, pattern: Pattern) -> (Plate, f64) {
+    let mut p = square(20.0, 100.0);
+    p.contact = contact;
+    let az = 8.0f32.atan2(14.0).to_degrees();
+    let pts = vec![Point { x: 3.0, y: 6.0, force: 3.0, alt: 55.0, az, speed: 25.0 }, Point { x: 17.0, y: 14.0, force: 3.0, alt: 55.0, az, speed: 25.0 }];
+    p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
+    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    let lines = p.ink_um3().0;
+    p.hand_wipe(None, 0.5, 1, false, pattern, 2.0);
+    (p, lines)
+}
+
+/// The films (µm) of the cells whose middles lie `d0..d1` mm from the slanting
+/// line, on side `side` (±1), away from its ends.
+fn band_films(p: &Plate, side: f64, d0: f64, d1: f64) -> Vec<f64> {
+    let (ox, oy, tx, ty) = (3.0, 6.0, 14.0 / 260f64.sqrt(), 8.0 / 260f64.sqrt());
+    let mut out = Vec::new();
+    for y in 0..200 {
+        for x in 0..200 {
+            let (dx, dy) = ((x as f64 + 0.5) * 0.1 - ox, (y as f64 + 0.5) * 0.1 - oy);
+            let (along, across) = (dx * tx + dy * ty, dy * tx - dx * ty);
+            if (4.0..12.0).contains(&along) && across * side >= d0 && across * side < d1 {
+                out.push(p.ink_cell(x, y).film as f64);
+            }
+        }
+    }
+    out
+}
+
+/// The mean and the coefficient of variation.
+fn mean_cv(v: &[f64]) -> (f64, f64) {
+    let m = v.iter().sum::<f64>() / v.len() as f64;
+    let var = v.iter().map(|x| (x - m) * (x - m)).sum::<f64>() / v.len() as f64;
+    (m, var.sqrt() / m.max(1e-12))
+}
+
+/// The palm's halos (a painter's report): wiping heavy ink by a burred
+/// drypoint line, the palm without the contact laws is held off for h·E/(p(1 −
+/// ν²)), 3 mm and more past this 39 µm burr, and the lee's edge is a comb on a
+/// slanting line (each piece of burr shielded a strip one cell long, which a
+/// slanting line's cells don't tile). Under the laws it is held off only by
+/// the gap the burr leaves (`palm_gaps`): the tone it leaves falls smoothly
+/// away from the line, as even along the line as the cells allow, and is gone
+/// within a millimetre; the line keeps its ink; and it is the same whichever way
+/// the palm moves.
+#[test]
+fn the_palm_leaves_a_narrow_smooth_tone_by_a_burr() {
+    let (old, _) = palmed_slant(false, Pattern::Circles);
+    let (new, lines) = palmed_slant(true, Pattern::Circles);
+    for side in [-1.0, 1.0] {
+        let far_old = mean_cv(&band_films(&old, side, 5.0, 6.0)).0;
+        let far = mean_cv(&band_films(&new, side, 5.0, 6.0)).0;
+        // without the laws: full of ink at 2 mm, and a comb at the lee's edge
+        assert!(mean_cv(&band_films(&old, side, 1.9, 2.1)).0 > 3.0 * far_old);
+        let comb = (0..90).map(|k| mean_cv(&band_films(&old, side, 0.05 * k as f64, 0.05 * (k + 1) as f64)).1).fold(0.0, f64::max);
+        assert!(comb > 0.3, "the old lee's edge varies along the line by {comb}");
+        // under them: polished as the open plate from 0.8 mm on, with a tone near the line
+        for d in [0.8, 1.0, 1.5, 2.0] {
+            let m = mean_cv(&band_films(&new, side, d, d + 0.1)).0;
+            assert!((m - far).abs() < 0.02 * far, "{d} mm: {m} against {far}");
+        }
+        let mut last = f64::MAX;
+        for k in 3..13 {
+            let (d0, d1) = (0.05 * k as f64, 0.05 * (k + 1) as f64);
+            let (m, cv) = mean_cv(&band_films(&new, side, d0, d1));
+            assert!(m > far && m <= last * 1.001, "{d0} mm: {m} µm, falling away from the line");
+            assert!(cv < 0.12, "{d0}–{d1} mm: even along the line ({cv})");
+            last = m;
+        }
+        assert!(last < 0.5 * mean_cv(&band_films(&new, side, 0.15, 0.2)).0);
+    }
+    assert!(new.ink_um3().0 > 0.98 * lines, "the line keeps its ink: {} of {lines}", new.ink_um3().0);
+    let (a, _) = palmed_slant(true, Pattern::Along(0.0));
+    let (b, _) = palmed_slant(true, Pattern::Along(90.0));
+    assert_eq!(a.ink_um3(), b.ink_um3(), "the skin's gap is the same whichever way the palm moves");
+}
+
+/// The cloth under the contact laws (`shields_tiled`): across a slanting
+/// burred line its lee is as even along the line as across a straight one,
+/// and wiping along the line still takes it (IP §1.5).
+#[test]
+fn the_cloths_lee_is_even_along_a_slanting_line() {
+    let make = |deg: f64| {
+        let mut p = square(20.0, 100.0);
+        p.contact = true;
+        let (c, s) = (deg.to_radians().cos() as f32, deg.to_radians().sin() as f32);
+        let az = deg as f32;
+        let pts = vec![Point { x: 10.0 - 7.0 * c, y: 10.0 - 7.0 * s, force: 3.0, alt: 55.0, az, speed: 25.0 }, Point { x: 10.0 + 7.0 * c, y: 10.0 + 7.0 * s, force: 3.0, alt: 55.0, az, speed: 25.0 }];
+        p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
+        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        p
+    };
+    // the lee's share of each cell near the line, wiping square across it
+    for deg in [0.0f64, 30.0, 45.0] {
+        let p = make(deg);
+        let a = deg.to_radians();
+        let v = (-a.sin(), a.cos());
+        let b = Tarlatan::new(0.7).bend_nm;
+        let (sh, _) = p.shields_tiled(v, &|h| lee_um(h, 0.5 * PAD_PA, b)).unwrap();
+        // cells 0.1–0.3 mm from the line, away from its ends: all in the lee
+        let mut v = Vec::new();
+        for y in 0..200 {
+            for x in 0..200 {
+                let (dx, dy) = ((x as f64 + 0.5) * 0.1 - 10.0, (y as f64 + 0.5) * 0.1 - 10.0);
+                let (along, across) = (dx * a.cos() + dy * a.sin(), (dy * a.cos() - dx * a.sin()).abs());
+                if along.abs() < 5.0 && (0.15..0.3).contains(&across) {
+                    v.push(sh[y * 200 + x] as f64);
+                }
+            }
+        }
+        let min = v.iter().cloned().fold(f64::MAX, f64::min);
+        assert!(min > 0.99, "{deg}°: every cell beside the line is in the lee (least {min})");
+    }
+}

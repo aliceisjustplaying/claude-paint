@@ -239,6 +239,85 @@ pub fn palm_lee_um(h: f64, p: f64) -> f64 {
     h * SKIN_PA / (p * (1.0 - SKIN_NU * SKIN_NU))
 }
 
+/// The palm's gap past a burr (`Plate::contact`, `--@ intaglio-contact`; IP
+/// §5.4): skin pressed at `p` Pa onto the plate is propped up by a burr `h`
+/// µm high whose top bears on it over `c` µm either side of its middle.
+/// Plane strain, an elastic half-space (E* = E/(1 − ν²)) on a rigid flat: the
+/// skin lifts off over `a` either side, a gap in the contact opened by the
+/// burr's line load P and closed by the pressure. It closes smoothly (no
+/// singular pressure at its edges: K = P/√(πa) − p√(πa) = 0, so P = πpa), and
+/// the skin then stands (2pa/E*)·(acosh(a/x) − √(1 − x²/a²)) over the plate at
+/// x from the burr's middle, h at x = c [D: the crack-opening displacements of
+/// a pressurised crack and of a pair of point forces at its middle (Tada,
+/// Paris & Irwin, The Stress Analysis of Cracks Handbook, 5.1 and 5.4), half
+/// of each for one elastic face on a rigid one]. The span `a` solves that at
+/// x = c.
+pub fn palm_span_um(h: f64, c: f64, p: f64) -> f64 {
+    let es = SKIN_PA / (1.0 - SKIN_NU * SKIN_NU);
+    let c = c.max(1e-3);
+    let at = |a: f64| 2.0 * p * a / es * ((a / c).acosh() - (1.0 - (c / a).powi(2)).max(0.0).sqrt());
+    if h <= 0.0 || p <= 0.0 {
+        return c;
+    }
+    let (mut lo, mut hi) = (c, 2.0 * c);
+    while at(hi) < h && hi < 1e7 {
+        lo = hi;
+        hi *= 2.0;
+    }
+    for _ in 0..60 {
+        let m = 0.5 * (lo + hi);
+        if at(m) < h { lo = m } else { hi = m }
+    }
+    0.5 * (lo + hi)
+}
+
+/// The skin's height (µm) over the plate at `x` µm from a burr's middle
+/// (`palm_span_um`: its height `h`, its top's half-width `c`, the pressure
+/// `p`, the span `a`): `h` on the burr, nothing past the span.
+pub fn palm_gap_um(h: f64, c: f64, p: f64, a: f64, x: f64) -> f64 {
+    if x <= c {
+        return h;
+    }
+    if x >= a {
+        return 0.0;
+    }
+    let es = SKIN_PA / (1.0 - SKIN_NU * SKIN_NU);
+    (2.0 * p * a / es * ((a / x).acosh() - (1.0 - (x / a).powi(2)).sqrt())).clamp(0.0, h)
+}
+
+/// Points a cell is sampled at across (and down) for a burr's gap and lee
+/// (`Plate::contact`): its sub-cell detail, so that a line's lee is as smooth
+/// across cells as the line.
+const SUB: usize = 4;
+
+/// A piece of a burr standing in one cell (`Plate::contact`): its middle (µm
+/// on the plate), its line's way, its half-length (the cell's share of the
+/// line: consecutive cells of a straight line tile it), its height and its
+/// top's half-width (µm), and the way it is crossed (a roulette's ring: from
+/// every way, `ring`).
+struct Fence {
+    x: f64,
+    y: f64,
+    t: (f64, f64),
+    half: f64,
+    h: f64,
+    c: f64,
+    ring: bool,
+}
+
+impl Fence {
+    /// The distance (µm) from (x, y) to the piece.
+    fn dist(&self, x: f64, y: f64) -> f64 {
+        let (dx, dy) = (x - self.x, y - self.y);
+        if self.ring {
+            return dx.hypot(dy);
+        }
+        let along = (dx * self.t.0 + dy * self.t.1).abs();
+        let across = (dy * self.t.0 - dx * self.t.1).abs();
+        if along <= self.half { across } else { (along - self.half).hypot(across) }
+    }
+}
+
 /// How deep (µm) a soft cloth's fibres draw ink of viscosity `eta` up in
 /// `t` s: Lucas–Washburn, √(γ·r·t/(2η)).
 pub fn washburn_um(eta: f64, t: f64) -> f64 {
@@ -830,6 +909,151 @@ impl Plate {
         any.then_some((flat, open))
     }
 
+    /// The burr's pieces, a cell each (`Fence`), as `shields` reads them.
+    fn fences(&self) -> Vec<Fence> {
+        let p = self.pitch;
+        let mut out = Vec::new();
+        let tw = self.w.div_ceil(TILE);
+        for ty in 0..self.h.div_ceil(TILE) {
+            for tx in 0..tw {
+                if self.tiles[ty * tw + tx].is_none() {
+                    continue;
+                }
+                for y in ty * TILE..((ty + 1) * TILE).min(self.h) {
+                    for x in tx * TILE..((tx + 1) * TILE).min(self.w) {
+                        let c = self.cell(x, y);
+                        let hb = c.burr_height() as f64;
+                        if hb < 0.5 || c.side == 0 {
+                            continue;
+                        }
+                        let ring = c.dir == 255;
+                        let t = if ring { (1.0, 0.0) } else {
+                            let a = (c.dir as f64).to_radians();
+                            (a.cos(), a.sin())
+                        };
+                        // a straight line crosses a cell every p / max(|cos|, |sin|) along it
+                        let half = if ring { 0.0 } else { 0.5 * p / t.0.abs().max(t.1.abs()) };
+                        // the fin's base over its length in the cell; its top bears over half the base
+                        // [E: the gap's span goes as 1/ln(2a/c), so a factor 2 here moves it some 15 %]
+                        let area = c.burr_area as f64 * p * p;
+                        let base = if ring { (area / std::f64::consts::PI).sqrt() } else { area / (2.0 * half) };
+                        out.push(Fence { x: (x as f64 + 0.5) * p, y: (y as f64 + 0.5) * p, t, half, h: hb, c: (0.5 * base).clamp(1.0, 0.5 * p), ring });
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Each cell within `reach(piece)` of a piece of burr, at each of its
+    /// `SUB`² points: `each(cell index, point index, distance µm, piece's
+    /// index)`, piece by piece.
+    fn near_fences(&self, fences: &[Fence], reach: &dyn Fn(usize) -> f64, each: &mut dyn FnMut(usize, usize, f64, usize)) {
+        let p = self.pitch;
+        for (k, f) in fences.iter().enumerate() {
+            let r = reach(k) + f.half;
+            let (x0, x1) = (((f.x - r) / p).floor().max(0.0) as usize, (((f.x + r) / p).ceil() as usize).min(self.w));
+            let (y0, y1) = (((f.y - r) / p).floor().max(0.0) as usize, (((f.y + r) / p).ceil() as usize).min(self.h));
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    for j in 0..SUB * SUB {
+                        let (sx, sy) = ((x as f64 + ((j % SUB) as f64 + 0.5) / SUB as f64) * p, (y as f64 + ((j / SUB) as f64 + 0.5) / SUB as f64) * p);
+                        each(y * self.w + x, j, f.dist(sx, sy), k);
+                    }
+                }
+            }
+        }
+    }
+
+    /// `shields` under the contact laws (`contact`): each piece of burr is
+    /// held to its own length along the line (`Fence`), so a slanting line's
+    /// lee is as continuous as a straight one's, and a cell is in the lee by
+    /// the share of its points within `lee(h)` of the burr.
+    fn shields_tiled(&self, v: (f64, f64), lee: &dyn Fn(f64) -> f64) -> Option<(Vec<f32>, Vec<f32>)> {
+        let fences = self.fences();
+        if fences.is_empty() {
+            return None;
+        }
+        let n = self.w * self.h;
+        let mut flat = vec![0.0f32; n];
+        // (per cell: the piece last counted and how many of its points it holds)
+        let mut held: Vec<(u32, u8)> = vec![(u32::MAX, 0); n];
+        let lees: Vec<f64> = fences.iter().map(|f| lee(f.h)).collect();
+        self.near_fences(&fences, &|k| lees[k], &mut |i, _, d, k| {
+            let f = &fences[k];
+            let t = if f.ring { (-v.1, v.0) } else { f.t };
+            let sinp = (t.0 * v.1 - t.1 * v.0).abs();
+            if sinp <= 1e-9 || d > lees[k] {
+                return;
+            }
+            let id = k as u32;
+            let e = &mut held[i];
+            if e.0 != id {
+                *e = (id, 0);
+            }
+            e.1 += 1;
+            let s = (sinp * e.1 as f64 / (SUB * SUB) as f64) as f32;
+            flat[i] = flat[i].max(s);
+        });
+        let open = flat.clone();
+        Some((flat, open))
+    }
+
+    /// The palm's gap over each cell near a burr (`contact`): the skin's
+    /// height over the plate at each of its `SUB`² points, the most any piece
+    /// of burr props it to (`palm_gap_um`), pressed at `p` Pa.
+    fn palm_gaps(&self, p: f64) -> std::collections::HashMap<usize, [f32; SUB * SUB]> {
+        let fences = self.fences();
+        let spans: Vec<f64> = fences.iter().map(|f| palm_span_um(f.h, f.c, p)).collect();
+        let mut out: std::collections::HashMap<usize, [f32; SUB * SUB]> = std::collections::HashMap::new();
+        self.near_fences(&fences, &|k| spans[k], &mut |i, j, d, k| {
+            let f = &fences[k];
+            let g = palm_gap_um(f.h, f.c, p, spans[k], d) as f32;
+            if g > 0.0 {
+                let e = out.entry(i).or_insert([0.0; SUB * SUB]);
+                e[j] = e[j].max(g);
+            }
+        });
+        out
+    }
+
+    /// `reach_sweep` for the palm under the contact laws: where a burr props
+    /// the skin up by g (`palm_gaps`), it reaches only the ink standing above
+    /// g on the flat, and g less far into the openings, point by point.
+    #[allow(clippy::type_complexity)]
+    fn reach_sweep_gap(&self, cells: &[(usize, usize, f32)], ct: &Contact, rims: &[Option<Vec<f32>>], frac: &dyn Fn(usize, usize, f32, &InkCell) -> f64, gaps: &std::collections::HashMap<usize, [f32; SUB * SUB]>) -> Vec<(usize, usize, f64, [f64; BINS])> {
+        let mut out = Vec::new();
+        for &(x, y, m) in cells {
+            let ic = self.ink_cell(x, y);
+            if ic.total() <= 0.0 {
+                continue;
+            }
+            let fr = frac(x, y, m, &ic);
+            if fr <= 0.0 {
+                continue;
+            }
+            let i = y * self.w + x;
+            let c = self.cell(x, y);
+            let rim = |k: usize| rims[k].as_ref().and_then(|r| (c.open[k] >= 0.5).then_some(r[i]));
+            let (flat, bins) = match gaps.get(&i) {
+                None => (ic.film as f64 * fr, std::array::from_fn(|k| Self::within_reach(&c, k, ic.line[k], rim(k), &*ct.reach) * fr)),
+                Some(g) => {
+                    let n = (SUB * SUB) as f64;
+                    let flat = g.iter().map(|&g| (ic.film as f64 - g as f64).max(0.0)).sum::<f64>() / n * fr;
+                    let bins: [f64; BINS] = std::array::from_fn(|k| {
+                        if c.open[k] <= 0.0 || ic.line[k] <= 0.0 {
+                            return 0.0;
+                        }
+                        g.iter().map(|&g| Self::within_reach(&c, k, ic.line[k], rim(k), &|w, x| (ct.reach)(w, x) - g as f64)).sum::<f64>() / n * fr
+                    });
+                    (flat, bins)
+                }
+            };
+            out.push((x, y, flat, bins));
+        }
+        out
+    }
+
     /// The ink in bin `k` of cell `c` (`line` µm over the cell) above the
     /// level a contact reaches (`reach` at x from the rim): what it can take.
     /// A wide opening's cell knows its distance from the rim (`rim`); a
@@ -858,7 +1082,7 @@ impl Plate {
     /// each bin).
     #[allow(clippy::type_complexity)]
     fn reach_sweep(&self, cells: &[(usize, usize, f32)], v: (f64, f64), ct: &Contact, rims: &[Option<Vec<f32>>], frac: &dyn Fn(usize, usize, f32, &InkCell) -> f64) -> Vec<(usize, usize, f64, [f64; BINS])> {
-        let shield = self.shields(v, &*ct.lee);
+        let shield = if self.contact { self.shields_tiled(v, &*ct.lee) } else { self.shields(v, &*ct.lee) };
         let mut out = Vec::new();
         for &(x, y, m) in cells {
             let ic = self.ink_cell(x, y);
@@ -1032,7 +1256,7 @@ impl Plate {
                 }
                 let lay_shares: [f32; INKS] = if lay_um3 > 0.0 { std::array::from_fn(|i| (lay_mix[i] / lay_um3) as f32) } else { [0.0; INKS] };
                 // laid where the cloth touched, out of the lee
-                let shield = self.shields(v, &*ct.lee);
+                let shield = if self.contact { self.shields_tiled(v, &*ct.lee) } else { self.shields(v, &*ct.lee) };
                 let wts: Vec<(usize, usize, f64)> = cells.iter().map(|&(x, y, m)| {
                     let sf = shield.as_ref().map_or(0.0, |(f, _)| f[y * self.w + x] as f64);
                     (x, y, m as f64 * (1.0 - sf))
@@ -1110,7 +1334,9 @@ impl Plate {
     /// The hand wipe (IP §5.4): the palm, soft, pressed at `pressure` 0..1
     /// for `passes`. Skin bulges into each opening by `palm_dip_um` (the top
     /// few µm of a fine line, the whole of an open bite), is held off past a
-    /// burr by `palm_lee_um`, and parts from the film it touches taking its
+    /// burr by `palm_lee_um` (under the contact laws, `contact`: propped up
+    /// by the gap the burr opens, `palm_gaps`, reaching only the ink above
+    /// it), and parts from the film it touches taking its
     /// split share (`PALM_SPLIT`, or `WHITING_SPLIT` with whiting), each of
     /// `PALM_TOUCHES` times a pass. The printer wipes the palm clean between
     /// strokes: what it takes leaves the plate.
@@ -1130,10 +1356,15 @@ impl Plate {
         let keep = (1.0 - q).powf(PALM_TOUCHES / kk);
         let unit = self.pitch * self.pitch;
         let mut taken = 0.0f64;
+        // (the contact laws: the gap a burr props the skin up by, the same whichever way the palm moves)
+        let gaps = self.contact.then(|| self.palm_gaps(p));
         for _ in 0..passes {
             for &v in &ways {
                 let frac = |_: usize, _: usize, m: f32, ic: &InkCell| (1.0 - keep) * crate::drying::fluid(ic.cure) as f64 * m as f64;
-                let asks = self.reach_sweep(&cells, v, &ct, &rims, &frac);
+                let asks = match &gaps {
+                    Some(g) => self.reach_sweep_gap(&cells, &ct, &rims, &frac, g),
+                    None => self.reach_sweep(&cells, v, &ct, &rims, &frac),
+                };
                 taken += self.take(&asks, 1.0).0 * unit;
             }
         }

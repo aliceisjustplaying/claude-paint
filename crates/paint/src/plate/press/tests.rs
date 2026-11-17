@@ -327,17 +327,25 @@ fn printed_2n_line() -> (Vec<f64>, f64) {
 /// half-peak width no more than 0.35 mm and its OD no more than 0.15 at 0.3 mm
 /// off (it printed a plateau of OD 0.7–0.8 out there before the lee took the
 /// film by its fibres in it). It is a line: dark at its core, with velvet by
-/// the burr.
+/// the burr: the ink on the fin's faces and against them, which the yarn
+/// resting on its crest and the palm's ridge riding it can't reach and the
+/// damp sheet, pressed round the fin, takes. From below, by the scans: OD
+/// above 0.3 over at least Rembrandt's narrowest, 0.17 mm (it was 0.125 mm
+/// while the fin's own ink was wiped as the open plate). Its half-peak and its
+/// OD above 0.1 stay below the scans' (0.075 and 0.275 mm): its core prints
+/// twice its velvet's OD, and §5.7 says why that isn't bounded here.
 #[test]
 fn a_printed_drypoint_line_is_peaked_like_real_ones() {
     let (od, um) = printed_2n_line();
     let peak = od[0];
     assert!(peak > 1.0, "the line prints dark: OD {peak}");
-    let half = od.iter().position(|&v| v < 0.5 * peak).unwrap() as f64;
-    // (rows at `um` µm; the width counts both sides and the middle row)
-    let width = (2.0 * half - 1.0) * um * 1e-3;
-    assert!(width <= 0.35, "half-peak width {width} mm: {od:?}");
+    // (rows at `um` µm; a width counts both sides and the middle row)
+    let width = |t: f64| (2.0 * od.iter().position(|&v| v < t).unwrap() as f64 - 1.0) * um * 1e-3;
+    let half = width(0.5 * peak);
+    assert!(half <= 0.35, "half-peak width {half} mm: {od:?}");
     let k = (300.0 / um).round() as usize;
     assert!(od[k] <= 0.15, "OD {} at 0.3 mm off: {od:?}", od[k]);
     assert!(od[(50.0 / um) as usize] > 0.1, "the velvet by the burr: {od:?}");
+    let dark = width(0.3);
+    assert!(dark >= 0.17, "OD above 0.3 over {dark} mm, Rembrandt's narrowest 0.17: {od:?}");
 }

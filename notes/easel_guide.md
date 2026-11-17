@@ -1839,6 +1839,15 @@ use(pr)                                        -- the print: mirrored, the ink w
   than the split. What isn't taken stays on the plate. Reports `taken` and `left` (mm³).
 - **The print** is the plate mirrored, the ink an oil film of its tubes on the paper, wet: it
   dries on the clock as paint does. A damp sheet takes more than a dry one.
+- **A print looks like a print.** A sheet the press has printed on shows its ink matte, wet or
+  dry: the ink's face is the film split from the plate, too stiff to level. So a black reads
+  at most about as dark as a matte black on uncoated paper (OD about 1.3 on a white sheet),
+  however thick, where a glossy oil film of its thickness reads far darker. And the paper
+  carries light sideways under the ink, from its own scattering (about 60 µm at its core,
+  fading over a millimetre): a line's edges soften and the paper by it greys a little, as a
+  printed line's do. A sheet keeps this in its saves; nothing else changes. An ink of bone
+  black from tube paste reads about 0.14 OD per µm printed, so a black needs some 5–10 µm.
+  Physics: notes/research/intaglio_physics.md §6.7.
 - **Embossing.** A damp sheet keeps the plate's shape as it dries: its lines stand up, a burr is
   pressed in, and the plate's footprint lies half the plate's thickness below the margin (the
   plate mark, `mark` µm), sloping over the bevel. A dry sheet springs back. `look --mode relief`

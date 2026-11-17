@@ -394,6 +394,87 @@ pub fn wet_fall_um(g: f64) -> f64 {
     (12.0 * GAMMA / (WET_CRUMB_KG_M3 * 9.81 * g.max(1e-9))).sqrt() * 1e6
 }
 
+/// How the water at a cell holds the crumbs lying there (§5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Wet {
+    /// None: a dry grain's adhesion (sheet.rs `ADHESION_N`).
+    Dry,
+    /// Only in the pastel's pores: bridges at the touching grains, beside
+    /// the dry hold (`pore_bridge_n`, `pore_fall_um`).
+    Pores,
+    /// Standing, or in the sheet beneath: a bridge at the crumb's own
+    /// radius (`wet_fall_um`).
+    Film,
+}
+
+/// The pastel's pores' radius, µm: twice their hydraulic radius,
+/// 2εd/6(1 − ε) (wet_pastel's Washburn radius, #322 §3): 0.69 µm.
+pub fn pore_radius_um() -> f64 {
+    2.0 * POROSITY as f64 * crate::wet_pastel::PARTICLE_D_UM as f64 / (6.0 * (1.0 - POROSITY as f64))
+}
+
+/// How far a bridge fed by the pores' water reaches across a gap, µm (§5):
+/// water drawn out of full pores leaves them at their entry suction,
+/// 2γ/r_p, so a bridge they feed stops growing when its meniscus pulls as
+/// hard, γ/r_k = 2γ/r_p: it spans gaps to 2r_k = r_p (cos θ ≈ 1).
+pub fn pore_bridge_reach_um() -> f64 {
+    pore_radius_um()
+}
+
+/// How far a crumb's grains stand proud of it, µm: a grain's radius
+/// (whiting's d₃₂, `wet_pastel::PARTICLE_D_UM`; its d₅₀ of 2.4–2.7 µm would
+/// give 1.2–1.35). A bridge that spans less (`pore_bridge_reach_um`) holds
+/// at the one grain it touches; one that spans more fills the contact
+/// to the crumb's own curvature (§5).
+pub const GRAIN_RELIEF_UM: f64 = crate::wet_pastel::PARTICLE_D_UM as f64 / 2.0;
+
+/// A bridge at the one grain a crumb touches the sheet with, N (§5):
+/// 4πγa, a the grain's radius (`GRAIN_RELIEF_UM`; cos θ ≈ 1), the
+/// single-asperity bridge charcoal's adhesion counts (`charcoal::VINE_LIFT`)
+/// and the rough limit measured by van Zwol, Palasantzas & De Hosson (2007):
+/// 0.53 µN, 59 times less than the 100 µm crumb's 4πγR [E: one grain
+/// touching; a crumb resting on two or three makes it 1.1–1.6 µN].
+pub fn pore_bridge_n() -> f64 {
+    4.0 * std::f64::consts::PI * GAMMA * GRAIN_RELIEF_UM * 1e-6
+}
+
+/// The largest crumb a tap at `g` gravities leaves where the water is
+/// only in the pores, µm (§5): the dry hold and the grain's bridge
+/// (`pore_bridge_n`) against the wet crumb's weight, d = (6F/πρa)^⅓:
+/// 87 µm at 100 g, against a dry crumb's 43 and a film's 585.
+pub fn pore_fall_um(g: f64) -> f64 {
+    let f = crate::sheet::ADHESION_N as f64 + pore_bridge_n();
+    (6.0 * f / (std::f64::consts::PI * WET_CRUMB_KG_M3 * 9.81 * g.max(1e-9))).cbrt() * 1e6
+}
+
+/// The water standing that fills a crumb's contact to its own curvature,
+/// µm over the cell (§5): Halsey & Levine's bridge saturates at 2πγR
+/// (sphere to sphere) once it holds V₂ = l_R² R, l_R the roughness; over
+/// the section π R² of the smallest crumb (`CRUMB_MIN_UM`), with
+/// l_R = `GRAIN_RELIEF_UM`: l_R²/(π R), 0.09 µm.
+pub fn film_saturates_um() -> f64 {
+    GRAIN_RELIEF_UM * GRAIN_RELIEF_UM / (std::f64::consts::PI * CRUMB_MIN_UM / 2.0)
+}
+
+/// How the water at cell `c` holds its crumbs (§5), `p` its perched crumbs'
+/// record and `under_um` the water in the sheet beneath it (its
+/// own, `Drawing::sheet`, and a damp sheet's free water, `crate::damp`).
+/// The pores (the pastel's, the perched crumbs counted as crushed, as
+/// they drank on the sift) take the water first; water standing past
+/// them (`film_saturates_um`), or held in the paper's larger pores
+/// beneath (r ≈ 6 µm, so a weaker suction: the bridges reach 6 µm), feeds
+/// a bridge that fills the contact (`Wet::Film`); pore water alone, at the
+/// pores' suction, reaches only 0.69 µm, under the grains' relief
+/// (`Wet::Pores`).
+pub(crate) fn wetness(c: &Cell, p: Option<&[f32]>, under_um: f32) -> Wet {
+    if !(c.water > 0.0) {
+        return Wet::Dry;
+    }
+    let crushed = p.map_or(0.0, |p| crumb_pore_extra(p, c));
+    let pores = POROSITY * ((c.loose + c.bound).max(0.0) + crushed);
+    if (c.water - pores) as f64 > film_saturates_um() || under_um > 0.0 { Wet::Film } else { Wet::Pores }
+}
+
 /// A spherical cap's volume over π R³/3 at contact angle θ:
 /// (2 − 3 cos θ + cos³ θ)/sin³ θ.
 fn cap_factor(theta: f64) -> f64 {
@@ -514,16 +595,28 @@ pub(crate) fn bind(p: &mut [f32], held: f32) {
 /// A tap at `g` gravities on cell `c` with its perched crumbs `p`: the
 /// loose ones whose weight beats their hold fall (dry: a grain's adhesion;
 /// wet, while the cell holds water: a liquid bridge at the crumb's radius).
-/// Returns (the volume shed as crushed, µm; as it lay, µm; the loose crumbs
-/// left, as they lie).
-pub(crate) fn tap(p: &mut [f32], c: &Cell, g: f32) -> (f32, f32, f32) {
+/// With `under` (the steam-and-sift switch's bridges: the water in the
+/// sheet beneath, µm) the bridge is weighed as the water lies
+/// (`wetness`): at the crumb's radius only where a film stands or the
+/// sheet beneath is wet, at the touching grain where the pores alone hold
+/// it. Returns (the volume shed as crushed, µm; as it lay, µm; the loose
+/// crumbs left, as they lie).
+pub(crate) fn tap(p: &mut [f32], c: &Cell, g: f32, under: Option<f32>) -> (f32, f32, f32) {
     sync(p, c);
     if p[P_V] <= 0.0 {
         return (0.0, 0.0, 0.0);
     }
     let free = 1.0 - p[P_HELD].clamp(0.0, 1.0);
-    let wet = c.water > 0.0;
-    let dc = if wet { wet_fall_um(g as f64) } else { dry_fall_um(g as f64) };
+    let wet = match under {
+        None if c.water > 0.0 => Wet::Film,
+        None => Wet::Dry,
+        Some(u) => wetness(c, Some(p), u),
+    };
+    let dc = match wet {
+        Wet::Dry => dry_fall_um(g as f64),
+        Wet::Pores => pore_fall_um(g as f64),
+        Wet::Film => wet_fall_um(g as f64),
+    };
     // (the crumbs' sizes as the sieve's, clusters among them: the islands
     // are smaller than a wet bridge lets fall, and bound once dry)
     let share = ggs_share_above(dc, p[P_TOP] as f64) as f32;
@@ -549,12 +642,22 @@ pub(crate) fn blowable(p: &mut [f32], c: &Cell) -> f32 {
     if c.water > 0.0 { 0.0 } else { p[P_L] * (1.0 - p[P_HELD].clamp(0.0, 1.0)) }
 }
 
-/// The loose perched crumbs at cell `c`, wet or dry (as they lie, µm), and
-/// the largest of them, µm: what a puff weighs against their hold when a
+/// The loose perched crumbs at cell `c`, wet or dry (as they lie, µm), the
+/// largest of them, µm, and how the water holds them (`wetness`, `under_um`
+/// the sheet's water beneath): what a puff weighs against their hold when a
 /// liquid bridge may hold them (sheet.rs `blow_pastel_with`).
-pub(crate) fn loose_perched(p: &mut [f32], c: &Cell) -> (f32, f32) {
+pub(crate) fn loose_perched(p: &mut [f32], c: &Cell, under_um: f32) -> (f32, f32, Wet) {
     sync(p, c);
-    (p[P_L] * (1.0 - p[P_HELD].clamp(0.0, 1.0)), p[P_TOP])
+    (p[P_L] * (1.0 - p[P_HELD].clamp(0.0, 1.0)), p[P_TOP], wetness(c, Some(p), under_um))
+}
+
+/// A puff left no perched crumb at cell `p` larger than `d_um` (it moved
+/// every one whose threshold it passed): the record's largest falls to it,
+/// as a tap's does.
+pub(crate) fn blown_to(p: &mut [f32], d_um: f32) {
+    if p[P_V] > 0.0 {
+        p[P_TOP] = p[P_TOP].min(d_um);
+    }
 }
 
 /// The pores the perched crumbs `p` at cell `c` hold beyond what the cell

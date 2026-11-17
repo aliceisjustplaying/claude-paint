@@ -1230,8 +1230,10 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
                 return err("tap: g, the board's acceleration in gravities (a tapped edge 50–400; an upright sheet 1)");
             }
             crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                // (under the steam-and-sift switch water bridges hold wet pastel as its water lies)
+                let bridges = s.tubes.steam_sift;
                 let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-                let v = c.tap_pastel(a);
+                let v = c.tap_pastel_with(a, bridges);
                 c.tally_mut().secs += 3.0;
                 Ok(v)
             })

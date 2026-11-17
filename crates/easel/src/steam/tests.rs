@@ -114,29 +114,54 @@ fn sift_a_stick_dry_and_steamed() {
     assert!(state(&r) == state(&s), "the log replays to the same sheet");
 }
 
-/// Under the switch `blow` weighs the water bridges: a heap sifted through a small sieve and
-/// steamed stays whole under a hard blow (12 m/s: u* 1.4 m/s against a 0.5 mm wet crumb's 2.0,
-/// paint's `a_hard_blow_clears_a_dry_heap_and_leaves_a_wet_one`), where the same heap dry goes.
+/// Under the switch `blow` weighs the water bridges as the water lies (paint's
+/// `a_hard_blow_moves_a_heap_wet_only_in_its_pores`). A heap sifted through a small sieve on a
+/// sheet soaked in the tray stays whole under a hard blow (12 m/s: u* 1.4 m/s against a 0.5 mm
+/// crumb's 2.0 held by a film's bridge, the sheet's water feeding it). Sifted dry and steamed
+/// after, its water all in its pores, the bridges hold at the touching grains only (0.5 mm
+/// crumbs go from 0.4 m/s) and the blow moves it, as it moves the dry heap.
 #[test]
-fn a_blow_leaves_a_steamed_heap() {
+fn a_blow_weighs_how_the_water_lies() {
     let px = |s: &Session| s.st.borrow().canvas.as_ref().unwrap().pixels().to_vec();
-    for steamed in [false, true] {
+    for case in ["dry", "soaked", "steamed"] {
         let mut s = live();
         run(&mut s, PAPER);
+        if case == "soaked" {
+            run(&mut s, "soak(\"painting\", {minutes=5})");
+        }
         run(&mut s, "sift(pile{{\"vermilion\", 1}}, {{500, 500}}, {amount=10, sieve=20})");
-        if steamed {
+        if case == "steamed" {
             run(&mut s, "steam({{500, 500}}, {seconds=5})");
         }
         let before = px(&s);
         let out = run(&mut s, "print(\"off=\" .. blow(500, 500))");
-        if steamed {
-            assert!(printed(&out, "off") == 0.0 && px(&s) == before, "the wet heap stays: {out}");
+        if case == "soaked" {
+            assert!(printed(&out, "off") == 0.0 && px(&s) == before, "the soaked heap stays: {out}");
         } else {
-            assert!(px(&s) != before, "the dry heap goes: {out}");
+            assert!(px(&s) != before, "the {case} heap goes: {out}");
         }
+        let r = replay(&s.program("x")).unwrap();
+        assert!(state(&r) == state(&s), "{case}: the log replays to the same sheet");
+    }
+}
+
+/// Under the switch `tap` weighs wet stroke pastel's water too: a band laid with a stick dipped
+/// half (`p:wet(0.5)`) before each stroke and tapped at 400 g sheds less than the same band does in a log without the switch, which
+/// taps it as if dry, as before (paint's `a_tap_holds_wet_stroke_pastel_as_its_water_lies`).
+#[test]
+fn a_tap_weighs_a_wet_stroke_on_the_switch() {
+    let mut fell = Vec::new();
+    for on in [true, false] {
+        let mut b = box_for(None).unwrap();
+        b.steam_sift = on;
+        let mut s = Session::with_box(W, b).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let out = run(&mut s, "p = pastel(pile{{\"cobalt blue\", 1}, {\"lead white\", 2}})\nfor k = 0, 5 do\n  p:wet(0.5)\n  p:stroke({{100, 450 + 18 * k}, {900, 450 + 18 * k}}, {force=3})\nend\nprint(\"fell=\" .. tap({g=400}))");
+        fell.push(printed(&out, "fell"));
         let r = replay(&s.program("x")).unwrap();
         assert!(state(&r) == state(&s), "the log replays to the same sheet");
     }
+    assert!(fell[1] > 0.0 && fell[0] < fell[1], "on the switch {} mm³, off {}", fell[0], fell[1]);
 }
 
 /// `steam` asks for its seconds and keeps the kettle where the jet has mixed; `sift` asks for

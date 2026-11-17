@@ -291,7 +291,8 @@ fn sifting_and_tapping_conserve_the_pastel() {
 }
 
 /// A puff takes dry sifted crumbs as it takes the heap; wet ones it leaves
-/// (the thin sift: no heap over the pores).
+/// (the thin sift: no heap over the pores), on a soaked sheet whose water
+/// feeds their bridges from beneath (`Wet::Film`).
 #[test]
 fn a_puff_blows_dry_crumbs_off_and_leaves_wet_ones() {
     let mut dry = paper();
@@ -300,8 +301,7 @@ fn a_puff_blows_dry_crumbs_off_and_leaves_wet_ones() {
     dry.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
     let (l1, _) = dry.perched_mm3();
     assert!(l1 < 0.95 * l0, "{l1} of {l0}");
-    let mut wet = paper();
-    wet.steam(MIDDLE, 5.0, 200.0).unwrap();
+    let mut wet = soaked();
     // (3.5 mm³ over the sieve's 60 mm: as thin as 30 over the whole sheet, no heap
     // over the pores)
     wet.sift(MIDDLE, 3.5, 0.5, SIEVE, &stick(), 3).unwrap();
@@ -339,14 +339,58 @@ fn heap(steamed: bool) -> Canvas {
     let mut c = paper();
     c.sift(MIDDLE, 30.0, 0.5, HEAP_SIEVE, &stick(), 3).unwrap();
     if steamed {
-        // (200 mm off for 5 s: water on every cell the sieve reached)
+        // (200 mm off for 5 s: water on every cell the sieve reached, 9.5 µm
+        // at the middle, all of it in the heap's pores, 40 µm there)
         c.steam(MIDDLE, 5.0, 200.0).unwrap();
     }
     c
 }
 
+/// A sheet soaked 5 minutes in a tray and drained 30 s: its pores hold free
+/// water (`crate::damp`), which the crumbs sifted on it drink and which
+/// feeds their bridges from beneath.
+fn soaked() -> Canvas {
+    let mut c = paper();
+    c.damp_soak(5.0, 30.0).unwrap();
+    c
+}
+
+/// The heap, sifted on the soaked sheet.
+fn soaked_heap() -> Canvas {
+    let mut c = soaked();
+    c.sift(MIDDLE, 30.0, 0.5, HEAP_SIEVE, &stick(), 3).unwrap();
+    c
+}
+
+/// How the water lies at every cell holding perched crumbs, by the
+/// definitions of §5: none; past the pores (the deposit's and the
+/// crumbs' as crushed) by more than l_R²/πR (0.85 µm grains, the
+/// smallest crumb's 2.5 µm radius: 0.092 µm), or over a wet sheet; else
+/// only in the pores.
+fn water_lies(c: &Canvas) -> (usize, usize, usize) {
+    let d = c.drawing.as_ref().unwrap();
+    let free = c.damp_free();
+    let (mut dry, mut pores, mut film) = (0, 0, 0);
+    for (i, cl) in d.cells.iter().enumerate() {
+        let Some(p) = d.perched.get(i * PERCH..(i + 1) * PERCH) else { break };
+        if p[P_V] <= 0.0 {
+            continue;
+        }
+        let under = d.sheet.get(i).copied().unwrap_or(0.0) + free;
+        let held = 0.55 * (cl.loose + cl.bound + p[P_V] - p[P_L]);
+        if cl.water <= 0.0 {
+            dry += 1
+        } else if cl.water - held > 0.85 * 0.85 / (std::f32::consts::PI * 2.5) || under > 0.0 {
+            film += 1
+        } else {
+            pores += 1
+        }
+    }
+    (dry, pores, film)
+}
+
 /// A hard blow (12 m/s from the lips, 8 mm, 50 mm off) clears a dry heap and
-/// leaves a wet one whole. Its wall shear peaks at τ = 44.6 ρU² Re^(−½)
+/// leaves a wet one whole (sifted on a soaked sheet: a film's bridges). Its wall shear peaks at τ = 44.6 ρU² Re^(−½)
 /// (h/d)^(−2) = 2.5 Pa, u* 1.43 m/s, past a dry 100 µm crumb's 0.2 m/s
 /// (Shao & Lu) sevenfold. A wet crumb's bridge, 2πγd with γ 50 mN/m (31 µN
 /// at 100 µm, 630 times a dry grain's 50 nN), makes Shao & Lu's cohesion
@@ -360,7 +404,8 @@ fn a_hard_blow_clears_a_dry_heap_and_leaves_a_wet_one() {
     dry.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
     let (l1, _) = dry.perched_mm3();
     assert!(l0 > 20.0 && l1 < 0.05 * l0, "the dry heap: {l1} of {l0} left");
-    let mut wet = heap(true);
+    let mut wet = soaked_heap();
+    assert_eq!(water_lies(&wet).1, 0, "every crumb over the soaked sheet");
     let (w0, p0, px0) = (wet.perched_mm3(), wet.pastel_mm3(), wet.pixels().to_vec());
     let off = wet.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
     assert_eq!((wet.perched_mm3(), wet.pastel_mm3(), off), (w0, p0, 0.0));
@@ -376,7 +421,7 @@ fn a_hard_blow_clears_a_dry_heap_and_leaves_a_wet_one() {
 #[test]
 fn a_bulb_close_in_moves_only_the_largest_wet_crumbs() {
     let mut dry = heap(false);
-    let mut wet = heap(true);
+    let mut wet = soaked_heap();
     let (d0, _) = dry.perched_mm3();
     let (w0, _) = wet.perched_mm3();
     dry.blow_pastel_with(500.0, 500.0, 20.0, 60.0, 4.0, true);
@@ -401,3 +446,159 @@ fn bridges_change_only_wet_pastel_on_the_switch() {
     old.blow_pastel(500.0, 500.0, 50.0, 12.0, 8.0);
     assert!(old.perched_mm3().0 < 0.5 * w0, "off the switch the wet heap blows as before");
 }
+
+/// The bridge pore water alone makes (§5): full pores give water up only at
+/// their entry suction 2γ/r_p (r_p = 2εd/6(1 − ε) = 0.69 µm at ε 0.55,
+/// d 1.7 µm), so a bridge they feed spans gaps to r_p, under the 0.85 µm a
+/// crumb's grains stand proud: it holds at the grain it touches, 4πγa =
+/// 4π × 0.05 × 0.85 µm = 0.534 µN (van Zwol et al. 2007's rough limit; a
+/// film's 4πγR at 100 µm is 31 µN). With the dry 50 nN, against a wet
+/// crumb (1250 + 0.5 × 998.2 kg/m³) at 100 g: d = (6F/πρa)^⅓ = 86.6 µm.
+#[test]
+fn pore_water_bridges_at_the_touching_grain() {
+    let rp = 2.0 * 0.55 * 1.7 / (6.0 * 0.45);
+    assert!((pore_radius_um() - rp).abs() < 1e-6 && (rp - 0.6926).abs() < 1e-3);
+    assert!(pore_bridge_reach_um() < GRAIN_RELIEF_UM, "{} µm under {} µm", pore_bridge_reach_um(), GRAIN_RELIEF_UM);
+    let f = 4.0 * std::f64::consts::PI * 0.05 * 0.85e-6;
+    assert!((pore_bridge_n() - f).abs() < 1e-12 && (f - 0.534e-6).abs() < 1e-9);
+    let d = (6.0 * (5e-8 + f) / (std::f64::consts::PI * 1749.1 * 9.81 * 100.0)).cbrt() * 1e6;
+    assert!((pore_fall_um(100.0) - d).abs() < 0.01 && (d - 86.6).abs() < 0.1, "{d}");
+    assert!(dry_fall_um(100.0) < pore_fall_um(100.0) && pore_fall_um(100.0) < wet_fall_um(100.0));
+    assert!((film_saturates_um() - 0.85 * 0.85 / (std::f64::consts::PI * 2.5)).abs() < 1e-6);
+}
+
+/// A tap at 100 g on a band of stroke pastel half steamed (1 s, 100 mm
+/// off: some cells' water past their pores, some only in them). A
+/// stroke's crumbs are even in mass by area from 5 µm to 0.3 mm, so a
+/// tap sheds (A_max − d_c²)/(A_max − A_min) of each heap: dry, d_c = 43.3
+/// µm (a grain's 50 nN), 0.979; water only in the pores, d_c = 86.6 µm
+/// (`pore_water_bridges_at_the_touching_grain`), 0.916; a film, d_c =
+/// √(12γ/ρga) = 585 µm, past the largest: none. Off the switch (every
+/// log without `--@ steam-sift`) it sheds every heap as dry, as before.
+#[test]
+fn a_tap_holds_wet_stroke_pastel_as_its_water_lies() {
+    let mut c = paper();
+    band(&mut c);
+    c.steam(LEFT_PASS, 1.0, LEFT_MM).unwrap();
+    let share = |d: f64| ((90000.0 - (d * d).max(25.0)) / (90000.0 - 25.0)).clamp(0.0, 1.0);
+    let dc_dry = (6.0 * 5e-8 / (std::f64::consts::PI * 1250.0 * 9.81 * 100.0)).cbrt() * 1e6;
+    let dc_pores = (6.0 * (5e-8 + 4.0 * std::f64::consts::PI * 0.05 * 0.85e-6) / (std::f64::consts::PI * 1749.1 * 9.81 * 100.0)).cbrt() * 1e6;
+    let dc_film = (12.0f64 * 0.05 / (1749.1 * 9.81 * 100.0)).sqrt() * 1e6;
+    assert!(dc_film > 300.0);
+    let px_um2 = (c.px_mm() as f64 * 1e3).powi(2);
+    let d = c.drawing.as_ref().unwrap();
+    let (mut want_on, mut want_off, mut n) = (0.0f64, 0.0f64, [0usize; 3]);
+    for (i, cl) in d.cells.iter().enumerate() {
+        let heap = ((cl.loose + cl.bound) - c.micro_um(i)).max(0.0).min(cl.loose) as f64;
+        if heap <= 0.0 {
+            continue;
+        }
+        let pores = 0.55 * (cl.loose + cl.bound);
+        let k = if cl.water <= 0.0 { 0 } else if (cl.water - pores) as f64 > film_saturates_um() { 2 } else { 1 };
+        n[k] += 1;
+        want_on += heap * share([dc_dry, dc_pores, dc_film][k]);
+        want_off += heap * share(dc_dry);
+    }
+    assert!(n.iter().all(|&k| k > 50), "dry, pore-wet and film-wet cells: {n:?}");
+    let mut off = c.clone();
+    let on = c.tap_pastel_with(100.0, true) as f64;
+    let (want_on, want_off) = (want_on * px_um2 * 1e-9, want_off * px_um2 * 1e-9);
+    assert!((on - want_on).abs() < 1e-3 * want_on, "{on} vs {want_on} mm³");
+    let shed_off = off.tap_pastel(100.0) as f64;
+    assert!((shed_off - want_off).abs() < 1e-3 * want_off, "{shed_off} vs {want_off} mm³");
+    assert!(on < shed_off, "{on} of {shed_off} mm³");
+}
+
+/// Dry pastel taps and blows exactly as before on the switch: the same
+/// volume, pixels and state, a band and a sift alike.
+#[test]
+fn bridges_leave_dry_pastel_as_it_was() {
+    let mut a = paper();
+    band(&mut a);
+    a.sift(MIDDLE, 20.0, 0.5, SIEVE, &stick(), 5).unwrap();
+    let mut b = a.clone();
+    let state = |c: &Canvas| {
+        let mut v = Vec::new();
+        c.write_state(&mut v, "").unwrap();
+        v
+    };
+    assert_eq!(a.blow_pastel(500.0, 500.0, 20.0, 60.0, 4.0).to_bits(), b.blow_pastel_with(500.0, 500.0, 20.0, 60.0, 4.0, true).to_bits());
+    assert_eq!(a.tap_pastel(100.0).to_bits(), b.tap_pastel_with(100.0, true).to_bits());
+    assert!(state(&a) == state(&b));
+}
+
+/// A heap wet only in its pores (steamed after it was sifted) holds by the
+/// bridges at its touching grains: Shao & Lu's cohesion 3e-4 (1 + 0.534
+/// µN/50 nN) = 3.5e-3 N/m, so a wet crumb's threshold is
+/// √(0.0123 (ρgd/ρ_a + 3.5e-3/(ρ_a d))): 0.40 m/s at 0.5 mm, 0.61 at
+/// 0.1 mm, 1.0 at 35 µm. A hard blow (u* up to 1.43 m/s) moves every crumb
+/// over about 27 µm near its ring, some 80 % of the sift by its crushing,
+/// less further out: less than the dry heap, where every crumb goes, and
+/// far more than a film-held heap, where none does.
+#[test]
+fn a_hard_blow_moves_a_heap_wet_only_in_its_pores() {
+    let moved = |mut c: Canvas| {
+        let l0 = c.perched_mm3().0;
+        c.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
+        l0 - c.perched_mm3().0
+    };
+    let pores = heap(true);
+    let (dry_cells, pore_cells, film_cells) = water_lies(&pores);
+    assert!(dry_cells == 0 && film_cells == 0 && pore_cells > 100, "{:?}", water_lies(&pores));
+    let (d, p, f) = (moved(heap(false)), moved(pores), moved(soaked_heap()));
+    assert!(f == 0.0 && p > 0.3 * d && p < 0.95 * d, "dry {d}, pores {p}, film {f} mm³");
+}
+
+/// A puff that moved a wet heap's larger crumbs leaves its record's
+/// largest at what it left: every crumb whose bridged threshold (a film's,
+/// 0.19 N/m) is under u*/1.25, the ramp's top, went. A bulb's puff (60 m/s
+/// through 4 mm, 20 mm off: τ = 44.6 ρU² Re^(−½) 6^(−2) = 42 Pa at its
+/// ring 1.8 mm out, u* 5.9 m/s, rising linearly to it and falling as
+/// r^(−2.3) past it) leaves 86 µm crumbs at the ring, solved here from
+/// Shao & Lu. A second puff the same then weighs only what is left, so it
+/// moves far less than the first.
+#[test]
+fn a_wet_puff_lowers_the_largest_crumb_left() {
+    let mut c = soaked_heap();
+    let l0 = c.perched_mm3().0;
+    c.blow_pastel_with(500.0, 500.0, 20.0, 60.0, 4.0, true);
+    let l1 = c.perched_mm3().0;
+    // the jet's wall shear at a radius, mm (Phares et al. 2000)
+    let (u, dn, h) = (60.0f64, 4.0f64, 20.0f64);
+    let tau_max = 44.6 * 1.2 * u * u / (u * dn * 1e-3 / 1.5e-5).sqrt() / 36.0;
+    let rp = 0.09 * h;
+    let ustar = |r: f64| (if r <= rp { tau_max * r / rp } else { tau_max * (rp / r).powf(2.3) } / 1.2).sqrt();
+    let gamma = 3e-4 * (1.0 + std::f64::consts::TAU * 0.05 * 100e-6 / 5e-8);
+    let ut = |d_um: f64| (0.0123 * (1749.1 * 9.81 * d_um * 1e-6 / 1.2 + gamma / (1.2 * d_um * 1e-6))).sqrt();
+    let left = |us: f64| {
+        let x = us / 1.25;
+        if ut(500.0) > x {
+            return 500.0;
+        }
+        let (mut a, mut b) = (5.0f64, 500.0f64);
+        for _ in 0..60 {
+            let m = 0.5 * (a + b);
+            if ut(m) > x { a = m } else { b = m }
+        }
+        b
+    };
+    assert!((left(ustar(rp)) - 86.0).abs() < 1.0, "{}", left(ustar(rp)));
+    let (w, mpu) = (c.window(), c.mm_per_unit() as f64);
+    let d = c.drawing.as_ref().unwrap();
+    let mut lowered = 0;
+    for (i, _) in d.cells.iter().enumerate() {
+        let p = &d.perched[i * PERCH..(i + 1) * PERCH];
+        if p[P_V] <= 0.0 {
+            continue;
+        }
+        let (x, y) = (w.ux(i % w.w) as f64 * mpu - 75.0, w.uy(i / w.w) as f64 * mpu - 75.0);
+        let want = left(ustar((x * x + y * y).sqrt()).max(1e-9));
+        assert!((p[P_TOP] as f64 - want).abs() < 0.01 * want, "at {x:.2}, {y:.2} mm: {} vs {want}", p[P_TOP]);
+        lowered += (want < 500.0) as usize;
+    }
+    assert!(lowered >= 4, "{lowered} cells");
+    c.blow_pastel_with(500.0, 500.0, 20.0, 60.0, 4.0, true);
+    let l2 = c.perched_mm3().0;
+    assert!(l1 < l0 && l1 - l2 < 0.35 * (l0 - l1), "first {} mm³, second {}", l0 - l1, l1 - l2);
+}
+

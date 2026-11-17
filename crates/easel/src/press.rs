@@ -101,6 +101,9 @@ fn press(lua: &Lua, st: &S, o: Option<Table>) -> Result<Table> {
             if !plate.inked() {
                 return Err(mlua::Error::runtime("press: the plate has no ink on it (k:ink(...) and wipe it first)"));
             }
+            if plate.lye_on() {
+                return Err(mlua::Error::runtime("press: the plate has caustic stripper on its ink: rinse it first (k:rinse())"));
+            }
             let paper = *c.paper().ok_or_else(|| mlua::Error::runtime(format!("press: {sheet_name:?} isn't a sheet of paper")))?;
             let m = c.moisture().ok_or_else(|| mlua::Error::runtime("press: the sheet has no moisture"))?;
             // its strain now beside its size as made: across its width, along its height

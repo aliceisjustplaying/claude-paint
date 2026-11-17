@@ -528,15 +528,19 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
 /// A coated cell as a fingernail finds it: words, and (ground µm, rosin's share).
 pub(crate) fn feel(p: &Plate, x: usize, y: usize) -> (String, Vec<f64>) {
     let e = p.etch(x, y);
-    let ground = if p.grounded(x, y) { p.ground_um() as f64 } else { 0.0 };
+    let ground = p.ground_at(x, y);
     let rosin = p.rosin_cover(x, y);
     let mut words = Vec::new();
     if e.stopped {
-        words.push("varnished".to_string());
+        words.push(if e.stop_taken > 0.0 { format!("varnished, thinned to {} µm", fmt_num(((etch::STOP_UM as f32 - e.stop_taken) * 10.0).round() / 10.0)) } else { "varnished".to_string() });
     }
     if ground > 0.0 {
         let bared = e.lines.iter().any(|l| l.lam > 0.0);
-        words.push(format!("hard ground {} µm{}", fmt_num(ground as f32), if bared { ", a needle line through it" } else { "" }));
+        let thinned = if e.ground_taken > 0.0 { format!(" (thinned from {} µm)", fmt_num(p.ground_um())) } else { String::new() };
+        words.push(format!("hard ground {} µm{thinned}{}", fmt_num((ground as f32 * 100.0).round() / 100.0), if bared { ", a needle line through it" } else { "" }));
+    }
+    if p.pinholes_at(x, y).is_some() {
+        words.push(format!("pinholed over {}% of it", fmt_num((1000.0 * etch::bared_share(p.coat_um(x, y))).round() as f32 / 10.0)));
     }
     if rosin > 0.0 {
         let melted = p.coats().is_some_and(|c| c.dust.iter().all(|d| d.melted));

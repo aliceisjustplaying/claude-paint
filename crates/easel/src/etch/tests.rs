@@ -476,3 +476,35 @@ fn hand_tools_go_where_the_points_go() {
     let c = |mm: f64| (mm * 1000.0 / p.pitch_um()) as usize;
     assert!(p.etch(c(3.0), c(12.0)).stopped && !p.etch(c(30.0), c(12.0)).stopped);
 }
+
+/// One pass of the solvent rag that doesn't dissolve through 20 µm of varnish leaves it thinner,
+/// and the fingernail says so; the acid still doesn't reach the metal under it; a second pass
+/// takes the rest (EP §8).
+#[test]
+fn the_rag_thins_a_varnish_and_a_second_pass_clears_it() {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    run(&mut s, "use(k)\nk:stop_out({{60, 500}, {940, 500}}, {pressure=0.85})");
+    let feel = |s: &mut Session| {
+        let r = s.run("print(k:feel(500, 500).words)").unwrap();
+        r.out.trim().to_string()
+    };
+    assert!(feel(&mut s).contains("varnished") && !feel(&mut s).contains("thinned"));
+    // (a 10 mm rag 2.8 mm off the strip: under the contact laws a pressed pad rubs a point u off its
+    // path (3π/8)(1 − u²/r²) of a pass, some 0.8 here, against the 1.15 that 20 µm wants)
+    run(&mut s, "r = k:clean({{0, 570}, {1000, 570}}, {width=10})\nassert(r.coated > 0)");
+    let words = feel(&mut s);
+    assert!(words.contains("varnished, thinned to"), "{words}");
+    let p = plate(&s);
+    let c = |mm: f64| (mm * 1000.0 / p.pitch_um()) as usize;
+    let (x, y) = (c(20.0), c(20.0));
+    let e = p.etch(x, y);
+    assert!(e.stopped && e.stop_taken > 0.0 && p.pinholes_at(x, y).is_none(), "{e:?}");
+    let kept = p.cell(x, y);
+    run(&mut s, "k:bite{acid=\"ferric\", baume=36, minutes=5}");
+    assert!(plate(&s).cell(x, y) == kept, "the thinned varnish still keeps the acid off");
+    run(&mut s, "r = k:clean({{0, 570}, {1000, 570}}, {width=10})\nassert(r.cleaned > 0)");
+    assert!(!feel(&mut s).contains("varnished"));
+    assert!(!plate(&s).etch(x, y).stopped);
+}

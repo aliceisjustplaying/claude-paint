@@ -328,3 +328,60 @@ fn ink_and_wipes_go_where_the_points_go() {
     let p = plate(&s);
     assert!(p.ink_cell(c(20.0), c(15.0)).total() > 0.0 && p.ink_cell(c(2.0), c(2.0)).total() == 0.0);
 }
+
+/// Ink that has dried on a plate handed off (EP §9): received half a year later, a solvent rag
+/// takes only its sol and the network stays, so the plate's tools still refuse it (saying how
+/// to strip it); a caustic stripper laid in a tray loosens it on the clock, refuses ink and the
+/// press while it lies there, and a rinse after its dwell leaves the plate clean for the
+/// needle. Brushed along points, it loosens only where the brush went.
+#[test]
+fn a_plate_with_dried_ink_is_stripped() {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    let d = darkest(&s);
+    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nk:ink(black, {{{{0, 375}}, {{1000, 375}}}})"));
+    let dir = std::path::PathBuf::from(format!("out/easel/strip-test-{}", std::process::id()));
+    let abs = crate::session::root().join(&dir);
+    let _ = std::fs::remove_dir_all(&abs);
+    std::fs::create_dir_all(&abs).unwrap();
+    let out = s.run(&format!("handoff(k, \"{}/key.surface\")", dir.display())).unwrap();
+    let sha = out.out.split("sha256=").nth(1).unwrap()[..64].to_string();
+    let mut b = live();
+    run(&mut b, CANVAS);
+    run(&mut b, &format!("k = receive(\"{}/key.surface\", {{after={}, sha256=\"{sha}\"}})\nuse(k)\nn = needle{{tip=25, cone=30}}", dir.display(), 180 * 24 * 60));
+    let all = "{{0, 100}, {1000, 100}, {1000, 375}, {0, 375}, {0, 650}, {1000, 650}}";
+    let mut brushed = live();
+    run(&mut brushed, CANVAS);
+    run(&mut brushed, &format!("k = receive(\"{}/key.surface\", {{after={}, sha256=\"{sha}\"}})\nuse(k)", dir.display(), 180 * 24 * 60));
+    run(&mut b, &format!("c = k:clean_ink({all}, {{passes=3}})\nassert(c.after > 0.6 * c.before, c.after .. ' of ' .. c.before)"));
+    let p = plate(&b);
+    let (w, h) = p.size_px();
+    let (x, y) = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).max_by(|a, b| p.ink_cell(a.0, a.1).total().total_cmp(&p.ink_cell(b.0, b.1).total())).unwrap();
+    let ic = p.ink_cell(x, y);
+    assert!(p.inked() && p.ink_set(x, y) && paint::etch::sol_share(ic.cure as f64) < 0.1, "{x} {y} {ic:?}");
+    let e = b.run("k:drypoint(n, {{100, 700}, {900, 700}})").unwrap_err();
+    assert!(e.contains("set") && e.contains("k:strip"), "{e}");
+    run(&mut b, "r = k:strip_bath()\nassert(r.area > 0)");
+    let e = b.run(&format!("black = ink{{{{\"{d}\", 1}}}}\nk:ink(black, {{{{0, 375}}, {{1000, 375}}}})")).unwrap_err();
+    assert!(e.contains("rinse"), "{e}");
+    assert!(plate(&b).lye_on());
+    // its dwell: the deepest ink's depth at the stripper's pace, and some
+    let p = plate(&b);
+    let (w, h) = p.size_px();
+    let deepest = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| {
+        let (ic, c) = (p.ink_cell(x, y), p.cell(x, y));
+        (0..paint::plate::BINS).filter(|&k| c.open[k] > 0.0).map(|k| (ic.line[k] / c.open[k]) as f64).fold(ic.film as f64, f64::max)
+    }).fold(0.0, f64::max);
+    let dwell = (deepest / paint::etch::CAUSTIC_UM_MIN).ceil() + 5.0;
+    run(&mut b, &format!("wait({dwell})\nr = k:rinse()\nassert(r.taken > 0 and r.after == 0, r.after)\nk:drypoint(n, {{{{100, 700}}, {{900, 700}}}})"));
+    assert!(!plate(&b).inked() && !plate(&b).lye_on());
+    // brushed along the top band only: the ink below it stays
+    run(&mut brushed, "r = k:strip({{0, 100}, {1000, 100}}, {width=10})\nassert(r.area > 0 and r.seconds > 0)");
+    run(&mut brushed, &format!("wait({dwell})\nk:rinse()"));
+    let p = plate(&brushed);
+    let (w, h) = p.size_px();
+    let (top, low) = (h * 100 / 750, h * 650 / 750);
+    assert!(p.ink_cell(w / 2, top).total() == 0.0 && p.ink_cell(w / 2, low).total() > 0.0, "{:?} {:?}", p.ink_cell(w / 2, top), p.ink_cell(w / 2, low));
+    let _ = std::fs::remove_dir_all(&abs);
+}

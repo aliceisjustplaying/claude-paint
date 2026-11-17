@@ -1796,11 +1796,15 @@ impl Plate {
         out
     }
 
-    /// Each cell's share of a full touch on its film under the contact laws:
-    /// the mean over its points of the share it meets the film for there
-    /// (`Touch::r`; none where it stands off), 1 for a cell no burr reaches.
-    fn touch_of(&self, gaps: &Gaps, touch: &dyn Fn(&Prop) -> (Touch, Touch), x: usize, y: usize) -> f64 {
-        gaps.get(y * self.w + x).map_or(1.0, |g| g.iter().map(|pr| touch(pr).0.r).sum::<f64>() / (SUB * SUB) as f64)
+    /// Each cell's share of a full touch under the contact laws, on its film
+    /// and in its openings: the means over its points of the share it meets
+    /// each for there (`Touch::r`; none where it stands off, as a yarn held
+    /// off the line by the fin), (1, 1) for a cell no burr reaches.
+    fn touch_of(&self, gaps: &Gaps, touch: &dyn Fn(&Prop) -> (Touch, Touch), x: usize, y: usize) -> (f64, f64) {
+        gaps.get(y * self.w + x).map_or((1.0, 1.0), |g| {
+            let n = (SUB * SUB) as f64;
+            g.iter().map(|pr| touch(pr)).fold((0.0, 0.0), |a, (f, o)| (a.0 + f.r / n, a.1 + o.r / n))
+        })
     }
 
     /// The ink in bin `k` of cell `c` (`line` µm over the cell) above the
@@ -1887,8 +1891,9 @@ impl Plate {
 
     /// Lay `um` (µm over cells) of ink back on `cells`, by their weights
     /// (all alike if none weighs anything), the `j`th of shares `mix(j)`: on
-    /// each cell's flat by its share of the cell, into its openings by theirs.
-    fn lay(&mut self, cells: &[(usize, usize, f64)], um: f64, mix: impl Fn(usize) -> [f32; INKS], cure: f32) {
+    /// each cell's flat by its share of the cell, into its openings by theirs,
+    /// or by `split(j)`, the share that goes into the openings, if it gives one.
+    fn lay(&mut self, cells: &[(usize, usize, f64)], um: f64, mix: impl Fn(usize) -> [f32; INKS], split: impl Fn(usize) -> Option<f64>, cure: f32) {
         let total: f64 = cells.iter().map(|c| c.2).sum();
         if cells.is_empty() || um <= 0.0 {
             return;
@@ -1901,6 +1906,7 @@ impl Plate {
             }
             let c = self.cell(x, y);
             let open = c.open_share().min(1.0) as f64;
+            let open = if open > 0.0 { split(j).unwrap_or(open).clamp(0.0, 1.0) } else { 0.0 };
             let ic = self.ink_cell_mut(x, y);
             let had = ic.total();
             ic.film += (a * (1.0 - open)) as f32;
@@ -2057,8 +2063,19 @@ impl Plate {
                     // laid where the cloth touched, out of the lee (under the contact
                     // laws: by its share of full contact there, and by what the face
                     // carries there, below)
+                    // (under the laws, by its touch on the flat and in the openings, each over
+                    // its share of the cell, and split between them so: `splits`)
+                    let mut splits: Vec<Option<f64>> = vec![None; cells.len()];
                     let mut wts: Vec<(usize, usize, f64)> = match gaps {
-                        Some(g) => cells.iter().map(|&(x, y, m)| (x, y, m as f64 * self.touch_of(g, &*ct.touch, x, y))).collect(),
+                        Some(g) => cells.iter().enumerate().map(|(j, &(x, y, m))| {
+                            let (rf, ro) = self.touch_of(g, &*ct.touch, x, y);
+                            let open = self.cell(x, y).open_share().min(1.0) as f64;
+                            let (wf, wo) = ((1.0 - open) * rf, open * ro);
+                            if wf + wo > 0.0 {
+                                splits[j] = Some(wo / (wf + wo));
+                            }
+                            (x, y, m as f64 * (wf + wo))
+                        }).collect(),
                         None => {
                             let shield = self.shields(v, &*ct.lee);
                             cells.iter().map(|&(x, y, m)| {
@@ -2133,7 +2150,7 @@ impl Plate {
                             w.2 *= a;
                         }
                     }
-                    self.lay(&wts, lay_um3 / unit, |k| carried[k], 0.0);
+                    self.lay(&wts, lay_um3 / unit, |k| carried[k], |k| splits[k], 0.0);
                     let cl = rag.cloth.as_mut().unwrap();
                     cl.held_um3 += got_um3 - lay_um3;
                     taken += got_um3;
@@ -2285,7 +2302,7 @@ impl Plate {
                                 wts.push((xx as usize, yy as usize, 1.0));
                             }
                         }
-                        self.lay(&wts, lay, |_| sh, cure);
+                        self.lay(&wts, lay, |_| sh, |_| None, cure);
                     }
                 }
             }

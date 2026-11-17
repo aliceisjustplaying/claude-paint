@@ -735,6 +735,9 @@ fn beside(p: &Plate, deg: f64, side: f64, d0: f64, d1: f64) -> Vec<f64> {
 /// plate. Within a yarn's shade of the fin, √(2Rh) ≈ 65 µm past its top, the
 /// yarn can't come down: there it keeps the film it can't reach, a velvet.
 /// Measured on a 2 N line wiped across twice (0.1 mm cells):
+/// - the line under the fin keeps its ink: a yarn resting on the fin stands
+///   h over it, more than its chord dips into the line (a burred line's ink
+///   holds, as printers say), and the cloth lays none back into it;
 /// - the velvet: the cells by the line keep more than twice the open plate's
 ///   film;
 /// - no plateau: from 0.15 mm on, less than twice the open plate's film (by
@@ -749,8 +752,15 @@ fn the_cloths_lee_is_a_yarns_shade() {
             p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
         });
         let (c, s) = (deg.to_radians().cos() as f32, deg.to_radians().sin() as f32);
+        let lines = p.ink_um3().0;
         let mut t = Rag::tarlatan(40.0, 3, 0.7);
         p.wipe(&mut t, &[pt(10.0 - 50.0 * c, 10.0 - 50.0 * s, 0.5), pt(10.0 + 50.0 * c, 10.0 + 50.0 * s, 0.5)], 2, 1.0);
+        // the yarn is held off the line by the fin, higher than its chord dips: the line keeps
+        // its ink, and the cloth lays none into it (at these 0.1 mm cells a groove's cell reaches
+        // past the fin's shade on one side, and gives a little; at the easel's 42 µm, below,
+        // none)
+        let kept = p.ink_um3().0 / lines;
+        assert!((kept - 1.0).abs() < 0.1, "{deg}°: the line keeps {kept} of its ink");
         let far = mean_cv(&beside(&p, deg, 0.0, 3.5, 5.0)).0;
         let near = beside(&p, deg, 0.0, 0.0, 0.1).into_iter().fold(0.0, f64::max);
         assert!(near > 2.0 * far, "{deg}°: the velvet {near} µm by the line against {far} on the open plate");
@@ -864,8 +874,12 @@ fn the_lee_is_even_along_a_slanting_line() {
             assert!(across < 0.25 * pitch, "{deg}°: a piece of burr {across} mm off the line at ({}, {}) mm", f.x * 1e-3, f.y * 1e-3);
         }
         p.ink(&black(), InkTool::of(Inker::Card), &[pt(-25.0, 5.0, 10.0), pt(35.0, 5.0, 10.0)], 0.0).unwrap();
+        let lines = p.ink_um3().0;
         let mut t = Rag::tarlatan(40.0, 3, 0.7);
         p.wipe(&mut t, &[pt(5.0 - 50.0 * c, 5.0 - 50.0 * s, 0.5), pt(5.0 + 50.0 * c, 5.0 + 50.0 * s, 0.5)], 2, 1.0);
+        // (the burr keeps its line's ink: `the_cloths_lee_is_a_yarns_shade`)
+        let kept = p.ink_um3().0 / lines;
+        assert!((kept - 1.0).abs() < 0.01, "{deg}°: the line keeps {kept} of its ink");
         let band = |d0: f64, d1: f64| {
             let mut v = Vec::new();
             for y in 0..240 {

@@ -2,7 +2,7 @@
 //! §4, phase P4; the physics in crate::etch, EP).
 //!
 //! **What is kept.** The plate's coats (`Coats`): a hard ground's thickness
-//! over its face, the rosin dust laid on it (per size, per µm², with the seed
+//! and the cells its roller laid it on, the rosin dust laid on it (per size, per µm², with the seed
 //! its grains are scattered from), and the tray of acid it bites in (what the
 //! bath was made up as, and the metal it has taken in). Per cell (`Etch`,
 //! sparse like the cells): whether it is stopped out, the bite of its bared
@@ -142,8 +142,11 @@ pub struct InBath {
 /// A plate's coats and baths (see the module's notes).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Coats {
-    /// Hard ground over the face (µm; 0: none).
+    /// Hard ground (µm; 0: none), and the cells its roller laid it on (a bit
+    /// a cell, row by row; empty with no ground): a cell the roller never
+    /// crossed is bare.
     pub ground_um: f32,
+    pub laid: Vec<u8>,
     pub dust: Vec<Dust>,
     pub tray: Option<Tray>,
     /// The plate in its tray now, if it is.
@@ -216,6 +219,22 @@ pub struct BiteReport {
     /// (its oxidant used up) before it came out.
     pub minutes: f64,
     pub spent: bool,
+}
+
+/// What a stroke of stopping-out varnish lays (`Plate::stopping`): the
+/// length it laid of the path's (mm), whether the brush ran dry, the
+/// varnish used and left in it (mm³), the strip's mean width and how far
+/// its edge crept (mm), and the path it laid along.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stopping {
+    pub laid_mm: f64,
+    pub total_mm: f64,
+    pub dry: bool,
+    pub used_mm3: f64,
+    pub left_mm3: f64,
+    pub width_mm: f64,
+    pub spread_mm: f64,
+    pub pts: Vec<Point>,
 }
 
 /// 64-bit mixing (splitmix64).
@@ -309,31 +328,26 @@ impl Plate {
         }
     }
 
-    /// The cells with an etching state, in order.
-    fn etched_cells(&self) -> Vec<(usize, usize)> {
-        let Some(c) = self.coats.as_ref() else { return Vec::new() };
-        let tw = self.w.div_ceil(TILE);
-        let mut out = Vec::new();
-        for (i, t) in c.tiles.iter().enumerate() {
-            if t.is_none() {
-                continue;
-            }
-            let (tx, ty) = (i % tw, i / tw);
-            for yy in 0..TILE {
-                for xx in 0..TILE {
-                    let (x, y) = (tx * TILE + xx, ty * TILE + yy);
-                    if x < self.w && y < self.h {
-                        out.push((x, y));
-                    }
-                }
-            }
-        }
-        out
-    }
-
-    /// The hard ground over the face (µm; 0: none).
+    /// The hard ground's thickness where it is laid (µm; 0: none).
     pub fn ground_um(&self) -> f32 {
         self.coats.as_ref().map_or(0.0, |c| c.ground_um)
+    }
+
+    /// Whether the ground lies on cell (x, y).
+    pub fn grounded(&self, x: usize, y: usize) -> bool {
+        let i = y * self.w + x;
+        x < self.w && y < self.h && self.coats.as_ref().is_some_and(|c| c.ground_um > 0.0 && c.laid.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1))
+    }
+
+    /// The ground's thickness on cell (x, y) (µm; 0 where it isn't laid).
+    fn ground_at(&self, x: usize, y: usize) -> f64 {
+        if self.grounded(x, y) { self.ground_um() as f64 } else { 0.0 }
+    }
+
+    /// The share of the plate's face the ground lies on.
+    pub fn ground_share(&self) -> f64 {
+        let Some(c) = self.coats.as_ref().filter(|c| c.ground_um > 0.0) else { return 0.0 };
+        c.laid.iter().map(|b| b.count_ones() as f64).sum::<f64>() / (self.w * self.h) as f64
     }
 
     /// The metal the acid has taken (µm³).
@@ -377,15 +391,9 @@ impl Plate {
 
     pub(super) fn run_etch(&mut self, op: &Op) -> Report {
         match op {
-            Op::Ground { um } => {
-                self.coats_mut().ground_um = *um;
-                Report::default()
-            }
+            Op::Ground { um, roller_mm, pts } => self.ground(*um, *roller_mm as f64, pts),
             Op::Needle { tip_um, cone_deg, pts } => self.needle(*tip_um as f64, *cone_deg as f64, pts),
-            Op::StopOut { w, h, bits } => {
-                self.stop_out(*w as usize, *h as usize, bits);
-                Report::default()
-            }
+            Op::StopOut { brush_mm, load, pts } => self.stop_out(*brush_mm as f64, *load as f64, pts),
             Op::Aquatint { per_um2, seed } => {
                 self.coats_mut().dust.push(Dust { per_um2: per_um2.clone(), seed: *seed, melted: false });
                 Report::default()
@@ -416,7 +424,6 @@ impl Plate {
     fn needle(&mut self, tip_um: f64, cone_deg: f64, pts: &[Point]) -> Report {
         let h_pa = self.hardness_pa();
         let p = self.pitch;
-        let t = self.ground_um() as f64;
         let cone = cone_deg.to_radians();
         let (samples, total) = Self::samples(pts, p / 4000.0);
         let mut rep = Report { length_mm: total, secs: Self::secs(&samples), ..Report::default() };
@@ -429,10 +436,13 @@ impl Plate {
             }
             lo
         };
-        let a_t = half_at(t);
-        let f_ground = GROUND_FLOW_PA * std::f64::consts::PI * (a_t * 1e-6).powi(2);
+        // the force the ground bears before the point reaches the metal, where it is laid
+        let t_laid = self.ground_um() as f64;
+        let f_laid = GROUND_FLOW_PA * std::f64::consts::PI * (half_at(t_laid) * 1e-6).powi(2);
         for &(x, y, (tx, ty), s, pose, ds) in &samples {
             let f = Self::hand(pose.force as f64, s, total, pose.speed as f64);
+            let laid = self.at_mm(x, y).is_some_and(|(cx, cy)| self.grounded(cx, cy));
+            let (t, f_ground) = if laid { (t_laid, f_laid) } else { (0.0, 0.0) };
             if f <= f_ground {
                 continue;
             }
@@ -477,24 +487,96 @@ impl Plate {
         rep
     }
 
-    fn stop_out(&mut self, bw: usize, bh: usize, bits: &[u8]) {
-        if bw == 0 || bh == 0 {
-            return;
-        }
-        for y in 0..self.h {
-            for x in 0..self.w {
-                if !self.in_clip(x, y) {
-                    continue;
-                }
-                let (bx, by) = ((x * bw / self.w).min(bw - 1), (y * bh / self.h).min(bh - 1));
-                let i = by * bw + bx;
-                if bits.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1) {
-                    let mut e = self.etch(x, y);
-                    e.stopped = true;
-                    self.set_etch(x, y, e);
-                }
+    /// A hard ground rolled along `pts` (mm) with a roller `roller_mm` long
+    /// (IP §2.1): laid `um` thick on every cell its line of contact crosses
+    /// over half of (`Plate::sweep`). Rolled again, it lays the same ground
+    /// on more cells.
+    fn ground(&mut self, um: f32, roller_mm: f64, pts: &[Point]) -> Report {
+        let (samples, total) = Self::samples(pts, roller_mm.max(1.0));
+        let rep = Report { length_mm: total, secs: Self::secs(&samples), width_um: roller_mm * 1000.0, ..Report::default() };
+        let touched = self.touches(&self.sweep(pts, &|_| roller_mm, roller_mm));
+        let n = self.w * self.h;
+        let c = self.coats_mut();
+        c.ground_um = um;
+        c.laid.resize(n.div_ceil(8), 0);
+        for (i, t) in touched.iter().enumerate() {
+            if *t >= 0.5 {
+                c.laid[i / 8] |= 1 << (i % 8);
             }
         }
+        rep
+    }
+
+    /// What stopping-out varnish brushed along `pts` (mm; each point's force
+    /// the hand's pressure, 0..1) with a round brush `brush_mm` across loaded
+    /// to `load` (0..1 of its belly) lays (EP §3):
+    /// - the brush lays the width a wet tuft presses out at its pressure
+    ///   (`etch::brush_width_mm`), a film `etch::STOP_UM` thick, until the
+    ///   varnish its belly held (`etch::round_belly_mm3`) is spent: then it
+    ///   runs dry and lays no more;
+    /// - each strip's edge creeps out as the liquid spreads before it sets
+    ///   (`etch::stop_out_spread`): some tens of µm, so the edge is the
+    ///   brush's;
+    /// - where the brush comes down and lifts it leaves the disc of its tuft.
+    pub fn stopping(brush_mm: f64, load: f64, pts: &[Point]) -> Stopping {
+        let held0 = load.clamp(0.0, 1.0) * etch::round_belly_mm3(brush_mm);
+        let h_mm = etch::STOP_UM * 1e-3;
+        let w = |p: &Point| etch::brush_width_mm(brush_mm, p.force as f64);
+        let total: f64 = pts.windows(2).map(|p| ((p[1].x - p[0].x) as f64).hypot((p[1].y - p[0].y) as f64)).sum();
+        let mut held = held0;
+        let mut laid = pts.first().copied().into_iter().collect::<Vec<_>>();
+        let (mut len, mut dry, mut wsum) = (0.0f64, false, 0.0f64);
+        for seg in pts.windows(2) {
+            let (a, b) = (seg[0], seg[1]);
+            let l = ((b.x - a.x) as f64).hypot((b.y - a.y) as f64);
+            let wm = 0.5 * (w(&a) + w(&b));
+            let need = l * h_mm * wm;
+            if need <= held {
+                held -= need;
+                len += l;
+                wsum += l * wm;
+                laid.push(b);
+                continue;
+            }
+            let u = if need > 0.0 { held / need } else { 0.0 };
+            let l_ = |p: f32, q: f32| (p as f64 + (q as f64 - p as f64) * u) as f32;
+            laid.push(Point { x: l_(a.x, b.x), y: l_(a.y, b.y), force: l_(a.force, b.force), alt: l_(a.alt, b.alt), az: l_(a.az, b.az), speed: l_(a.speed, b.speed) });
+            len += l * u;
+            wsum += l * u * wm;
+            held = 0.0;
+            dry = true;
+            break;
+        }
+        let width = if len > 0.0 { wsum / len } else { pts.first().map_or(0.0, w) };
+        Stopping { laid_mm: len, total_mm: total, dry, used_mm3: held0 - held, left_mm3: held, width_mm: width, spread_mm: etch::stop_out_spread(width, etch::STOP_UM), pts: laid }
+    }
+
+    /// Stopping-out varnish brushed along `pts` (`stopping`): no acid reaches
+    /// a cell its strips cover over half of until a clean.
+    fn stop_out(&mut self, brush_mm: f64, load: f64, pts: &[Point]) -> Report {
+        let s = Self::stopping(brush_mm, load, pts);
+        let (samples, _) = Self::samples(pts, 1.0);
+        let rep = Report { length_mm: s.laid_mm, secs: Self::secs(&samples), width_um: s.width_mm * 1000.0, ..Report::default() };
+        if s.pts.is_empty() || load <= 0.0 {
+            return rep;
+        }
+        let strip = |p: &Point| {
+            let w = etch::brush_width_mm(brush_mm, p.force as f64);
+            w + 2.0 * etch::stop_out_spread(w, etch::STOP_UM)
+        };
+        let mut st = self.sweep(&s.pts, &strip, 1.0);
+        let ends: Vec<Point> = if s.pts.len() > 1 { vec![s.pts[0], *s.pts.last().unwrap()] } else { vec![s.pts[0]] };
+        st.extend(self.dabs(&ends, &strip));
+        let touched = self.touches(&st);
+        for (i, t) in touched.iter().enumerate() {
+            if *t >= 0.5 {
+                let (x, y) = (i % self.w, i / self.w);
+                let mut e = self.etch(x, y);
+                e.stopped = true;
+                self.set_etch(x, y, e);
+            }
+        }
+        rep
     }
 
     /// Solvent: ground, stopping-out and rosin off. What the acid opened stays
@@ -502,10 +584,17 @@ impl Plate {
     fn clean(&mut self) {
         let c = self.coats_mut();
         c.ground_um = 0.0;
+        c.laid.clear();
         c.dust.clear();
         for t in &mut c.tiles {
             *t = None;
         }
+    }
+
+    /// Whether the plate holds a ground and nothing else of the etching
+    /// tools' (more ground can be rolled onto it).
+    pub fn only_ground(&self) -> bool {
+        self.coats.as_ref().is_some_and(|c| c.ground_um > 0.0 && c.dust.is_empty() && c.tiles.iter().all(|t| t.is_none()))
     }
 
     /// Whether the plate holds a coat or a bite's state (ground, varnish,
@@ -609,20 +698,16 @@ impl Plate {
         self.set_etch(x, y, e);
     }
 
-    /// The cells the bath reaches: under a ground, those with needle lines;
-    /// without one, every cell of the face (between its dots, if it has any).
+    /// The cells the bath reaches: where the ground lies, those with needle
+    /// lines; where it doesn't (no ground, or cells its roller missed), every
+    /// cell of the face (between its dots, if it has any); never a stopped one.
     fn exposed(&self) -> Vec<(usize, usize)> {
-        if self.ground_um() > 0.0 {
-            return self.etched_cells().into_iter().filter(|&(x, y)| {
-                let e = self.etch(x, y);
-                !e.stopped && e.lines.iter().any(|l| l.lam > 0.0)
-            }).collect();
-        }
         let (x0, y0, x1, y1) = self.clip.unwrap_or((0, 0, self.w, self.h));
-        let mut out = Vec::with_capacity((x1 - x0) * (y1 - y0));
+        let mut out = Vec::new();
         for y in y0..y1.min(self.h) {
             for x in x0..x1.min(self.w) {
-                if !self.etch(x, y).stopped {
+                let e = self.etch(x, y);
+                if !e.stopped && (!self.grounded(x, y) || e.lines.iter().any(|l| l.lam > 0.0)) {
                     out.push((x, y));
                 }
             }
@@ -647,11 +732,11 @@ impl Plate {
         if doses.is_empty() {
             return (0.0, 0.0);
         }
-        let t = self.ground_um() as f64;
         let a = self.pitch * self.pitch;
         let cells = self.exposed();
         let (mut taken, mut deepest) = (0.0f64, 0.0f64);
         for (x, y) in cells {
+            let t = self.ground_at(x, y);
             let mut e = self.etch(x, y);
             let before = self.cell(x, y).height() as f64;
             if t > 0.0 {
@@ -893,7 +978,7 @@ impl Looks {
         if e.stopped {
             return Some(self.stop);
         }
-        let g = self.ground?;
+        let g = self.ground.filter(|_| p.grounded(x, y))?;
         let mut px = g;
         let mut bare = 0.0f32;
         for l in e.lines.iter().filter(|l| l.lam > 0.0) {
@@ -1007,6 +1092,9 @@ pub(super) fn write_etch(c: &Coats, w: &mut impl Write) -> io::Result<()> {
         }
         w.write_all(&buf)?;
     }
+    // the cells the ground is laid on
+    put64(w, c.laid.len() as u64)?;
+    w.write_all(&c.laid)?;
     Ok(())
 }
 
@@ -1125,6 +1213,13 @@ pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
         }
         c.tiles[i] = Some(cells.into_boxed_slice());
     }
+    let n = get64(r)?;
+    let want = if c.ground_um > 0.0 { (p.w * p.h).div_ceil(8) as u64 } else { 0 };
+    if n != want {
+        return Err(bad("its ground's cells are damaged"));
+    }
+    c.laid = vec![0u8; n as usize];
+    r.read_exact(&mut c.laid)?;
     Ok(c)
 }
 

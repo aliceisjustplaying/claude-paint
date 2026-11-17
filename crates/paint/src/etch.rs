@@ -664,8 +664,75 @@ pub const GROUND_URBACH_EV: f64 = 0.3;
 /// Hard ground laid 4 µm thick by default [E: IP §2.1's 2–8 µm].
 pub const GROUND_UM: f64 = 4.0;
 /// Stopping-out varnish (asphaltum in turpentine, brushed): 20 µm [E: a
-/// brushed varnish, unmeasured], the ground's bitumen.
+/// brushed varnish, unmeasured], the ground's bitumen. It is the film a
+/// loaded brush lays (`stop_out_spread`, `Plate`'s stopping-out).
 pub const STOP_UM: f64 = 20.0;
+
+// ---------------------------------------------------------------- the hand's tools on a ground
+
+/// A hard ground's leather roller: 150 mm long [P: "the ideal roller is
+/// about 150 mm long and 50 mm in diameter, covered in leather" (Etching: a
+/// guide to traditional techniques, ch. 11); makers sell 100–200 mm (Artools
+/// 116-10, 116-20)]. Its line of contact lays the ground where it rolls.
+pub const ROLLER_MM: f64 = 150.0;
+/// Rolling a ground: the roller pushed at 100 mm/s [E: a brisk roll; no
+/// timed account], and the plate warmed on the hot plate and let cool, 8
+/// minutes [E: EP's 10 minutes for the whole, less the rolling].
+pub const ROLL_MM_S: f64 = 100.0;
+pub const GROUND_WARM_S: f64 = 480.0;
+/// Stopping-out varnish (asphaltum and rosin in turpentine) as a liquid:
+/// its surface tension that of turpentine, 27 mN/m [M: handbook value for
+/// turpentine and α-pinene, 26–27 mN/m near 20 °C]; its viscosity 1 Pa·s
+/// [E: makers call it of "thicker consistency" than straw-hat varnish, so
+/// over a brushing paint's 0.1–0.3 Pa·s; unmeasured].
+pub const STOP_TENSION: f64 = 0.027;
+pub const STOP_PA_S: f64 = 1.0;
+/// It flows for 10 minutes before it sets [P: about 10 minutes to dry under
+/// a fan (Glasgow Print Studio's handbook), an hour in still air
+/// (MungoLux); a film stops flowing well before it is dry to the touch, so
+/// the shorter].
+pub const STOP_SET_S: f64 = 600.0;
+/// Cox–Voinov's logarithm ln(L/λ), the ratio of the drop's size to the
+/// microscopic cut-off at its contact line: 9.2 [M: Bonn et al., Rev. Mod.
+/// Phys. 81, 739 (2009), ln 10⁴ fitted across fluids in complete wetting].
+pub const COX_LOG: f64 = 9.2;
+/// Brushing varnish, 20 mm/s [E: EP's stop-out pace, a brush 8 mm wide at
+/// 20 mm/s].
+pub const BRUSH_MM_S: f64 = 20.0;
+/// A sable round's belly (Rosemary & Co Series 33: 15.7/3.4, 20/3.9 and
+/// 24.2/5.2 mm hair length over width for sizes 4, 6, 8 [M]): a cone of its
+/// width `d_mm` and 4.7 times that long, the liquid filling 0.6 of it [E: the
+/// hairs' packing in a wet bundle] (the wet brush's own, `bristle`'s
+/// `capacity_mm3` where wet pastel has it). A size 6, 3.9 mm, holds 44 mm³.
+pub fn round_belly_mm3(d_mm: f64) -> f64 {
+    0.6 * std::f64::consts::PI / 12.0 * d_mm * d_mm * (4.7 * d_mm)
+}
+/// The stop-out brush when none is given: a size 6 sable round, 3.9 mm.
+pub const STOP_BRUSH_MM: f64 = 3.9;
+
+/// The width (mm) a round brush `d_mm` across lays pressed at `pressure`
+/// (0..1): a wet tuft is a cone, so its mark widens with the pressure until
+/// its whole belly is down (`bristle::P_FULL`), the bristle model's law.
+pub fn brush_width_mm(d_mm: f64, pressure: f64) -> f64 {
+    d_mm * (pressure / crate::bristle::P_FULL as f64).clamp(0.0, 1.0)
+}
+
+/// How far (mm) the edge of a strip of stopping-out varnish `w_mm` wide and
+/// `h_um` thick creeps out on a clean plate before it sets: the strip is a
+/// ridge of section A = h·w, its contact angle θ = 3A/(2a²) for its half-width
+/// a (a parabolic section), and its edge advances by Cox–Voinov in complete
+/// wetting, θ³ = 9·ln(L/λ)·ηU/γ, so a⁷ = a₀⁷ + 7γ(3A/2)³t/(9η·ln(L/λ)) over
+/// `STOP_SET_S` [D: Tanner's law for a two-dimensional ridge]. A 20 µm strip
+/// 2.3 mm wide creeps 26 µm: the edge is the brush's.
+pub fn stop_out_spread(w_mm: f64, h_um: f64) -> f64 {
+    let a0 = 0.5 * w_mm * 1e-3;
+    let area = h_um * 1e-6 * w_mm * 1e-3;
+    if a0 <= 0.0 || area <= 0.0 {
+        return 0.0;
+    }
+    let a7 = a0.powi(7) + 7.0 * STOP_TENSION * (1.5 * area).powi(3) * STOP_SET_S / (9.0 * STOP_PA_S * COX_LOG);
+    (a7.powf(1.0 / 7.0) - a0) * 1e3
+}
 /// Rosin: index 1.54 [M, CAMEO], pale amber: absorption 0.02 /µm at 450 nm
 /// [E: a rosin of pale grade, unmeasured], with an Urbach tail of 0.3 eV [E].
 pub const ROSIN_N: f64 = 1.54;

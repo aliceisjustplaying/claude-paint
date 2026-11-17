@@ -8,6 +8,18 @@ fn pt(x: f32, y: f32, force: f32) -> Point {
     Point { x, y, force, alt: 80.0, az: 0.0, speed: 20.0 }
 }
 
+/// A hard ground `um` thick rolled once across the whole of a `tiny` plate
+/// (a 150 mm roller's line of contact spans its height).
+fn rolled(um: f32) -> Op {
+    Op::Ground { um, roller_mm: etch::ROLLER_MM as f32, pts: vec![pt(0.0, 5.0, 0.5), pt(20.0, 5.0, 0.5)] }
+}
+
+/// Stopping-out varnish brushed along y `y` mm from x 2 to 18 with a size 6
+/// round at pressure 0.5: a strip some 2.3 mm wide.
+fn varnish(y: f32) -> Op {
+    Op::StopOut { brush_mm: etch::STOP_BRUSH_MM as f32, load: 1.0, pts: vec![pt(2.0, y, 0.5), pt(18.0, y, 0.5)] }
+}
+
 /// A 20 × 10 mm plate at 0.1 mm a cell.
 fn tiny(metal: Metal) -> Plate {
     let temper = if metal == Metal::Copper { Temper::HalfHard } else { Temper::Rolled };
@@ -26,7 +38,7 @@ fn balance(p: &Plate) -> f64 {
 /// A grounded copper plate with a needle line at y 5 mm, x 4–16, and a second at y 7.
 fn lined() -> Plate {
     let mut p = tiny(Metal::Copper);
-    p.apply(Op::Ground { um: etch::GROUND_UM as f32 });
+    p.apply(rolled(etch::GROUND_UM as f32));
     p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0, 5.0, 0.3), pt(16.0, 5.0, 0.3)] });
     p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0, 7.0, 0.3), pt(16.0, 7.0, 0.3)] });
     p
@@ -112,16 +124,9 @@ fn stop_out_protects() {
     let mut p = lined();
     p.bite(ferric(10.0, 20.0));
     let first = p.etch(100, 70);
-    // varnish over the upper half of the plate (y < 6 mm: the line at 5)
-    let (bw, bh) = (200usize, 100usize);
-    let mut bits = vec![0u8; (bw * bh).div_ceil(8)];
-    for y in 0..60 {
-        for x in 0..bw {
-            let i = y * bw + x;
-            bits[i / 8] |= 1 << (i % 8);
-        }
-    }
-    p.apply(Op::StopOut { w: bw as u32, h: bh as u32, bits });
+    // varnish brushed along the line at 5 mm (not the one at 7)
+    p.apply(varnish(5.0));
+    assert!(p.etch(100, 50).stopped && !p.etch(100, 70).stopped);
     let kept = p.cell(100, 50);
     let z_kept = p.etch(100, 50).lines.iter().map(|l| l.z).fold(0.0, f32::max);
     p.bite(ferric(20.0, 20.0));
@@ -187,11 +192,9 @@ fn plat_v1_still_reads_and_v2_round_trips() {
     assert!(Plate::read(&mut v1.as_slice()).unwrap() == p);
 
     p.apply(Op::Clean);
-    p.apply(Op::Ground { um: 4.0 });
+    p.apply(rolled(4.0));
     p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0, 7.0, 0.3), pt(16.0, 7.0, 0.3)] });
-    let mut bits = vec![0u8; 200usize.div_ceil(8) * 100];
-    bits[0] = 0xff;
-    p.apply(Op::StopOut { w: 200, h: 100, bits: bits[..(200 * 100usize).div_ceil(8)].to_vec() });
+    p.apply(varnish(2.0));
     p.bite(BiteSpec { acid: Acid::Nitric, molar: etch::NITRIC_CONC_M / 9.0, temp_c: 18.0, minutes: 3.0, face: Face::Up, rock: Some((5.0, 4.0)), feather: Some(30.0), fresh: false });
     p.apply(Op::Clean);
     p.apply(Op::Aquatint { per_um2: etch::dust_box(0.6, 60.0, 2.0).iter().map(|&v| v as f32).collect(), seed: 3 });
@@ -234,7 +237,7 @@ fn a_grounded_plate_looks_dark_with_bright_lines() {
     let lum = |c: crate::Rgb| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     let bare = lum(tiny(Metal::Copper).colour_and_height((0, 0, 1, 1)).0[0]);
     let mut p = tiny(Metal::Copper);
-    p.apply(Op::Ground { um: 4.0 });
+    p.apply(rolled(4.0));
     p.apply(Op::Needle { tip_um: 60.0, cone_deg: 30.0, pts: vec![pt(4.0, 5.05, 0.3), pt(16.0, 5.05, 0.3)] });
     let (col, _) = p.colour_and_height((0, 0, 200, 100));
     let (ground, line) = (lum(col[30 * 200 + 100]), lum(col[50 * 200 + 100]));
@@ -296,12 +299,7 @@ fn out_stopped_out_and_back_in_keeps_the_first_depths() {
     let mut p = lined();
     p.immerse(ferric(0.0, 20.0).bath(), 100.0).unwrap();
     p.lift(110.0).unwrap();
-    let (bw, bh) = (200usize, 100usize);
-    let mut bits = vec![0u8; (bw * bh).div_ceil(8)];
-    for i in 0..60 * bw {
-        bits[i / 8] |= 1 << (i % 8);
-    }
-    p.apply(Op::StopOut { w: bw as u32, h: bh as u32, bits });
+    p.apply(varnish(5.0));
     let kept = (p.cell(100, 50), p.etch(100, 50));
     let tray = p.coats().unwrap().tray.unwrap();
     let im = p.immerse(ferric(0.0, 20.0).bath(), 130.0).unwrap();
@@ -354,4 +352,74 @@ fn a_forgotten_plate_bites_on_until_the_bath_is_spent() {
     let depth = -p.cell(20, 20).level as f64;
     assert!(depth <= most_um * 1.001 && depth > most_um * (1.0 - 2.0 * SPENT) - 0.01, "{depth} µm against the bath's {most_um}");
     assert!(balance(&p).abs() < 1e-3 * p.bitten_um3());
+}
+
+/// The varnish lies where the brush laid it: a strip as wide as the size 6
+/// round pressed out at its pressure (`etch::brush_width_mm`) and the few tens
+/// of µm its edge crept (`etch::stop_out_spread`), its ends the brush's disc;
+/// cells it covers over half are stopped, the rest are not.
+#[test]
+fn stop_out_lies_where_the_brush_went() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(varnish(5.0));
+    let w = etch::brush_width_mm(etch::STOP_BRUSH_MM, 0.5);
+    assert!((w - 3.9 * 0.5 / 0.85).abs() < 1e-6);
+    let spread = etch::stop_out_spread(w, etch::STOP_UM);
+    assert!(spread > 0.0 && spread < 0.05, "the edge creeps {spread} mm: the brush's edge");
+    let half = 0.5 * w + spread;
+    for y in 0..100 {
+        let d = ((y as f64 + 0.5) * 0.1 - 5.0).abs();
+        let stopped = p.etch(100, y).stopped;
+        if d < half - 0.05 {
+            assert!(stopped, "row {y} under the strip");
+        }
+        if d > half + 0.05 {
+            assert!(!stopped, "row {y} beside it");
+        }
+    }
+    // along the stroke: from the brush's landing to its lift, and its tuft's disc past each end
+    assert!(p.etch(19, 50).stopped && p.etch(181, 50).stopped);
+    assert!(!p.etch(5, 50).stopped && !p.etch(195, 50).stopped);
+}
+
+/// A brush runs dry: the varnish its belly held (load of `round_belly_mm3`)
+/// is laid as a film `STOP_UM` thick across its width, and no further.
+#[test]
+fn a_brush_runs_dry() {
+    let pts = vec![pt(1.0, 5.0, 0.85), pt(19.0, 5.0, 0.85)];
+    let held = 0.1 * etch::round_belly_mm3(1.0);
+    let s = Plate::stopping(1.0, 0.1, &pts);
+    let want = held / (etch::STOP_UM * 1e-3 * 1.0);
+    assert!(s.dry && (s.laid_mm / want - 1.0).abs() < 1e-9, "{} mm against {want}", s.laid_mm);
+    assert!(s.left_mm3.abs() < 1e-12 && (s.used_mm3 / held - 1.0).abs() < 1e-9);
+    let mut p = tiny(Metal::Copper);
+    p.apply(Op::StopOut { brush_mm: 1.0, load: 0.1, pts });
+    let end = 1.0 + want;
+    let x_in = ((end - 0.8) / 0.1) as usize;
+    let x_out = ((end + 0.8) / 0.1) as usize;
+    assert!(p.etch(x_in, 50).stopped && !p.etch(x_out, 50).stopped, "stopped up to {end} mm");
+    // a full brush lays the whole stroke
+    assert!(!Plate::stopping(1.0, 1.0, &[pt(1.0, 5.0, 0.85), pt(19.0, 5.0, 0.85)]).dry);
+}
+
+/// The ground lies where the roller went: a cell its line of contact never
+/// crossed is bare and bites as an open face, while the grounded cells bite
+/// only through their needle lines; a needle on the bare part needs no force
+/// to part a ground.
+#[test]
+fn a_ground_lies_where_the_roller_went() {
+    let mut p = tiny(Metal::Copper);
+    // rolled over the left half only (x 0 to 10 mm)
+    p.apply(Op::Ground { um: 4.0, roller_mm: 150.0, pts: vec![pt(0.0, 5.0, 0.5), pt(10.0, 5.0, 0.5)] });
+    assert!(p.grounded(50, 50) && !p.grounded(150, 50));
+    assert!((p.ground_share() - 0.5).abs() < 1e-9);
+    p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(2.0, 5.0, 0.3), pt(18.0, 5.0, 0.3)] });
+    p.bite(ferric(10.0, 20.0));
+    assert_eq!(p.cell(50, 20).level, 0.0, "the ground keeps the acid off the left half's flat");
+    assert!(p.cell(150, 20).level < 0.0, "the bare right half bites open");
+    assert!(p.etch(50, 50).lines.iter().any(|l| l.z > 0.0), "the needle line bites through the ground");
+    // and it comes back from its section as it was
+    let mut v = Vec::new();
+    p.write(&mut v).unwrap();
+    assert!(Plate::read(&mut v.as_slice()).unwrap() == p);
 }

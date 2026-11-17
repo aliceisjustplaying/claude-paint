@@ -202,8 +202,6 @@ pub mod pace {
     /// conductance of 300 W/m²K is 15 s, four of them to come within 2 % of
     /// the hot plate [D; the conductance E], with the reach to it and back.
     pub const WARM_S: f64 = 60.0 + 4.0 * 15.0;
-    /// Cleaning ink off a plate with solvent and rag [E].
-    pub const CLEAN_S: f64 = 300.0;
     /// A tarlatan refolded: as a rag (`rag::pace::REFOLD`).
     pub const REFOLD: f64 = crate::rag::pace::REFOLD;
 }
@@ -1460,15 +1458,87 @@ impl Plate {
         Ok(InkReport { added_um3: after.0 + after.1 - before.0 - before.1, film_um: film_max, fill: if fvol > 0.0 { fsum / fvol } else { 0.0 }, temp_c: temp, eta, area_mm2: area, secs })
     }
 
-    /// Solvent and a rag: every bit of ink off the plate (µm³ taken).
-    pub fn clean_ink(&mut self) -> f64 {
-        let (l, f) = self.ink_um3();
-        if let Some(k) = self.ink.as_deref_mut() {
-            for t in k.tiles.iter_mut() {
-                *t = None;
+    /// A rag dampened with solvent, a pad `pad_mm` across, rubbed along `pts`
+    /// (mm; each point's speed its own, mm/s) `passes` times at `now` (EP §8,
+    /// "Cleaning"). The pad slides along the points as a tarlatan does
+    /// (`Plate::slide`; pressed soft under the contact laws), and each cell
+    /// gets its share `m` of a pass each time:
+    /// - **the film on the flat**: the rubbing mixes the solvent the face
+    ///   lays (`etch::SOLVENT_UM`) into the film f it meets, and the cloth
+    ///   drinks the mixture but for the film a wiped face keeps
+    ///   (`etch::RESIDUE_UM`): it keeps RESIDUE/(f + SOLVENT) of its ink a
+    ///   whole pass (f the film the pass came to), that to the power m for a
+    ///   share of one [D];
+    /// - **the ink in an opening**: the solvent fills the opening above the
+    ///   ink and joins it to the cloth, whose pores draw the ink up by
+    ///   capillarity as retroussage's fibres do (Lucas–Washburn,
+    ///   `washburn_um`, at the ink's own viscosity at the plate's warmth,
+    ///   for the time the pad lies over the point, m·pad/speed): the ink
+    ///   sinks by that depth [D]. A stiff ink comes out of deep lines more
+    ///   slowly than a loose one, and a warm plate gives it up sooner.
+    ///
+    /// A cell whose ink comes below an oil's monolayer
+    /// (`etch::MONOLAYER_UM`) holds none. What the rag takes it keeps: a
+    /// solvent rag is refolded as it fills and lays nothing back. Nothing
+    /// is taken where the rag doesn't go.
+    pub fn clean_ink(&mut self, pts: &[Point], pad_mm: f64, passes: u32, now: f64) -> WipeReport {
+        self.age_ink(now);
+        let temp = self.temp_c(now);
+        let before = self.ink_um3();
+        let pad = pad_mm.max(0.1);
+        let stretches = if self.contact { self.slide_pressed(pts, &|_| pad, 0.25 * pad) } else { self.slide(pts, &|_| pad, 0.25 * pad) };
+        let inks: Vec<Ink> = self.ink.as_ref().map(|k| k.inks.clone()).unwrap_or_default();
+        let unit = self.pitch * self.pitch;
+        let (hs, hr, mono) = (crate::etch::SOLVENT_UM, crate::etch::RESIDUE_UM, crate::etch::MONOLAYER_UM);
+        let mut swept = 0.0f64;
+        for _ in 0..passes {
+            // (the film each cell had as the pass came to it, and the time the pad has lain over
+            // it so far in the pass: a pass keeps RESIDUE/(f + SOLVENT) of that film, and draws
+            // the lines' ink up by Washburn over its whole time there, shared out over the
+            // stretches that rub it, so a pass is one pass however its path is cut up)
+            let mut met: std::collections::HashMap<(usize, usize), (f64, f64)> = std::collections::HashMap::new();
+            for st in &stretches {
+                let secs = pad / (st.pose.speed as f64).max(1e-3);
+                for &(x, y, m) in &st.cells {
+                    swept += m as f64 * unit;
+                    let ic = self.ink_cell(x, y);
+                    if ic.total() <= 0.0 || m <= 0.0 {
+                        continue;
+                    }
+                    let c = self.cell(x, y);
+                    let sh = ic.shares();
+                    let eta: f64 = inks.iter().enumerate().map(|(i, k)| sh[i] as f64 * k.eta(temp)).sum::<f64>().max(1e-6);
+                    let mut out = ic;
+                    let f = ic.film as f64;
+                    let seen = met.entry((x, y)).or_insert((f, 0.0));
+                    let (f0, t0) = *seen;
+                    seen.1 += m as f64 * secs;
+                    let draw = washburn_um(eta, t0 + m as f64 * secs) - washburn_um(eta, t0);
+                    out.film = (f * (hr / (f0 + hs)).min(1.0).powf(m as f64)) as f32;
+                    for k in 0..BINS {
+                        let open = c.open[k] as f64;
+                        if out.line[k] <= 0.0 || open <= 0.0 {
+                            continue;
+                        }
+                        let depth = out.line[k] as f64 / open;
+                        out.line[k] = (open * (depth - draw).max(0.0)) as f32;
+                    }
+                    if out.film < mono as f32 {
+                        out.film = 0.0;
+                    }
+                    for k in 0..BINS {
+                        if (out.line[k] as f64) < mono * (c.open[k] as f64) {
+                            out.line[k] = 0.0;
+                        }
+                    }
+                    *self.ink_cell_mut(x, y) = out;
+                }
             }
         }
-        l + f
+        let after = self.ink_um3();
+        let taken = (before.0 + before.1) - (after.0 + after.1);
+        let area_mm2 = self.union(&stretches).len() as f64 * unit * 1e-6;
+        self.wipe_report(before, after, taken, 0.0, area_mm2, swept * 1e-6 / pace::TARLATAN_MM2_S, temp)
     }
 
     // ------------------------------------------------------------ wiping

@@ -423,3 +423,85 @@ fn a_ground_lies_where_the_roller_went() {
     p.write(&mut v).unwrap();
     assert!(Plate::read(&mut v.as_slice()).unwrap() == p);
 }
+
+/// A solvent rag `pad` mm across rubbed along y `y` mm from x `x0` to `x1`,
+/// `passes` times.
+fn wash(pad: f32, y: f32, x0: f32, x1: f32, passes: u32) -> Op {
+    Op::Wash { pad_mm: pad, passes, pts: vec![pt(x0, y, 0.5), pt(x1, y, 0.5)] }
+}
+
+/// The cell of a point (mm) on the 0.1 mm plate.
+fn at(mm: f64) -> usize {
+    (mm * 10.0) as usize
+}
+
+/// The solvent rag (EP §8) takes the ground off only where it goes: a 4 mm
+/// pad drawn once along y 5 from x 0 to 10 rubs a point u mm off its path for
+/// the chord √(1 − u²/r²) of a pass (`Plate::slide`), and dissolves
+/// `solvent_dissolves_um` of coat a whole pass, so the 4 µm ground comes off
+/// out to u = r·√(1 − (4/d)²) and stays beyond it, past the pad's rim and
+/// past the stroke's end. The whole plate washed is as a clean leaves it.
+#[test]
+fn a_solvent_rag_takes_the_ground_off_only_where_it_goes() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(rolled(etch::GROUND_UM as f32));
+    let d = etch::solvent_dissolves_um();
+    assert!((d - 150.0 * 0.5 / 0.86 * 0.2).abs() < 1e-9, "{d}");
+    let reach = 2.0 * (1.0 - (etch::GROUND_UM / d).powi(2)).sqrt();
+    assert!(reach > 1.8 && reach < 2.0, "{reach}");
+    let r = p.apply(wash(4.0, 5.0, 0.0, 10.0, 1));
+    assert!(r.secs > 0.0 && (r.length_mm - 10.0).abs() < 1e-9);
+    // under the path, and 1.8 mm off it (inside the reach): bare
+    assert!(!p.grounded(at(5.0), at(5.0)) && !p.grounded(at(5.0), at(5.0 + 1.75)) && !p.grounded(at(5.0), at(5.0 - 1.75)));
+    // past the pad's rim, past the stroke's end: the ground stays
+    assert!(p.grounded(at(5.0), at(5.0 + 2.15)) && p.grounded(at(5.0), at(5.0 - 2.15)) && p.grounded(at(12.5), at(5.0)));
+    assert!(p.coated());
+    // a rag big enough to span the plate, twice across: nothing left, as a clean leaves it
+    p.apply(Op::Wash { pad_mm: 40.0, passes: 2, pts: vec![pt(-25.0, 5.0, 0.5), pt(45.0, 5.0, 0.5)] });
+    assert!(!p.coated() && p.ground_um() == 0.0 && p.coat_cells() == 0);
+}
+
+/// Varnish over the ground takes the solvent first: 20 µm of it wants more
+/// than one pass's 17 µm under the pad's middle, so one pass leaves it (and the
+/// ground under it) whole, and a second takes both where the two passes'
+/// solvent, 2·d·√(1 − u²/r²), passes the varnish and the ground together.
+#[test]
+fn varnish_wants_two_passes_of_the_solvent_rag() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(rolled(etch::GROUND_UM as f32));
+    p.apply(varnish(5.0));
+    let (x, y) = (at(10.0), at(5.0));
+    assert!(p.etch(x, y).stopped);
+    p.apply(wash(4.0, 5.0, 0.0, 20.0, 1));
+    assert!(p.etch(x, y).stopped && p.grounded(x, y), "one pass: {} µm against 20", etch::solvent_dissolves_um());
+    // beside the varnish one pass took the ground
+    assert!(!p.grounded(x, at(5.0 + 1.5)) && !p.etch(x, at(5.0 + 1.5)).stopped);
+    p.apply(wash(4.0, 5.0, 0.0, 20.0, 2));
+    assert!(!p.etch(x, y).stopped && !p.grounded(x, y));
+}
+
+/// Loose rosin is swept off by any touch of the rag, and only there; the
+/// layer remembers the cells it left (its record's bit 1), through a save.
+/// The old whole-plate clean still reads and runs.
+#[test]
+fn a_solvent_rag_sweeps_loose_rosin_where_it_goes_and_a_save_keeps_it() {
+    let mut p = tiny(Metal::Copper);
+    p.apply(Op::Aquatint { per_um2: etch::dust_box(0.6, 30.0, 1.0).iter().map(|&v| v as f32).collect(), seed: 7 });
+    let n = |p: &Plate, x: usize, y: usize| p.dots(x, y, false).len();
+    let busy = (0..200).filter(|&x| n(&p, x, at(5.0)) > 0).count();
+    assert!(busy > 150, "{busy}");
+    p.apply(wash(4.0, 5.0, 0.0, 10.0, 1));
+    assert!((0..at(9.0)).all(|x| n(&p, x, at(5.0)) == 0), "swept under the pad");
+    assert!((at(13.0)..200).filter(|&x| n(&p, x, at(5.0)) > 0).count() > 50, "left past its end");
+    assert!((0..200).filter(|&x| n(&p, x, at(8.0)) > 0).count() > 150, "and past its rim");
+    let mut b = Vec::new();
+    p.write(&mut b).unwrap();
+    let q = Plate::read(&mut &b[..]).unwrap();
+    assert!(q == p && q.coats().unwrap().dust[0].gone.iter().any(|&g| g != 0));
+    // the old whole-plate clean: all off
+    p.apply(Op::Clean);
+    assert!(!p.coated());
+    let mut b = Vec::new();
+    p.write(&mut b).unwrap();
+    assert!(Plate::read(&mut &b[..]).unwrap() == p);
+}

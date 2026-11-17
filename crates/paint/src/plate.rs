@@ -788,8 +788,13 @@ pub enum Op {
     Melt,
     /// A bite: each step's bite of a flat face (µm) and diffusion layer (µm).
     Bite { acid: crate::etch::Acid, doses: Vec<(f32, f32)> },
-    /// Solvent: grounds, varnish and rosin off.
+    /// Solvent: grounds, varnish and rosin off, all over (the plates of
+    /// paintings begun before the solvent rag, and their saves).
     Clean,
+    /// A rag dampened with solvent, a pad `pad_mm` across, rubbed along
+    /// `pts` (each point's speed its own) `passes` times: coats off where it
+    /// dissolves through them (`Plate::wash`).
+    Wash { pad_mm: f32, passes: u32, pts: Vec<Point> },
 }
 
 impl Op {
@@ -1602,6 +1607,7 @@ impl Plate {
                     (9, 0.0, 0.0, 0.0, none)
                 }
                 Op::Clean => (10, 0.0, 0.0, 0.0, none),
+                Op::Wash { pad_mm, passes, pts } => (11, *pad_mm, *passes as f32, 0.0, pts.as_slice()),
             };
             put64(w, tag)?;
             for v in [a, b, c] {
@@ -1719,7 +1725,7 @@ impl Plate {
                 });
                 continue;
             }
-            if v < 2 || tag > 10 {
+            if v < 2 || tag > 11 {
                 return Err(bad(&format!("a tool of kind {tag}, which this build doesn't know")));
             }
             let n = get64(r)?;
@@ -1741,6 +1747,7 @@ impl Plate {
                     Op::Bite { acid, doses: (8..blob.len()).step_by(8).map(|i| (f32::from_bits(w32(&blob, i)), f32::from_bits(w32(&blob, i + 4)))).collect() }
                 }
                 10 => Op::Clean,
+                11 if a.is_finite() && a > 0.0 && b >= 1.0 && b.fract() == 0.0 => Op::Wash { pad_mm: a, passes: b as u32, pts },
                 _ => return Err(bad("an etching tool's data is damaged")),
             });
         }

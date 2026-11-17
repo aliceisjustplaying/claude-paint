@@ -668,6 +668,47 @@ pub const GROUND_UM: f64 = 4.0;
 /// loaded brush lays (`stop_out_spread`, `Plate`'s stopping-out).
 pub const STOP_UM: f64 = 20.0;
 
+// ---------------------------------------------------------------- the solvent rag
+
+/// A cotton rag dampened with solvent (turpentine, or petroleum spirit),
+/// bunched to a pad and rubbed along the points the hand moves it (EP §8,
+/// "Cleaning"). What its face carries to the plate under it, per area: its
+/// cloth's weight, 150 g/m² [E: rags of cotton sheeting and jersey weigh
+/// 100–200 g/m²], times what a cloth wrung damp holds, 0.5 g a gram [M:
+/// cotton's water retention value, 0.45–0.55 g/g by centrifuge (ISO 23714);
+/// a hand-wrung cloth holds as much or more], over turpentine's density,
+/// 0.86 g/cm³ [M, CRC]: a film of some 87 µm.
+pub const RAG_GSM: f64 = 150.0;
+pub const RAG_HOLD: f64 = 0.5;
+pub const SOLVENT_G_CM3: f64 = 0.86;
+pub const SOLVENT_UM: f64 = RAG_GSM * RAG_HOLD / SOLVENT_G_CM3;
+/// The share of the solvent's volume a coat dissolves into before the
+/// solvent is saturated: 0.2 [E: asphaltum and rosin dissolve freely in
+/// turpentine (stopping-out varnish is asphaltum in turpentine, and rosin
+/// is the residue of turpentine's distillation [M, CAMEO]), but beeswax only
+/// partly at room temperature (two thirds of a beeswax sample in C9–C15
+/// alkanes, Kastratović 2022, Agriculture & Forestry 68(4)), and a hard
+/// ground is held by its wax].
+pub const SOLVENT_SAT: f64 = 0.2;
+/// The coat (µm) one pass of the rag dissolves where it rubs a whole pass
+/// (`Plate::slide`'s share 1): the solvent its face lays, saturated [D]: some
+/// 17 µm, so a 4 µm ground comes off in one pass under the pad's middle,
+/// a 20 µm stopping-out varnish in two, and the pad's rim needs more.
+pub fn solvent_dissolves_um() -> f64 {
+    SOLVENT_UM * SOLVENT_SAT
+}
+/// The liquid a cloth leaves on a smooth face it has wiped: 0.3 µm [M:
+/// a cellulose wiper drawn over a wetted surface leaves 0.1–0.5 g/m² of
+/// liquid behind (US patents 8,778,086 and 9,345,376, their claims and
+/// tests)]. The solvent mixed with the ink it met, it leaves that much of
+/// the mixture.
+pub const RESIDUE_UM: f64 = 0.3;
+/// Ink thinner than an oil's monolayer is no film: a triglyceride lies some
+/// 2 nm thick spread on a solid [M: Langmuir films of triolein and other
+/// triglycerides, 1.5–2.5 nm]. A cell whose ink comes below it after a
+/// solvent rag holds none.
+pub const MONOLAYER_UM: f64 = 0.002;
+
 // ---------------------------------------------------------------- the hand's tools on a ground
 
 /// A hard ground's leather roller: 150 mm long [P: "the ideal roller is

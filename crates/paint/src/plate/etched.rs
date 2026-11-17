@@ -106,12 +106,21 @@ pub struct Etch {
 
 /// Rosin dust laid on the plate: grains per µm² by size bin
 /// (`etch::dust_bin`), the seed they are scattered from, and whether they
-/// were melted on.
+/// were melted on, and the cells a solvent rag has taken it off (a bit a
+/// cell, row by row; empty where it has taken none: `Plate::wash`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Dust {
     pub per_um2: Vec<f32>,
     pub seed: u64,
     pub melted: bool,
+    pub gone: Vec<u8>,
+}
+
+impl Dust {
+    /// Whether a solvent rag has taken this layer off cell `i` (row by row).
+    pub fn gone_at(&self, i: usize) -> bool {
+        self.gone.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1)
+    }
 }
 
 /// The plate's tray of acid: as made up, its volume, and the metal it holds.
@@ -366,16 +375,28 @@ impl Plate {
             if melted_only && !d.melted {
                 continue;
             }
-            let spread = if d.melted { etch::MELT_SPREAD } else { 1.0 };
-            for (b, n) in d.per_um2.iter().enumerate() {
-                if *n <= 0.0 {
-                    continue;
-                }
-                let h = mix(d.seed ^ mix((x as u64) << 32 | y as u64) ^ mix(b as u64 + 1));
-                let count = poisson(*n as f64 * area, h);
-                if count > 0.0 {
-                    out.push((count / area, 0.5 * spread * etch::dust_bin(b).2));
-                }
+            out.extend(Self::layer_dots(d, x, y, self.w, area));
+        }
+        out
+    }
+
+    /// One dust layer's dots over cell (x, y) (`dots`), none where a solvent
+    /// rag has taken it off; `w` the plate's width in cells, `area` a cell's
+    /// (µm²).
+    fn layer_dots(d: &Dust, x: usize, y: usize, w: usize, area: f64) -> Vec<(f64, f64)> {
+        if d.gone_at(y * w + x) {
+            return Vec::new();
+        }
+        let spread = if d.melted { etch::MELT_SPREAD } else { 1.0 };
+        let mut out = Vec::new();
+        for (b, n) in d.per_um2.iter().enumerate() {
+            if *n <= 0.0 {
+                continue;
+            }
+            let h = mix(d.seed ^ mix((x as u64) << 32 | y as u64) ^ mix(b as u64 + 1));
+            let count = poisson(*n as f64 * area, h);
+            if count > 0.0 {
+                out.push((count / area, 0.5 * spread * etch::dust_bin(b).2));
             }
         }
         out
@@ -395,7 +416,7 @@ impl Plate {
             Op::Needle { tip_um, cone_deg, pts } => self.needle(*tip_um as f64, *cone_deg as f64, pts),
             Op::StopOut { brush_mm, load, pts } => self.stop_out(*brush_mm as f64, *load as f64, pts),
             Op::Aquatint { per_um2, seed } => {
-                self.coats_mut().dust.push(Dust { per_um2: per_um2.clone(), seed: *seed, melted: false });
+                self.coats_mut().dust.push(Dust { per_um2: per_um2.clone(), seed: *seed, melted: false, gone: Vec::new() });
                 Report::default()
             }
             Op::Melt => {
@@ -412,6 +433,7 @@ impl Plate {
                 self.clean();
                 Report::default()
             }
+            Op::Wash { pad_mm, passes, pts } => self.wash(*pad_mm as f64, *passes, pts),
             _ => unreachable!("not an etching tool"),
         }
     }
@@ -589,6 +611,116 @@ impl Plate {
         for t in &mut c.tiles {
             *t = None;
         }
+    }
+
+    /// A rag dampened with solvent, a pad `pad_mm` across, rubbed along `pts`
+    /// (mm; slid, `Plate::slide`, or pressed soft under the contact laws,
+    /// `slide_pressed`) `passes` times (EP §8): each cell gets its share of a
+    /// pass each time, and the solvent dissolves `etch::solvent_dissolves_um`
+    /// of coat a whole pass, from the top down: stopping-out varnish
+    /// (`etch::STOP_UM`), then the ground or the rosin under it. A coat it
+    /// dissolves through in this cleaning comes off with the rag; one it
+    /// doesn't stays whole (the model keeps a coat on a cell or not: the
+    /// little the solvent took dries back as the solvent evaporates, and the
+    /// next cleaning starts on it again). Loose rosin is swept off by any
+    /// touch; a melted grain is a lens `(2/3)·d/MELT_SPREAD²` thick (the
+    /// look's). A cell left with no coat loses the acid's memory there, as
+    /// a whole clean does: what the acid opened stays as its openings.
+    /// Nothing happens where the rag doesn't go.
+    pub(super) fn wash(&mut self, pad_mm: f64, passes: u32, pts: &[Point]) -> Report {
+        let pad = pad_mm.max(0.1);
+        let st = if self.contact { self.slide_pressed(pts, &|_| pad, 0.25 * pad) } else { self.slide(pts, &|_| pad, 0.25 * pad) };
+        let unit = self.pitch * self.pitch;
+        let swept: f64 = st.iter().flat_map(|s| s.cells.iter()).map(|c| c.2 as f64).sum::<f64>() * unit * 1e-6 * passes as f64;
+        let length_mm: f64 = pts.windows(2).map(|p| ((p[1].x - p[0].x) as f64).hypot((p[1].y - p[0].y) as f64)).sum();
+        let rep = Report { length_mm, secs: swept / super::inked::pace::TARLATAN_MM2_S, width_um: pad * 1000.0, ..Report::default() };
+        if self.coats.is_none() {
+            return rep;
+        }
+        let touched = self.touches(&st);
+        let d = etch::solvent_dissolves_um();
+        let (w, h, area) = (self.w, self.h, unit);
+        let ground = self.ground_um() as f64;
+        for (i, t) in touched.iter().enumerate() {
+            if *t <= 0.0 {
+                continue;
+            }
+            let (x, y) = (i % w, i / w);
+            let mut b = *t as f64 * passes as f64 * d;
+            let mut e = self.etch(x, y);
+            let was = e;
+            if e.stopped {
+                if b < etch::STOP_UM {
+                    continue;
+                }
+                e.stopped = false;
+                b -= etch::STOP_UM;
+            }
+            let mut grounded = self.grounded(x, y);
+            let c = self.coats.as_mut().unwrap();
+            if grounded && b >= ground {
+                c.laid[i / 8] &= !(1 << (i % 8));
+                grounded = false;
+            }
+            let mut rosin = false;
+            if !grounded {
+                for dl in c.dust.iter_mut() {
+                    let dots = Self::layer_dots(dl, x, y, w, area);
+                    if dots.is_empty() {
+                        continue;
+                    }
+                    // the tallest grain's lens (a melted grain's radius is its spread's)
+                    let lens = dots.iter().map(|&(_, r)| 2.0 / 3.0 * (2.0 * r / etch::MELT_SPREAD) / (etch::MELT_SPREAD * etch::MELT_SPREAD)).fold(0.0, f64::max);
+                    if !dl.melted || b >= lens {
+                        if dl.gone.is_empty() {
+                            dl.gone = vec![0u8; (w * h).div_ceil(8)];
+                        }
+                        dl.gone[i / 8] |= 1 << (i % 8);
+                    } else {
+                        rosin = true;
+                    }
+                }
+            }
+            if !grounded && !e.stopped && !rosin {
+                e = Etch::default();
+            }
+            if e != was {
+                self.set_etch(x, y, e);
+            }
+        }
+        self.tidy_coats();
+        rep
+    }
+
+    /// The coats with what a rag has taken off them gone: no ground left
+    /// anywhere is none, a rosin layer gone from every cell that had grains
+    /// is none, and a tile of cells with no etching state is none (so a plate
+    /// washed all over is as `clean` leaves it).
+    fn tidy_coats(&mut self) {
+        let (w, h, area) = (self.w, self.h, self.pitch * self.pitch);
+        let Some(c) = self.coats.as_mut() else { return };
+        if c.ground_um > 0.0 && c.laid.iter().all(|&b| b == 0) {
+            c.ground_um = 0.0;
+            c.laid.clear();
+        }
+        c.dust.retain(|d| d.gone.is_empty() || (0..w * h).any(|i| !d.gone_at(i) && !Self::layer_dots(d, i % w, i / w, w, area).is_empty()));
+        for t in c.tiles.iter_mut() {
+            if t.as_ref().is_some_and(|t| t.iter().all(|e| *e == Etch::default())) {
+                *t = None;
+            }
+        }
+    }
+
+    /// The cells (row by row) that hold a coat: ground, stopping-out varnish
+    /// or rosin.
+    pub fn coat_cells(&self) -> usize {
+        if self.coats.is_none() {
+            return 0;
+        }
+        (0..self.w * self.h).filter(|&i| {
+            let (x, y) = (i % self.w, i / self.w);
+            self.grounded(x, y) || self.etch(x, y).stopped || !self.dots(x, y, false).is_empty()
+        }).count()
     }
 
     /// Whether the plate holds a ground and nothing else of the etching
@@ -932,7 +1064,7 @@ fn steps(minutes: f64) -> Vec<(f64, f64)> {
     (0..n).map(|i| (i as f64 * dt, (i + 1) as f64 * dt)).collect()
 }
 
-/// A coated plate's look (EP §5): a ground or a varnish as a film of bitumen
+/// A coated plate's look (EP §8): a ground or a varnish as a film of bitumen
 /// over the metal (`etch::film_over_metal`), the needle's windows in it bright
 /// metal, or a bitten line's walls once the acid has opened it; rosin as its
 /// dots over the face, each cell's share of them its own (the speckle of a
@@ -1040,10 +1172,15 @@ pub(super) fn write_etch(c: &Coats, w: &mut impl Write) -> io::Result<()> {
     put64(w, c.dust.len() as u64)?;
     for d in &c.dust {
         put64(w, d.seed)?;
-        put64(w, d.melted as u64)?;
+        // (bit 1: the cells a solvent rag took it off follow its grading)
+        put64(w, d.melted as u64 | (!d.gone.is_empty() as u64) << 1)?;
         put64(w, d.per_um2.len() as u64)?;
         for v in &d.per_um2 {
             put32(w, v.to_bits())?;
+        }
+        if !d.gone.is_empty() {
+            put64(w, d.gone.len() as u64)?;
+            w.write_all(&d.gone)?;
         }
     }
     match c.tray {
@@ -1123,11 +1260,11 @@ pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
     }
     for _ in 0..nd {
         let seed = get64(r)?;
-        let melted = match get64(r)? {
-            0 => false,
-            1 => true,
-            _ => return Err(bad("a rosin layer is damaged")),
-        };
+        let flags = get64(r)?;
+        if flags > 3 {
+            return Err(bad("a rosin layer is damaged"));
+        }
+        let melted = flags & 1 == 1;
         let n = get64(r)?;
         if n != etch::DUST_BINS as u64 {
             return Err(bad("a rosin layer of another grading"));
@@ -1136,7 +1273,16 @@ pub(super) fn read_etch(p: &Plate, r: &mut impl Read) -> io::Result<Coats> {
         for _ in 0..n {
             per.push(f32_(r)?);
         }
-        c.dust.push(Dust { per_um2: per, seed, melted });
+        let mut gone = Vec::new();
+        if flags & 2 == 2 {
+            let m = get64(r)?;
+            if m != (p.w * p.h).div_ceil(8) as u64 {
+                return Err(bad("a rosin layer's cleaned cells are damaged"));
+            }
+            gone = vec![0u8; m as usize];
+            r.read_exact(&mut gone)?;
+        }
+        c.dust.push(Dust { per_um2: per, seed, melted, gone });
     }
     c.tray = match get64(r)? {
         0 => None,

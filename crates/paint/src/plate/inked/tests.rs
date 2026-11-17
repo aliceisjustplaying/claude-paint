@@ -241,8 +241,11 @@ fn every_wipe_conserves_ink() {
     let r = p.retrousse(&along_x(), 40.0, 1, 3.0);
     assert!(rel(r.before_um3 - r.after_um3, r.taken_um3 - r.laid_um3), "{r:?}");
     let left = p.ink_um3();
-    assert!(rel(p.clean_ink(), left.0 + left.1));
+    // the solvent rag across the whole plate three times: all of it, into the rag
+    let c = p.clean_ink(&along_x(), 40.0, 3, 4.0);
+    assert!(rel(c.taken_um3, left.0 + left.1) && rel(c.kept_um3, c.taken_um3), "{c:?}");
     assert_eq!(p.ink_um3(), (0.0, 0.0));
+    assert!(!p.inked());
 }
 
 /// Inks laid on stripes side by side and wiped with one tarlatan slid along
@@ -1118,4 +1121,52 @@ fn a_gap_under_the_cloth_keeps_its_film() {
         }
     }
     assert!(least > 0.7 * open && least > 1.4 * POLISH_HOLD_UM, "the thinnest film by the crossing {least} µm, the open plate {open}");
+}
+
+/// The solvent rag over ink (EP §8): a 4 mm pad drawn once along y 10 at 20
+/// mm/s. On the flat it keeps RESIDUE/(f + SOLVENT) of the film a whole pass
+/// (the middle row, share 1 on a straight stroke) and leaves the film 3 mm
+/// off untouched; in the lines it draws the ink up by Lucas–Washburn at the
+/// ink's viscosity for the 0.2 s the pad lies over the point, so a stiff ink
+/// stays deep in an 80 µm line where a loose one comes right out, and a warm
+/// plate gives up more of the stiff one.
+#[test]
+fn a_solvent_rag_takes_ink_where_it_goes_and_a_stiff_ink_holds_in_the_lines() {
+    let loose = Ink { name: "loose".into(), stiff: 0.0, oil: 0.3, pvc: 0.45 * 0.7, ..black() };
+    let run = |ink: &Ink, warm: Option<f64>| {
+        let mut p = square(20.0, 100.0);
+        cut(&mut p, 0, 200, 95, 105, 100.0, 80.0, 0.5);
+        if let Some(t) = warm {
+            p.warm(t, 0.0);
+        }
+        p.ink(ink, InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+        let before = (p.ink_cell(100, 100), p.ink_cell(100, 40), p.temp_c(0.0));
+        let r = p.clean_ink(&[pt(0.0, 10.0, 0.5), pt(20.0, 10.0, 0.5)], 4.0, 1, 0.0);
+        (p, before, r)
+    };
+    for (ink, warm) in [(black(), None), (loose.clone(), None), (black(), Some(45.0))] {
+        let (p, (mid, far, temp), r) = run(&ink, warm);
+        let (hs, hr) = (crate::etch::SOLVENT_UM, crate::etch::RESIDUE_UM);
+        let f = mid.film as f64;
+        let want = f * hr / (f + hs);
+        let got = p.ink_cell(100, 100);
+        assert!((got.film as f64 - if want < crate::etch::MONOLAYER_UM { 0.0 } else { want }).abs() < 1e-4 * f.max(1.0), "film {} against {want}", got.film);
+        assert_eq!(p.ink_cell(100, 40), far, "3 mm off the path's pad (2 mm radius): untouched");
+        let draw = washburn_um(ink.eta(temp), 4.0 / 20.0);
+        for k in 0..BINS {
+            let open = p.cell(100, 100).open[k] as f64;
+            if open > 0.0 {
+                let want = open * (mid.line[k] as f64 / open - draw).max(0.0);
+                // (the middle row lies 0.05 mm off the path: its share is √(1 − 0.025²), not 1)
+                assert!((got.line[k] as f64 - want).abs() < 0.01, "bin {k}: {} against {want}", got.line[k]);
+            }
+        }
+        assert!((r.taken_um3 - (r.before_um3 - r.after_um3)).abs() < 1e-6 * r.before_um3 && r.laid_um3 == 0.0);
+    }
+    let left = |ink: &Ink, warm| {
+        let (p, (mid, _, _), _) = run(ink, warm);
+        p.ink_cell(100, 100).lines() as f64 / mid.lines() as f64
+    };
+    let (stiff, thin, warm) = (left(&black(), None), left(&loose, None), left(&black(), Some(45.0)));
+    assert!(stiff > 0.3 && thin == 0.0 && warm < stiff, "stiff keeps {stiff}, loose {thin}, warm {warm}");
 }

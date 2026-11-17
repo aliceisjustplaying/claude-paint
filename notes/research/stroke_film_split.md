@@ -246,71 +246,212 @@ its paint for the filbert and 0.082 for the hog flat (summed |difference|
 over rows). Before the switch these were 0.120 and 0.092. So the clumps
 keep about 90 % of their across-width effect.
 
-**Clump width against elastocapillary theory.** The engine's clump is
+**Clump width before this change.** The engine's clump was
 `2·clump_u = 2·r_h·(1 + 4·stiffen²)` wide. Here `r_h` is the modelled
 hair's share of the brush's area (`Tool::hair_radius`). For the 8 mm
-filbert, the clump is 0.57 mm in barely stiff paint and 2.8 mm in stiff
-body paint, with 14 and 2.8 bands across the brush.
+filbert, the clump was 0.57 mm in barely stiff paint and 2.8 mm in stiff
+body paint, with 14 and 2.8 bands across the brush. So the width
+depended on the paint's stiffness and on the number of modelled hairs,
+which is a drawing resolution, not a property of the brush.
 
-An estimate from the energy balance follows. Take a hair of radius a,
-clamped in the ferrule, with a wetted free length L. It joins a clump
-whose axis is δ = W/2 away. It bends over a length ℓ in an S shape
-(clamped at the ferrule, lying along the clump beyond it), which stores
-`6·EI·δ²/ℓ³`. Along the remaining `L − ℓ` it lies wetted against the
-clump, which gives up a surface energy of about `2γa` per length. That
-prefactor is an **[est]** of the meniscus between touching fibres.
-Minimising over ℓ gives `ℓ = (3·δ·ℓ_ec)^{1/2}`, where
-`ℓ_ec = (EI/(γa))^{1/2}` is the fibre form of the elastocapillary length.
-A clump holds while ℓ < L, so
+## Clump width from elastocapillary coalescence
 
-  `W_max ≈ 2·L² / (3·ℓ_ec)`.
+With the switch, a clump is as wide as elastocapillary coalescence
+makes it (`bristle::coalesce`). The paint's stiffness no longer enters.
+Whether the ridges a clump leaves survive is left to the levelling
+physics the engine already has (below).
 
-The input values:
+**The law for a pair.** Two flexible plates clamped a gap d apart, with
+a wetting liquid between them, zip together from their free ends. They
+stop at the distance `L_stick` from the clamps where the plates' bending
+balances the surface energy the zipping gives up [RB10, eq. 6]:
 
-- γ: 35 mN/m for the oil (`surface::SIGMA`; 33–36 mN/m measured,
-  oil_paint_physics.md).
-- E: natural hair bristle's 680×10³ psi = 4.7 GPa dry (410×10³ psi wet
-  with water, which oil is not) [DuP].
-- a: pig bristle measures 160–380 µm across, mid-shaft 268 µm and root
-  319 µm [M14, ICAR]. An artist's hog brush is made of the tapered,
-  flagged tip ends, so a = 50–80 µm near the paint is an **[est]** at
-  the fine end of that range.
-- L: the wetted free length, 10–15 mm on a No. 8 filbert, is an **[est]**.
+  `L_stick⁴ = 9·d²·L_EC² / 2`,  `L_EC = (B/γ)^{1/2}`,
 
-| a | ℓ_ec | W at L = 10 mm | W at L = 15 mm |
+with B the plates' bending stiffness per width. The energy balance
+gives the same prefactor. Each plate bends in an S over ℓ, clamped at
+the base and lying flat along the other beyond, and stores
+`6·B·(d/2)²/ℓ³`. Zipping gives up `2γ` per area. The minimum of
+`3·B·d²/ℓ³ − 2γ·(L − ℓ)` lies at `ℓ⁴ = 9·d²·B/(2γ)`. This check fixes
+the S-bend's factor 6, which the previous section's estimate also used.
+
+For fibres, Roman & Bico replace B by `B_rod = π·E·r⁴/4` and the
+capillary term by `γ·r` [RB10, section 3]. The prefactor of that γ·r
+term follows from the menisci. Take two touching wet fibres of radius
+r, with zero contact angle, and menisci of radius R filling the two
+wedges between them. Joining them gives up the arc of each fibre that
+the menisci cover, less the menisci themselves. Per length and per
+wedge, that is `2r·φ − 2R·α`, with `cos φ = r/(r + R)` and
+`α = π/2 − φ`. For both wedges together the gain is:
+
+| R | 0.5 r | r | ∞ |
 |---|---|---|---|
-| 50 µm | 115 mm | 0.58 mm | 1.3 mm |
-| 80 µm | 232 mm | 0.29 mm | 0.65 mm |
-| 134 µm (mid-shaft) | 504 mm | 0.13 mm | 0.30 mm |
+| gain / (γ·r) | 1.90 | 2π/3 = 2.09 | 2(π − 2) = 2.28 |
 
-So the theory puts a hog brush's clumps in oil at about 0.1–1.3 mm. The
-engine's 0.57 mm, in barely stiff paint, lies inside that range. Its
-2.8 mm, in stiff paint, is about twice the theory's upper end. Hierarchical
-merging [BRMB04] and the uncertainty in L, which enters squared, leave
-room for a factor of two, but not a factor of ten. The engine's widths
-are left as they were and remain **[est]**, for three reasons:
+The engine takes R = r, which is an **[est]**: the gain varies by ±10 %
+with how much paint the wedge holds. It ignores the pressure in the
+paint, which is near the reservoir's. So for two fibres with a gap g
+between their surfaces,
 
-- In the theory the width depends on the fibres (a, E), on L and on γ.
-  γ is about the same for fluid and stiff oil paint. The engine instead
-  ties the width and the contrast (`0.6·stiffen`) to the paint's
-  stiffness. Stiffness does decide whether the ridges a clump leaves
-  survive levelling (the yield-stress floor in oil_paint_physics.md), so
-  `stiffen` is a stand-in for levelling at a hair's scale, not for
-  coalescence.
-- `r_h` is the modelled hair's share of the area, so the clump width
-  changes with the number of modelled hairs. That number is a drawing
-  resolution, not a property of the brush.
-- The tool has no fibre radius or wetted length to compute W from.
+  `L_pair⁴ = 9·EI·g² / (c·γ·r)`,  `c = 2π/3`.
 
-Setting W from the formula above would need per-brush fibre data and its
-own switch. That is left open.
+This is the previous section's balance with c = 2 and δ = W/2.
+
+**Clumps of clumps.** A brush withdrawn from the liquid bundles in a
+cascade: pairs of clumps merge into larger clumps [BRMB04, PBBRB07].
+A clump of n hairs is n times as stiff as one hair, because the liquid
+lets its hairs slide [RB10]. Two of them merge where
+
+  `ℓ⁴ = 9·(n·EI)·g_n² / (c·γ·r_n)`.
+
+Here `r_n = r·√(n/φ_b)` is the clump's radius, with its hairs packed at
+φ_b = π/(2√3) = 0.907. The gap between neighbouring clumps is
+`g_n = √n·(d − 2r/√φ_b)`, with d the hairs' spacing in the ferrule. So
+`ℓ ∝ n^{3/8}`, the law Roman & Bico give for fibres (`N^{3/8}`, from the
+2D lattice) [RB10]. The largest clump joins right at the tips, ℓ = L,
+with L the hair out of the ferrule. It holds N = 2n hairs gathered from
+a patch `d·√N` across, which is the spacing of the clumps:
+
+  `N = 2·(L⁴·c·γ·r / (9·EI·g₁²·√φ_b))^{2/3}`,  `W = d·√N`,
+  `g₁ = d − 2r/√φ_b`.
+
+The clumps form only if a pair can, `L_pair < L`. Otherwise the hairs
+stay apart and the brush lays no clump bands. The law doesn't depend on
+how far up the hairs the paint reaches, as long as their tips are wet.
+The largest clump zips over no length at all. Boudaoud, Bico & Roman
+find the clumps spread over `0.3·N_max < N < N_max` [BBR07]. The
+engine's bands use `N_max`, the law's value. The engine's bands also
+already vary in level from band to band. With W ∝ √N, the smallest
+clumps are 0.55 W.
+
+So W ∝ L^{4/3}·γ^{1/3}·E^{-1/3}·r^{-2/3}, given the packing.
+
+**The brushes' data.**
+
+- γ = 35 mN/m (`surface::SIGMA`; linseed oil measures 33–36 mN/m,
+  oil_paint_physics.md). Solvent lowers it, to about 25 mN/m for mineral
+  spirit. That narrows W by (25/35)^{1/3} = 0.89, which the engine
+  doesn't take.
+- E: natural hair bristle measures 680×10³ psi = 4.69 GPa at 50 % RH
+  [DuP, Table 1; the table's heading says "Mpsi" but its graphs give
+  psi×10³]. Water drops it to 410×10³ psi. Oil doesn't swell keratin,
+  so the engine takes the dry value. It takes the same value for sable
+  and badger, which is an **[est]** since they are keratin like the
+  bristle. For synthetics, Tynex 612 nylon measures 580×10³ psi =
+  4.0 GPa dry and 420×10³ psi wet; nylon 66 650/230; nylon 6 280/140
+  [DuP]. The brochure gives no modulus for PBT (Orel). No preset is
+  synthetic, so these aren't used.
+- r: whole pig bristles measure 268 µm across mid-shaft and 319 µm at
+  the root [M14]. A brush's hair out of the ferrule is the tapered,
+  flagged tip end. The engine takes 180 µm across (r = 90 µm), an
+  **[est]** between the mid-shaft and the flag. Siberian weasel
+  (kolinsky) guard hairs measure 108–152 µm at their widest [Z, in MS].
+  A sable brush hair tapers from its belly to a point, so the engine
+  takes 90 µm (r = 45 µm), an **[est]**. Badger hair is taken at 100 µm,
+  an **[est]**.
+- The hairs' spacing: d = r·√(π/φ_t), where φ_t is the share of the
+  tuft the hairs fill at the ferrule. The engine takes φ_t = 0.45, an
+  **[est]** between loose (0.3) and close-packed (0.6). For the fan,
+  whose hairs spread in one thin layer, it takes 0.2, also an **[est]**.
+- L: makers publish each size's width and hair length. The engine fits
+  a line to them, `L = a + b·width`:
+
+| kind | fitted to | a (mm) | b |
+|---|---|---|---|
+| flat (hog) | Princeton Umbria flats 7–24 mm (synthetic hog) | 12.18 | 0.763 |
+| filbert (hog) | six hog filberts No. 8 (14–17 mm, 23–33 mm long) and da Vinci Forte filberts | 4.95 | 1.562 |
+| round (sable, also the stippler) | Escoda Óptimo kolinsky rounds 0–20 | 8.86 | 2.529 |
+| rigger | da Vinci 673, Escoda, Princeton Aqua Elite riggers | 23.27 | 2.069 |
+| blender (badger) | da Vinci 5080 mottlers 20–80 mm | 26.35 | 0.144 |
+| fan | none found: **[est]** | 15 | 0.25 |
+
+The widths and lengths come from the makers' tables collected in [AG],
+plus Utrecht, Trekell, da Vinci, Silver Brush and Pro Arte listings for
+the hog filberts. `width` is the engine's footprint at full pressure, a
+little wider than the ferrule. Tool kinds don't name a hair, so each
+kind takes one: hog for flats, filberts and fans, sable for rounds and
+riggers, badger for the blender.
+
+**What the law gives** (`coalesce`; the test
+`with_the_switch_a_clump_is_as_wide_as_coalescence_makes_it` checks the
+first two rows against an independent working of the law):
+
+| brush | L | L_pair | hairs to a clump | W | bands across |
+|---|---|---|---|---|---|
+| hog flat 8 mm | 18.3 mm | 5.8 mm | 56 | 1.79 mm | 4.5 |
+| sable round 4.4 mm | 20.0 mm | 2.4 mm | 720 | 3.19 mm | 1.4 |
+| hog filbert 8 mm | 17.4 mm | 5.8 mm | 50 | 1.68 mm | 4.8 |
+| hog flat 14 mm | 22.9 mm | 5.8 mm | 102 | 2.41 mm | 5.8 |
+| hog fan 8 mm | 17.0 mm | 10.1 mm | 9 | 1.07 mm | 7.5 |
+| badger 8 mm | 27.5 mm | 2.8 mm | 1190 | 4.55 mm | 1.8 |
+| sable round 1.5 mm | 12.7 mm | 2.4 mm | 210 | 1.74 mm | one clump |
+
+The hog brushes' clumps of 1–2.4 mm, some 50–100 hairs each, sit
+between the two old widths for the filbert (0.57 and 2.8 mm). The sable
+round's fine, soft hair gathers into one or two clumps across the brush,
+the way a wet round draws to a point. How sensitive the hog flat 8 mm's
+W is to the estimates:
+
+| φ_t 0.3 / 0.45 / 0.6 | r 60 / 90 / 134 µm |
+|---|---|
+| 1.06 / 1.42 / 2.49 mm (at L = 15.4 mm) | 2.72 / 2.08 / 1.59 mm (at L = 20.5 mm) |
+
+**In the engine.** With the switch, `clump_factor` lays `width / W`
+bands across the brush (`clump_span`), with no clamp. A brush narrower
+than one clump lays evenly across. The bands' width depends on neither
+the paint's stiffness nor the number of modelled hairs
+(`with_the_switch_the_clumps_do_not_depend_on_the_modelled_hair_count`).
+The plough that throws paint aside at the brush's sides throws it a
+clump's width, still capped at 3 px. `clump_step_mean` still makes the
+factors average to 1 over the hairs touching at each step. Measured as
+in the section above (12 stroke ids, load 0.6), with the new widths:
+
+| | filbert 8 mm | hog flat 8 mm |
+|---|---|---|
+| share of load laid, default hand | 15.2 % | 25.7 % |
+| spread over the ids, default hand | 0.6 % | 2.1 % |
+| spread, steady hand | 0.08 % | 0.5 % |
+| marks apart, steady hand (old widths with the switch; before the switch) | 0.098 (0.107; 0.120) | 0.106 (0.082; 0.092) |
+
+The share laid is the same as with the old widths, so the tables
+above still hold. The marks differ from id to id about as much as
+before.
+
+**Contrast stays an estimate.** A clump lays `1 ± 0.6·stiffen` times the
+mean, as before. A clump/gap geometry could set it. The clumps of N
+hairs, packed at φ_b and spaced W apart, cover `2r/(d·√φ_b)` = 0.80 of
+the brush's width at φ_t = 0.45, whatever N is. In the limit of no
+spreading, a clump lays 1.26 times the mean and the gaps lay nothing.
+A pressed brush's clumps splay on the canvas, and the paint film under
+the brush's belly joins across the gaps. Neither is modelled, so the
+bound can't be turned into a contrast. The contrast stays the old
+**[est]**, including no clumps in fluid paint (stiffen = 0).
+
+**Survival is the levelling's.** The engine levels open wet paint
+(`drying::level_open` → `surface::settle_with_transport`). A ridge at the
+bristle scale (λ ≥ 0.25 mm) decays with Orchard's
+`τ = 3η(λ/2π)⁴/(σh³)` and freezes below Hester's yield floor
+`a_c = τ_y·λ³/(8π³σh)` (surface.rs). For clump ridges 1.7 mm apart in a
+25 µm film:
+
+- fluid paint (η = 2 Pa·s): τ ≈ 60 s, so the ridges level well within
+  the engine's 900 s set time;
+- stiff paint (τ_y = 3000 Pa): a_c ≈ 7 cm, so the ridges freeze.
+
+The levelling therefore already does what the contrast's tie to
+`stiffen` does. That tie could go once a derived contrast exists (left
+open).
 
 ## Left open
 
-- The clump width and contrast (above): unsourced constants, the width
-  of the same order as the elastocapillary estimate but tied to the
-  paint's stiffness and to the modelled hair count rather than to the
-  fibres and γ.
+- The clumps' contrast (`0.6·stiffen`, no clumps in fluid paint) is
+  still an estimate tied to the paint's stiffness ("Contrast stays an
+  estimate"). Their width now comes from coalescence.
+- The fibre radii, the tuft packing and the fan's hair length are
+  estimates. No measured hair count or packing for an artist's brush was
+  found.
+- Solvent lowers the paint's surface tension, and with it W
+  (by (γ/35 mN/m)^{1/3}). The engine takes the oil's γ.
 
 ## Sources
 
@@ -324,12 +465,37 @@ own switch. That is left open.
 - [BBR07] A. Boudaoud, J. Bico and B. Roman, "Elastocapillary
   coalescence: aggregation and fragmentation with a maximal size",
   *Phys. Rev. E* 76 (2007) 060102.
-- [G14] A fluid-mechanical model of elastocapillary coalescence, arXiv:1310.4530
-  (2014): states ℓ_ec = (B/γ)^{1/2} after [BRMB04], and the "collaborative
-  stiffening" of a bundle that limits its size.
+- [G14] K. Singh, J. R. Lister and D. Vella, "A fluid-mechanical model of
+  elastocapillary coalescence", *J. Fluid Mech.* 745 (2014) 621–646,
+  arXiv:1310.4530: states ℓ_ec = (B/γ)^{1/2} after [BRMB04], and the
+  "collaborative stiffening" of a bundle (stiffness N·K) that limits its
+  size; their spring-block arrays give a largest cluster ∝ K^{-1/2}.
+- [RB10] B. Roman and J. Bico, "Elasto-capillarity: deforming an elastic
+  structure with a liquid droplet", *J. Phys.: Condens. Matter* 22
+  (2010) 493101, section 3 "Wet hairs": the pair law
+  `L_stick⁴ = 9d²L_EC²/2` (eq. 6), bundles of N lamellae N/2 times as
+  stiff as one, sliding in the liquid, separated by Nd/2 (eq. 8); for
+  rods `B_rod = πEr⁴/4` against `γr`, and `L_stick(N) ∼ N^{3/8}`.
+- [W14] Z. Wei, T. M. Schneider, J. Kim, H.-Y. Kim, J. Aizenberg and
+  L. Mahadevan, "Elastocapillary coalescence of plates and pillars",
+  *Proc. R. Soc. A* 471 (2015) 20140593, arXiv:1408.0748: drying arrays,
+  hierarchical clusters and their arrest (consulted; no figure here
+  depends on it).
+- [Z, in MS] Zhang et al., winter guard hairs of Siberian weasels (Tonghe
+  forest farm), as quoted in the Mammalian Species account of *Mustela
+  sibirica* (vol. 50, no. 966, 2018): mid-back guard hair 108–152 µm
+  across (males, mean 126.6 µm).
+- [AG] "Paint brush size chart: measured dimensions by shape & brand",
+  austingallery.org (2026): makers' widths and hair lengths per size
+  (Escoda, Princeton, da Vinci, Rosemary & Co); hog filbert No. 8
+  listings at Utrecht (14 × 23 mm), Blick/Trekell (15.9 × 31.8 mm),
+  Jackson's (da Vinci 5423 17 × 25, Silver Brush 1103 15 × 33, Pro Arte
+  B 14 × 32 mm).
 - [DuP] DuPont Filaments, "Filament Performance in Brushes" (brochure,
-  2014), Table 1: tangent modulus of natural hair bristle 680×10³ psi at
-  50 % RH, 410×10³ psi wet.
+  2014), Table 1 "Brush Moduli" (50 % RH dry / 100 % RH wet, psi×10³):
+  natural hair bristle (horse hair and hog bristle) 680 / 410, Tynex 612
+  nylon 580 / 420, Herox 610 nylon 530 / 333, nylon 66 650 / 230, nylon 6
+  280 / 140; online at brushtec.com (Filaments_Brochure_web.pdf).
 - [M14] Mohan et al., "Tensile properties of hair fibres obtained from
   different breeds of pigs", *Biosystems Engineering* (2014),
   sciencedirect.com/science/article/pii/S153751101400004X (abstract):

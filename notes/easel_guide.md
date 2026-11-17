@@ -310,13 +310,20 @@ leaves it. Over wet paint a stroke lifts some of what was there (at most
 its brush's `pickup` share), and the brush comes away dirtied with it.
 In stiff paint a bristle brush's hairs gather into clumps, which lay the
 stroke in ridges and furrows. Each stroke has its own clumps. They move
-paint across the width but don't change how much the stroke lays.
+paint across the width but don't change how much the stroke lays. A
+clump is as wide as the paint's surface tension can pull the brush's
+hairs together against their stiffness: about 1.7 mm on an 8 mm hog flat
+or filbert (some 50 hairs to a clump), wider on a bigger brush with
+longer hair. A sable round's soft, fine hair gathers into one or two
+clumps across the brush (a wet round draws to a point), so it lays
+almost no clump bands. How wide a clump is doesn't depend on how stiff
+the paint is. Whether its ridges last depends on how the paint levels.
 (A painting whose log's head has no `--@ stroke-split` line keeps the
 stroke it was painted with. There, the hairs behind lifted back part of
 what the hairs ahead laid, about a fifth on bare canvas, and more on wet
 paint and with more hairs. Its clumps also changed how much a stroke
 laid: on a narrow brush, up to a third more or less from one stroke to
-the next.)
+the next. They were a few hairs wide, wider the stiffer the paint.)
 
 Brushes are blunt unless given a `point` (0 blunt, 1 a full point). A
 pointed round or rigger lays a hairline at light pressure and spreads to

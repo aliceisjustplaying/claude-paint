@@ -1,9 +1,12 @@
 //! Etching on plates (`--@ etch`; notes/plan-intaglio.md §4, phase P4).
 //!
 //! A plate in hand (plate.rs) takes, besides its drypoint tools:
-//! - `k:ground("hard", {um=})`: a hard ground rolled over its face;
+//! - `k:ground("hard", pts, {um=, roller=, speed=})`: a hard ground rolled along the points
+//!   with a leather roller: it lies where the roller went;
 //! - `k:needle(n, pts, {force=, alt=, azimuth=, speed=})`: an etching needle through the ground;
-//! - `k:stop_out(mask)`: stopping-out varnish where the mask is;
+//! - `k:stop_out(pts, {brush=, load=, pressure=, speed=})`: stopping-out varnish brushed along
+//!   the points with a round brush: it lies where the brush laid it, as wide as the brush pressed
+//!   out, until the brush runs dry;
 //! - `k:immerse{acid=, baume= | molar= | parts=, temp=, face=, rock=, feather=, fresh=}`: the
 //!   plate into its tray of ferric chloride, nitric acid or Dutch mordant, where it lies on the
 //!   session's clock, whatever else the session does, until `k:lift()` takes it out: the bite is
@@ -21,7 +24,7 @@
 //! checkpoints and handoffs. No ink or press yet.
 
 use crate::api::{S, check_keys, err, fmt_num, num};
-use crate::plate::{NeedleU, Rep, in_hand, opt, path};
+use crate::plate::{NeedleU, Rep, hand_path, in_hand, opt, path};
 use crate::surfaces::{Kind, SurfaceU};
 use mlua::{Lua, Result, Table, UserDataMethods, Value};
 use paint::etch::{self, Acid, Face};
@@ -36,17 +39,17 @@ pub const NEEDLE_N: f32 = 0.3;
 /// wax, as a pencil over paper].
 pub const NEEDLE_MM_S: f32 = 40.0;
 /// Hand time (s) [E: no timed account found for any of them]: laying a hard ground (warming
-/// the plate, rolling, cooling) 10 min; taking the plate out of its tray, rinsing and drying it
+/// the plate and letting it cool, `etch::GROUND_WARM_S`, and the roller's path at its speed);
+/// taking the plate out of its tray, rinsing and drying it
 /// 2 min (lowering it in takes seconds, which are the bath's own: they are in its minutes);
 /// cranking the dust box 1 min; melting the rosin over a heater 2 min; cleaning off ground and
 /// varnish with solvent and rag 5 min.
-const GROUND_S: f64 = 600.0;
 const LIFT_S: f64 = 120.0;
 const BOX_S: f64 = 60.0;
 const MELT_S: f64 = 120.0;
 const CLEAN_S: f64 = 300.0;
-/// Brushing stop-out: a brush 8 mm wide at 20 mm/s covers 160 mm² a second [E].
-const STOP_MM2_S: f64 = 160.0;
+const GROUND_HOW: &str = "k:ground(\"hard\", {{x, y}, ...}, {um=, roller=<mm>, speed=}): the roller's path over the plate, overlapping strokes to cover it";
+const STOP_HOW: &str = "k:stop_out({{x, y}, ...}, {brush=<mm>, load=<0 to 1>, pressure=<0 to 1, or a list along the points>, speed=}): the brush's stroke, dipped again for the next";
 /// Ferric chloride as a bath is made up when no strength is given: 38 °Bé (plan-intaglio §4.2's
 /// example; about 3 M, a little past the measured optimum) [P].
 const FERRIC_BAUME: f64 = 38.0;
@@ -191,17 +194,10 @@ fn table(lua: &Lua, names: &[&str], r: &Rep) -> Result<Table> {
     Ok(t)
 }
 
-fn mask_bits(m: &paint::mask::Mask, w: usize, h: usize) -> std::result::Result<Vec<u8>, String> {
-    if (m.f.w, m.f.h) != (w, h) {
-        return Err("stop_out: the mask isn't the plate's: make it while the plate is in hand".into());
-    }
-    let mut bits = vec![0u8; (w * h).div_ceil(8)];
-    for (i, v) in m.data.iter().enumerate() {
-        if *v >= 0.5 {
-            bits[i / 8] |= 1 << (i % 8);
-        }
-    }
-    Ok(bits)
+/// The plate's stopped-out cells.
+fn stopped_cells(p: &Plate) -> usize {
+    let (w, h) = p.size_px();
+    (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| p.etch(x, y).stopped).count()
 }
 
 fn bool_or<T>(o: &Table, key: &str, on: T, of: impl Fn(&Value) -> Result<Option<T>>) -> Result<Option<T>> {
@@ -317,27 +313,38 @@ fn bath_of(o: &Table, verb: &str) -> Result<BathSpec> {
 
 /// The etching tools, a plate's methods (plate.rs `methods`).
 pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
-    // k:ground("hard", {um=}): a hard ground rolled over the face
-    m.add_method("ground", |lua, k, (kind, o): (Option<String>, Option<Table>)| {
+    // k:ground("hard", pts, {um=, roller=, speed=}): a hard ground rolled along pts
+    m.add_method("ground", |lua, k, (kind, pts, o): (Option<String>, Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
         etching(&st, k, "ground")?;
         match kind.as_deref() {
             Some("hard") => {}
             Some("soft") => return err("ground: soft ground is its own switch, later (--@ soft-ground)"),
-            _ => return err("ground: k:ground(\"hard\", {um=<µm>})"),
+            _ => return err(format!("ground: {GROUND_HOW}")),
         }
         if let Some(o) = &o {
-            check_keys(o, &["um"], "ground")?;
+            check_keys(o, &["um", "roller", "speed"], "ground")?;
         }
-        let um = opt(o.as_ref(), "um", etch::GROUND_UM as f32, 1.0, 30.0, "the ground's thickness in µm (2–8 for a hard ground rolled thin)")?;
-        let r = work(&st, 0.0, GROUND_S, move |p| {
-            if p.coated() {
-                return Err("ground: the plate has a ground, varnish, rosin or the acid's work on it: clean it first (k:clean())".into());
+        let pts = hand_path(&st, k, "ground", GROUND_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.0, 1.0), etch::ROLL_MM_S as f32, 2)?;
+        let roller = opt(o.as_ref(), "roller", etch::ROLLER_MM as f32, 20.0, 300.0, "the roller's length in mm (a ground roller 100–200)")?;
+        let had = with_plate(&st, |p| p.ground_um())?;
+        let um = opt(o.as_ref(), "um", if had > 0.0 { had } else { etch::GROUND_UM as f32 }, 1.0, 30.0, "the ground's thickness in µm (2–8 for a hard ground rolled thin)")?;
+        let r = crate::time::verb_plate(&st, crate::time::Verb::Pass, move |s| {
+            let p = Rc::make_mut(s.plate.as_mut().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?);
+            // (more ground rolled onto a plate that holds only ground: the same ground on more of it)
+            if p.coated() && !p.only_ground() {
+                return Err(mlua::Error::runtime("ground: the plate has varnish, rosin, needle lines or the acid's work on it: clean it first (k:clean())"));
             }
-            p.apply(Op::Ground { um });
-            Ok((vec![um as f64, GROUND_S], false, false))
+            if p.only_ground() && p.ground_um() != um {
+                return Err(mlua::Error::runtime(format!("ground: the plate's ground is {} µm: roll more of the same (um={}), or clean it first (k:clean())", fmt_num(p.ground_um()), fmt_num(p.ground_um()))));
+            }
+            let r = p.apply(Op::Ground { um, roller_mm: roller, pts });
+            let secs = r.secs + etch::GROUND_WARM_S;
+            let share = 100.0 * p.ground_share();
+            s.canvas.as_mut().ok_or_else(crate::api::no_canvas)?.tally_mut().secs += secs;
+            Ok((vec![um as f64, share, r.length_mm, secs], false, false))
         })?;
-        table(lua, &["um", "seconds"], &r)
+        table(lua, &["um", "covered", "length", "seconds"], &r)
     });
     // k:needle(n, pts, {force=, alt=, azimuth=, speed=}): an etching needle through the ground
     m.add_method("needle", |lua, k, (n, pts, o): (Value, Value, Option<Table>)| {
@@ -366,21 +373,32 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         t.set("touched", r.1)?;
         Ok(t)
     });
-    // k:stop_out(mask): stopping-out varnish brushed where the mask is
-    m.add_method("stop_out", |lua, k, m: Value| {
+    // k:stop_out(pts, {brush=, load=, pressure=, speed=}): stopping-out varnish brushed along pts
+    m.add_method("stop_out", |lua, k, (pts, o): (Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
-        let (mm, _) = etching(&st, k, "stop_out")?;
-        let mask = crate::api::mask_of(&m)?;
-        let (w, h) = with_plate(&st, |p| p.size_px())?;
-        let bits = mask_bits(&mask, w, h).map_err(mlua::Error::runtime)?;
-        let cells = mask.data.iter().filter(|v| **v >= 0.5).count() as f64;
-        let mm2 = cells * (mm as f64 / w as f64).powi(2);
-        let secs = mm2 / STOP_MM2_S;
-        let r = work(&st, 0.0, secs, move |p| {
-            p.apply(Op::StopOut { w: w as u32, h: h as u32, bits });
-            Ok((vec![mm2, secs], false, false))
+        etching(&st, k, "stop_out")?;
+        if let Some(o) = &o {
+            check_keys(o, &["brush", "load", "pressure", "speed"], "stop_out")?;
+        }
+        let pts = hand_path(&st, k, "stop_out", STOP_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.01, 1.0), etch::BRUSH_MM_S as f32, 1)?;
+        let brush = opt(o.as_ref(), "brush", etch::STOP_BRUSH_MM as f32, 0.5, 30.0, "the round brush's width in mm (a size 6 sable 3.9)")?;
+        let load = opt(o.as_ref(), "load", 1.0, 0.01, 1.0, "how full its belly is")?;
+        let plan = Plate::stopping(brush as f64, load as f64, &pts);
+        let r = crate::time::verb_plate(&st, crate::time::Verb::Pass, move |s| {
+            let plate = Rc::make_mut(s.plate.as_mut().ok_or_else(|| mlua::Error::runtime("no plate in hand"))?);
+            let before = stopped_cells(plate);
+            let r = plate.apply(Op::StopOut { brush_mm: brush, load, pts });
+            let mm = plate.width_mm as f64 / plate.size_px().0 as f64;
+            let area = (stopped_cells(plate) - before) as f64 * mm * mm;
+            s.canvas.as_mut().ok_or_else(crate::api::no_canvas)?.tally_mut().secs += r.secs;
+            Ok((vec![area, r.length_mm, plan.width_mm, plan.spread_mm * 1000.0, plan.left_mm3, r.secs], plan.dry, false))
         })?;
-        table(lua, &["area", "seconds"], &r)
+        if r.1 {
+            st.borrow_mut().out.push_str(&format!("stop_out: the brush ran dry {} mm into the {} mm stroke: dip it again (another k:stop_out) for the rest\n", fmt_num(r.0[1].round() as f32), fmt_num(plan.total_mm.round() as f32)));
+        }
+        let t = table(lua, &["area", "length", "width", "edge", "left", "seconds"], &r)?;
+        t.set("dry", r.1)?;
+        Ok(t)
     });
     // k:immerse{...}: the plate into its tray, to bite on the clock until k:lift()
     m.add_method("immerse", |lua, k, o: Option<Table>| {
@@ -496,7 +514,7 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
 /// A coated cell as a fingernail finds it: words, and (ground µm, rosin's share).
 pub(crate) fn feel(p: &Plate, x: usize, y: usize) -> (String, Vec<f64>) {
     let e = p.etch(x, y);
-    let ground = p.ground_um() as f64;
+    let ground = if p.grounded(x, y) { p.ground_um() as f64 } else { 0.0 };
     let rosin = p.rosin_cover(x, y);
     let mut words = Vec::new();
     if e.stopped {
@@ -529,7 +547,8 @@ pub(crate) fn probe(p: &Plate, r: (usize, usize, usize, usize)) -> String {
     }
     let mut out = String::new();
     if p.ground_um() > 0.0 {
-        out.push_str(&format!("hard ground {} µm\n", fmt_num(p.ground_um())));
+        let laid = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| p.grounded(x, y)).count() as f64;
+        out.push_str(&format!("hard ground {} µm over {}%\n", fmt_num(p.ground_um()), (100.0 * laid / n).round()));
     }
     if stopped > 0.0 {
         out.push_str(&format!("stopped out over {}%\n", (100.0 * stopped / n).round()));

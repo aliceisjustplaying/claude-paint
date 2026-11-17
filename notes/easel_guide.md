@@ -1423,14 +1423,14 @@ touched saves and replays byte for byte as before. Ink and wiping come with `--@
 
 ```lua
 use(k)
-k:ground("hard", {um=4})                        -- rolled over the face
+k:ground("hard", {{0,100},{1000,100},{1000,300},{0,300},{0,500},{1000,500}}, {um=4})  -- rolled where the roller goes
 n = needle{tip=40, cone=30}
 r = k:needle(n, {{100,200},{900,200}}, {force=0.3})   -- through the ground: r.touched, r.width (the window)
 k:immerse{acid="ferric", baume=36}             -- into the bath (face down by default): it bites on the clock
 use(study)                                      -- ... while you draw on another surface, or wait
 use(k)
 r = k:lift()                                    -- out, rinsed and dried: r.minutes it lay there, r.depth
-k:stop_out(rect(0, 400, 1000, 300))             -- varnish: no acid there
+k:stop_out({{120,420},{480,430},{860,410}}, {brush=3.9, load=1, pressure=0.6})  -- a brushstroke of varnish: no acid there
 k:bite{acid="ferric", baume=36, minutes=30, rock=true}   -- in, 30 minutes, out, in one
 k:clean()                                       -- solvent: ground, varnish, rosin off
 k:aquatint{box=0.6, wait=30, minutes=1}         -- the dust box: wait s after stirring, minutes in it
@@ -1440,10 +1440,21 @@ print(k:feel(500, 200).words)
 use("painting")
 ```
 
-- **`k:ground("hard", {um=})`.** A hard ground (beeswax, bitumen, rosin) rolled over the
-  whole face, 4 µm by default (an estimate: 2–8). It covers whatever lines are already
-  there. It goes on a clean plate (`k:clean()` first), and takes 10 minutes of hand time.
-  Soft ground is `--@ soft-ground`, later.
+- **`k:ground("hard", pts, {um=, roller=, speed=})`.** A hard ground (beeswax, bitumen,
+  rosin) rolled on with a leather roller moved along the points (plate units, as a needle's
+  path). It lies only where the roller's line of contact went: a cell it crossed over half of.
+  - **The roller** is `roller` mm long (150, the size printmakers' manuals give; makers sell
+    100–200). Roll overlapping strokes to cover the plate; `covered` says how much of it the
+    ground lies on, and `probe` gives the share under the ground.
+  - **Where the roller didn't go the plate is bare,** and the acid bites it as an open face.
+  - **Thickness:** 4 µm by default (an estimate: 2–8). It covers whatever lines are already
+    there. More of the same ground can be rolled onto a plate that holds only ground;
+    another thickness, or ground over varnish, rosin or needle lines, wants `k:clean()` first.
+  - **Hand time:** the roller's path at `speed` (100 mm/s), and 8 minutes to warm the plate
+    and let it cool (estimates).
+  - Points alone are needed: `k:ground("hard", {um=4})` is refused ("options but no
+    points"), as is a mask or a function.
+  - Soft ground is `--@ soft-ground`, later.
 - **`k:needle(n, pts, {force=, alt=, azimuth=, speed=})`** draws an etching needle
   (`needle{}`) through the ground.
   - **The window.** It parts the ground where its point is wider than the ground is thick.
@@ -1454,9 +1465,25 @@ use("painting")
     nothing, and the verb says so (`touched`).
   - The default speed is 40 mm/s. An etching needle needs a ground: without one, use
     `k:drypoint`.
-- **`k:stop_out(mask)`.** Stopping-out varnish brushed where the mask (made while the plate
-  is in hand) is at least half. No acid reaches there until `k:clean()`. Hand time is its
-  area at 160 mm²/s (an estimate).
+- **`k:stop_out(pts, {brush=, load=, pressure=, speed=})`.** Stopping-out varnish
+  (asphaltum in turpentine) brushed along the points with a round brush. No acid reaches
+  the cells the strip covers over half of until `k:clean()`. It takes no mask, function or
+  region: brush where the varnish should go.
+  - **The brush:** `brush` is the round's width in mm (3.9, a size 6 sable); `load` how full
+    its belly is (1). Its belly holds a cone of liquid 4.7 times as long as it is wide, 0.6
+    full: 44 mm³ for a size 6.
+  - **The strip's width** is what the wet tuft presses out at `pressure` (0 to 1, a number or
+    a list along the points): it widens with the pressure until the whole belly is down at
+    0.85, the bristle model's law.
+  - **It runs dry.** The brush lays a film 20 µm thick (an estimate) until its belly is
+    spent. Then it lays nothing more; the verb says how far it got (`dry`, `length`, `left`
+    mm³): dip it again with another `k:stop_out` for the rest.
+  - **The edge** creeps out as the liquid spreads before it sets (Tanner's law for a ridge,
+    over the 10 minutes it flows): some 25 µm for a size 6 (`edge`, µm), so the edge is the brush's.
+    Where the brush comes down and lifts it leaves the disc of its tuft.
+  - **Hand time** is the stroke at `speed` (20 mm/s).
+  - Reports `area` (mm² newly stopped), `length`, `width` (mm), `edge`, `left`, `seconds`,
+    `dry`.
 - **`k:immerse{acid=, …}`** puts the plate into its tray, and **`k:lift()`** takes it out.
   - **The bath is on the session's clock.** While the plate lies in it, it bites through
     whatever the session does meanwhile: work on another surface, `wait`, paint drying.

@@ -237,6 +237,46 @@ pub(crate) fn path(st: &S, k: &SurfaceU, verb: &str, pts: &Value, o: Option<&Tab
     Ok((0..n).map(|i| Point { x: pts[i].0 * u, y: pts[i].1 * u, force: f[i], alt: alt[i], az: az[i], speed: speed[i] }).collect())
 }
 
+/// The points a hand moves a tool along (`hand_path`), or a refusal saying how to give them
+/// where a region, a function or nothing was given: a hand's tool acts where it goes.
+fn hand_points(v: &Value, verb: &str, how: &str) -> Result<Vec<(f32, f32)>> {
+    let refuse = |what: &str| err(format!("{verb}: {what}: a hand's tool acts only where it goes, so give the points it is moved along, as a needle's: {how}"));
+    match v {
+        Value::Nil => refuse("no points"),
+        Value::Function(_) => refuse("it takes no function"),
+        Value::UserData(_) => refuse("it takes no mask or region"),
+        Value::Table(t) if !t.contains_key(1)? => refuse("options but no points"),
+        v => crate::api::points(v),
+    }
+}
+
+/// A hand tool's path over the plate in hand (units) into plate points (mm): each point's
+/// force the hand's pressure on it (`press`: a number or a list along the points, as pastel
+/// takes them, within `range`), its speed `speed=` (mm/s). At least `least` points.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn hand_path(st: &S, k: &SurfaceU, verb: &str, how: &str, pts: &Value, o: Option<&Table>, press: (&str, f32, f32, f32), speed: f32, least: usize) -> Result<Vec<Point>> {
+    let (mm, h) = in_hand(st, k, verb)?;
+    let pts = hand_points(pts, verb, how)?;
+    if pts.len() < least {
+        return err(format!("{verb}: needs at least {least} point{}: {how}", if least == 1 { "" } else { "s" }));
+    }
+    if pts.iter().any(|&(x, y)| !(0.0..=1000.0).contains(&x) || !(0.0..=h).contains(&y)) {
+        return err(format!("{verb}: the points lie on the plate: x 0 to 1000, y 0 to {}", fmt_num(h)));
+    }
+    let n = pts.len();
+    let (key, default, lo, hi) = press;
+    let f = along(o, key, n, default)?;
+    let sp = along(o, "speed", n, speed)?;
+    if f.iter().any(|v| !(lo..=hi).contains(v)) {
+        return err(format!("{verb}: {key} is {lo} to {hi}"));
+    }
+    if sp.iter().any(|v| !(1.0..=500.0).contains(v)) {
+        return err(format!("{verb}: speed is mm/s, 1 to 500"));
+    }
+    let u = mm / 1000.0;
+    Ok((0..n).map(|i| Point { x: pts[i].0 * u, y: pts[i].1 * u, force: f[i], alt: 90.0, az: 0.0, speed: sp[i] }).collect())
+}
+
 fn int_opt(o: Option<&Table>, key: &str, default: u32, most: u32) -> Result<u32> {
     let v = o.map(|o| num(o, key)).transpose()?.flatten().unwrap_or(default as f32);
     if v.fract() != 0.0 || !(1.0..=most as f32).contains(&v) {

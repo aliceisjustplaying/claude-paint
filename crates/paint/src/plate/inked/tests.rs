@@ -347,8 +347,8 @@ fn an_etched_and_inked_plate_reads_back_with_its_coats() {
     use super::etched::BathSpec;
     use crate::etch::{self, Acid, Face};
     let mut p = square(20.0, 100.0);
-    p.apply(Op::Ground { um: etch::GROUND_UM as f32 });
     let pt = |x: f32| Point { x, y: 10.0, force: 0.3, alt: 80.0, az: 0.0, speed: 20.0 };
+    p.apply(Op::Ground { um: etch::GROUND_UM as f32, roller_mm: etch::ROLLER_MM as f32, pts: vec![pt(0.0), pt(20.0)] });
     p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0), pt(16.0)] });
     let bath = BathSpec { acid: Acid::Ferric, molar: 2.2, temp_c: 20.0, face: Face::Down, rock: None, feather: None, fresh: false };
     p.immerse(bath, 10.0).unwrap();

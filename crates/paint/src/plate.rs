@@ -1120,13 +1120,53 @@ impl Plate {
             let nb = ((base / (p / 4.0)).ceil() as usize).max(3);
             let dv = base / nb as f64;
             let vs: Vec<f64> = (0..nb).map(|i| (i as f64 + 0.5) * dv).collect();
-            let hs: Vec<f64> = vs.iter().map(|v| 1.0 - v / base).collect();
+            // Under the contact laws each sample of the fin's base carries the same metal, h/2 of
+            // its width: a cell's piece, read back as a ridge of height 2·vol/area
+            // (`Cell::burr_height`), is then the fin's own height wherever the cell's edges cut
+            // its base. (Weighted by the fin's height at each sample, a cell holding only its
+            // inner part read up to 1.5 h and one holding its toe less, so the height of a
+            // slanting line's burr stepped with the line's place in its cells.) The metal is
+            // the same; its centre lies base/6 further out, a few µm.
+            let hs: Vec<f64> = vs.iter().map(|v| if self.contact { 1.0 } else { 1.0 - v / base }).collect();
             let hsum: f64 = hs.iter().sum();
             // bit 0: the left of the line as `dir` runs (the needle went the other way: its right)
             let bit = if (sgn < 0.0) != flip { 1u8 } else { 2u8 };
             for (v, hv) in vs.iter().zip(&hs) {
                 let off = sgn * (a + v);
                 let (px, py) = (x + off * r.0 / 1000.0, y + off * r.1 / 1000.0);
+                if self.contact {
+                    // the sample's piece of base (dv across, len along) laid over the cells it
+                    // covers by area, a square of its area: a cell's share is then the base's
+                    // own, not every piece whose middle falls in it (which read a cell up to a
+                    // quarter over full, and its burr that much too tall); a full cell takes no
+                    // more, and none of the metal of what it can't take
+                    let q = (dv * len_um).sqrt();
+                    let (ux, uy) = (px * 1000.0 / p, py * 1000.0 / p);
+                    let hw = 0.5 * q / p;
+                    let (x0, x1, y0, y1) = (ux - hw, ux + hw, uy - hw, uy + hw);
+                    let whole = dv * len_um / cell_area;
+                    let vol = section * hv / hsum * len_um / cell_area;
+                    for cy in (y0.floor() as i64)..=(y1.floor() as i64) {
+                        for cx in (x0.floor() as i64)..=(x1.floor() as i64) {
+                            let f = ((x1.min(cx as f64 + 1.0) - x0.max(cx as f64)).max(0.0) * (y1.min(cy as f64 + 1.0) - y0.max(cy as f64)).max(0.0)) / (4.0 * hw * hw);
+                            if f <= 0.0 || cx < 0 || cy < 0 {
+                                continue;
+                            }
+                            if let Some(c) = self.cell_mut(cx as usize, cy as usize) {
+                                let want = whole * f;
+                                let took = want.min((1.0 - c.burr_area as f64).max(0.0));
+                                if took <= 0.0 {
+                                    continue;
+                                }
+                                c.burr_area += took as f32;
+                                c.burr_vol += (vol * f * took / want) as f32;
+                                c.dir = dir;
+                                c.side |= bit;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if let Some((cx, cy)) = self.at_mm(px, py)
                     && let Some(c) = self.cell_mut(cx, cy)
                 {

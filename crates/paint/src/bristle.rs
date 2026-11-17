@@ -718,11 +718,15 @@ pub struct Gesture {
     /// Pressure swell along the stroke: multipliers at evenly spaced knots
     /// from start to end, interpolated smoothly (empty = none).
     pub swell: Vec<f32>,
+    /// How fast the hand draws it, mm/s (None: the steering law's pace,
+    /// `tally::stroke_speed_mm_s`). Only the stroke film reads it
+    /// (`crate::stroke_film`), and the hand time.
+    pub speed: Option<f32>,
 }
 
 impl Gesture {
     pub fn new(pts: Vec<(f32, f32)>) -> Self {
-        Gesture { pts, pressure: (0.8, 0.8), orient: Orient::Across, attack: 0.08, release: 0.15, shake: 1.0, swell: Vec::new() }
+        Gesture { pts, pressure: (0.8, 0.8), orient: Orient::Across, attack: 0.08, release: 0.15, shake: 1.0, swell: Vec::new(), speed: None }
     }
     pub fn line(a: (f32, f32), b: (f32, f32)) -> Self {
         Self::new(vec![a, b])
@@ -743,6 +747,11 @@ impl Gesture {
     pub fn ramps(mut self, attack: f32, release: f32) -> Self {
         self.attack = attack;
         self.release = release;
+        self
+    }
+    /// Draw it at `mm_s` (see `speed`).
+    pub fn speed(mut self, mm_s: f32) -> Self {
+        self.speed = Some(mm_s);
         self
     }
     /// Vary the pressure along the stroke (see `swell`).
@@ -838,6 +847,14 @@ pub(crate) struct Surf {
     /// end (`drag_on`).
     pub(crate) reach_end: bool,
     pub(crate) layers: bool,
+    /// The stroke film (`crate::stroke_film`, `Canvas::with_stroke_film`):
+    /// the canvas's mm per unit, so a stroke can size its bristle bed; None
+    /// without the switch.
+    pub(crate) stroke_film: Option<f32>,
+    /// The bristle bed of the stroke at the step being laid (`drag_on` sets
+    /// it with the stroke film): every hair's film ceiling follows from it
+    /// and the paint it carries.
+    pub(crate) pad: Option<crate::stroke_film::Pad>,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1113,6 +1130,8 @@ impl Canvas {
             volume_latent: self.engine >= crate::PIGMENT_MIXER,
             reach_end: self.engine >= crate::REACH_END,
             layers: self.engine >= crate::PIGMENT_MIXER,
+            stroke_film: self.stroke_film.then_some(self.mm_per_unit),
+            pad: None,
         }
     }
 
@@ -1135,6 +1154,15 @@ impl Canvas {
         assert!(!thinned || self.engine >= 3, "{what}: thinned paint needs engine 3 (this canvas is engine {}, which has no solvent in its film)", self.engine);
     }
 
+    /// A stroke of `tool` along `g` on the hand's clock: at the speed the
+    /// gesture gives, or at the steering law's pace.
+    fn tally_stroke(&mut self, tool: &Tool, g: &Gesture) {
+        match g.speed {
+            Some(v) => self.tally.stroke_at(tool, &g.pts, self.mm_per_unit, v),
+            None => self.tally.stroke(tool, &g.pts, self.mm_per_unit),
+        }
+    }
+
     /// Drag a held brush through a gesture, working the wet paint.
     ///
     /// Panics if the brush holds solvent (a thinned load) and the canvas's
@@ -1147,7 +1175,7 @@ impl Canvas {
         if let Some(m) = clip {
             self.check_mask(m);
         }
-        self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
+        self.tally_stroke(&held.tool, g);
         let id = self.next_stroke_ids(1);
         let surf = self.surf();
         let mut scratch = Vec::new();
@@ -1160,22 +1188,6 @@ impl Canvas {
 }
 
 impl Canvas {
-    /// One stroke that lays a thin film (`Handling::film`'s, on one stroke):
-    /// it adds no more than `coats` of wet film to any pixel, and what the
-    /// hairs can't lay stays on them. `style::Style::GLAZE_FILM` (about
-    /// 7.5 µm) for a glaze, `SCUMBLE_FILM` (about 5 µm) for a scumble.
-    /// Panics without the glaze film (`with_glaze_film`) or with a coats
-    /// that isn't finite and above 0.
-    pub fn drag_film(&mut self, held: &mut Held, g: &Gesture, coats: f32) {
-        assert!(self.glaze_film, "Canvas::drag_film: a thin film on one stroke needs the glaze film (with_glaze_film)");
-        assert!(coats.is_finite() && coats > 0.0, "Canvas::drag_film: coats must be finite and > 0, got {coats}");
-        // (the stroke `drag` is about to number: its ceiling counts from it)
-        let id = self.wet.current.wrapping_add(1).max(1);
-        self.film_pass = Some((coats, id));
-        self.drag(held, g, None);
-        self.film_pass = None;
-    }
-
     /// A clean-blender stroke: the brush wiped on the rag (nine tenths of
     /// what it holds, as a blender pass wipes it, `Handling::blender`), then
     /// drawn through the wet paint along `g`. It lays only what it picks up,
@@ -1188,7 +1200,7 @@ impl Canvas {
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::blend_stroke");
         }
-        self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
+        self.tally_stroke(&held.tool, g);
         let id = self.next_stroke_ids(1);
         let surf = Surf { skim: 0.0, ..self.surf() };
         let mut scratch = Vec::new();
@@ -1455,6 +1467,8 @@ pub(crate) unsafe fn drag_on(
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
+    // (the stroke film: the hand's speed, given or the steering law's)
+    let film_speed = sf.stroke_film.map(|mmu| g.speed.unwrap_or_else(|| crate::tally::stroke_speed_mm_s(&tool, mmu) as f32));
 
     for b in &mut held.bristles {
         b.prev = [None, None];
@@ -1505,6 +1519,9 @@ pub(crate) unsafe fn drag_on(
         };
         let (st, ct) = theta.sin_cos();
         let coh = cohesion(held, full);
+        if let (Some(mmu), Some(v)) = (sf.stroke_film, film_speed) {
+            sf.pad = Some(crate::stroke_film::pad(&tool, p, mmu, v));
+        }
         let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(&tool, p, coh);
         // bend relaxes toward its target: a rate in 0..1 keeps it a blend of
         // targets, within the reach `footprint` allows for
@@ -1813,10 +1830,21 @@ pub(crate) unsafe fn exchange(
         // lower ceiling, for the whole pass)
         let pass_film = sf.film.filter(|_| !sf.laid.is_null());
         let thinned = phi > 0.0 && !sf.laid.is_null() && !exch;
-        let capped = thinned || pass_film.is_some();
-        let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(if thinned { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY });
+        // the stroke film (`crate::stroke_film`): the film this hair's paint
+        // leaves under the bed, in place of the thinner's estimate
+        let law = crate::stroke_film::ceiling(&sf, &br.hide, phi);
+        let capped = thinned || pass_film.is_some() || law.is_some();
+        let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(match law {
+            Some(c) => c,
+            None if thinned => crate::thinner::stroke_limit_um(phi) / COAT_UM,
+            None => f32::INFINITY,
+        });
         let wet = smoothstep(0.1, 0.8, liquid / full);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
+        // (how far below the tooth's peaks the paint a loaded hair carries
+        // reaches: with the stroke film, the film it leaves; before it, an
+        // estimate, `WET_REACH`)
+        let wet_reach = law.map_or(WET_REACH, crate::stroke_film::tooth_reach);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(wet_reach * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -2144,7 +2172,7 @@ pub(crate) unsafe fn exchange(
                 }
             }
         }
-        if phi > 0.0 || pass_film.is_some() {
+        if phi > 0.0 || pass_film.is_some() || law.is_some() {
             // the hair loses what it laid (and in a crop, the share laid
             // outside the window), paint and solvent in its proportions
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
@@ -2645,6 +2673,9 @@ impl Gesture {
         }
         if let Some((i, v)) = self.swell.iter().enumerate().find(|(_, v)| !v.is_finite()) {
             return Err(format!("Gesture swell knot {i} is not finite: {v}"));
+        }
+        if let Some(v) = self.speed.filter(|v| !(v.is_finite() && *v > 0.0)) {
+            return Err(format!("Gesture speed is a finite number of mm/s above 0, not {v}"));
         }
         Ok(())
     }
@@ -3638,13 +3669,11 @@ mod knife_skim {
     }
 }
 
-// one stroke laying a thin film, and a clean-blender stroke (`Canvas::drag_film`,
-// `Canvas::blend_stroke`)
+// a clean-blender stroke (`Canvas::blend_stroke`)
 #[cfg(test)]
 mod one_stroke_tests {
     use super::*;
     use crate::color::hex;
-    use crate::style::Style;
 
     fn canvas() -> Canvas {
         Canvas::new(200, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(200.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true)
@@ -3654,30 +3683,6 @@ mod one_stroke_tests {
         let mut h = Held::new(tool, 3).with_engine(crate::PIGMENT_MIXER);
         h.load(Paint::body(hex(color)), 1.0);
         h
-    }
-
-    fn max_um(c: &Canvas) -> f32 {
-        c.wet.vol.iter().fold(0.0f32, |m, &v| m.max(v)) * crate::surface::COAT_UM
-    }
-
-    /// A glaze stroke lays no more than its film anywhere, a scumble's
-    /// thinner still; a plain stroke of the same load lays far more, and the
-    /// brush keeps what the film couldn't take.
-    #[test]
-    fn a_film_stroke_lays_no_more_than_its_film() {
-        let line = || Gesture::new(vec![(200.0, 500.0), (800.0, 500.0)]).pressure(0.7, 0.7);
-        let mut plain = canvas();
-        let mut h = loaded(Tool::filbert(40.0), "#802010");
-        plain.drag(&mut h, &line(), None);
-        for coats in [Style::GLAZE_FILM, Style::SCUMBLE_FILM] {
-            let mut c = canvas();
-            let mut g = loaded(Tool::filbert(40.0), "#802010");
-            c.drag_film(&mut g, &line(), coats);
-            let um = coats * crate::surface::COAT_UM;
-            assert!(max_um(&c) <= um * 1.0001 && max_um(&c) > 0.5 * um, "{coats} coats: {} µm", max_um(&c));
-            assert!(max_um(&plain) > 3.0 * um && g.fullness() > h.fullness(), "plain {} µm", max_um(&plain));
-            assert!(c.film_pass.is_none());
-        }
     }
 
     /// A clean-blender stroke across a wet edge between two colors carries
@@ -3704,5 +3709,159 @@ mod one_stroke_tests {
         let d0: f32 = (0..3).map(|k| (l0[k] - r0[k]).abs()).sum();
         let d1: f32 = (0..3).map(|k| (l1[k] - r1[k]).abs()).sum();
         assert!(d1 < d0, "the edge didn't soften: {d0} -> {d1}");
+    }
+}
+
+// the film one stroke leaves (`crate::stroke_film`, `Canvas::with_stroke_film`)
+#[cfg(test)]
+mod stroke_film_tests {
+    use super::*;
+    use crate::color::hex;
+    use crate::stroke_film::{film_um, pad, rheology};
+    use crate::surface::{COAT_UM, Linen};
+
+    /// 200 mm across, 1 mm pixels, as a new painting's canvas is set up.
+    fn canvas() -> Canvas {
+        Canvas::new(200, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(200.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true)
+    }
+
+    /// Tube paint knifed with `medium` (blotted if negative), as
+    /// `Mixture::paint` makes it.
+    fn paint(color: &str, hiding: f32, medium: f32) -> Paint {
+        let k = (1.0 - medium).clamp(0.0, 1.5);
+        let p = Paint::new(hex(color), hiding, (k * k).min(1.0));
+        Paint { scatter: p.scatter * k.max(1e-3), oil: if medium < 0.0 { 1.0 + medium } else { 1.0 + 1.5 * medium }, ..p }
+    }
+
+    fn held(tool: Tool, p: Paint, seed: u64) -> Held {
+        let mut h = Held::new(tool, seed).with_engine(crate::PIGMENT_MIXER);
+        h.load(p, 1.0);
+        h
+    }
+
+    /// A steady stroke: even pressure, no ramps, an exact hand.
+    fn steady(y: f32, pressure: f32, speed: f32) -> Gesture {
+        Gesture::new(vec![(150.0, y), (850.0, y)]).pressure(pressure, pressure).ramps(0.0, 0.0).shake(0.0).speed(speed)
+    }
+
+    /// The greatest wet film (µm) the stroke laid (it lays thinner at its
+    /// edges, where fewer hairs reach), over the band y ± 20 units.
+    fn film(c: &Canvas, y: f32) -> f32 {
+        let mut max = 0.0f32;
+        for x in (150..=850).step_by(5) {
+            for dy in (-20..=20).step_by(5) {
+                max = max.max(c.wet.vol[c.f.index(x as f32, y + dy as f32)] * COAT_UM);
+            }
+        }
+        max
+    }
+
+    /// The law's film for `p` on `tool` at `pressure` and `speed`.
+    fn law(p: &Paint, tool: &Tool, pressure: f32, speed: f32) -> f32 {
+        film_um(rheology(&p.prop(), 0.0), &pad(tool, pressure, 0.2, speed))
+    }
+
+    /// One stroke lays no more than the law's film anywhere and, loaded
+    /// full, near that much where its hairs lie thickest: thinner with more medium, thicker drawn
+    /// faster (Reynolds: h ∝ √U), and paint with a high yield stress
+    /// (blotted) stays thick drawn slowly where a fluid one thins.
+    #[test]
+    fn one_stroke_leaves_the_film_the_law_gives() {
+        let tool = Tool::hog_flat(36.0);
+        let lay = |p: Paint, pressure: f32, speed: f32| {
+            let mut c = canvas();
+            c.drag(&mut held(tool.clone(), p.clone(), 5), &steady(500.0, pressure, speed), None);
+            let max = film(&c, 500.0);
+            let h = law(&p, &tool, pressure, speed);
+            assert!(max <= h * 1.0001, "{max} µm laid over the law's {h} µm");
+            (max, h)
+        };
+        let tube = paint("#802010", 0.92, 0.0);
+        let (t, th) = lay(tube.clone(), 0.7, 200.0);
+        assert!(t > 0.6 * th, "tube paint: {t} µm of the law's {th} µm");
+        let (m, mh) = lay(paint("#802010", 0.92, 0.5), 0.7, 200.0);
+        assert!(mh < 0.7 * th && m < 0.8 * t, "medium: {m} µm (law {mh}), tube {t} µm (law {th})");
+        let (fast, _) = lay(tube.clone(), 0.7, 400.0);
+        let (slow, _) = lay(tube.clone(), 0.7, 50.0);
+        assert!(fast > 1.3 * slow, "fast {fast} µm, slow {slow} µm");
+        let lean = paint("#802010", 0.92, -0.2);
+        let fluid = paint("#802010", 0.92, 0.5);
+        assert!(law(&lean, &tool, 0.7, 10.0) > 3.0 * law(&fluid, &tool, 0.7, 10.0));
+        let (l, lh) = lay(lean, 0.7, 10.0);
+        let (f, _) = lay(fluid, 0.7, 10.0);
+        assert!(l > 2.0 * f && l <= lh * 1.0001, "lean {l} µm (law {lh}), fluid {f} µm");
+    }
+
+    /// A glaze (paint knifed with much medium, its pigment diluted) laid
+    /// with a soft brush leaves a film the law gives, and the band of black
+    /// dried under it shows through it: dark under the glaze, the glaze's
+    /// color beside it.
+    #[test]
+    fn a_glaze_laid_with_a_soft_brush_is_a_thin_transparent_film() {
+        let mut c = canvas();
+        c.drag(&mut held(Tool::hog_flat(80.0), Paint::body(hex("#141414")), 2), &Gesture::new(vec![(500.0, 150.0), (500.0, 850.0)]).pressure(0.8, 0.8), None);
+        c.dry();
+        let soft = Tool::round_sable(60.0);
+        let glaze = paint("#b02818", 0.05, 0.7);
+        c.drag(&mut held(soft.clone(), glaze.clone(), 4), &steady(500.0, 0.6, 150.0), None);
+        let h = law(&glaze, &soft, 0.6, 150.0);
+        // the law's film for this glaze and brush: a few tens of µm or less
+        assert!((5.0..60.0).contains(&h), "law: {h} µm");
+        let um = |x: f32| c.wet.vol[c.f.index(x, 500.0)] * COAT_UM;
+        assert!(um(300.0) <= h * 1.0001 && um(300.0) > 0.3 * h, "laid {} µm of {h}", um(300.0));
+        let seen = c.seen();
+        let lum = |x: f32| {
+            let p = seen[c.f.index(x, 500.0)];
+            p[0] + p[1] + p[2]
+        };
+        assert!(lum(500.0) < 0.35 * lum(300.0), "over black {} vs over the ground {}", lum(500.0), lum(300.0));
+        let ground = hex("#e8e0d0");
+        assert!(lum(300.0) < 0.95 * (ground[0] + ground[1] + ground[2]), "the glaze laid nothing visible");
+    }
+
+    /// A stiff, lean, opaque paint dragged lightly over canvas tooth breaks:
+    /// the weave's peaks take it and its hollows stay bare. The same brush
+    /// pressed with a fluid paint covers.
+    #[test]
+    fn a_scumble_breaks_on_the_tooth() {
+        // 100 mm across 800 px (1/8 mm), on a coarse linen (12 threads a
+        // centimetre, crowns 80 µm high) under no ground
+        let linen = || Canvas::new(800, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(100.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true).with_linen(Linen { warp_per_cm: 12.0, weft_per_cm: 12.0, crown_um: 80.0, slubs: 0.3, seed: 3 });
+        let covered = |c: &Canvas| {
+            let mut n = 0;
+            let mut hit = 0;
+            for x in 300..700 {
+                for y in 490..510 {
+                    n += 1;
+                    hit += (c.wet.vol[c.f.index(x as f32, y as f32)] * COAT_UM > 0.5) as usize;
+                }
+            }
+            hit as f32 / n as f32
+        };
+        let mut c = linen();
+        // a little of it on the brush
+        let mut h = Held::new(Tool::hog_flat(60.0), 6).with_engine(crate::PIGMENT_MIXER);
+        h.load(paint("#e8e4d8", 0.98, -0.2), 0.3);
+        c.drag(&mut h, &steady(500.0, 0.15, 200.0), None);
+        let scumble = covered(&c);
+        let mut c = linen();
+        c.drag(&mut held(Tool::hog_flat(60.0), paint("#e8e4d8", 0.98, 0.3), 6), &steady(500.0, 0.8, 200.0), None);
+        let pressed = covered(&c);
+        assert!(scumble < 0.7 && scumble > 0.1 && pressed > 0.95, "scumble covers {scumble}, pressed {pressed}");
+    }
+
+    /// Without the switch a stroke lays what it did.
+    #[test]
+    fn without_the_switch_a_stroke_lays_as_before() {
+        let run = |law: bool| {
+            let mut c = canvas().with_stroke_film(law);
+            c.drag(&mut held(Tool::hog_flat(36.0), paint("#802010", 0.92, 0.5), 5), &Gesture::new(vec![(150.0, 500.0), (850.0, 500.0)]), None);
+            c.wet.vol.clone()
+        };
+        let (off, on) = (run(false), run(true));
+        assert!(off != on);
+        let mut plain = Canvas::new(200, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(200.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true);
+        plain.drag(&mut held(Tool::hog_flat(36.0), paint("#802010", 0.92, 0.5), 5), &Gesture::new(vec![(150.0, 500.0), (850.0, 500.0)]), None);
+        assert!(plain.wet.vol == off);
     }
 }

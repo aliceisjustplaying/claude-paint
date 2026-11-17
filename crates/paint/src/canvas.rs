@@ -270,6 +270,11 @@ pub struct Canvas {
     /// Engine 7: a brush's paint laid on wet paint stays on top of it
     /// (`bristle::BRUSH_SKIM_COATS`).
     pub(crate) brush_skim: bool,
+    /// Engine 7 and later: the film one brush stroke leaves follows from its
+    /// paint's rheology and the hand's force and speed
+    /// (`crate::stroke_film`). A painting begun with the gestures-only
+    /// switch has it.
+    pub(crate) stroke_film: bool,
     /// While a blender pass with `blend_feather` runs: how much of the paint
     /// a bristle carries each pixel takes (0..1, see `Canvas::receptive`).
     pub(crate) receptive: Option<Vec<f32>>,
@@ -346,6 +351,7 @@ impl Canvas {
             knife_skim: false,
             blend_feather: false,
             brush_skim: false,
+            stroke_film: false,
             receptive: None,
             soak: None,
             drain: false,
@@ -366,6 +372,7 @@ impl Canvas {
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
+        self.stroke_film &= crate::engine7::active(v);
         if v < crate::PIGMENT_MIXER {
             self.material = 0;
         }
@@ -495,6 +502,16 @@ impl Canvas {
 
     pub fn brush_skim(&self) -> bool {
         self.brush_skim
+    }
+
+    /// The stroke film (`crate::stroke_film`): engine 7 and later.
+    pub fn with_stroke_film(mut self, enabled: bool) -> Self {
+        self.stroke_film = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn stroke_film(&self) -> bool {
+        self.stroke_film
     }
 
     /// Physical width of the painting in mm (default 700).

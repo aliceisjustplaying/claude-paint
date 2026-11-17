@@ -42,6 +42,7 @@ pub mod bristle;
 pub mod engine7;
 pub mod handling;
 pub mod stipple;
+pub mod stroke_film;
 pub mod state_dump;
 pub mod tally;
 pub mod style;

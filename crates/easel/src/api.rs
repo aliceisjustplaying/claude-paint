@@ -149,8 +149,8 @@ pub(crate) fn gestures_only(st: &S, call: &str) -> Result<()> {
 }
 
 /// The gesture verbs that came with the gestures-only switch (tape, a frisket
-/// cut along points, fixative sprayed along a path, a blender stroke, a film
-/// on one stroke): `call` is refused in a painting begun before it.
+/// cut along points, fixative sprayed along a path, a blender stroke, the
+/// hand's speed on a stroke): `call` is refused in a painting begun before it.
 pub(crate) fn gesture_verb(st: &S, call: &str) -> Result<()> {
     if !st.borrow().tubes.gestures_only {
         return err(format!("{call}: in a painting begun with the gestures-only switch only (its log's head says --@ gestures-only)"));
@@ -589,7 +589,7 @@ impl UserData for Brush {
         // pointed tips: how wide a mark at this pressure, what pressure for this width
         m.add_method("mark_width", |_, b, p: f32| Ok(b.held.borrow().tool.mark_width(p)));
         m.add_method("pressure_for", |_, b, w: f32| Ok(b.held.borrow().tool.pressure_for(w)));
-        // b:stroke(points, {pressure=, ramps=, orient=, shake=, swell=, clip=})
+        // b:stroke(points, {pressure=, ramps=, orient=, shake=, swell=, clip=, speed=})
         m.add_method("stroke", |_, b, (pts, o): (Value, Option<Table>)| {
             let pts = points(&pts)?;
             if pts.len() < 2 {
@@ -597,10 +597,11 @@ impl UserData for Brush {
             }
             let mut g = Gesture::new(pts);
             let mut clip = None;
-            let mut film = None;
             if let Some(o) = &o {
-                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell", "clip", "film"], "stroke")?;
-                film = film_of(&b.st, o, "b:stroke")?;
+                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell", "clip", "speed"], "stroke")?;
+                if let Some(v) = speed_of(&b.st, o, "b:stroke")? {
+                    g = g.speed(v);
+                }
                 if let Some((a, z)) = pair(o, "pressure")? {
                     g = g.pressure(a, z);
                 }
@@ -619,15 +620,11 @@ impl UserData for Brush {
                 clip = mask_opt(&b.st, o.get("clip")?, "b:stroke")?;
             }
             time::verb(&b.st, Verb::Marks, |s| {
-                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                match film {
-                    Some(coats) => c.drag_film(&mut b.held.borrow_mut(), &g, coats),
-                    None => c.drag(&mut b.held.borrow_mut(), &g, clip.as_deref()),
-                }
+                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
                 Ok(())
             })
         });
-        // b:blend(points, {pressure=, ramps=, orient=, shake=, swell=}): a clean-blender
+        // b:blend(points, {pressure=, ramps=, orient=, shake=, swell=, speed=}): a clean-blender
         // stroke: the brush wiped on the rag, then drawn through the wet paint along
         // the points; it lays only what it picks up (paint's `Canvas::blend_stroke`)
         m.add_method("blend", |_, b, (pts, o): (Value, Option<Table>)| {
@@ -638,7 +635,10 @@ impl UserData for Brush {
             }
             let mut g = Gesture::new(pts);
             if let Some(o) = &o {
-                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell"], "b:blend")?;
+                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell", "speed"], "b:blend")?;
+                if let Some(v) = speed_of(&b.st, o, "b:blend")? {
+                    g = g.speed(v);
+                }
                 if let Some((a, z)) = pair(o, "pressure")? {
                     g = g.pressure(a, z);
                 }
@@ -707,10 +707,10 @@ impl UserData for Brush {
                 .collect();
             let mut wobble = 0.0f32;
             let mut g_orient = None;
-            let (mut ramps, mut shake, mut clip, mut film) = (None, None, None, None);
+            let (mut ramps, mut shake, mut clip, mut speed) = (None, None, None, None);
             if let Some(o) = &o {
-                check_keys(o, &["wobble", "orient", "ramps", "shake", "clip", "film"], "gesture")?;
-                film = film_of(&b.st, o, "b:gesture")?;
+                check_keys(o, &["wobble", "orient", "ramps", "shake", "clip", "speed"], "gesture")?;
+                speed = speed_of(&b.st, o, "b:gesture")?;
                 wobble = num(o, "wobble")?.unwrap_or(0.0);
                 if !(wobble.is_finite() && (0.0..=100.0).contains(&wobble)) { return err("gesture: wobble must be 0 to 100 units"); }
                 g_orient = orient_of(o.get("orient")?)?;
@@ -809,12 +809,11 @@ impl UserData for Brush {
             if let Some(s) = shake {
                 g = g.shake(s);
             }
+            if let Some(v) = speed {
+                g = g.speed(v);
+            }
             time::verb(&b.st, Verb::Marks, |s| {
-                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                match film {
-                    Some(coats) => c.drag_film(&mut b.held.borrow_mut(), &g, coats),
-                    None => c.drag(&mut b.held.borrow_mut(), &g, clip.as_deref()),
-                }
+                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
                 Ok(())
             })
         });
@@ -1260,23 +1259,17 @@ pub(crate) fn paint_mask_of(st: &S, v: &Value) -> Result<Rc<Mask>> {
     Ok(paint_mask(st, mask_of(v)?))
 }
 
-/// A mark's `film=`: `"glaze"` (a thin film, `Style::GLAZE_FILM`, about
-/// 7.5 µm) or `"scumble"` (`Style::SCUMBLE_FILM`, about 5 µm): the most wet
-/// film the stroke adds anywhere (paint's `Canvas::drag_film`). None if nil.
-fn film_of(st: &S, o: &Table, call: &str) -> Result<Option<f32>> {
-    let v: Value = o.get("film")?;
-    if v.is_nil() {
-        return Ok(None);
+/// A mark's `speed=`: how fast the hand draws it, mm/s (1 to 2000): the
+/// film the stroke leaves follows from it (paint's `stroke_film`), and the
+/// hand time. None if nil; in a painting begun with the gestures-only switch
+/// only.
+fn speed_of(st: &S, o: &Table, call: &str) -> Result<Option<f32>> {
+    let Some(v) = num(o, "speed")? else { return Ok(None) };
+    gesture_verb(st, &format!("{call}: speed="))?;
+    if !(v.is_finite() && (1.0..=2000.0).contains(&v)) {
+        return err(format!("{call}: speed is how fast the hand draws the stroke, 1 to 2000 mm/s (a broad sweep of the arm is about 400), not {v}"));
     }
-    gesture_verb(st, &format!("{call}: film="))?;
-    if !st.borrow().tubes.glaze_film {
-        return err(format!("{call}: film= needs the glaze film (a painting begun with it)"));
-    }
-    match v {
-        Value::String(s) if s.to_str()?.as_ref() == "glaze" => Ok(Some(Style::GLAZE_FILM)),
-        Value::String(s) if s.to_str()?.as_ref() == "scumble" => Ok(Some(Style::SCUMBLE_FILM)),
-        v => err(format!("{call}: film is \"glaze\" (a thin film, about 7.5 µm) or \"scumble\" (about 5 µm), not {}", v.to_string().unwrap_or_else(|_| v.type_name().to_string()))),
-    }
+    Ok(Some(v))
 }
 
 /// A mark's `clip=` mask (none if nil); refused with the gestures-only switch (`call`
@@ -3528,22 +3521,27 @@ lift_sheet()"#).unwrap_or_else(|e| panic!("{e}"));
         assert!(e.contains("seconds= is a burst at one point"), "{e}");
     }
 
-    /// A blender stroke and a film on one stroke run in a new painting.
+    /// A blender stroke runs in a new painting, and a stroke takes the
+    /// hand's speed; a film mode is no option of a stroke's (the film follows
+    /// from the paint and the hand, paint's stroke_film).
     #[test]
-    fn a_blender_stroke_and_a_film_stroke_run() {
+    fn a_blender_stroke_and_a_stroke_at_a_speed_run() {
         let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap();
         s.run(CANVAS).unwrap();
+        assert!(s.canvas().unwrap().stroke_film());
         s.run(r#"p = pile{{"vermilion", 1}, medium=0.6} b = brush("filbert", 30) b:load(p, 1)
-b:stroke({{100, 300}, {900, 300}}, {film="glaze"})
-b:gesture({{100, 600, 0.4}, {500, 620, 0.6}, {900, 600, 0.4}}, {film="scumble"})
-c = brush("badger", 40) c:blend({{100, 300}, {900, 300}}, {pressure=0.4})"#).unwrap_or_else(|e| panic!("{e}"));
-        assert!(wet_at(&s, 500.0, 300.0) <= 7.5 * 1.0001 && wet_at(&s, 500.0, 300.0) > 0.0, "{}", wet_at(&s, 500.0, 300.0));
-        let e = s.run(r#"b:stroke({{100, 300}, {900, 300}}, {film="thick"})"#).expect_err("a film that isn't one");
-        assert!(e.contains("film is \"glaze\""), "{e}");
+b:stroke({{100, 300}, {900, 300}}, {speed=300})
+b:gesture({{100, 600, 0.4}, {500, 620, 0.6}, {900, 600, 0.4}}, {speed=60})
+c = brush("badger", 40) c:blend({{100, 300}, {900, 300}}, {pressure=0.4, speed=100})"#).unwrap_or_else(|e| panic!("{e}"));
+        assert!(wet_at(&s, 500.0, 300.0) > 0.0);
+        let e = s.run(r#"b:stroke({{100, 300}, {900, 300}}, {film="glaze"})"#).expect_err("a film mode");
+        assert!(e.contains("film"), "{e}");
+        let e = s.run(r#"b:stroke({{100, 300}, {900, 300}}, {speed=0})"#).expect_err("a stroke at no speed");
+        assert!(e.contains("1 to 2000 mm/s"), "{e}");
     }
 
     /// A log begun before the switch has none of the gesture verbs: no tape,
-    /// stencil or lift_tape globals, and the points forms, b:blend and film=
+    /// stencil or lift_tape globals, and the points forms, b:blend and speed=
     /// refused; `fix()` returns nothing, as it did.
     #[test]
     fn an_older_log_has_none_of_the_gesture_verbs() {
@@ -3555,6 +3553,7 @@ p = pile{{"lead white", 1}} b = brush("round", 4) b:load(p, 0.5)"#).unwrap_or_el
             ("fix(points)", "fix({{10, 10}})"),
             ("lay_sheet(points)", "lay_sheet({{10, 10}, {50, 10}, {30, 40}})"),
             ("b:blend", "b:blend({{10, 10}, {40, 40}})"),
+            ("b:stroke: speed=", "b:stroke({{10, 10}, {40, 40}}, {speed=100})"),
         ] {
             let e = s.run(src).expect_err(src);
             assert!(e.contains(&format!("{call}: in a painting begun with the gestures-only switch only")), "{src}: {e}");
@@ -3582,6 +3581,7 @@ print(#i:paths(), #f:paths(), select('#', fix()))"#,
         for chunk in parse_program(&program) {
             replay.run(&chunk).unwrap_or_else(|e| panic!("{chunk}: {e}"));
         }
+        assert!(!replay.canvas().unwrap().stroke_film() && !live.canvas().unwrap().stroke_film());
         let (mut a, mut b) = (Vec::new(), Vec::new());
         live.canvas().unwrap().write_state(&mut a, "").unwrap();
         replay.canvas().unwrap().write_state(&mut b, "").unwrap();

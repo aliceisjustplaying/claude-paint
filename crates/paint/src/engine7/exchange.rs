@@ -252,10 +252,21 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         // lower ceiling, for the whole pass)
         let pass_film = sf.film.filter(|_| !sf.laid.is_null());
         let thinned = phi > 0.0 && !sf.laid.is_null() && !exch;
-        let capped = thinned || pass_film.is_some();
-        let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(if thinned { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY });
+        // the stroke film (`crate::stroke_film`): the film this hair's paint
+        // leaves under the bed, in place of the thinner's estimate
+        let law = crate::stroke_film::ceiling(sf, &br.hide, phi);
+        let capped = thinned || pass_film.is_some() || law.is_some();
+        let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(match law {
+            Some(c) => c,
+            None if thinned => crate::thinner::stroke_limit_um(phi) / COAT_UM,
+            None => f32::INFINITY,
+        });
         let wet = smoothstep(0.1, 0.8, liquid / full);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
+        // (how far below the tooth's peaks the paint a loaded hair carries
+        // reaches: with the stroke film, the film it leaves; before it, an
+        // estimate, `WET_REACH`)
+        let wet_reach = law.map_or(WET_REACH, crate::stroke_film::tooth_reach);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(wet_reach * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
         let spread = dep.is_none();
@@ -560,7 +571,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             film.add(j, m, &Paint7::new(sf.lean, sf.drain, &lat, hide, c.a[CURE] * inv));
         }
         let had = br.vol + br.solvent;
-        if phi > 0.0 || pass_film.is_some() {
+        if phi > 0.0 || pass_film.is_some() || law.is_some() {
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
             br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
             br.solvent = (br.solvent - gone * phi).max(0.0);

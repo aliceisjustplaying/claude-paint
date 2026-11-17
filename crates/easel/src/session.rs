@@ -87,8 +87,9 @@ pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// regions and its parallel curves (`o:inset`, `o:offset`), `body_of`, `form`,
 /// `terrain`, `world`, `aerial` and a legacy styled canvas. It brings the gesture
 /// verbs in their place (`tape`, `stencil`, `lift_tape`, `lay_sheet` and `fix` along
-/// points, `b:blend`, `film=` on a stroke). Every new painting has it; a log without
-/// it replays as it was painted.
+/// points, `b:blend`, `speed=` on a stroke), and the film one brush stroke leaves
+/// follows from its paint and the hand (`paint::Canvas::with_stroke_film`). Every new
+/// painting has it; a log without it replays as it was painted.
 pub const GESTURES_ONLY_MARK: &str = "--@ gestures-only";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its

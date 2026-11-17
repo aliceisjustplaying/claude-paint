@@ -1440,7 +1440,10 @@ tap()                                  -- dry crumbs fall; stuck ones stay
   them as it takes heaped pastel. The fines stay, a ghost of the color.
 - **On a damp sheet** (steamed, or a damp sheet's own water, `--@ damp-paper`) the crumbs
   drink the water into their pores and a liquid bridge holds each to the sheet: a tap at
-  100 g leaves anything under 0.6 mm. Where water still stands once they have drunk, the
+  100 g leaves anything under 0.6 mm, and `blow` moves none of them: a hard blow from the
+  lips can't break the bridge even of a 0.5 mm crumb, and a bulb close in only lifts the
+  larger crumbs on a ring a few mm across. This holds wherever the pastel is wet, sifted
+  or drawn. Dry, a heap blows as before. Where water still stands once they have drunk, the
   drops it dries into gather the crumbs smaller than themselves into clusters: the more
   water, the larger (about 10 µm over a 4 µm film, 30 µm over 19 µm). On a sized sheet the
   condensed drops sink in within half a minute, so sift a patch straight after steaming

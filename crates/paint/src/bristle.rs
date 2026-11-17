@@ -838,6 +838,9 @@ pub(crate) struct Surf {
     /// end (`drag_on`).
     pub(crate) reach_end: bool,
     pub(crate) layers: bool,
+    /// The touch split (`Canvas::with_touch_split`): a touch lays the film a
+    /// stroke lays at its start (`touch_on`).
+    pub(crate) touch_split: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1113,6 +1116,7 @@ impl Canvas {
             volume_latent: self.engine >= crate::PIGMENT_MIXER,
             reach_end: self.engine >= crate::REACH_END,
             layers: self.engine >= crate::PIGMENT_MIXER,
+            touch_split: self.touch_split,
         }
     }
 
@@ -2147,6 +2151,10 @@ pub(crate) unsafe fn exchange(
 /// paint film on its contact face stays on the canvas, a set thickness per
 /// load (not a share per distance, as in a stroke), and it lifts some of
 /// the wet paint under it, so touches into wet paint blend and dirty the brush.
+/// With the touch split (`Canvas::with_touch_split`) the film is the one a
+/// stroke lays where it starts, the same split off the same face: each hair
+/// lays the share of its load a stroke's hair lays moving the pressed
+/// patch's mean length, plus the drag (notes/research/touch_film_split.md).
 #[derive(Clone, Copy, Debug)]
 pub struct Touch {
     /// Where the tip lands (units).
@@ -2291,7 +2299,22 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
     let spacing_u = touch_half(&tool, p, s) / s * (root_area(tool.kind) / held.bristles.len().max(1) as f32).sqrt();
     // a lighter press squeezes less paint out of the tip
     let film = TOUCH_FILM * tool.lay * spacing_u * spacing_u * (0.4 + 0.6 * p);
+    // With the touch split, what each hair lays over the whole touch: the
+    // share of its load a stroke's hair lays while the brush moves the
+    // pressed patch's mean length along it (its area over its width,
+    // `root_area · half / 2`), plus the hand's drag. Paint leaves a hair by
+    // the same film splitting whether it slides off the contact face or the
+    // face lifts off (notes/research/touch_film_split.md), so a press lays
+    // the film a stroke lays where it starts, and a dragged touch what a
+    // stroke of that length lays.
+    let split_share = sf.touch_split.then(|| {
+        let mean_len = root_area(tool.kind) * touch_half(&tool, p, 1.0) * 0.5;
+        let drag_u = (t.drag.0 * t.drag.0 + t.drag.1 * t.drag.1).sqrt();
+        1.0 - (-(mean_len + drag_u) / tool.run.max(1e-3)).exp()
+    });
     let sums: Vec<f32> = held.bristles.iter().map(|b| (0..steps).map(|k| reach_of(b, at(k).1).max(0.0)).sum()).collect();
+    // each hair's load as the touch begins (the split share is of it)
+    let starts: Vec<f32> = if split_share.is_some() { held.bristles.iter().map(|b| b.vol + b.solvent).collect() } else { Vec::new() };
     for b in &mut held.bristles {
         b.prev = [None, None];
     }
@@ -2312,8 +2335,10 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let (ox, oy) = (b.rx * half * spread, b.ry * half * spread);
             let cur = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             let prev = b.prev[0].unwrap_or(cur);
-            let fill = ((b.vol + b.solvent) / full).min(1.0);
-            let v = film * fill * reach / sums[bi].max(1e-6);
+            let v = match split_share {
+                Some(share) => share * starts[bi] * reach / sums[bi].max(1e-6),
+                None => film * ((b.vol + b.solvent) / full).min(1.0) * reach / sums[bi].max(1e-6),
+            };
             if sf.e7 {
                 unsafe { crate::engine7::exchange::exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             } else {
@@ -3594,5 +3619,118 @@ mod knife_skim {
         let stirred = light_over_dark(false, false);
         assert!(wet > 0.85 * dried, "on wet {wet}, on dried {dried}");
         assert!(stirred < 0.6 * dried, "stirred in {stirred}, on dried {dried}");
+    }
+}
+
+#[cfg(test)]
+mod touch_split {
+    use super::*;
+    use crate::color::hex;
+
+    fn canvas(split: bool) -> Canvas {
+        Canvas::new(400, 1.0, hex("#e8e0d0")).with_engine(9).with_size_mm(200.0).with_brush_skim(true).with_touch_split(split)
+    }
+
+    fn blue() -> Paint {
+        Paint::body(hex("#1c3c9c"))
+    }
+
+    fn loaded() -> Held {
+        let mut h = Held::new(Tool::filbert(40.0), 7);
+        h.load(blue(), 0.6);
+        h
+    }
+
+    /// The paint on the canvas (units² × coats), and its film where it lies
+    /// (coats, weighted by the paint: Σv² / Σv).
+    fn laid(c: &Canvas, before: &[f32]) -> (f32, f32) {
+        let a = 1.0 / (c.f.scale * c.f.scale);
+        let d: Vec<f32> = c.wet.vol.iter().zip(before).map(|(v, b)| v - b).collect();
+        let sum: f32 = d.iter().sum();
+        let sq: f32 = d.iter().map(|v| v.max(0.0) * v.max(0.0)).sum();
+        (sum * a, sq / d.iter().map(|v| v.max(0.0)).sum::<f32>().max(1e-9))
+    }
+
+    fn touch(split: bool, drag: (f32, f32), angle: f32) -> (f32, f32) {
+        let mut c = canvas(split);
+        let before = c.wet.vol.clone();
+        c.touch(&mut loaded(), &Touch::at(300.0, 500.0).pressure(0.8).drag(drag.0, drag.1).angle(angle), None);
+        laid(&c, &before)
+    }
+
+    fn stroke(len: f32) -> (f32, f32) {
+        let mut c = canvas(true);
+        let before = c.wet.vol.clone();
+        c.drag(&mut loaded(), &Gesture::line((300.0, 500.0), (300.0 + len, 500.0)), None);
+        laid(&c, &before)
+    }
+
+    /// A press lifts off the contact face by the same film splitting a
+    /// stroke's hairs slide off it by, so it lays the film a stroke lays
+    /// where it starts. Before the switch it laid a fixed coat, a fraction
+    /// of that film.
+    #[test]
+    fn a_pressed_touch_lays_the_film_a_stroke_starts_with() {
+        let (_, film_stroke) = stroke(60.0);
+        let (_, film_touch) = touch(true, (0.0, 0.0), 0.0);
+        let (_, film_old) = touch(false, (0.0, 0.0), 0.0);
+        let r = film_touch / film_stroke;
+        assert!((0.5..2.0).contains(&r), "touch film {film_touch} coats vs stroke {film_stroke}: {r}");
+        assert!(film_old < 0.3 * film_stroke, "before the switch: {film_old} vs {film_stroke}");
+    }
+
+    /// A touch dragged across the brush lays at least what a stroke of that
+    /// length lays, and no more than the share of its load the law gives
+    /// for the pressed patch's length and the drag (`touch_on`). (A stroke
+    /// lays less than that share: its trailing hairs lift some of the paint
+    /// the leading ones laid.)
+    #[test]
+    fn a_dragged_touch_lays_at_least_a_stroke_of_its_drag() {
+        let (v_stroke, _) = stroke(60.0);
+        let (v_touch, _) = touch(true, (60.0, 0.0), std::f32::consts::FRAC_PI_2);
+        let h = loaded();
+        let load: f32 = h.bristles.iter().map(|b| b.vol).sum();
+        let mean_len = root_area(h.tool.kind) * touch_half(&h.tool, 0.8, 1.0) * 0.5;
+        let share = 1.0 - (-(mean_len + 60.0) / h.tool.run).exp();
+        assert!(v_touch >= v_stroke && v_touch <= share * load * 1.001, "dragged touch {v_touch} vs stroke {v_stroke}, law {}", share * load);
+        let (v_old, _) = touch(false, (60.0, 0.0), std::f32::consts::FRAC_PI_2);
+        assert!(v_old < 0.1 * v_stroke, "before the switch: {v_old} vs {v_stroke}");
+    }
+
+    /// Into wet paint a touch lifts some of it, as a stroke does, but the
+    /// split touch lays more than it lifts, and more of its own paint than a
+    /// touch before the switch.
+    #[test]
+    fn on_wet_paint_a_split_touch_lays_more_than_it_lifts() {
+        let run = |split: bool| {
+            let mut c = canvas(split);
+            let mut k = Knife::new(200.0);
+            k.load(Paint::body(hex("#f4efe2")), 1.0);
+            c.knife(&mut k, &[(300.0, 350.0), (300.0, 650.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+            let before = c.wet.vol.clone();
+            let mut h = loaded();
+            let load: f32 = h.bristles.iter().map(|b| b.vol).sum();
+            c.touch(&mut h, &Touch::at(300.0, 500.0).pressure(0.8), None);
+            let left: f32 = h.bristles.iter().map(|b| b.vol).sum();
+            (laid(&c, &before).0, load - left)
+        };
+        let (net_new, gave_new) = run(true);
+        let (_, gave_old) = run(false);
+        assert!(net_new > 0.0, "net {net_new}");
+        assert!(gave_new > 4.0 * gave_old.max(0.0), "brush gave {gave_new} vs {gave_old} before");
+    }
+
+    #[test]
+    fn the_switch_is_saved_and_needs_engine_7() {
+        for split in [false, true] {
+            let c = canvas(split);
+            assert_eq!(c.touch_split(), split);
+            let mut saved = Vec::new();
+            c.write_state(&mut saved, "touch").unwrap();
+            let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+            assert_eq!(restored.touch_split(), split);
+        }
+        assert!(!Canvas::new(50, 1.0, [1.0; 3]).with_engine(6).with_touch_split(true).touch_split());
+        assert!(!canvas(true).with_engine(5).touch_split());
     }
 }

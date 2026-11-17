@@ -96,6 +96,10 @@ pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// scatters by its measured index (`paint::Palette::dry_lakes`): every new painting. Only engine 9's dry colors have it (below, the line changes nothing). A log
 /// without it replays its lakes' dry colors as painted.
 pub const DRY_LAKES_MARK: &str = "--@ dry-lakes";
+/// Marks a painting whose vine black has its measured masstone in oil, as dark as a carbon
+/// black's (`paint::Palette::vine_black`, `paint::palette::VINE_BLACK_OIL`): every new
+/// painting. A log without it replays its vine black as it was painted, lighter.
+pub const VINE_BLACK_MARK: &str = "--@ vine-black";
 /// Marks a painting whose pastel sticks' `p:hatch` covers an area as a
 /// pastellist does: its `angle` may be a direction field (a function(x, y) or
 /// a form's field), and it takes `zigzag=`, `jitter=`, `open=`, `alt=`,
@@ -959,6 +963,9 @@ impl Session {
         if self.st.borrow().tubes.dry_lakes {
             let _ = writeln!(s, "{DRY_LAKES_MARK}");
         }
+        if self.st.borrow().tubes.vine_black {
+            let _ = writeln!(s, "{VINE_BLACK_MARK}");
+        }
         if self.st.borrow().tubes.pastel_area_strokes {
             let _ = writeln!(s, "{PASTEL_AREA_STROKES_MARK}");
         }
@@ -1810,7 +1817,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.damp_paper = true;
         b.press = true;
         b.plate_contact = true;
-        return Ok(b);
+        return Ok(b.with_vine_black());
     };
     let engine = logged_engine(text)?;
     let material = logged_material(text)?;
@@ -1883,6 +1890,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.dry_lakes = head(DRY_LAKES_MARK);
+    if head(VINE_BLACK_MARK) {
+        b = b.with_vine_black();
+    }
     b.paper_presets = head(PAPER_PRESETS_MARK);
     if b.paper_presets && engine < 5 {
         return Err(format!("the log's {PAPER_PRESETS_MARK} line (the paper-presets switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));

@@ -301,3 +301,33 @@ pull(stiff, "stiff")"#
     assert!(num(&out, "stiff_film") > num(&out, "loose_film"), "more plate tone: {out}");
     assert!(num(&out, "stiff_taken") > num(&out, "loose_taken"), "it prints more: {out}");
 }
+
+/// A new painting's vine black has its measured masstone in oil (`VINE_BLACK_MARK`,
+/// `paint::palette::VINE_BLACK_OIL`); a log without the line keeps main's estimate (#323538)
+/// and replays as painted (an engine-9 log painting vine black replays to main's canvas and
+/// studio digests at 4bbbbec3). The log and a save keep the switch.
+#[test]
+fn a_new_paintings_vine_black_is_as_dark_as_carbon_measures() {
+    use crate::session::VINE_BLACK_MARK;
+    assert!(box_for(None).unwrap().vine_black);
+    for enabled in [false, true] {
+        let head = format!("--@ box impressionist\n--@ engine 9\n--@ paper\n{}", if enabled { format!("{VINE_BLACK_MARK}\n") } else { String::new() });
+        let tubes = box_for(Some(&head)).unwrap();
+        assert_eq!(tubes.vine_black, enabled);
+        let vine = |p: &paint::Palette| p.tubes.iter().find(|t| t.name == "vine black").unwrap().color;
+        assert_eq!(vine(&tubes), paint::color::hex(if enabled { paint::palette::VINE_BLACK_OIL } else { "#323538" }));
+        assert_eq!(vine(&tubes.clone()), vine(&tubes), "a clone keeps it");
+        let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+        run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+        let program = s.program("vine");
+        assert_eq!(program.lines().any(|l| l == VINE_BLACK_MARK), enabled);
+        assert_eq!(box_for(Some(&program)).unwrap().vine_black, enabled);
+        let path = std::env::temp_dir().join(format!("easel-vine-black-{}-{enabled}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        let st = restored.st.borrow();
+        assert_eq!(st.tubes.vine_black, enabled);
+        assert_eq!(vine(&st.tubes), vine(&box_for(Some(&program)).unwrap()));
+    }
+}

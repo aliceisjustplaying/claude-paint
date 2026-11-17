@@ -600,6 +600,21 @@ impl Tube {
     }
 }
 
+/// Vine black's masstone in oil under `Palette::vine_black`: Y ≈ 1.6 %
+/// (L* ≈ 13), carbon's slight blue kept. Linseed-oil reflectance spectra of
+/// vine, bone, ivory and lamp blacks are indistinguishable at the
+/// instrument's floor, vine 16.7 % against bone 16.4 % raw (Cosentino 2014,
+/// FORS spectral database of historical pigments in different binders,
+/// e-conservation Journal 2), so vine black is within about half a per cent
+/// of bone black's near-zero masstone; a maker's "vine black" oil measures
+/// L* 8.4 (Michael Harding, by artistpigments.org) [M]; Lumsden (1925) warns
+/// that some Frankfort black "is very grey" [P]. The estimate it replaces,
+/// #323538 (Y 3.5 %, L* 22), had no measurement behind it. Its hiding (0.75,
+/// semi-opaque) and tinting strength (0.6) stand, so a coat of its tube's
+/// paste absorbs 0.6 of a coat of bone black's, as its strength says
+/// (notes/research/black_pigments.md).
+pub const VINE_BLACK_OIL: &str = "#202224";
+
 /// Every tube the engine knows, each defined once: `tube(name, pigment,
 /// masstone, hiding, stiffness, tinting strength, drying)`. Boxes
 /// (`Palette::tube_box`, `Palette::named_box`) take their tubes from here by
@@ -955,6 +970,11 @@ pub struct Palette {
     /// (`dry::measured_index`; the easel's session.rs `DRY_LAKES_MARK`): new
     /// paintings.
     pub dry_lakes: bool,
+    /// Vine black's masstone in oil is as dark as a carbon black's measures
+    /// (`VINE_BLACK_OIL`; `with_vine_black`; the easel's session.rs
+    /// `VINE_BLACK_MARK`): new paintings. Without it vine black keeps the
+    /// lighter estimate it was painted with.
+    pub vine_black: bool,
     /// A sheet of paper may be a named one and mounted (`paper={preset=,
     /// mount=}`, `crate::paper::PRESETS`, `crate::paper::Mount`; the easel's
     /// session.rs `PAPER_PRESETS_MARK`): new paintings.
@@ -1015,7 +1035,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, vine_black: self.vine_black, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -1037,7 +1057,21 @@ impl Palette {
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
         let grind = tubes.iter().map(|t| grind_of(name, t.name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, oils: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, wet_pastel: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, grit: false, pastel_pencil_sharpen: false, material: 0, calls_agree: false, surfaces: false, charcoal: false, pastel_area_strokes: false, paper_presets: false, dry_lakes: false, plate: false, etch: false, damp_paper: false, press: false, plate_contact: false, lat, lat9, scat, pack, grind, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, oils: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, wet_pastel: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, grit: false, pastel_pencil_sharpen: false, material: 0, calls_agree: false, surfaces: false, charcoal: false, pastel_area_strokes: false, paper_presets: false, dry_lakes: false, vine_black: false, plate: false, etch: false, damp_paper: false, press: false, plate_contact: false, lat, lat9, scat, pack, grind, stock: name }
+    }
+
+    /// This palette with vine black's masstone in oil the measured one
+    /// (`VINE_BLACK_OIL`), its tubes' optics rebuilt from it, and
+    /// `vine_black` set. A box without vine black is as it was, but for the flag.
+    pub fn with_vine_black(&self) -> Palette {
+        let mut t = self.tubes.clone();
+        for tube in t.iter_mut().filter(|t| t.name == "vine black") {
+            tube.color = crate::color::hex(VINE_BLACK_OIL);
+        }
+        // (ground by its box's colormen, as `clone` and `with`)
+        let mut p = Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, vine_black: true, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, t) };
+        p.vine_black = true;
+        p
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -1047,7 +1081,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, vine_black: self.vine_black, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -1149,7 +1183,7 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, wet_pastel: self.wet_pastel, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, grit: self.grit, pastel_pencil_sharpen: self.pastel_pencil_sharpen, material: self.material, calls_agree: self.calls_agree, surfaces: self.surfaces, charcoal: self.charcoal, pastel_area_strokes: self.pastel_area_strokes, paper_presets: self.paper_presets, dry_lakes: self.dry_lakes, vine_black: self.vine_black, plate: self.plate, etch: self.etch, damp_paper: self.damp_paper, press: self.press, plate_contact: self.plate_contact, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.

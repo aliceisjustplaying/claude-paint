@@ -1237,3 +1237,39 @@ fn a_loose_ink_wipes_out_of_the_lines_and_a_stiff_one_holds() {
     assert!(st > lt, "plate tone: the stiff ink's {st} µm against the loose one's {lt}");
     assert!(1.0 - ll > 1.5 * (1.0 - sl), "the lines keep {sl} of the stiff ink, {ll} of the loose");
 }
+
+/// Vine black's masstone (`Palette::vine_black`): with it, a coat of an ink of
+/// its tube's paste absorbs its tinting strength's share (0.6) of a coat of
+/// bone black's, K = S·(1 − R∞)²/(2R∞) at its hiding; without it (the
+/// estimate #323538) under half. Per volume of pigment it absorbs 0.3 of bone
+/// black's, the low end of carbon's size argument (0.3–1.0), where it was
+/// 0.25. Bone black and the other tubes are untouched, and a palette without
+/// the flag is as it was.
+#[test]
+fn vine_black_prints_as_its_strength_says() {
+    let old = crate::palette::Palette::named_box("impressionist").unwrap();
+    let new = old.with_vine_black();
+    assert!(!old.vine_black && new.vine_black);
+    let tube = |p: &crate::palette::Palette, n: &str| p.tubes.iter().find(|t| t.name == n).unwrap().clone();
+    assert_eq!(tube(&old, "vine black").color, crate::color::hex("#323538"));
+    assert_eq!(tube(&new, "vine black").color, crate::color::hex(crate::palette::VINE_BLACK_OIL));
+    for t in &old.tubes {
+        if t.name != "vine black" {
+            assert_eq!(tube(&new, t.name).color, t.color);
+        }
+    }
+    let ink = |p: &crate::palette::Palette, n: &str| Ink::of_tubes(p, &[(n.to_string(), 1.0)], 0.0, 1.0, n.into()).unwrap();
+    assert_eq!(ink(&new, "bone black"), ink(&old, "bone black"));
+    let (bone, vine0, vine) = (ink(&old, "bone black"), ink(&old, "vine black"), ink(&new, "vine black"));
+    let strength = tube(&old, "vine black").strength as f64;
+    let per_coat = |v: &Ink| v.k[1] as f64 / bone.k[1] as f64;
+    assert!(per_coat(&vine0) < 0.5, "{}", per_coat(&vine0));
+    assert!((per_coat(&vine) - strength).abs() < 0.03, "a coat of vine black's paste: {} of bone black's", per_coat(&vine));
+    let per_pigment = per_coat(&vine) * bone.pvc as f64 / vine.pvc as f64;
+    assert!((0.29..0.4).contains(&per_pigment), "{per_pigment}");
+    // its K from its masstone and hiding, as every tube's
+    let t = tube(&new, "vine black");
+    let r = crate::color::luminance(t.color);
+    let sc = crate::pigment::scatter_for(r, t.hiding);
+    assert!((vine.s[1] - sc).abs() < 1e-6 && (crate::color::luminance(t.color) - 0.0158).abs() < 0.001);
+}

@@ -316,6 +316,13 @@ faster); a pile dries at its tubes' rates mixed by volume. The other
 numbers, and the colors and strengths of the tubes not measured, are
 estimates from the pigment literature.
 
+Vine black (in the boxes that have it) is as dark in oil as a carbon black measures in a
+painting begun with `--@ vine-black` in its head (every new painting): its masstone Y 1.6 %
+(L* 13) instead of the old estimate's 3.5 % (L* 22), its hiding and strength as before. A coat
+of it absorbs some 0.6 of a coat of bone black, as its tinting strength says: weaker, as charcoal
+blacks are, but not under half. A painting begun before it (no such line) replays its vine
+black as painted. Sources: notes/research/black_pigments.md.
+
 ### Thinner
 
 ```lua

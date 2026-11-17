@@ -331,6 +331,19 @@ pub fn palm_gap_um(h: f64, c: f64, p: f64, a: f64, x: f64) -> f64 {
 /// across cells as the line.
 const SUB: usize = 4;
 
+/// Gaps over cells near a burr (`Plate::gaps_of`): a slot of `SUB`² points
+/// for each cell that has one.
+struct Gaps {
+    idx: Vec<u32>,
+    slots: Vec<[f32; SUB * SUB]>,
+}
+
+impl Gaps {
+    fn get(&self, i: usize) -> Option<&[f32; SUB * SUB]> {
+        self.idx.get(i).and_then(|&k| (k != u32::MAX).then(|| &self.slots[k as usize]))
+    }
+}
+
 /// A piece of a burr standing in one cell (`Plate::contact`): its middle (µm
 /// on the plate), its line's way, its half-length (the cell's share of the
 /// line: consecutive cells of a straight line tile it), its height and its
@@ -986,42 +999,57 @@ impl Plate {
         out
     }
 
-    /// Each cell within `reach(piece)` of a piece of burr, at each of its
-    /// `SUB`² points: `each(cell index, point index, distance µm, piece's
-    /// index)`, piece by piece.
-    fn near_fences(&self, fences: &[Fence], reach: &dyn Fn(usize) -> f64, each: &mut dyn FnMut(usize, usize, f64, usize)) {
+    /// Each cell within `reach(piece)` of a piece of burr, the most any piece
+    /// props a contact up to over each of its `SUB`² points, `gap(piece,
+    /// distance)`. Within `fine` µm of a piece every point is measured; past
+    /// it the cell's middle stands for its points (the gap changes little
+    /// across a cell there).
+    fn gaps_of(&self, fences: &[Fence], reach: &dyn Fn(usize) -> f64, gap: &dyn Fn(usize, f64) -> f64, fine: f64) -> Gaps {
         let p = self.pitch;
+        let mut out = Gaps { idx: vec![u32::MAX; self.w * self.h], slots: Vec::new() };
         for (k, f) in fences.iter().enumerate() {
             let r = reach(k) + f.half;
             let (x0, x1) = (((f.x - r) / p).floor().max(0.0) as usize, (((f.x + r) / p).ceil() as usize).min(self.w));
             let (y0, y1) = (((f.y - r) / p).floor().max(0.0) as usize, (((f.y + r) / p).ceil() as usize).min(self.h));
             for y in y0..y1 {
                 for x in x0..x1 {
+                    let i = y * self.w + x;
+                    let mid = f.dist((x as f64 + 0.5) * p, (y as f64 + 0.5) * p);
+                    let mut put = |j: Option<usize>, g: f64| {
+                        if g <= 0.0 {
+                            return;
+                        }
+                        if out.idx[i] == u32::MAX {
+                            out.idx[i] = out.slots.len() as u32;
+                            out.slots.push([0.0; SUB * SUB]);
+                        }
+                        let e = &mut out.slots[out.idx[i] as usize];
+                        match j {
+                            Some(j) => e[j] = e[j].max(g as f32),
+                            None => e.iter_mut().for_each(|v| *v = v.max(g as f32)),
+                        }
+                    };
+                    if mid > fine + p {
+                        put(None, gap(k, mid));
+                        continue;
+                    }
                     for j in 0..SUB * SUB {
                         let (sx, sy) = ((x as f64 + ((j % SUB) as f64 + 0.5) / SUB as f64) * p, (y as f64 + ((j / SUB) as f64 + 0.5) / SUB as f64) * p);
-                        each(y * self.w + x, j, f.dist(sx, sy), k);
+                        put(Some(j), gap(k, f.dist(sx, sy)));
                     }
                 }
             }
         }
+        out
     }
 
     /// The palm's gap over each cell near a burr (`contact`): the skin's
     /// height over the plate at each of its `SUB`² points, the most any piece
     /// of burr props it to (`palm_gap_um`), pressed at `p` Pa.
-    fn palm_gaps(&self, p: f64) -> std::collections::HashMap<usize, [f32; SUB * SUB]> {
+    fn palm_gaps(&self, p: f64) -> Gaps {
         let fences = self.fences();
         let spans: Vec<f64> = fences.iter().map(|f| palm_span_um(f.h, f.c, p)).collect();
-        let mut out: std::collections::HashMap<usize, [f32; SUB * SUB]> = std::collections::HashMap::new();
-        self.near_fences(&fences, &|k| spans[k], &mut |i, j, d, k| {
-            let f = &fences[k];
-            let g = palm_gap_um(f.h, f.c, p, spans[k], d) as f32;
-            if g > 0.0 {
-                let e = out.entry(i).or_insert([0.0; SUB * SUB]);
-                e[j] = e[j].max(g);
-            }
-        });
-        out
+        self.gaps_of(&fences, &|k| spans[k], &|k, d| palm_gap_um(fences[k].h, fences[k].c, p, spans[k], d), f64::INFINITY)
     }
 
     /// The tarlatan's gap over each cell near a burr under the contact laws
@@ -1029,20 +1057,13 @@ impl Plate {
     /// each of its `SUB`² points, the most any piece of burr props it to,
     /// pressed at `p` Pa with bending rigidity `b`. It is a static drape, the
     /// same whichever way the pad moves: the cloth slides over the burr as
-    /// it slides over the flat.
-    fn cloth_gaps(&self, p: f64, b: f64) -> std::collections::HashMap<usize, [f32; SUB * SUB]> {
+    /// it slides over the flat. Its points are measured within 0.3 mm of the
+    /// burr, where it bends most; past that its span (1–2 mm) is many cells
+    /// wide and a cell's middle stands for it.
+    fn cloth_gaps(&self, p: f64, b: f64) -> Gaps {
         let fences = self.fences();
         let spans: Vec<f64> = fences.iter().map(|f| cloth_span_um(f.h, p, b)).collect();
-        let mut out: std::collections::HashMap<usize, [f32; SUB * SUB]> = std::collections::HashMap::new();
-        self.near_fences(&fences, &|k| fences[k].c + spans[k], &mut |i, j, d, k| {
-            let f = &fences[k];
-            let g = cloth_gap_um(f.h, p, b, spans[k], d - f.c) as f32;
-            if g > 0.0 {
-                let e = out.entry(i).or_insert([0.0; SUB * SUB]);
-                e[j] = e[j].max(g);
-            }
-        });
-        out
+        self.gaps_of(&fences, &|k| fences[k].c + spans[k], &|k, d| cloth_gap_um(fences[k].h, p, b, spans[k], d - fences[k].c), 300.0)
     }
 
     /// The film (µm over cell `c`) out of any wipe's reach: the polish's
@@ -1055,7 +1076,7 @@ impl Plate {
     /// the skin up by g (`palm_gaps`), it reaches only the ink standing above
     /// g on the flat, and g less far into the openings, point by point.
     #[allow(clippy::type_complexity)]
-    fn reach_sweep_gap(&self, cells: &[(usize, usize, f32)], ct: &Contact, rims: &[Option<Vec<f32>>], frac: &dyn Fn(usize, usize, f32, &InkCell) -> f64, gaps: &std::collections::HashMap<usize, [f32; SUB * SUB]>) -> Vec<(usize, usize, f64, [f64; BINS])> {
+    fn reach_sweep_gap(&self, cells: &[(usize, usize, f32)], ct: &Contact, rims: &[Option<Vec<f32>>], frac: &dyn Fn(usize, usize, f32, &InkCell) -> f64, gaps: &Gaps) -> Vec<(usize, usize, f64, [f64; BINS])> {
         let mut out = Vec::new();
         for &(x, y, m) in cells {
             let ic = self.ink_cell(x, y);
@@ -1070,7 +1091,7 @@ impl Plate {
             let c = self.cell(x, y);
             let hold = self.polish_hold(&c);
             let rim = |k: usize| rims[k].as_ref().and_then(|r| (c.open[k] >= 0.5).then_some(r[i]));
-            let (flat, bins) = match gaps.get(&i) {
+            let (flat, bins) = match gaps.get(i) {
                 None => ((ic.film as f64 - hold).max(0.0) * fr, std::array::from_fn(|k| Self::within_reach(&c, k, ic.line[k], rim(k), &*ct.reach) * fr)),
                 Some(g) => {
                     let n = (SUB * SUB) as f64;
@@ -1304,7 +1325,7 @@ impl Plate {
                 let wts: Vec<(usize, usize, f64)> = match &cloth_gaps {
                     Some(g) => cells.iter().map(|&(x, y, m)| {
                         let i = y * self.w + x;
-                        let touch = g.get(&i).map_or(1.0, |g| {
+                        let touch = g.get(i).map_or(1.0, |g| {
                             let f = self.ink_cell(x, y).film;
                             g.iter().filter(|&&g| g <= f).count() as f64 / (SUB * SUB) as f64
                         });

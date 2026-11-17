@@ -1550,36 +1550,53 @@ impl Plate {
 
     /// How far (µm) the centreline of the line through cell (x, y), of
     /// direction `dir` (way `t`), lies from the cell's middle across it (along
-    /// (−t.1, t.0)): the centroid of the groove's volume in the cells of the
-    /// same line within a cell along it and three across. The groove is laid
-    /// across its width at a quarter of a cell (`Plate::deposit`), so its
-    /// centroid finds the line to a few µm; a piece of burr placed at its
-    /// cell's middle instead followed a staircase of ±p/2 along a slanting
-    /// line, and so did the film beside it.
+    /// n = (−t.1, t.0)): the line's own groove is found nearest the cell
+    /// across it (a burr thrown by a leaning needle stands up to a few cells
+    /// off its groove), and the centreline is the centroid of the groove's
+    /// volume in the cells of that line within one cell along and three and
+    /// a half across of that (wide enough for the whole of a 4 N groove from
+    /// its edge). The groove is laid across its width at a quarter of a cell
+    /// (`Plate::deposit`), so its centroid finds the line to within that. A
+    /// piece of burr placed at its cell's middle instead followed a staircase
+    /// of ±p/2 along a slanting line, and so did the film beside it.
     fn centreline(&self, x: usize, y: usize, dir: u8, t: (f64, f64)) -> f64 {
         let p = self.pitch;
-        let (mut sv, mut so) = (0.0f64, 0.0f64);
-        for dy in -3i64..=3 {
-            for dx in -3i64..=3 {
-                let (xx, yy) = (x as i64 + dx, y as i64 + dy);
-                if xx < 0 || yy < 0 || xx >= self.w as i64 || yy >= self.h as i64 {
-                    continue;
+        let n = (-t.1, t.0);
+        let same = |xx: i64, yy: i64| -> Option<f64> {
+            if xx < 0 || yy < 0 || xx >= self.w as i64 || yy >= self.h as i64 {
+                return None;
+            }
+            let o = self.cell(xx as usize, yy as usize);
+            let turn = (o.dir as i64 - dir as i64).rem_euclid(180);
+            (o.dir != 255 && turn.min(180 - turn) <= 3 && o.groove_vol() > 0.0).then_some(o.groove_vol() as f64)
+        };
+        // the line's groove nearest across: a step of a cell along n at a time, either way
+        let mut at = None;
+        'find: for j in 0..=8i64 {
+            for sgn in [1i64, -1] {
+                let (ox, oy) = ((j * sgn) as f64 * n.0, (j * sgn) as f64 * n.1);
+                let (gx, gy) = (x as i64 + ox.round() as i64, y as i64 + oy.round() as i64);
+                if same(gx, gy).is_some() {
+                    at = Some((gx, gy));
+                    break 'find;
                 }
-                let (ox, oy) = (dx as f64 * p, dy as f64 * p);
-                if (ox * t.0 + oy * t.1).abs() > p {
-                    continue;
-                }
-                let o = self.cell(xx as usize, yy as usize);
-                let turn = (o.dir as i64 - dir as i64).rem_euclid(180);
-                if o.dir == 255 || turn.min(180 - turn) > 3 {
-                    continue;
-                }
-                let v = o.groove_vol() as f64;
-                sv += v;
-                so += v * (oy * t.0 - ox * t.1);
             }
         }
-        if sv > 0.0 { (so / sv).clamp(-3.0 * p, 3.0 * p) } else { 0.0 }
+        let Some((gx, gy)) = at else { return 0.0 };
+        let (mut sv, mut so) = (0.0f64, 0.0f64);
+        for dy in -4i64..=4 {
+            for dx in -4i64..=4 {
+                let (ox, oy) = (dx as f64, dy as f64);
+                if (ox * t.0 + oy * t.1).abs() > 1.0 || (ox * n.0 + oy * n.1).abs() > 3.5 {
+                    continue;
+                }
+                if let Some(v) = same(gx + dx, gy + dy) {
+                    sv += v;
+                    so += v * (((gx + dx - x as i64) as f64 * n.0 + (gy + dy - y as i64) as f64 * n.1) * p);
+                }
+            }
+        }
+        if sv > 0.0 { so / sv } else { 0.0 }
     }
 
     /// Each cell within `reach(piece)` of a piece of burr, with what the

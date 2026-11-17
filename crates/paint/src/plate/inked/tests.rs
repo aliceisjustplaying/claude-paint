@@ -833,7 +833,10 @@ fn a_burr_is_as_tall_wherever_its_line_lies_in_its_cells() {
 /// The lee along a slanting line (`Plate::fences`, `Plate::centreline`): a
 /// piece of burr sits on its line's centreline, not at its cell's middle, so
 /// a cell's film beside a line at 1.4° or 5.7° depends on its distance from
-/// the line, not on where the line crosses its row. At the easel's 42 µm
+/// the line, not on where the line crosses its row. The needle is held as the
+/// easel holds it by default, pulled at 55°, which throws burr up to four
+/// cells off the groove: those pieces too belong on the centreline (placed at
+/// their cells' middles they printed a dash of velvet by each row step). At the easel's 42 µm
 /// cells, wiped twice along the line, the cells in each 20 µm band from 0.1
 /// to 0.4 mm off (past the yarn's shade, whose steep edge a band 20 µm wide
 /// can't hold even) vary along it by no more than the open plate's creases
@@ -845,12 +848,24 @@ fn the_lee_is_even_along_a_slanting_line() {
         p.contact = true;
         let a = deg.to_radians();
         let (c, s) = (a.cos() as f32, a.sin() as f32);
-        let pts = vec![Point { x: 5.0 - 4.5 * c, y: 5.0 - 4.5 * s, force: 2.0, alt: 90.0, az: 0.0, speed: 25.0 }, Point { x: 5.0 + 4.5 * c, y: 5.0 + 4.5 * s, force: 2.0, alt: 90.0, az: 0.0, speed: 25.0 }];
+        let az = deg as f32;
+        let pts = vec![Point { x: 5.0 - 4.5 * c, y: 5.0 - 4.5 * s, force: 2.0, alt: 55.0, az, speed: 25.0 }, Point { x: 5.0 + 4.5 * c, y: 5.0 + 4.5 * s, force: 2.0, alt: 55.0, az, speed: 25.0 }];
         p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
+        let pitch = 10.0 / 240.0;
+        // every piece of burr lies on the line's centreline (away from its ends, where the
+        // groove tapers)
+        for f in p.fences() {
+            let (fx, fy) = (f.x * 1e-3 - 5.0, f.y * 1e-3 - 5.0);
+            if (fx * a.cos() + fy * a.sin()).abs() > 4.0 {
+                continue;
+            }
+            let across = (fy * a.cos() - fx * a.sin()).abs();
+            // (to the quarter cell the groove is laid at)
+            assert!(across < 0.25 * pitch, "{deg}°: a piece of burr {across} mm off the line at ({}, {}) mm", f.x * 1e-3, f.y * 1e-3);
+        }
         p.ink(&black(), InkTool::of(Inker::Card), &[pt(-25.0, 5.0, 10.0), pt(35.0, 5.0, 10.0)], 0.0).unwrap();
         let mut t = Rag::tarlatan(40.0, 3, 0.7);
         p.wipe(&mut t, &[pt(5.0 - 50.0 * c, 5.0 - 50.0 * s, 0.5), pt(5.0 + 50.0 * c, 5.0 + 50.0 * s, 0.5)], 2, 1.0);
-        let pitch = 10.0 / 240.0;
         let band = |d0: f64, d1: f64| {
             let mut v = Vec::new();
             for y in 0..240 {
@@ -1065,4 +1080,5 @@ fn a_gap_under_the_cloth_keeps_its_film() {
     }
     assert!(least > 0.7 * open && least > 1.4 * POLISH_HOLD_UM, "the thinnest film by the crossing {least} µm, the open plate {open}");
 }
+
 

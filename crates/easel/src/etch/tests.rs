@@ -179,8 +179,9 @@ fn an_etched_plate_survives_replay_save_checkpoint_and_handoff() {
 }
 
 /// Without the switch nothing changes: a drypoint plate made with and without it is the same
-/// bytes (a plate no etching tool touched is PLAT version 1) and so is every surface; the logs
-/// differ by the switch's line alone; a log without it refuses the etching tools.
+/// bytes (a plate no etching tool touched keeps version 1's layout, inside version 4's contact
+/// word when the painting has the contact laws) and so is every surface; the logs differ by
+/// the switch's line alone; a log without it refuses the etching tools.
 #[test]
 fn without_the_switch_byte_identical() {
     let mut on = live();
@@ -199,7 +200,10 @@ fn without_the_switch_byte_identical() {
     };
     assert!(state(&on) == state(&off), "every surface as before");
     let p = plates(&on);
-    assert_eq!(u64::from_le_bytes(p[0].1[4..12].try_into().unwrap()), 1, "a drypoint plate is version 1");
+    let word = |at: usize| u64::from_le_bytes(p[0].1[at..at + 8].try_into().unwrap());
+    // a plate under the contact laws writes version 4, its laws, then the layout it would have
+    let layout = if word(4) == paint::plate::PLAT_V { word(20) } else { word(4) };
+    assert_eq!(layout, 1, "a drypoint plate no etching tool touched is laid out as version 1");
     let (lon, loff) = (on.program("x"), off.program("x"));
     assert!(lon.contains(ETCH_MARK) && !loff.contains(ETCH_MARK));
     assert_eq!(lon.replace(&format!("{ETCH_MARK}\n"), ""), loff);

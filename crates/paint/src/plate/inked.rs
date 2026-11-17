@@ -223,6 +223,47 @@ pub fn lee_um(h: f64, p: f64, b: f64) -> f64 {
     (b * h * 1e-6 / p).powf(0.25) * 1e6
 }
 
+/// The tarlatan's span past a burr under the contact laws (`Plate::contact`;
+/// IP §5.6): the starched cloth, a plate of bending rigidity `b` N·m pressed
+/// at `p` Pa onto the flat, is propped `h` µm up by the burr's top and lies
+/// off the plate for L = (72·B·h/p)^¼ either side of it [D: a beam under a
+/// uniform load lifted by a line support between two smooth touchdowns,
+/// w(s) = p·s³(4L − 3s)/(72B) at s from the touchdown (zero gap, slope and
+/// moment there, level over the support); `lee_um`'s (B·h/p)^¼ is its scale
+/// without the factor 72^¼ ≈ 2.9].
+pub fn cloth_span_um(h: f64, p: f64, b: f64) -> f64 {
+    (72.0 * b * h.max(0.0) * 1e-6 / p.max(1e-9)).powf(0.25) * 1e6
+}
+
+/// The cloth's height (µm) over the plate `s` µm past the edge of the burr's
+/// top (`cloth_span_um`'s L): p·(L − s)³·(L + 3s)/(72B), `h` at s = 0, none
+/// past L.
+pub fn cloth_gap_um(h: f64, p: f64, b: f64, l: f64, s: f64) -> f64 {
+    if s <= 0.0 {
+        return h;
+    }
+    if s >= l {
+        return 0.0;
+    }
+    let (l, s) = (l * 1e-6, s * 1e-6);
+    (p * (l - s).powi(3) * (l + 3.0 * s) / (72.0 * b) * 1e6).clamp(0.0, h)
+}
+
+/// The plate's polish under the contact laws (IP §5.4, "Plate tone"): a
+/// copper plate sold "mirror polished" yields little or no tone and one of
+/// mill finish a significant tone [P, Tuckamore Press], because the ink in
+/// its finest scratches is out of a wipe's reach: a cotton fibre (12–20 µm)
+/// or the palm's skin, pressed at kPa, bridges a scratch a µm or two across
+/// (skin bulges p(1 − ν²)w/E ≈ 0.03 µm into one 1 µm wide at 10 kPa, `palm_dip_um`).
+/// Its roughness, Ra 0.1 µm [E: between a mirror polish's 0.05 µm and a
+/// cold-rolled mill finish's 0.2–1 µm (general finishing data; no measurement
+/// of a printmaker's plate was found)]. A wipe resting on the summits leaves
+/// at least the void below the surface's mean plane, σ/√(2π) for Gaussian
+/// heights, σ = Ra·√(π/2): Ra/2 [D; the mean plane is the low bound: at
+/// these pressures the contacts stand on the summits above it].
+pub const POLISH_RA_UM: f64 = 0.1;
+pub const POLISH_HOLD_UM: f64 = 0.5 * POLISH_RA_UM;
+
 /// How far (µm) skin pressed at `p` Pa bulges into an opening `w` µm wide,
 /// `x` µm in from its rim: a pressurised slit in an elastic half-space,
 /// 2p(1 − ν²)/E·√(x(w − x)), p·w(1 − ν²)/E at the middle [D, Sneddon's
@@ -965,40 +1006,6 @@ impl Plate {
         }
     }
 
-    /// `shields` under the contact laws (`contact`): each piece of burr is
-    /// held to its own length along the line (`Fence`), so a slanting line's
-    /// lee is as continuous as a straight one's, and a cell is in the lee by
-    /// the share of its points within `lee(h)` of the burr.
-    fn shields_tiled(&self, v: (f64, f64), lee: &dyn Fn(f64) -> f64) -> Option<(Vec<f32>, Vec<f32>)> {
-        let fences = self.fences();
-        if fences.is_empty() {
-            return None;
-        }
-        let n = self.w * self.h;
-        let mut flat = vec![0.0f32; n];
-        // (per cell: the piece last counted and how many of its points it holds)
-        let mut held: Vec<(u32, u8)> = vec![(u32::MAX, 0); n];
-        let lees: Vec<f64> = fences.iter().map(|f| lee(f.h)).collect();
-        self.near_fences(&fences, &|k| lees[k], &mut |i, _, d, k| {
-            let f = &fences[k];
-            let t = if f.ring { (-v.1, v.0) } else { f.t };
-            let sinp = (t.0 * v.1 - t.1 * v.0).abs();
-            if sinp <= 1e-9 || d > lees[k] {
-                return;
-            }
-            let id = k as u32;
-            let e = &mut held[i];
-            if e.0 != id {
-                *e = (id, 0);
-            }
-            e.1 += 1;
-            let s = (sinp * e.1 as f64 / (SUB * SUB) as f64) as f32;
-            flat[i] = flat[i].max(s);
-        });
-        let open = flat.clone();
-        Some((flat, open))
-    }
-
     /// The palm's gap over each cell near a burr (`contact`): the skin's
     /// height over the plate at each of its `SUB`² points, the most any piece
     /// of burr props it to (`palm_gap_um`), pressed at `p` Pa.
@@ -1015,6 +1022,33 @@ impl Plate {
             }
         });
         out
+    }
+
+    /// The tarlatan's gap over each cell near a burr under the contact laws
+    /// (`cloth_span_um`, `cloth_gap_um`): the cloth's height over the plate at
+    /// each of its `SUB`² points, the most any piece of burr props it to,
+    /// pressed at `p` Pa with bending rigidity `b`. It is a static drape, the
+    /// same whichever way the pad moves: the cloth slides over the burr as
+    /// it slides over the flat.
+    fn cloth_gaps(&self, p: f64, b: f64) -> std::collections::HashMap<usize, [f32; SUB * SUB]> {
+        let fences = self.fences();
+        let spans: Vec<f64> = fences.iter().map(|f| cloth_span_um(f.h, p, b)).collect();
+        let mut out: std::collections::HashMap<usize, [f32; SUB * SUB]> = std::collections::HashMap::new();
+        self.near_fences(&fences, &|k| fences[k].c + spans[k], &mut |i, j, d, k| {
+            let f = &fences[k];
+            let g = cloth_gap_um(f.h, p, b, spans[k], d - f.c) as f32;
+            if g > 0.0 {
+                let e = out.entry(i).or_insert([0.0; SUB * SUB]);
+                e[j] = e[j].max(g);
+            }
+        });
+        out
+    }
+
+    /// The film (µm over cell `c`) out of any wipe's reach: the polish's
+    /// hold over its flat, under the contact laws (`POLISH_HOLD_UM`).
+    fn polish_hold(&self, c: &Cell) -> f64 {
+        if self.contact { POLISH_HOLD_UM * (1.0 - c.open_share().min(1.0)) as f64 } else { 0.0 }
     }
 
     /// `reach_sweep` for the palm under the contact laws: where a burr props
@@ -1034,12 +1068,13 @@ impl Plate {
             }
             let i = y * self.w + x;
             let c = self.cell(x, y);
+            let hold = self.polish_hold(&c);
             let rim = |k: usize| rims[k].as_ref().and_then(|r| (c.open[k] >= 0.5).then_some(r[i]));
             let (flat, bins) = match gaps.get(&i) {
-                None => (ic.film as f64 * fr, std::array::from_fn(|k| Self::within_reach(&c, k, ic.line[k], rim(k), &*ct.reach) * fr)),
+                None => ((ic.film as f64 - hold).max(0.0) * fr, std::array::from_fn(|k| Self::within_reach(&c, k, ic.line[k], rim(k), &*ct.reach) * fr)),
                 Some(g) => {
                     let n = (SUB * SUB) as f64;
-                    let flat = g.iter().map(|&g| (ic.film as f64 - g as f64).max(0.0)).sum::<f64>() / n * fr;
+                    let flat = g.iter().map(|&g| (ic.film as f64 - (g as f64).max(hold)).max(0.0)).sum::<f64>() / n * fr;
                     let bins: [f64; BINS] = std::array::from_fn(|k| {
                         if c.open[k] <= 0.0 || ic.line[k] <= 0.0 {
                             return 0.0;
@@ -1082,7 +1117,8 @@ impl Plate {
     /// each bin).
     #[allow(clippy::type_complexity)]
     fn reach_sweep(&self, cells: &[(usize, usize, f32)], v: (f64, f64), ct: &Contact, rims: &[Option<Vec<f32>>], frac: &dyn Fn(usize, usize, f32, &InkCell) -> f64) -> Vec<(usize, usize, f64, [f64; BINS])> {
-        let shield = if self.contact { self.shields_tiled(v, &*ct.lee) } else { self.shields(v, &*ct.lee) };
+        // (the contact laws don't come here: their cloth and palm are held off by gaps, `reach_sweep_gap`)
+        let shield = self.shields(v, &*ct.lee);
         let mut out = Vec::new();
         for &(x, y, m) in cells {
             let ic = self.ink_cell(x, y);
@@ -1096,7 +1132,7 @@ impl Plate {
             let i = y * self.w + x;
             let (sf, so) = shield.as_ref().map_or((0.0, 0.0), |(f, o)| (f[i] as f64, o[i] as f64));
             let c = self.cell(x, y);
-            let flat = ic.film as f64 * fr * (1.0 - sf);
+            let flat = (ic.film as f64 - self.polish_hold(&c)).max(0.0) * fr * (1.0 - sf);
             let mut bins = [0.0f64; BINS];
             for k in 0..BINS {
                 let rim = rims[k].as_ref().and_then(|r| (c.open[k] >= 0.5).then_some(r[i]));
@@ -1170,7 +1206,10 @@ impl Plate {
     /// Each pass is a sweep of the pad over the area each way the pattern
     /// moves. At each cell, the cloth takes by the rag's lift law (its face's
     /// thirst, its creases' contact, the ink's fluidity) what it reaches:
-    /// - the film on the flat, but in a burr's lee (`shields`, `lee_um`);
+    /// - the film on the flat, but in a burr's lee (`shields`, `lee_um`;
+    ///   under the contact laws, `contact`, only the ink standing above the
+    ///   cloth's drape over the burr, `cloth_gaps`, whichever way it moves,
+    ///   and never below the polish's hold, `POLISH_HOLD_UM`);
     /// - the ink in each opening above the level it reaches: the yarn's dip
     ///   (`yarn_dip_um`) and the cloth's sag across the opening (`sag_um`,
     ///   at the cell's distance from the rim of a wide one).
@@ -1210,6 +1249,8 @@ impl Plate {
         let tracks: Vec<Vec<(i64, f64, usize)>> = ways.iter().map(|&v| tracks(&cells, v)).collect();
         let fade_um = -((1.0 - crate::rag::SMEAR as f64) * (1.0 - crate::rag::SOAK as f64)).ln() / (pad_um / 4.0);
         let mut at = vec![u32::MAX; self.w * self.h];
+        // (the contact laws: the cloth's drape over a burr, the same whichever way it moves)
+        let cloth_gaps = self.contact.then(|| self.cloth_gaps(p, b));
         // the ink the face comes to the plate with: its pool from before
         let (pool0_um3, pool0_mix) = (cloth.pool_um3, cloth.pool_mix);
         for pass in 0..passes {
@@ -1225,7 +1266,10 @@ impl Plate {
                     let fl = crate::drying::fluid(ic.cure) as f64;
                     (1.0 - (-rate * fl).exp()) * c * m as f64
                 };
-                let asks = self.reach_sweep(&cells, v, &ct, &rims, &frac);
+                let asks = match &cloth_gaps {
+                    Some(g) => self.reach_sweep_gap(&cells, &ct, &rims, &frac, g),
+                    None => self.reach_sweep(&cells, v, &ct, &rims, &frac),
+                };
                 let want: f64 = asks.iter().map(|a| a.2 + a.3.iter().sum::<f64>()).sum::<f64>() * unit;
                 let room = (1.0 - rag.load as f64).max(0.0) * cap;
                 let scale = if want > room && want > 0.0 { room / want } else { 1.0 };
@@ -1255,12 +1299,25 @@ impl Plate {
                     cl.pool_um3 = t;
                 }
                 let lay_shares: [f32; INKS] = if lay_um3 > 0.0 { std::array::from_fn(|i| (lay_mix[i] / lay_um3) as f32) } else { [0.0; INKS] };
-                // laid where the cloth touched, out of the lee
-                let shield = if self.contact { self.shields_tiled(v, &*ct.lee) } else { self.shields(v, &*ct.lee) };
-                let wts: Vec<(usize, usize, f64)> = cells.iter().map(|&(x, y, m)| {
-                    let sf = shield.as_ref().map_or(0.0, |(f, _)| f[y * self.w + x] as f64);
-                    (x, y, m as f64 * (1.0 - sf))
-                }).collect();
+                // laid where the cloth touched, out of the lee (under the contact
+                // laws: at the points where its drape comes down to the film)
+                let wts: Vec<(usize, usize, f64)> = match &cloth_gaps {
+                    Some(g) => cells.iter().map(|&(x, y, m)| {
+                        let i = y * self.w + x;
+                        let touch = g.get(&i).map_or(1.0, |g| {
+                            let f = self.ink_cell(x, y).film;
+                            g.iter().filter(|&&g| g <= f).count() as f64 / (SUB * SUB) as f64
+                        });
+                        (x, y, m as f64 * touch)
+                    }).collect(),
+                    None => {
+                        let shield = self.shields(v, &*ct.lee);
+                        cells.iter().map(|&(x, y, m)| {
+                            let sf = shield.as_ref().map_or(0.0, |(f, _)| f[y * self.w + x] as f64);
+                            (x, y, m as f64 * (1.0 - sf))
+                        }).collect()
+                    }
+                };
                 // what it lays at a cell is what its face carries there: a
                 // point of the face slides along its track, so the pool it
                 // lays from is the ink it took along the track, fading by

@@ -510,11 +510,40 @@ fn the_palm_leaves_a_narrow_smooth_tone_by_a_burr() {
     assert_eq!(a.ink_um3(), b.ink_um3(), "the skin's gap is the same whichever way the palm moves");
 }
 
-/// The cloth under the contact laws (`shields_tiled`): across a slanting
-/// burred line its lee is as even along the line as across a straight one,
-/// and wiping along the line still takes it (IP §1.5).
+/// The tarlatan's drape over a burr (`cloth_span_um`, `cloth_gap_um`): a
+/// beam of rigidity B under a uniform load p lifted h by a line support
+/// touches down smoothly at L = (72Bh/p)^¼, its gap p·s³(4L − 3s)/(72B) from
+/// the touchdown: h over the support, level there, and zero with zero slope
+/// and moment at L.
 #[test]
-fn the_cloths_lee_is_even_along_a_slanting_line() {
+fn the_cloths_drape_over_a_burr_is_a_lifted_beam() {
+    let (h, p, b) = (40.0, 1e4, 5e-5);
+    let l = cloth_span_um(h, p, b);
+    assert!((l - 1e6 * (72.0 * b * h * 1e-6 / p).powf(0.25)).abs() < 1e-6);
+    assert!((l / lee_um(h, p, b) - 72f64.powf(0.25)).abs() < 1e-9, "the scale (Bh/p)^¼ times 72^¼");
+    let g = |x: f64| cloth_gap_um(h, p, b, l, x);
+    assert!((g(1e-9) - h).abs() < 1e-3 * h && g(l) == 0.0);
+    // level over the support, flat at the touchdown, and its curvature gone there too
+    let e = 1e-3 * l;
+    assert!((g(e) - h).abs() / e < 1e-2 * h / l);
+    assert!(g(l - e) / e < 1e-4 * h / l);
+    let curv = |x: f64| (g(x + e) - 2.0 * g(x) + g(x - e)) / (e * e);
+    assert!(curv(l - 2.0 * e).abs() < 0.05 * curv(0.5 * l).abs());
+    // falling all the way
+    let mut last = h;
+    for k in 1..20 {
+        let v = g(k as f64 * l / 20.0);
+        assert!(v < last);
+        last = v;
+    }
+}
+
+/// The cloth under the contact laws: across a slanting burred line its lee is
+/// as even along the line as across a straight one, and it is the same
+/// whichever way the pad moves (a drape is static: the cloth slides over the
+/// burr as over the flat), wider than the bare scale (B·h/p)^¼.
+#[test]
+fn the_cloths_lee_is_even_and_the_same_whichever_way_it_wipes() {
     let make = |deg: f64| {
         let mut p = square(20.0, 100.0);
         p.contact = true;
@@ -525,25 +554,60 @@ fn the_cloths_lee_is_even_along_a_slanting_line() {
         p.ink(&black(), None, Inker::Card, 0.0).unwrap();
         p
     };
-    // the lee's share of each cell near the line, wiping square across it
-    for deg in [0.0f64, 30.0, 45.0] {
-        let p = make(deg);
+    let band = |p: &Plate, deg: f64, d0: f64, d1: f64| {
         let a = deg.to_radians();
-        let v = (-a.sin(), a.cos());
-        let b = Tarlatan::new(0.7).bend_nm;
-        let (sh, _) = p.shields_tiled(v, &|h| lee_um(h, 0.5 * PAD_PA, b)).unwrap();
-        // cells 0.1–0.3 mm from the line, away from its ends: all in the lee
         let mut v = Vec::new();
         for y in 0..200 {
             for x in 0..200 {
                 let (dx, dy) = ((x as f64 + 0.5) * 0.1 - 10.0, (y as f64 + 0.5) * 0.1 - 10.0);
                 let (along, across) = (dx * a.cos() + dy * a.sin(), (dy * a.cos() - dx * a.sin()).abs());
-                if along.abs() < 5.0 && (0.15..0.3).contains(&across) {
-                    v.push(sh[y * 200 + x] as f64);
+                if along.abs() < 5.0 && (d0..d1).contains(&across) {
+                    v.push(p.ink_cell(x, y).film as f64);
                 }
             }
         }
-        let min = v.iter().cloned().fold(f64::MAX, f64::min);
-        assert!(min > 0.99, "{deg}°: every cell beside the line is in the lee (least {min})");
+        v
+    };
+    for deg in [0.0f64, 30.0, 45.0] {
+        let wiped = |way: f64| {
+            let mut p = make(deg);
+            let mut t = Rag::tarlatan(60.0, 3, 0.7);
+            p.wipe(&mut t, None, 0.5, 2, Pattern::Along(way as f32), 1.0);
+            p
+        };
+        let (along, across) = (wiped(deg), wiped(deg + 90.0));
+        let far = mean_cv(&band(&across, deg, 4.0, 5.0)).0;
+        for k in 2..8 {
+            let (d0, d1) = (0.1 * k as f64, 0.1 * (k + 1) as f64);
+            let (m, cv) = mean_cv(&band(&across, deg, d0, d1));
+            let (ma, _) = mean_cv(&band(&along, deg, d0, d1));
+            assert!(m > 5.0 * far, "{deg}°, {d0} mm: {m} µm kept beside the burr against {far} on the open plate");
+            assert!(cv < 0.15, "{deg}°, {d0}–{d1} mm: even along the line ({cv})");
+            assert!((ma - m).abs() < 0.05 * m, "{deg}°, {d0} mm: wiped along {ma}, across {m}");
+        }
     }
+}
+
+/// The plate's polish (`POLISH_HOLD_UM`): under the contact laws no wipe
+/// takes the film below the void of the plate's roughness, Ra/2 over the
+/// flat, however long the tarlatan and the palm work; without them the palm
+/// takes it to nothing.
+#[test]
+fn the_polish_keeps_a_film_no_wipe_reaches() {
+    let wiped = |contact: bool| {
+        let mut p = square(10.0, 100.0);
+        p.contact = contact;
+        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        let mut t = Rag::tarlatan(40.0, 3, 0.7);
+        for _ in 0..4 {
+            p.wipe(&mut t, None, 0.5, 2, Pattern::Circles, 1.0);
+            t.refold(&mut crate::tally::Tally::default());
+        }
+        p.hand_wipe(None, 1.0, 3, true, Pattern::Circles, 2.0);
+        p.ink_um3().1 / (10_000.0 * 10_000.0)
+    };
+    let (old, new) = (wiped(false), wiped(true));
+    assert!((new - POLISH_HOLD_UM).abs() < 1e-3 * POLISH_HOLD_UM, "under the laws the film comes to the polish's hold: {new} µm");
+    assert!(old < 1e-3 * POLISH_HOLD_UM, "without them the palm takes it all: {old} µm");
+    assert!((POLISH_HOLD_UM - POLISH_RA_UM / 2.0).abs() < 1e-12);
 }

@@ -272,8 +272,16 @@ impl UserData for OutlineU {
             Ok(wrap(o.o.band(frame(&o.st)?, w, taper.unwrap_or(0.0).clamp(0.0, 1.0))))
         });
         // o:inset(d, amount?) / o:offset(d, amount?): a parallel outline
-        m.add_method("inset", |_, o, (d, k): (f32, Option<f32>)| Ok(OutlineU { o: Rc::new(o.o.offset(-d, k.unwrap_or(0.4))), st: o.st.clone() }));
-        m.add_method("offset", |_, o, (d, k): (f32, Option<f32>)| Ok(OutlineU { o: Rc::new(o.o.offset(d, k.unwrap_or(0.4))), st: o.st.clone() }));
+        // (parallel curves the easel computes from the drawn line: refused with the
+        // gestures-only switch)
+        m.add_method("inset", |_, o, (d, k): (f32, Option<f32>)| {
+            gestures_only(&o.st, "outline:inset")?;
+            Ok(OutlineU { o: Rc::new(o.o.offset(-d, k.unwrap_or(0.4))), st: o.st.clone() })
+        });
+        m.add_method("offset", |_, o, (d, k): (f32, Option<f32>)| {
+            gestures_only(&o.st, "outline:offset")?;
+            Ok(OutlineU { o: Rc::new(o.o.offset(d, k.unwrap_or(0.4))), st: o.st.clone() })
+        });
         // o:path(i?): the drawn line as {{x, y}, ...} (a closed one doesn't repeat its first point)
         m.add_method("path", |lua, o, i: Option<usize>| {
             let l = o.o.lines.get(i.unwrap_or(1).saturating_sub(1)).ok_or_else(|| mlua::Error::runtime(format!("path: this outline has {} line(s)", o.o.lines.len())))?;

@@ -489,6 +489,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         Ok(FormU { src: Arc::new(form), parts })
     })?)?;
 
-    g.set("aerial", lua.create_function(|_, (d, vis): (f32, f32)| Ok(aerial(d, vis)))?)?;
+    // (a color shift the easel computes from a distance: refused with the
+    // gestures-only switch)
+    g.set("aerial", lua.create_function(|lua, (d, vis): (f32, f32)| {
+        crate::api::gestures_only_lua(lua, "aerial")?;
+        Ok(aerial(d, vis))
+    })?)?;
     Ok(())
 }

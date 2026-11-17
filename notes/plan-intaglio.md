@@ -26,7 +26,6 @@ What is reused:
 | ink on paper: pigment in oil, its optics, its drying | the oil film, `pigment.rs`, `drying.rs` | crates/paint/src |
 | a fabric's height field for soft-ground textures | the linen weave | `canvas{linen=}` |
 | a sheet laid over a picture, catching what lands on it | `lay_sheet` | sheet.rs |
-| a mask from a drawing | `drawing_guide()` | graphite.rs |
 | hand time | `tally::pace`, `time::verb` | crates/paint/src/tally.rs, crates/easel/src/time.rs |
 
 **What is new:**
@@ -129,6 +128,8 @@ k = plate{name="key", metal="copper", temper="half-hard", size={346, 211}, thick
 
 ## 3. Tools on the plate (phase P2; acid tools are §4)
 
+Every tool on a plate (needle, burnisher, roller, brush, card, dabber, tarlatan, palm, muslin) takes the points the hand moves it along, in plate units, and acts only where it touches. None takes a mask, a field or a function: the painter moves the tool, the engine works out what it touched.
+
 ### 3.1 Drypoint needle
 ```lua
 n = needle{tip=25, cone=30}          -- tip radius µm, half-angle of the cone, degrees
@@ -147,8 +148,8 @@ k:drypoint(n, pts, {force=2, alt=55, azimuth=110, tilt=0, speed=30})
 
 ### 3.2 Burnisher, scraper, roulette (IP §1.7)
 ```lua
-k:burnish(pts or mask, {force=30, radius=10, passes=3})
-k:scrape(pts or mask, {force=5, width=8})
+k:burnish(pts, {force=30, radius=10, passes=3})   -- the burnisher moved along the points
+k:scrape(pts, {force=5, width=8})
 k:roulette(pts, {pitch=0.2, tooth=30, force=3})     -- mm between teeth, tooth tip radius µm
 ```
 - **Burnisher.** Where the Hertzian contact of a burnisher of radius `radius` under `force` exceeds the metal's hardness, the plate flows. Each pass the highs (burr, then aquatint dots, then the rims of lines) come down toward the local mean, and shallow openings close. Depth and open share fall, so the area prints lighter.
@@ -162,10 +163,10 @@ A copper plate and a zinc plate, each with drypoint lines at 0.5, 1, 2 and 5 N, 
 
 ### 4.1 Grounds
 ```lua
-k:ground("hard", {um=4})                  -- rolled on a warm plate (IP §2.1)
-k:ground("soft", {um=12, grease=0.4})     -- share of tallow or Vaseline (IP §2.2)
+k:ground("hard", pts, {um=4})             -- rolled on a warm plate where the roller goes (IP §2.1)
+k:ground("soft", pts, {um=12, grease=0.4}) -- share of tallow or Vaseline (IP §2.2)
 k:needle(n, pts, {force=0.5})             -- an etching needle: clears the ground, barely marks the metal
-k:stop_out(mask)                          -- varnish: no acid there
+k:stop_out(pts, {brush=3.9, pressure=0.6}) -- varnish brushed along the points: no acid there
 k:clean()                                 -- grounds, resin and stop-out off (solvent): hand time
 ```
 - **The etching needle.** It bares the ground along its contact width. The force needed to clear a ground of thickness t is far below what marks copper (§3.1 at under 0.3 N), so it reports whether it touched the metal.
@@ -176,7 +177,7 @@ k:clean()                                 -- grounds, resin and stop-out off (so
 k:bite{acid="ferric", baume=38, temp=20, minutes=15, rock=true}
 k:bite{acid="nitric", parts=8, temp=18, minutes=4, feather=true}
 k:bite{acid="dutch", minutes=30}
-k:spit(mask, {minutes=3})             -- ferric brushed on (IP §3.3)
+k:spit(pts, {minutes=3})              -- ferric brushed on along the points (IP §3.3)
 ```
 - **Ferric on copper** (IP §3.1). The rate is r = ½·V_Cu·D·C/δ.
   - D falls with the bath's viscosity: 12 cP measured at 40 %, and the rate peaks near 2–2.25 M, as measured.
@@ -219,8 +220,8 @@ k:melt()                                  -- heats the plate until the grains cl
 ```lua
 black = ink{{"bone black", 3}, {"burnt umber", 1}, oil=0.35, stiff=1}  -- parts of tubes; oil share; plate oil: 1 heavy .. 0 light
 k:warm(40)                                    -- on the hot plate, °C
-k:ink(black, {mask=m, by="card"})             -- pushed into the lines and grain
-k:ink(blue, {mask=dress, by="poupee"})        -- à la poupée: a dabber into an area (§5.4)
+k:ink(black, pts, {by="card"})                 -- the card dragged along the points, into the lines and grain
+k:ink(blue, dabs, {by="poupee"})               -- à la poupée: a small dabber dabbed at each point (§5.4)
 ```
 - **What ink is.** Pigment in burnt linseed oil, mixed from the box's tubes as a pile is. Its optics are the pigments' (pigment.rs) at the ink's pigment volume.
 - **What its rheology sets:**
@@ -232,9 +233,9 @@ k:ink(blue, {mask=dress, by="poupee"})        -- à la poupée: a dabber into an
 ### 5.2 Wiping
 ```lua
 t = tarlatan{stiff=0.7}                     -- starch, 0 soft .. 1 stiff
-t:wipe(k, mask, {pressure=0.5, passes=3, pattern="circles"})
-k:hand_wipe(mask, {passes=2, whiting=true})
-k:retrousse(mask, {passes=1})
+t:wipe(k, circles, {pressure=0.5, passes=3})  -- the pad slid along the points: round in circles if they go round
+k:hand_wipe(pts, {passes=2, whiting=true})    -- the palm drawn along the points
+k:retrousse(pts, {passes=1})                  -- the muslin passed along the points
 ```
 The tarlatan is a `Rag` (crates/paint/src/rag.rs): the same face that loads and lifts less as it fills, the same refolds and soaked cloth, the same creases that press unevenly and the same smear back over its trailing end. What changes is what it reaches. The rag reaches the oil wet layer of a canvas through `BRIDGE_MM` and `SAG_UM` (both [E] there); the tarlatan reaches the plate's ink through two derived reaches (IP §5.3):
 - **Into an opening narrower than the yarn spacing:** a yarn of radius r dips h = r − √(r² − w²/4). That is the dry brush's formula in sheet.rs, the same code.
@@ -253,7 +254,7 @@ The **hand wipe** is a softer contact (skin, IP §5.4). It reaches the flat full
 - **Old logs.** The canvas path is untouched, so old logs replay unchanged without a switch.
 
 ### 5.4 À la poupée (phase P6)
-- **Inking.** Each `ink(..., {by="poupee", mask=})` fills its mask's openings with that ink. A cell keeps up to 8 inks as volume shares.
+- **Inking.** Each `ink(..., pts, {by="poupee"})` fills the openings under the dabber's face where it is dabbed with that ink. A cell keeps up to 8 inks as volume shares.
 - **The wipe across a boundary.** A tarlatan face loaded with one ink lays a little of it into the next area along its path (the smear). The band where inks mix is as wide as the face's contact along the wipe (IP §5.5): the blue that crept into Cassatt's flowers.
 - **Mixing.** Mixed ink in a pit prints as a KM mixture of its inks by volume.
 
@@ -354,7 +355,7 @@ k:state("III")                 -- names the plate as it now stands; a proof can 
 ## 9. Monotype (phase P8)
 ```lua
 k:paint(b, pts)                -- a brush lays ink on a bare plate (light field)
-k:ink(black, {mask=all}); t:wipe(k, m) -- or ink all over and wipe the image out (dark field)
+k:ink(black, pts); t:wipe(k, pts2)  -- or ink all over with the card and wipe the image out where the pad goes (dark field)
 press{plate=k, sheet=s}; press{plate=k, sheet=s2}   -- the print and its ghost
 ```
 - **On a bare plate** the ink is a film on the flat. The brush lays it as a pile of ink; a bristle brush on a smooth plate uses the existing bristle model with the plate as a non-absorbent surface (I8).

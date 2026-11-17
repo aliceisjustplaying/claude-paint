@@ -387,15 +387,15 @@ fn hand_pivot(azimuth: f32, mmu: f32) -> paint::area_strokes::Pivot {
 const AREA_HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "graded", "seed", "zigzag", "jitter", "open", "alt", "azimuth", "speed"];
 
 /// A stick's `p:hatch` over an area, with the area-strokes switch
-/// (session.rs `PASTEL_AREA_STROKES_MARK`): the pencil's hatching, and an
-/// `angle` that may be a direction field, `zigzag=`, `jitter=`, `open=` and
-/// the hand's `alt=`, `azimuth=` and `speed=`. Without them it lays
+/// (session.rs `PASTEL_AREA_STROKES_MARK`): the pencil's hatching at one
+/// `angle`, with `zigzag=`, `jitter=`, `open=` (one share) and the hand's
+/// `alt=`, `azimuth=` and `speed=`. Without them it lays
 /// Cassatt's open strokes (`STICK_HATCH_SPACING_MM`), each bowed by the
 /// wrist's swing (`hand_pivot`) and as fast as its length asks
 /// (`stroke_speed`), the stick at 50° (`AREA_HAND`). Each mark is one
 /// stroke of the stick (`stick_stroke`), so it wears and sheds as a stroke does.
 fn area_hatch(lua: &Lua, st: &S, p: &Table, m: &Value, o: Option<&Table>) -> Result<f32> {
-    use paint::area_strokes::{AreaHatch, Direction, Jitter, Open, Zigzag};
+    use paint::area_strokes::{AreaHatch, Jitter, Zigzag};
     if let Some(o) = o {
         check_keys(o, AREA_HATCH_KEYS, "hatch")?;
     }
@@ -436,21 +436,16 @@ fn area_hatch(lua: &Lua, st: &S, p: &Table, m: &Value, o: Option<&Table>) -> Res
         }
         o => return err(format!("hatch: jitter is true or {{length=, angle=}}, got {}", o.type_name())),
     };
-    let open_mask;
     let open = match value("open")? {
         Value::Nil => None,
         Value::Integer(_) | Value::Number(_) => {
             let share = finite("open", get("open")?.unwrap_or(0.0))?;
             if !(0.0..=1.0).contains(&share) {
-                return err("hatch: open is the share left to the paper, 0..1, or a mask of it");
+                return err("hatch: open is the share left to the paper, 0..1");
             }
-            Some(Open::Share(share))
+            Some(share)
         }
-        v @ Value::UserData(_) => {
-            open_mask = paint_mask_of(st, &v)?;
-            Some(Open::Mask(&open_mask))
-        }
-        o => return err(format!("hatch: open is the share left to the paper, 0..1, or a mask of it, got {}", o.type_name())),
+        o => return err(format!("hatch: open is one share left to the paper, 0..1, got {}: the hatching takes no mask of it; to leave more paper in one part, hatch that part on its own with a larger open=", o.type_name())),
     };
     // by default Cassatt's open strokes; a zigzag's bands side by side
     let spacing = get("spacing")?.unwrap_or(match zigzag {
@@ -472,23 +467,13 @@ fn area_hatch(lua: &Lua, st: &S, p: &Table, m: &Value, o: Option<&Table>) -> Res
         None => seed_of(st, &lua.create_table()?)?,
     };
     let graded = o.map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false);
-    let field;
-    let direction = match value("angle")? {
-        Value::Nil => Direction::Fixed(-0.9),
-        v @ (Value::Function(_) | Value::UserData(_)) => {
-            let f = crate::api::frame(st)?;
-            let b = crate::api::support(Some(&m), f, spacing);
-            // (each unit of line traced is tested against its neighbors: bound the work)
-            if (b.2 - b.0) * (b.3 - b.1) / spacing > 4.0e6 {
-                return err("hatch: too many strokes along a field; a wider spacing or a smaller area");
-            }
-            field = crate::api::angle_field(st, &v, b)?;
-            Direction::Field(&*field)
-        }
-        _ => Direction::Fixed(finite("angle", get("angle")?.unwrap_or(-0.9))?),
+    let angle = match value("angle")? {
+        Value::Nil => -0.9,
+        Value::Integer(_) | Value::Number(_) => finite("angle", get("angle")?.unwrap_or(-0.9))?,
+        o => return err(format!("hatch: angle is one number (radians), got {}: the hatching takes no function or field of directions; to turn the strokes, hatch each part on its own at its own angle", o.type_name())),
     };
     let pivot = Some(hand_pivot(held.azimuth, mmu));
-    let h = AreaHatch { direction, spacing, length, pressure, graded, zigzag, jitter, open, pivot };
+    let h = AreaHatch { angle, spacing, length, pressure, graded, zigzag, jitter, open, pivot };
     let marks = paint::area_strokes::area_marks(&m, &h, seed);
     // each stroke as fast as its length asks: a zigzag's a leg's, there or back
     let speed = |mk: &Mark| {
@@ -2173,22 +2158,24 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         (cols, rows)
     }
 
-    /// A stick's hatching follows an angle function across the area: strokes
-    /// along x in its left half, along y in its right half.
+    /// A stick's hatching runs at its one angle: hatched part by part, strokes
+    /// along x in the left half, along y in the right half. A function or a
+    /// field of angles is refused, with what to do instead.
     #[test]
-    fn a_sticks_hatching_follows_an_angle_function() {
+    fn a_sticks_hatching_runs_at_its_angle() {
         let mut s = area_session_of(true, &AREA_PAPER.replace("size=64", "size=200"));
-        run(&mut s, "p:hatch(rect(100, 100, 800, 600), {angle=function(x, y) if x < 500 then return 0 else return math.pi / 2 end end, spacing=50, pressure=0.6, seed=4})");
+        run(&mut s, "p:hatch(rect(100, 100, 400, 600), {angle=0, spacing=50, pressure=0.6, seed=4})");
+        run(&mut s, "p:hatch(rect(500, 100, 400, 600), {angle=math.pi / 2, spacing=50, pressure=0.6, seed=4})");
         let (lc, lr) = profiles(&s, 150.0, 150.0, 450.0, 650.0);
         let (rc, rr) = profiles(&s, 550.0, 150.0, 850.0, 650.0);
         assert!(lr > 2.0 * lc, "left half (strokes along x): columns {lc}, rows {lr}");
         assert!(rc > 2.0 * rr, "right half (strokes along y): columns {rc}, rows {rr}");
-        // a number goes too; anything else is refused
-        run(&mut s, "p:hatch(rect(100, 100, 300, 300), {angle=0.5, seed=4})");
         let e = s.run("p:hatch(rect(100, 100, 300, 300), {angle='steep'})").unwrap_err();
-        assert!(e.contains("angle"), "{e}");
-        let e = s.run("p:hatch(rect(100, 100, 300, 300), {angle=function() return 'up' end})").unwrap_err();
-        assert!(e.contains("angle function returned string"), "{e}");
+        assert!(e.contains("angle is one number"), "{e}");
+        for v in ["function(x, y) return 0 end", "rect(0, 0, 500, 800)"] {
+            let e = s.run(&format!("p:hatch(rect(100, 100, 300, 300), {{angle={v}}})")).unwrap_err();
+            assert!(e.contains("takes no function or field") && e.contains("hatch each part on its own"), "{v}: {e}");
+        }
     }
 
     /// A zigzag mark is one stroke of the stick, back and forth over a band
@@ -2240,7 +2227,8 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         assert!(hatch("jitter=false, seed=5") == hatch("seed=5"));
     }
 
-    /// `open=` leaves the paper bare in proportion: a share, or a mask's value.
+    /// `open=` leaves the paper bare in proportion to its one share; a mask
+    /// of it is refused, with what to do instead.
     #[test]
     fn open_leaves_more_bare_paper() {
         let (blank, w, h) = lum(&area_session(true));
@@ -2265,10 +2253,9 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         let half = bare(", open=0.5");
         let most = bare(", open=0.85");
         assert!(half > closed + 0.15 && most > half + 0.1, "bare paper: {closed} {half} {most}");
-        // a mask: open on the left only
-        let left = bare(", open=rect(0, 0, 500, 800)");
-        assert!(left > closed + 0.2, "{closed} {left}");
         assert_eq!(bare(", open=0"), closed);
+        let e = area_session(true).run("p:hatch(rect(100, 100, 300, 300), {open=rect(0, 0, 500, 800)})").unwrap_err();
+        assert!(e.contains("takes no mask") && e.contains("hatch that part on its own"), "{e}");
         for bad in ["open=2", "open='half'", "open=-0.1"] {
             assert!(area_session(true).run(&format!("p:hatch(rect(100, 100, 300, 300), {{{bad}}})")).is_err(), "{bad} accepted");
         }
@@ -2285,7 +2272,6 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             ("{jitter=true}", "hatch: unknown option \"jitter\""),
             ("{open=0.5}", "hatch: unknown option \"open\""),
             ("{speed=200}", "hatch: unknown option \"speed\""),
-            ("{angle=function(x, y) return 0 end}", "angle: want a number, got function"),
         ] {
             let e = area_session(false).run(&format!("p:hatch(rect(100, 100, 300, 300), {opts})")).unwrap_err();
             assert!(e.contains(says), "{opts}: {e}");

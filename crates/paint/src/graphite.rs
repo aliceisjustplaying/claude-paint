@@ -232,6 +232,42 @@ impl Cell {
         self.loose = 0.0;
     }
 
+    /// `bind`, over the share `share` (0..1) of the pixel fixative's spots
+    /// reach (`crate::spray`): that share of the loose pastel and of the
+    /// removable drawing is bound, the rest stays loose; the bound pastel
+    /// darkened by the share `wet` of it the resin wets. A share of 1 binds
+    /// as `bind` does.
+    pub(crate) fn bind_share(&mut self, wet: f32, share: f32) {
+        let Some(mut optics) = self.optics else { return };
+        let share = share.clamp(0.0, 1.0);
+        if share <= 0.0 {
+            return;
+        }
+        let gs = (self.non_pastel - self.non_pastel_floor).max(0.0) * share;
+        let ls = self.loose * share;
+        let b = self.bound;
+        let dark = self.r.map(|r| {
+            if wet == 0.0 { return r }
+            let r = r.clamp(1e-4, 0.9999);
+            let ks = (1.0 - r).powi(2) / (2.0 * r) / (1.0 - wet + wet / 5.0);
+            1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
+        });
+        let npf = self.non_pastel_floor + gs;
+        if npf > 0.0 {
+            optics.fixed = (optics.fixed * self.non_pastel_floor + optics.graphite * gs) / npf;
+        }
+        for k in 0..3 {
+            if b + ls > 0.0 {
+                optics.bound[k] = (optics.bound[k] * b + dark[k] * ls) / (b + ls);
+            }
+        }
+        self.optics = Some(optics);
+        self.floor += (self.a - self.floor).max(0.0) * share;
+        self.non_pastel_floor = npf;
+        self.bound += ls;
+        self.loose -= ls;
+    }
+
     pub(crate) fn free_bound(&mut self, floor: f32, freed: f32) {
         if let Some(optics) = self.optics {
             let l = self.loose;
@@ -262,6 +298,21 @@ pub struct Drawing {
     /// color and the pastel in the tooth (`to_f32s`).
     pub(crate) sticks: bool,
     optics: bool,
+}
+
+impl Drawing {
+    /// Fixative over the guide, the share `share(k)` of whole-canvas pixel
+    /// `k` its spots reach: that share of what the eraser could still lift
+    /// of the guide is bound (`crate::spray`).
+    pub(crate) fn fix_guide_share(&mut self, share: impl Fn(usize) -> f32) {
+        let fl = self.guide_floor.get_or_insert_with(|| vec![0.0; self.guide.len()]);
+        for (k, (v, g)) in fl.iter_mut().zip(&self.guide).enumerate() {
+            let s = share(k);
+            if s > 0.0 && *g > *v {
+                *v += (*g - *v) * s.min(1.0);
+            }
+        }
+    }
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising

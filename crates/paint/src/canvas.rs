@@ -280,6 +280,9 @@ pub struct Canvas {
     pub(crate) drain: bool,
     /// A sheet of paper laid over part of the picture (`sheet.rs`).
     pub(crate) sheet: Option<crate::sheet::Sheet>,
+    /// Masking tape and stencils laid on the picture (`tape.rs`), with the
+    /// picture under them. Laid and lifted within a chunk: never saved.
+    pub(crate) tape: Option<Box<crate::tape::Tape>>,
 }
 
 impl Canvas {
@@ -347,6 +350,7 @@ impl Canvas {
             soak: None,
             drain: false,
             sheet: None,
+            tape: None,
         }
     }
 

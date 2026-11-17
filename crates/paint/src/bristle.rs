@@ -1159,6 +1159,47 @@ impl Canvas {
     }
 }
 
+impl Canvas {
+    /// One stroke that lays a thin film (`Handling::film`'s, on one stroke):
+    /// it adds no more than `coats` of wet film to any pixel, and what the
+    /// hairs can't lay stays on them. `style::Style::GLAZE_FILM` (about
+    /// 7.5 µm) for a glaze, `SCUMBLE_FILM` (about 5 µm) for a scumble.
+    /// Panics without the glaze film (`with_glaze_film`) or with a coats
+    /// that isn't finite and above 0.
+    pub fn drag_film(&mut self, held: &mut Held, g: &Gesture, coats: f32) {
+        assert!(self.glaze_film, "Canvas::drag_film: a thin film on one stroke needs the glaze film (with_glaze_film)");
+        assert!(coats.is_finite() && coats > 0.0, "Canvas::drag_film: coats must be finite and > 0, got {coats}");
+        // (the stroke `drag` is about to number: its ceiling counts from it)
+        let id = self.wet.current.wrapping_add(1).max(1);
+        self.film_pass = Some((coats, id));
+        self.drag(held, g, None);
+        self.film_pass = None;
+    }
+
+    /// A clean-blender stroke: the brush wiped on the rag (nine tenths of
+    /// what it holds, as a blender pass wipes it, `Handling::blender`), then
+    /// drawn through the wet paint along `g`. It lays only what it picks up,
+    /// worked into the wet film it lays it in (the blender pass's `skim` of
+    /// 0: none of it stays on top as a brushload would).
+    pub fn blend_stroke(&mut self, held: &mut Held, g: &Gesture) {
+        held.wipe(0.9);
+        self.tally.wipe();
+        held.tool.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::blend_stroke");
+        }
+        self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
+        let id = self.next_stroke_ids(1);
+        let surf = Surf { skim: 0.0, ..self.surf() };
+        let mut scratch = Vec::new();
+        // SAFETY: exclusive &mut self, single brush.
+        let b = unsafe { drag_on(surf, held, g, None, id, &mut scratch) };
+        if let Some((x0, y0, x1, y1)) = b {
+            self.wet.touch(x0, y0, x1, y1);
+        }
+    }
+}
+
 /// Where a stroke may lay paint: a mask multiplying the bristles' contact
 /// (a stencil: the region's edge exactly, the same for every stroke), or a
 /// fence (`crate::fence`): the region's edge, overrun by this stroke's own
@@ -3594,5 +3635,74 @@ mod knife_skim {
         let stirred = light_over_dark(false, false);
         assert!(wet > 0.85 * dried, "on wet {wet}, on dried {dried}");
         assert!(stirred < 0.6 * dried, "stirred in {stirred}, on dried {dried}");
+    }
+}
+
+// one stroke laying a thin film, and a clean-blender stroke (`Canvas::drag_film`,
+// `Canvas::blend_stroke`)
+#[cfg(test)]
+mod one_stroke_tests {
+    use super::*;
+    use crate::color::hex;
+    use crate::style::Style;
+
+    fn canvas() -> Canvas {
+        Canvas::new(200, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(200.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true)
+    }
+
+    fn loaded(tool: Tool, color: &str) -> Held {
+        let mut h = Held::new(tool, 3).with_engine(crate::PIGMENT_MIXER);
+        h.load(Paint::body(hex(color)), 1.0);
+        h
+    }
+
+    fn max_um(c: &Canvas) -> f32 {
+        c.wet.vol.iter().fold(0.0f32, |m, &v| m.max(v)) * crate::surface::COAT_UM
+    }
+
+    /// A glaze stroke lays no more than its film anywhere, a scumble's
+    /// thinner still; a plain stroke of the same load lays far more, and the
+    /// brush keeps what the film couldn't take.
+    #[test]
+    fn a_film_stroke_lays_no_more_than_its_film() {
+        let line = || Gesture::new(vec![(200.0, 500.0), (800.0, 500.0)]).pressure(0.7, 0.7);
+        let mut plain = canvas();
+        let mut h = loaded(Tool::filbert(40.0), "#802010");
+        plain.drag(&mut h, &line(), None);
+        for coats in [Style::GLAZE_FILM, Style::SCUMBLE_FILM] {
+            let mut c = canvas();
+            let mut g = loaded(Tool::filbert(40.0), "#802010");
+            c.drag_film(&mut g, &line(), coats);
+            let um = coats * crate::surface::COAT_UM;
+            assert!(max_um(&c) <= um * 1.0001 && max_um(&c) > 0.5 * um, "{coats} coats: {} µm", max_um(&c));
+            assert!(max_um(&plain) > 3.0 * um && g.fullness() > h.fullness(), "plain {} µm", max_um(&plain));
+            assert!(c.film_pass.is_none());
+        }
+    }
+
+    /// A clean-blender stroke across a wet edge between two colors carries
+    /// each into the other and lays no new paint: the wet paint's volume
+    /// stays (less what the hairs keep), and the colors meet in between.
+    #[test]
+    fn a_blender_stroke_moves_wet_paint_and_lays_none() {
+        let mut c = canvas();
+        let mut a = loaded(Tool::filbert(160.0), "#1830a0");
+        let mut b = loaded(Tool::filbert(160.0), "#e8c020");
+        c.drag(&mut a, &Gesture::new(vec![(300.0, 200.0), (300.0, 800.0)]).pressure(0.8, 0.8), None);
+        c.drag(&mut b, &Gesture::new(vec![(500.0, 200.0), (500.0, 800.0)]).pressure(0.8, 0.8), None);
+        let before = c.wet_total();
+        let edge = |c: &Canvas| {
+            let seen = c.seen();
+            (seen[c.f.index(392.0, 500.0)], seen[c.f.index(408.0, 500.0)])
+        };
+        let (l0, r0) = edge(&c);
+        let mut bl = Held::new(Tool::badger(80.0), 9).with_engine(crate::PIGMENT_MIXER);
+        c.blend_stroke(&mut bl, &Gesture::new(vec![(250.0, 500.0), (550.0, 500.0)]).pressure(0.5, 0.5));
+        let after = c.wet_total();
+        assert!(after <= before * 1.0001 && after > 0.8 * before, "wet {before} -> {after}");
+        let (l1, r1) = edge(&c);
+        let d0: f32 = (0..3).map(|k| (l0[k] - r0[k]).abs()).sum();
+        let d1: f32 = (0..3).map(|k| (l1[k] - r1[k]).abs()).sum();
+        assert!(d1 < d0, "the edge didn't soften: {d0} -> {d1}");
     }
 }

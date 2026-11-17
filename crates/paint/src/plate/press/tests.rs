@@ -22,7 +22,7 @@ fn sheet() -> Canvas {
 
 fn feel(c: &Canvas, damp: bool) -> SheetFeel {
     let p = c.paper().unwrap();
-    SheetFeel { thick_um: p.thick_um as f64, stiffness: if damp { crate::damp::stiffness(0.6) } else { 1.0 }, damp, absorbent: p.absorbent as f64 }
+    SheetFeel { thick_um: p.thick_um as f64, stiffness: if damp { crate::damp::stiffness(0.6) } else { 1.0 }, damp, absorbent: p.absorbent as f64, strain: (0.0, 0.0) }
 }
 
 fn paint() -> Paint {
@@ -210,4 +210,56 @@ fn a_cell_lays_its_ink_over_the_pixels_it_covers() {
     // conserved: the coats laid are the ink taken, at the coat's thickness
     let laid = (sh.wet_coats() - v0) * COAT_UM as f64 * 100.0 * 100.0;
     assert!((laid / r.taken_um3 - 1.0).abs() < 1e-3, "laid {laid} µm³, taken {}", r.taken_um3);
+}
+
+/// The sheet's size at the pull (`SheetFeel::strain`, under the contact
+/// laws): a damp sheet is larger than as made by its fibres' swelling
+/// (`damp::strain`), so a plate printed on it covers fewer of its fibres,
+/// and the print, dried back to the sheet as made, is smaller than the plate
+/// by 1/(1 + ε). Two plates pulled at one strain meet in register; a sheet
+/// that dried between them is out by Δε·L from where it is held (`at`).
+#[test]
+fn a_damp_sheet_prints_the_plate_smaller_and_drying_moves_the_register() {
+    // the ink's middle across the sheet (pixels), in two halves
+    let centres = |strain: (f64, f64), contact: bool| {
+        let mut p = plate();
+        p.contact = contact;
+        cut(&mut p, 20, 21, 0, 200, 100.0, 50.0, 1.0);
+        cut(&mut p, 180, 181, 0, 200, 100.0, 50.0, 1.0);
+        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        p.hand_wipe(None, 1.0, 3, true, Pattern::Circles, 0.5);
+        let mut sh = sheet();
+        let fe = SheetFeel { strain, ..feel(&sh, true) };
+        p.press(&mut sh, (10.0, 10.0), &PressSpec::default(), &fe, &[paint()], 1.0).unwrap();
+        let f = sh.window();
+        let mut out = [(0.0f64, 0.0f64); 2];
+        for y in 0..f.h {
+            for x in 0..f.w {
+                let v = sh.wet.vol[y * f.w + x] as f64;
+                // (the lines' ink, not the polish's film)
+                if v > 0.01 {
+                    let k = usize::from(x >= 200);
+                    out[k].0 += v * (x as f64 + 0.5);
+                    out[k].1 += v;
+                }
+            }
+        }
+        out.map(|(s, w)| s / w)
+    };
+    let e = 0.02;
+    let flat = centres((0.0, 0.0), true);
+    let wet = centres((e, e), true);
+    // the plate's lines 16 mm apart (160 cells) print 160/(1 + ε) pixels apart, mirrored
+    assert!(((flat[0] - flat[1]).abs() - 160.0).abs() < 0.05, "{flat:?}");
+    assert!(((wet[0] - wet[1]).abs() - 160.0 / (1.0 + e)).abs() < 0.05, "{wet:?}");
+    // each lands where its plate mm, measured on the sheet now from its held edge, falls as made
+    for k in 0..2 {
+        assert!((wet[k] - flat[k] / (1.0 + e)).abs() < 0.05, "{k}: {} against {}", wet[k], flat[k] / (1.0 + e));
+    }
+    // a sheet that dried by 0.5 % between two pulls: out by 0.005·L at L from the held edge
+    let drier = centres((e - 0.005, e - 0.005), true);
+    let shift = drier[1] - wet[1];
+    assert!((shift - flat[1] * (1.0 / (1.0 + e - 0.005) - 1.0 / (1.0 + e))).abs() < 0.05 && shift > 1.0, "{shift} px");
+    // without the laws the sheet's size isn't read
+    assert_eq!(centres((e, e), false), flat);
 }

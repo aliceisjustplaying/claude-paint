@@ -103,13 +103,17 @@ fn press(lua: &Lua, st: &S, o: Option<Table>) -> Result<Table> {
             }
             let paper = *c.paper().ok_or_else(|| mlua::Error::runtime(format!("press: {sheet_name:?} isn't a sheet of paper")))?;
             let m = c.moisture().ok_or_else(|| mlua::Error::runtime("press: the sheet has no moisture"))?;
-            let feel = SheetFeel { thick_um: paper.thick_um as f64, stiffness: m.stiffness, damp: m.plastic, absorbent: paper.absorbent as f64 };
+            // its strain now beside its size as made: across its width, along its height
+            let strain = (m.size_mm.0 / m.made_mm.0 - 1.0, m.size_mm.1 / m.made_mm.1 - 1.0);
+            let feel = SheetFeel { thick_um: paper.thick_um as f64, stiffness: m.stiffness, damp: m.plastic, absorbent: paper.absorbent as f64, strain };
             // the inks as the sheet's oil paint: their tubes from the box, their added plate oil as medium
             let mut paints = Vec::new();
             for ink in plate.inking().map(|k| k.inks.clone()).unwrap_or_default() {
                 paints.push(ink.paint(&tubes).map_err(|e| mlua::Error::runtime(format!("press: {e}")))?);
             }
-            let (sheet_w, sheet_h) = (c.mm_per_unit() as f64 * 1000.0, c.mm_per_unit() as f64 * c.height() as f64);
+            // (centred on the sheet as it is now, under the contact laws: a damp sheet is larger)
+            let grown = if plate.contact { (1.0 + strain.0, 1.0 + strain.1) } else { (1.0, 1.0) };
+            let (sheet_w, sheet_h) = (c.mm_per_unit() as f64 * 1000.0 * grown.0, c.mm_per_unit() as f64 * c.height() as f64 * grown.1);
             let at = match at {
                 Some((x, y)) => (x as f64, y as f64),
                 None => ((sheet_w - plate.width_mm as f64) / 2.0, (sheet_h - plate.height_mm as f64) / 2.0),

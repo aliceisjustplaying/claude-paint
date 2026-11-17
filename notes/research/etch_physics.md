@@ -6,13 +6,29 @@ Tags as in IP: **[M]** measured, with a source; **[D]** derived here; **[P]** pr
 
 ## 1. The ground and the etching needle
 
-- **Hard ground** is laid over the whole face, 4 µm by default. **[E]** IP §2.1 puts it at 2–8 µm. It covers what is already in the metal: a ground laid warm flows into old lines.
+- **Hard ground** is rolled on with a leather roller along the painter's points, 4 µm thick by default. **[E]** IP §2.1 puts it at 2–8 µm. It covers what is already in the metal: a ground laid warm flows into old lines.
+  - **It lies where the roller went.** The roller meets the plate along a line its own length (150 mm by default **[P]**: "the ideal roller is about 150 mm long and 50 mm in diameter, covered in leather", *Etching: a guide to traditional techniques*, ch. 11; Artools sell 100 and 200 mm leather rollers). A cell is grounded where that line, moved along the points, crossed over half of it (crates/paint/src/plate/hand.rs). A cell it never crossed is bare and bites as an open face.
+  - **Hand time:** the roller's path at 100 mm/s **[E]** and 8 minutes to warm the plate and let it cool **[E]**.
 - **The needle** (`k:needle`) is the drypoint needle of plate_physics.md, held lightly (default 0.3 N **[E]**, plan §3.1's "under 0.3 N"). Two things happen along its path:
   - **In the ground.** The point parts the ground where it is wider than the ground is thick. The window it leaves is the point's width at the ground's top, the height t + d above its lowest point, with t the ground's thickness and d its mark in the metal.
   - **On the metal.** The ground carries a little of the load: its flow pressure, 5 MPa **[E]** (waxes and bitumens indent at 1–10 MPa, a hundredth of copper's hardness), over the point's section in the ground. That is a few mN against the hand's tenths of a newton. The metal carries the rest and is marked by the scratch law, w = √(8F/πH).
   - At 0.3 N a 40 µm point marks half-hard copper about 3 µm deep, with a burr of the mark's volume. It ploughs, never cuts. Elastic contact alone would need far less load than any hand gives: the Hertz yield onset of a 25–50 µm point on copper is under a millinewton. So an etching needle always scratches a little, as printmakers know and do not mind: the acid opens the line anyway.
 - **Bitten lines have no burr.** The needle's burr stands in the window's foot. The acid attacks a fin from both faces, and an inward offset z of a triangle scales it about its incentre by 1 − z/r, with r its inradius [D, geometry]. A 1–3 µm burr is gone in the first micrometres of bite.
-- **Stopping-out varnish** (`k:stop_out(mask)`) is brushed asphaltum: no acid reaches what it covers. It is kept per cell, at the plate's pitch, where the mask is at least half.
+- **Stopping-out varnish** (`k:stop_out(pts, …)`) is asphaltum and rosin in turpentine brushed along the painter's points: no acid reaches what it covers. It is kept per cell, at the plate's pitch, where the strip covers over half the cell. Nothing tells it where to go but the brush's path; its footprint, edge and amount come from the brush and the liquid (§1.1).
+
+### 1.1 A stroke of stopping-out [M] [D] [E]
+
+- **The brush's load.** A sable round's belly is a cone of its width d and 4.7 d long **[M]** (Rosemary & Co Series 33: 15.7/3.4, 20/3.9 and 24.2/5.2 mm hair over width for sizes 4, 6 and 8), the liquid filling 0.6 of it **[E]** (the wet brush's own estimate, wet_pastel.md): V = 0.6 · π/12 · d² · 4.7 d, 44 mm³ for a size 6 (3.9 mm), times the load asked for.
+- **The width it lays.** A wet tuft is a cone, so its mark widens with the pressure until its whole belly is down at pressure 0.85 (the bristle model's law, bristle.rs `P_FULL`): w = d · min(p/0.85, 1).
+- **The film** is 20 µm thick **[E]**, the varnish's thickness for its look (§5). The brush lays w · 20 µm a millimetre of stroke until V is spent, then runs dry: a size 6 at pressure 0.5 lays some 950 mm of stroke on a full belly; a 1 mm brush a tenth full, 3.7 mm.
+- **The edge.** The laid strip is a ridge of section A = h·w. On a clean plate the varnish wets the metal completely, so its edge creeps out by Cox–Voinov, θ³ = 9 ln(L/λ) · ηU/γ, with the ridge's contact angle θ = 3A/(2a²) for a parabolic section of half-width a. Integrated, a⁷ = a₀⁷ + 7γ(3A/2)³t/(9η ln(L/λ)) **[D]**, Tanner's law for a two-dimensional ridge.
+  - γ = 27 mN/m, turpentine's **[M]** (handbook values for turpentine and α-pinene, 26–27 mN/m near 20 °C).
+  - η = 1 Pa·s **[E]**: makers call stop-out of "thicker consistency" than straw-hat varnish, so above a brushing paint's 0.1–0.3 Pa·s; no measurement.
+  - ln(L/λ) = 9.2 **[M]** (Bonn et al., *Rev. Mod. Phys.* 81, 739 (2009): ln 10⁴ fitted across fluids in complete wetting).
+  - t = 10 minutes **[P]**: stop-out dries in about 10 minutes under a fan (Glasgow Print Studio's handbook) and in about an hour in still air (MungoLux's instructions); a film stops flowing well before it is dry to the touch, so the shorter.
+  - A 2.3 mm strip (a size 6 at pressure 0.5) creeps 26 µm each side. The viscosity is the weak estimate: at 0.1 Pa·s it would creep 0.18 mm, at 10 Pa·s 3 µm. Either way the edge is mostly the brush's at the pitch a plate is laid out at (some 0.1–1.5 mm a cell).
+- **Where the brush comes down and lifts** it leaves the disc of its tuft, the strip's width across.
+- **Hand time** is the stroke at 20 mm/s **[E]**.
 - **Solvent** (`k:clean()`) takes the ground, the varnish and the rosin off. What the acid opened stays as the cells' openings.
 - **Smoking** a ground with a taper (1911 Britannica) is not modelled: the plan does not cover it.
 
@@ -187,7 +203,8 @@ Every mordant here bites at the rate its oxidant reaches the metal:
 
 - **PLAT version 2** is written when an etching tool has touched a plate.
   - The etching tools are among its uses, each with its own data after its points (a length and the bytes). A bite keeps its steps, each step's flat dose and diffusion layer, so a crop rebuilt from the vectors bites to the same depths.
-  - After the tiles come the coats: the ground's thickness, the metal the acid took, the rosin layers (seed, melted, grains per size), the tray (its acid, strength as made, volume and the metal it holds), the bath the plate lies in if it does (its acid, strength, temperature, face, rocking, feathering, and when it went in, on the plate's clock) and the etched cells' states.
+  - A ground's use keeps its roller's length and points; a stopping-out's its brush, load and points (each point's force the hand's pressure). A crop rebuilt from the vectors lays them again at its own pitch.
+  - After the tiles come the coats: the ground's thickness, the metal the acid took, the rosin layers (seed, melted, grains per size), the tray (its acid, strength as made, volume and the metal it holds), the bath the plate lies in if it does (its acid, strength, temperature, face, rocking, feathering, and when it went in, on the plate's clock), the etched cells' states, and the cells the ground lies on (a bit a cell; none without a ground).
 - **A plate no etching tool has touched** is still version 1, byte for byte, and version 1 is still read.
 
 ## 7. Estimates still standing
@@ -198,6 +215,10 @@ Every mordant here bites at the rate its oxidant reaches the metal:
 | ground's flow pressure | 5 MPa | waxes and bitumens 1–10 MPa; unmeasured for a ground |
 | etching needle force, speed | 0.3 N, 40 mm/s | plan §3.1; no measurement |
 | stop-out thickness | 20 µm | a brushed varnish, unmeasured |
+| stop-out viscosity | 1 Pa·s | "thicker consistency"; unmeasured (its edge's creep goes as η^(−1/7)) |
+| a sable's belly filled | 0.6 | the hairs' packing; no gravimetric measurement |
+| roller speed, warming the plate | 100 mm/s, 8 min | no timed account |
+| bend carried round smoothly | 30° | a hand follows a curve given by points; it pivots at a corner |
 | tray: depth, margin | 20 mm, 50 mm | unmeasured |
 | rocking: tilt, period | 5°, 4 s | unmeasured |
 | bubbles: contact angle, cover unswept, feather period | 40°, 0.5, 30 s | unmeasured |
@@ -208,7 +229,7 @@ Every mordant here bites at the rate its oxidant reaches the metal:
 | bitumen absorption and Urbach slope | 0.1 /µm at 550 nm, 0.3 eV | the "strong tea" test; no spectrum of a ground |
 | rosin absorption, loose powder's reflectance | 0.02 /µm at 450 nm, 0.6 | unmeasured |
 | yarn radius (for the tone guide) | 75 µm | IP §4.2 [E] |
-| hand times: ground, bath, box, melt, clean | 10, 2, 1, 2, 5 min | no timed account |
+| hand times: bath, box, melt, clean | 2, 1, 2, 5 min | no timed account |
 
 Each would be replaced by IP §9's bench measurements (Unknowns 4, 6 and 7) without rewriting the code. The tests read their expected numbers from the formulas.
 
@@ -224,4 +245,8 @@ Each would be replaced by IP §9's bench measurements (Unknowns 4, 6 and 7) with
 - 1911 Encyclopædia Britannica, "Etching": Dutch mordant's recipe, its slowness and lack of ebullition, its lines' widening against nitric's, smoking a ground: https://en.wikisource.org/wiki/1911_Encyclop%C3%A6dia_Britannica/Etching
 - Asphalt binder optical constants by spectroscopic ellipsometry (n ≈ 1.6): "Spectroscopic Ellipsometry of Asphalt Binder: A Study of Optical Constants" (via https://www.researchgate.net/publication/336407885); asphaltene Urbach edges: I. N. Evdokimov et al., "On the Nature of UV/Vis Absorption Spectra of Asphaltenes" (via https://www.researchgate.net/publication/245332232), after O. C. Mullins (abstracts only).
 - Rosin's index and density: CAMEO, https://cameo.mfa.org/wiki/Rosin
+- The ground roller: *Etching: a guide to traditional techniques*, ch. 11 "Hard ground etching" (https://zoboko.com/text/dnxwnxol/etching-a-guide-to-traditional-techniques/11); Artools leather rollers at Polymetaal (https://www.polymetaal.nl/contents/en-uk/d517_Pagina_525.html).
+- Stop-out drying: Glasgow Print Studio, *Etching Handbook* (https://www.gpsart.co.uk/DownloadDocs/GPS_Etching_Handbook.pdf); MungoLux asphaltum varnish (https://mungolux.com/asphaltum-hard-ground_2).
+- Cox–Voinov and Tanner's law, ln(L/λ): D. Bonn, J. Eggers, J. Indekeu, J. Meunier, E. Rolley, "Wetting and spreading", *Rev. Mod. Phys.* 81, 739 (2009) (https://www.phys.ens.psl.eu/~foldingslidingstretchinglab/papers/Bonn_RMP_2009.pdf).
+- Sable rounds' hair lengths and widths: Rosemary & Co Series 33 (as in wet_pastel.md).
 - The workshop facts (grounds, times, coverage, over-biting): IP §2–§4 and its sources (Kiekeben; Jackson's; sonic.net; UMBC).

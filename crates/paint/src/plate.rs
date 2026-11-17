@@ -294,59 +294,101 @@ fn burr_sides(tip: f64, cone: f64, a: f64, side_deg: f64) -> (f64, f64) {
 /// plate, pushed or leaned to the side it stands up. `beta` is the steepest
 /// angle the face meets the metal at.
 pub fn groove_streams(h_pa: f64, tip_um: f64, cone_deg: f64, force: f64, along_deg: f64, side_deg: f64) -> Groove {
+    groove_streams_at(h_pa, tip_um, cone_deg, force, along_deg, side_deg, cone_front(cone_deg, along_deg, side_deg))
+}
+
+/// The cone's face about its axis, the needle's top leaning `along` degrees
+/// ahead and `side` to the right: its axis and two unit vectors square to it.
+fn cone_frame(along_deg: f64, side_deg: f64) -> ([f64; 3], [f64; 3], [f64; 3]) {
+    let (ta, ts) = (along_deg.to_radians().tan(), side_deg.to_radians().tan());
+    let m = (ta * ta + ts * ts + 1.0).sqrt();
+    let ax = [ta / m, ts / m, 1.0 / m];
+    let e1 = {
+        let k = [ax[2], 0.0, -ax[0]];
+        let l = (k[0] * k[0] + k[2] * k[2]).sqrt();
+        [k[0] / l, 0.0, k[2] / l]
+    };
+    let e2 = [ax[1] * e1[2] - ax[2] * e1[1], ax[2] * e1[0] - ax[0] * e1[2], ax[0] * e1[1] - ax[1] * e1[0]];
+    (ax, e1, e2)
+}
+
+/// The generatrix at φ round a cone of half-angle `cone` (radians) in its
+/// frame (`cone_frame`), and its face's outward normal.
+fn cone_face(frame: &([f64; 3], [f64; 3], [f64; 3]), cone: f64, phi: f64) -> ([f64; 3], [f64; 3]) {
+    let (ax, e1, e2) = frame;
+    let (c, s) = (phi.cos(), phi.sin());
+    let gn: [f64; 3] = std::array::from_fn(|j| ax[j] * cone.cos() + cone.sin() * (e1[j] * c + e2[j] * s));
+    let nrm: [f64; 3] = std::array::from_fn(|j| (gn[j] * cone.cos() - ax[j]) / cone.sin());
+    (gn, nrm)
+}
+
+/// The steepest a cone's face meets the metal ahead (degrees): its attack
+/// angle at its front, which a groove's width doesn't change.
+fn cone_front(cone_deg: f64, along_deg: f64, side_deg: f64) -> f64 {
+    let cone = cone_deg.to_radians();
+    let frame = cone_frame(along_deg, side_deg);
+    let alpha = |phi: f64| {
+        let (gn, n) = cone_face(&frame, cone, phi);
+        if gn[2] <= 1e-9 || n[0] <= 0.0 { f64::NEG_INFINITY } else { n[0].atan2(-n[2]).to_degrees() }
+    };
+    // coarsely round the point, then refined
+    let coarse = 24;
+    let step = std::f64::consts::TAU / coarse as f64;
+    let best = (0..coarse).map(|i| i as f64 * step).max_by(|p, q| alpha(*p).total_cmp(&alpha(*q))).unwrap();
+    let (mut lo, mut hi) = (best - step, best + step);
+    for _ in 0..30 {
+        let (m1, m2) = (lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0);
+        if alpha(m1) < alpha(m2) { lo = m1 } else { hi = m2 }
+    }
+    alpha(best).max(alpha(0.5 * (lo + hi)))
+}
+
+/// `groove_streams` given its cone's `cone_front` (a drypoint reuses it while
+/// the needle's lean holds).
+fn groove_streams_at(h_pa: f64, tip_um: f64, cone_deg: f64, force: f64, along_deg: f64, side_deg: f64, front: f64) -> Groove {
     let mut g = groove(h_pa, tip_um, cone_deg, force, along_deg, side_deg);
     let a = 0.5 * g.w;
     if a <= 0.0 || g.area <= 0.0 {
         return g;
     }
-    // (each sample: its place across the groove, its attack angle in degrees)
-    let n = 720;
-    let mut fr: Vec<(f64, f64)> = Vec::with_capacity(n);
     let cone = cone_deg.to_radians();
-    if a <= tip_um * cone.cos() {
-        // the sphere: its edge at the surface, a across, R − d over the centre
-        let r_d = (tip_um - g.d).max(1e-9);
-        for i in 0..n {
-            let phi = -0.5 * std::f64::consts::PI + (i as f64 + 0.5) * std::f64::consts::PI / n as f64;
-            fr.push((a * phi.sin(), (a * phi.cos() / r_d).atan().to_degrees()));
+    let sphere = a <= tip_um * cone.cos();
+    let r_d = (tip_um - g.d).max(1e-9);
+    let frame = cone_frame(along_deg, side_deg);
+    // the virtual apex lies tip(1/sin θ − 1) under the rounded point
+    let depth = g.d + tip_um * (1.0 / cone.sin() - 1.0);
+    // the face where a stream at angle φ round the point meets the surface: its place
+    // across the groove and its attack angle (degrees), if it meets the metal ahead
+    let at = |phi: f64| -> Option<(f64, f64)> {
+        if sphere {
+            // the sphere: its edge at the surface, a across, R − d over its centre
+            let c = phi.cos();
+            return (c > 0.0).then(|| (a * phi.sin(), (a * c / r_d).atan().to_degrees()));
         }
-    } else {
-        // the cone about its axis, the needle's top leaning `along` ahead and `side` to the right
-        let (ta, ts) = (along_deg.to_radians().tan(), side_deg.to_radians().tan());
-        let m = (ta * ta + ts * ts + 1.0).sqrt();
-        let ax = [ta / m, ts / m, 1.0 / m];
-        // a unit vector square to the axis, and the third
-        let e1 = {
-            let k = [ax[2], 0.0, -ax[0]];
-            let l = (k[0] * k[0] + k[2] * k[2]).sqrt();
-            [k[0] / l, 0.0, k[2] / l]
-        };
-        let e2 = [ax[1] * e1[2] - ax[2] * e1[1], ax[2] * e1[0] - ax[0] * e1[2], ax[0] * e1[1] - ax[1] * e1[0]];
-        // the virtual apex lies tip(1/sin θ − 1) under the rounded point
-        let depth = g.d + tip_um * (1.0 / cone.sin() - 1.0);
-        for i in 0..n {
-            let phi = (i as f64 + 0.5) * std::f64::consts::TAU / n as f64;
-            let (c, s) = (phi.cos(), phi.sin());
-            let gn: [f64; 3] = std::array::from_fn(|j| ax[j] * cone.cos() + cone.sin() * (e1[j] * c + e2[j] * s));
-            if gn[2] <= 1e-9 {
-                continue;
-            }
-            let nrm: [f64; 3] = std::array::from_fn(|j| (gn[j] * cone.cos() - ax[j]) / cone.sin());
-            // the face meeting the metal ahead: its normal points forward
-            if nrm[0] <= 0.0 {
-                continue;
-            }
-            let y = gn[1] * depth / gn[2];
-            fr.push((y, nrm[0].atan2(-nrm[2]).to_degrees()));
-        }
+        let (gn, nrm) = cone_face(&frame, cone, phi);
+        // the face meeting the metal ahead: its normal points forward
+        (gn[2] > 1e-9 && nrm[0] > 0.0).then(|| (gn[1] * depth / gn[2], nrm[0].atan2(-nrm[2]).to_degrees()))
+    };
+    // the steepest the face meets the metal: the sphere's front, or the cone's
+    let beta = if sphere { (a / r_d).atan().to_degrees() } else { front };
+    let (sl, sr) = burr_sides(tip_um, cone, a, side_deg);
+    if !beta.is_finite() || beta <= BETA_C_DEG {
+        // (no stream meets it steeper than β_c: it all ploughs)
+        g.beta = if beta.is_finite() { beta } else { g.beta };
+        (g.chip, g.cut) = (0.0, false);
+        (g.burr_l, g.burr_r) = (g.area * sl, g.area * sr);
+        return g;
     }
+    // the streams, finely: each sample's place across and its attack angle
+    let n = 360;
+    let mut fr: Vec<(f64, f64)> = (0..n).filter_map(|i| at((i as f64 + 0.5) * std::f64::consts::TAU / n as f64)).collect();
     if fr.len() < 2 {
         return g;
     }
     fr.sort_by(|p, q| p.0.total_cmp(&q.0));
     let (lo, hi) = (fr[0].0, fr[fr.len() - 1].0);
     let span = (hi - lo).max(1e-9);
-    let (mut all, mut cut, mut beta) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut all, mut cut) = (0.0f64, 0.0f64);
     for k in 0..fr.len() {
         // (this stream's width across the front, mapped onto the groove's width)
         let y0 = if k == 0 { lo } else { 0.5 * (fr[k - 1].0 + fr[k].0) };
@@ -354,14 +396,12 @@ pub fn groove_streams(h_pa: f64, tip_um: f64, cone_deg: f64, force: f64, along_d
         let u = -a + ((0.5 * (y0 + y1)) - lo) / span * 2.0 * a;
         let wt = (y1 - y0).max(0.0) * g.depth_at(u);
         all += wt;
-        beta = beta.max(fr[k].1);
         if fr[k].1 > BETA_C_DEG {
             cut += wt;
         }
     }
     let chip = if all > 0.0 { (cut / all).clamp(0.0, 1.0) } else { 0.0 };
-    // the ploughed share parts to the sides as `groove` parts it
-    let (sl, sr) = burr_sides(tip_um, cone, a, side_deg);
+    // (the ploughed share parts to the sides as `groove` parts it)
     let burr = g.area * (1.0 - chip);
     g.beta = beta;
     g.chip = chip;
@@ -996,6 +1036,9 @@ impl Plate {
         };
         let (samples, total) = Self::samples(pts, p / 4000.0);
         let mut rep = Report { length_mm: total, secs: Self::secs(&samples), ..Report::default() };
+        // (the cone's front for the last lean, to a twentieth of a degree: it holds
+        // along a stretch, and moves β by less than that)
+        let mut front: Option<((i64, i64), f64)> = None;
         for &(x, y, (tx, ty), s, pose, ds) in &samples {
             let f = Self::hand(pose.force as f64, s, total, pose.speed as f64);
             // the needle's lean: along the way it goes (pulled: its top ahead) and to its right
@@ -1004,7 +1047,20 @@ impl Plate {
             let (rx, ry) = (-ty, tx);
             let along = (lean * (ax * tx + ay * ty)).atan().to_degrees();
             let side = (lean * (ax * rx + ay * ry)).atan().to_degrees();
-            let g = if self.contact { groove_streams(h_pa, tip_um, cone_deg, f, along, side) } else { groove(h_pa, tip_um, cone_deg, f, along, side) };
+            let g = if self.contact {
+                let key = ((along * 20.0).round() as i64, (side * 20.0).round() as i64);
+                let fr = match front {
+                    Some((k, v)) if k == key => v,
+                    _ => {
+                        let v = cone_front(cone_deg, along, side);
+                        front = Some((key, v));
+                        v
+                    }
+                };
+                groove_streams_at(h_pa, tip_um, cone_deg, f, along, side, fr)
+            } else {
+                groove(h_pa, tip_um, cone_deg, f, along, side)
+            };
             if g.w <= 0.0 || g.area <= 0.0 {
                 continue;
             }

@@ -390,12 +390,12 @@ These come with the switch. A painting begun before it has none of them
 ```lua
 tape({{x, y}, ...}, {width=24})          -- a strip of masking tape, mm wide, along the points
 stencil({{x, y}, ...})                   -- stencil film over the canvas, the shape through the points cut out
-lift_tape()                              -- every piece lifted, with the paint on it; returns the wet paint taken, mm³
+taken, parted, torn, lifted = lift_tape()   -- every piece lifted, with the paint on it (see below)
 lay_sheet({{x, y}, ...}, {grammage=, tone=})   -- paper: a sheet cut to the shape through the points
 fix({{x, y}, ...}, {distance=300, cone=25, speed=300})   -- fixative sprayed from a can along the points
 fix({{x, y}}, {distance=300, cone=25, seconds=0.5})      -- a burst at one point
-b:blend({{x, y}, ...}, {pressure=, ramps=, orient=, shake=, swell=})   -- a clean-blender stroke
-b:stroke(pts, {film="glaze"})            -- one stroke that lays a thin film; also film="scumble", and on b:gesture
+b:blend({{x, y}, ...}, {pressure=, ramps=, orient=, shake=, swell=, speed=})   -- a clean-blender stroke
+b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); also on b:gesture and b:blend
 ```
 
 - **Tape** (oil, not paper) is crepe-paper masking tape, 140 µm thick
@@ -412,9 +412,34 @@ b:stroke(pts, {film="glaze"})            -- one stroke that lays a thin film; al
   estimate), over the whole canvas with the closed shape through the points
   cut out. Paint reaches the picture only through the hole. It lifts with
   `lift_tape()`, like tape.
-- Tape and stencils are laid and lifted in one chunk: a chunk that ends
-  with them down fails. While they are down, `wait`, a pencil's lines,
-  `erase` and `fix()` over the whole surface are refused.
+- Tape and stencils stay down until `lift_tape()`: across chunks, through
+  `wait`, and in a save (a save from before this holds none). Paint on them
+  dries as paint anywhere does. The picture under them is held as it was
+  when they went down. While they are down, a pencil's lines, `erase` and
+  `fix()` over the whole surface are refused.
+- **Lifting across paint.** Where paint laid since spans a tape's edge, the
+  film parts there as its drying state gives (`drying(x, y)`):
+  - A wet (open) film is a liquid and parts at the edge.
+  - A set film (tacky or touch-dry) is a solid. Its modulus and work of
+    fracture grow from its gel point to touch-dry (33 MPa and 15 J/m² when
+    touch-dry). It is held to the surface beside the tape by its adhesion:
+    2 J/m² on dry paint or a sealed ground, 10 J/m² on a ground still
+    absorbent (both estimates). A crack starting at the tape's edge turns
+    into that surface when the adhesion is under 0.26 of the film's work of
+    fracture (He and Hutchinson). Otherwise it runs down through the film,
+    which tears at the edge. A film that turns is peeled with the tape as a
+    flap, its tears converging at sin θ = α√(2Bτ)/(2Γt) (B the film's
+    bending stiffness, τ the adhesion, Γ its work of fracture, t its
+    thickness, α the peel angle, taken as 90°). Where no such angle exists
+    the film tears at the edge. Where one does, the film lifts off beside
+    the tape over the peel's ridge, α√(B/2τ): about 0.1 mm for a film 20 µm
+    thick on dry paint. What lay beneath it, as it was when the tape went
+    down, shows there. A still-tacky film (weak) and a film on an absorbent
+    ground (keyed in) tear. Each edge point is judged from the film's
+    thickness there.
+  - `lift_tape()` returns the wet paint taken (mm³), the length of edge
+    where wet paint parted and where a set film broke (mm), and the area
+    beside the tape where a set film lifted off with it (mm²).
 - **A frisket** (`lay_sheet` with points, on paper) is the paper sheet of
   [Drawing](#drawing-pencil-chalk-pastel-and-eraser) cut along the closed shape through the points: it covers
   what lies inside the cut, and its edge is the cut, sharp to the pixel.
@@ -441,13 +466,44 @@ b:stroke(pts, {film="glaze"})            -- one stroke that lays a thin film; al
   the wet film there rather than lying on top of it as a brushload does. It
   lays no paint of its own. A badger (`brush("badger", w)`) is soft and
   presses lightly. Any brush can be used.
-- **A film on one stroke** (`film=` on `b:stroke` and `b:gesture`): the
-  stroke adds no more than a thin film of wet paint to any spot, about
-  7.5 µm for `"glaze"` and 5 µm for `"scumble"` (the films of `work`'s
-  glaze and scumble hands). The hairs keep what they can't lay. Where the
-  hairs ride only the high points of the surface (light pressure, a stiff
-  brush, a rough ground), the film is broken. How much it shows depends on
-  the pile, as with those hands.
+- **The film one stroke leaves** (every brush stroke in a new painting:
+  `b:stroke`, `b:gesture`, `b:blend`) follows from the paint and the hand.
+  No mode picks it. The bristle bed is a slider riding on the paint. Each
+  hair is a keratin cantilever (3.5 GPa; 90 µm across for soft hair, 250 µm
+  for hog, by the brush's stiffness) bent by the pressure. The tuft's force
+  over its footprint gives the bed's pressure p. The film that passes under
+  a bed of length L moving at U is h₀ = 0.4√(ηUL/p) (Reynolds's slider). A
+  yield stress τ adds to it, h₀² = 0.16L(ηU + τh₀)/p, so a paint with one
+  keeps a film about 0.16τL/p however slowly it is drawn. About 0.69 h₀
+  leaves the outlet onto the canvas. The film is never more than the
+  meniscus behind each hair drags out (Landau–Levich, 1.34 R Ca^(2/3)) nor
+  more than the hair's radius. A stroke adds no more than that film to any
+  spot, and the hairs keep what it can't lay. With less paint on the brush
+  a stroke lays less.
+  - The paint's viscosity is its vehicle's, linseed oil at 0.048 Pa·s, or
+    oil and turpentine (0.0014 Pa·s) mixed by Arrhenius's log rule. The
+    pigment's crowding toward its packing limit raises it
+    (Krieger–Dougherty). Its yield stress grows with the pigment's share
+    (Flatt and Bowen's YODEL) and is 100 Pa for paint as from the tube. The
+    pigment's share and packing limit come from the pile: its tubes' oil,
+    the `medium=` knifed in or `blot=` drawn out, and `turps=`/`thinner=`.
+    Tube paint is about 0.6 Pa·s at brushing; with `medium=0.6` about
+    0.08 Pa·s with almost no yield stress; blotted, stiff with a high one.
+  - So, other things equal: pressing harder leaves a thinner film, and
+    drawing faster a thicker one (h ∝ √(U/p)). Paint with more medium
+    leaves a thinner film. Paint with a yield stress keeps a thicker film
+    drawn slowly. A wider, deeper tuft (a longer bed) leaves more. A hog
+    flat 7 mm wide with tube paint at 0.7 pressure and 200 mm/s leaves
+    about 12 µm, one 25 mm wide about 80 µm. A sable with paint knifed
+    with much medium leaves more than a hog does, since it presses less.
+  - `speed=` is the hand's speed in mm/s. Without it the hand moves at the
+    pace the hand-time ledger gives: through a tunnel four mark-widths wide
+    by the steering law, at most 400 mm/s. It also sets the stroke's hand
+    time.
+  - The paint a loaded hair carries reaches into the ground's tooth only as
+    deep as that film. Where the hairs touch only the weave's high points
+    (light pressure, little paint, a coarse weave), the film breaks.
+  - Sources and estimates: notes/research/stroke_film.md.
 - Hatching an area is the lines a pencil draws (`h:line`), one by one.
 
 A painting whose log's head has no `--@ gestures-only` line was begun

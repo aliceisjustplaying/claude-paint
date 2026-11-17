@@ -1730,13 +1730,14 @@ use("painting")
   taking half (with whiting nearly all), and is held off past a burr further than the cloth.
   Two passes over a place with whiting take a tarlatan's tone to almost nothing: the bare
   metal shines.
-  - **Under the contact laws** (`--@ intaglio-contact`): the skin is propped up only by the
-    gap a burr opens in its contact. That is some 0.4–0.6 mm either side of a 40 µm burr at
-    the default pressure, standing highest by the burr and closing smoothly. The palm takes
-    only the ink standing above that gap, so the tone it leaves by a burr fades
-    smoothly within a millimetre, the drypoint's velvet. It is the same whichever way the
-    palm moves. Without the laws the palm is held off for 2–3 mm past a burr, keeping
-    all of a heavy film there, with a ragged edge along a slanting line.
+  - **Under the contact laws** (`--@ intaglio-contact`): the palm bears on the plate by its
+    papillary ridges, about 60 µm high and 0.5 mm apart, and a drypoint burr fits under their
+    furrows. Only a ridge riding the burr is propped up, so beside a line the palm is held off
+    for at most a sixth of its touches, and nowhere past about 0.2 mm: it wipes beside the
+    lines almost as on the open plate, and takes most of the ink piled by them. A burr taller
+    than the furrows props the whole skin. It is the same whichever way the palm moves.
+    Without the laws the palm is held off for 2–3 mm past a burr, keeping all of a heavy film
+    there, with a ragged edge along a slanting line.
 - **`k:retrousse(pts, {passes=, width=, speed=})`.** A soft muslin (`width` mm, 40) passed
   lightly along the points. Its fibre ends hang into the lines it passes over and draw ink up
   by capillarity (more from a warm plate), laying it on the plate within half a millimetre
@@ -1770,19 +1771,19 @@ was printed.
 
 - **The drypoint needle** ploughs or cuts stream by stream across its groove, along azimuths
   that turn the short way (above, "Plough or cut").
-- **The palm** is held off past a burr by the gap the burr opens, and reaches only the ink
-  above that gap (above, `k:hand_wipe`). Where it comes down it touches whole: skin conforms
-  to the plate.
+- **The palm** bears on its ridges, and a burr holds it off only where a ridge rides it
+  (above, `k:hand_wipe`). Where it comes down it touches whole: skin conforms to the plate.
 - **The tarlatan beside a burr.** The cloth (softened for wiping: Peirce bending length 2–3 cm
   by `stiff`) lies on its own face, a compressible layer of crimped yarns some 0.25 mm
   thick that squeezes like any fibre mass. A burr squeezes that face over its top, nearly to
   its core, and lifts the cloth by the rest, which settles back over a few tenths of a
-  millimetre. Beside the burr the face still touches the plate, but bears only part of the
-  pad's pressure, and takes the ink that much more slowly. So the cloth leaves a fine halo of
-  ink by each burred line, densest by the line and gone by a millimetre or so: the drypoint's
-  velvet. A hatch some 1.5 mm apart prints as lines with soft edges, not as a solid block.
-  The cloth never stands clear of the plate beside a drypoint burr at a hand's pressure; where
-  a very tall burr (a crossing) does lift it clear, its loose fibre ends hang in and draw up
+  millimetre. Beside the burr the face still touches the plate, with fewer of its fibres in
+  the ink (they spread as it swells), and takes the ink somewhat more slowly; over the burr's
+  top it is pressed hardest and wipes hardest. Right by the burr a yarn resting on its top
+  can't come down for some 0.06–0.1 mm, and the ink there stays: the drypoint's velvet. So a
+  line prints peaked, dark at its core with a narrow velvet and no band beside it, and a
+  hatch a few tenths of a millimetre apart stays open. The cloth stands clear of the plate only in that shade, or
+  past a burr far taller than a drypoint's; there its loose fibre ends hang in and draw up
   some of the film. And the wipe's way matters: each point of the cloth's face carries the
   ink it has picked up and lays some back as it goes, so wiping across a line lays the line's
   ink on the side the pad goes to. Without the laws the cloth was held off for (B·h/p)^¼ and

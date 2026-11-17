@@ -641,19 +641,17 @@ pastellist does, each mark one stroke of the stick (it wears and sheds as
 and 50 mm long; a pencil's `hatch` keeps its 1.5 mm and 12 mm:
 
 ```lua
-p:hatch(m, {angle=function(x, y) return -0.9 - x / 2000 end})  -- strokes along a direction field (radians), or a form's field
+p:hatch(m, {angle=-1.0})                                        -- strokes at one angle (radians)
 p:hatch(m, {angle=-1.0, zigzag=true})                           -- each mark one back-and-forth stroke
 p:hatch(m, {zigzag={amplitude=30, period=50, round=0}})         -- its swing to either side and per swing there and back (units), sharp corners
 p:hatch(m, {angle=-1.0, length=600, spacing=120, jitter=true, open=0.3})  -- slashing diagonals, loose, the paper between
-p:hatch(m, {open=bare})                                         -- open in proportion to a mask: 1 bare paper, 0 covered
 p:hatch(m, {alt=30, azimuth=45, speed=250})                     -- how the hand holds and moves the stick
 ```
 
-- `angle` is radians (as for a pencil: 0 along x, positive turning down the
-  canvas), or a `function(x, y)` returning them, or a form's field, as
-  `work` takes. Along a field the strokes follow it: lines a `spacing` apart
-  traced through the mask, each cut into strokes of up to `length`, so the
-  hatching turns with the form and stays evenly spaced as the field fans.
+- `angle` is one number, radians (as for a pencil: 0 along x, positive
+  turning down the canvas). It takes no function or field: for strokes that
+  turn with a form, hatch each part on its own at its own angle, or lay the
+  strokes yourself with `stroke`.
 - `zigzag` turns each mark into one continuous stroke swinging back and forth
   across its line: `amplitude` to either side, `period` along the line per
   swing there and back, `round` 0 for sharp corners to 1 for a sine (the
@@ -671,9 +669,9 @@ p:hatch(m, {alt=30, azimuth=45, speed=250})                     -- how the hand 
   it by up to ± `angle` radians about its middle; `jitter=true` is ±30% and
   ±0.17 rad. Seeded: the same `seed=` lays the same strokes.
 - `open` leaves that share of the marks out, the paper (or what is under)
-  showing between the rest: a number 0..1, or a mask whose value at each
-  mark's middle is its chance to be left out. The same marks are left out
-  whatever the jitter.
+  showing between the rest: one number 0..1, not a mask (to leave more paper
+  in one part, hatch that part on its own with a larger `open`). The same
+  marks are left out whatever the jitter.
 - `alt`, `azimuth` and `speed` hold the stick for every mark as `stroke`
   takes them. By default it is held at 50° (a held pen's measured altitude)
   with its upper end to the lower right (45°), and each stroke goes as fast as

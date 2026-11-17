@@ -100,4 +100,3 @@ These are not measured on her sheets. They come from measurements of hands and o
 - L. R. B. Schomaker and R. Plamondon, "The relation between pen force and pen-point kinematics in handwriting", *Biological Cybernetics* 63 (1990) 277–289 (preprint at ai.rug.nl): pen altitude, wrist and finger axes.
 - ANSUR II (2012 Anthropometric Survey of U.S. Army Personnel), public data files, male (4082) and female (1986): `handlength`, `forearmhandlength`. Read 2026-11-15.
 - J. Y. Ryu, W. P. Cooney, L. J. Askew, K. N. An and E. Y. Chao, "Functional ranges of motion of the wrist joint", *J. Hand Surg. Am.* 16 (1991) 409–419 (PubMed 1861019).
-- B. Jobard and W. Lefer, "Creating evenly-spaced streamlines of arbitrary density", *Visualization in Scientific Computing '97* (Springer, 1997), pp. 43–55: the placement `paint::area_strokes` uses for a direction field.

@@ -8,7 +8,10 @@
 //! - **Steam** (`Canvas::steam`, §1–§3). A kettle's jet of steam mixes with
 //!   the room's air as a turbulent round jet does (Chen & Rodi's decay of
 //!   its centreline velocity and mass fraction); at the sheet it is a warm
-//!   fog (`plume`). It condenses on the cooler sheet at the mass transfer
+//!   fog (`plume`). The hand moves the kettle along points (a pass): a point
+//!   of the sheet is steamed for as long as the jet's steam share is on it,
+//!   by the jet's own Gaussian profile, out to where the mixture's dew point
+//!   falls to the cool sheet's and nothing condenses (`Plume::reach_m`). It condenses on the cooler sheet at the mass transfer
 //!   of its stagnation flow (Sibulkin's laminar stagnation-point law, by the
 //!   Chilton–Colburn analogy), and the latent heat warms the face, which
 //!   conducts it into the sheet and the board behind (`condense`): the face
@@ -21,7 +24,8 @@
 //!   no pigment: nothing moves sideways unless the wet pastel is then
 //!   worked (a wet brush, `wash_pastel`).
 //! - **Sifting** (`Canvas::sift`, §4–§6). Crushed pastel rubbed through a
-//!   sieve falls as crumbs, with no stroke. Its sizes follow crushing
+//!   sieve held over points falls as crumbs, with no stroke, under the
+//!   sieve's mesh. Its sizes follow crushing
 //!   (Gates–Gaudin–Schuhmann, `GGS_M`) up to the sieve's aperture. On a dry
 //!   sheet the crumbs lie on the tooth, loose, held by the size-independent
 //!   adhesion of a dry grain (sheet.rs `ADHESION_N`): a tap sheds every
@@ -96,6 +100,12 @@ const BOARD_RHO: f64 = 480.0;
 const BOARD_MM: f64 = 20.0;
 /// The time step of the face's heat balance, s.
 const STEAM_DT: f64 = 0.01;
+/// A round jet's scalar (its steam share's) half-width over the distance:
+/// the mean scalar profile is Gaussian, C/C_c = exp(−ln 2 (r/b)²), and
+/// spreads a little faster than the velocity: 0.102–0.11 (Mi, Nobes &
+/// Nathan 2001, as quoted by the high-pressure jet DNS, arXiv 2009.12926),
+/// 0.138 for a light helium jet (Panchapakesan & Lumley 1993b) [M]: 0.11.
+const JET_SCALAR_SPREAD: f64 = 0.11;
 
 /// Crushed pastel's sizes: the mass finer than d is (d/D)^m up to the
 /// sieve's aperture D (Gates–Gaudin–Schuhmann). m falls with a material's
@@ -141,6 +151,13 @@ const P_TOP: usize = 2;
 const P_UNIT: usize = 3;
 const P_HELD: usize = 4;
 
+/// The error function (Abramowitz & Stegun 7.1.26, within 1.5e-7).
+fn erf(x: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.327_591_1 * x.abs());
+    let y = 1.0 - t * (0.254_829_592 + t * (-0.284_496_736 + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429)))) * (-x * x).exp();
+    if x < 0.0 { -y } else { y }
+}
+
 /// Water's saturated vapour pressure, Pa, at `t` °C (Buck 1981, as
 /// `wet_pastel`).
 fn p_sat(t: f64) -> f64 {
@@ -179,6 +196,19 @@ pub struct Plume {
     /// Heat and mass transfer at the stagnation point, W/m²K and m/s.
     pub h_c: f64,
     pub h_m: f64,
+    /// The steam share's half-width, m (`JET_SCALAR_SPREAD`), and how far
+    /// from the axis any vapour condenses on the sheet at the room's
+    /// temperature, m: where the mixture's dew point falls to it.
+    pub scalar_half_m: f64,
+    pub reach_m: f64,
+}
+
+impl Plume {
+    /// The steam share off the axis by `r_m`, over the axis's: the jet's
+    /// Gaussian scalar profile, 0 past `reach_m`.
+    pub fn share_at(&self, r_m: f64) -> f64 {
+        if r_m >= self.reach_m { 0.0 } else { (-std::f64::consts::LN_2 * (r_m / self.scalar_half_m).powi(2)).exp() }
+    }
 }
 
 /// The jet at `distance_mm` (§1): a boiling kettle gives `KETTLE_W` / h_fg
@@ -225,13 +255,18 @@ pub fn plume(distance_mm: f64) -> Plume {
         if p_sat(m) < pv { lo = m } else { hi = m }
     }
     let dew = 0.5 * (lo + hi);
+    // where the room's air and the jet's steam hold no more vapour than air
+    // saturated at the room's temperature, the sheet takes none: s ya + ... ≤ y_sat
+    let scalar_half = JET_SCALAR_SPREAD * x;
+    let s_dew = ((y_sat(ta) - ya) / (1.0 - ya)).max(0.0);
+    let reach = if s > s_dew { scalar_half * ((s / s_dew).ln() / std::f64::consts::LN_2).sqrt() } else { 0.0 };
     let beta = u / half;
     let h_c = SIBULKIN * AIR_K * AIR_PR.powf(0.4) * (beta / AIR_NU).sqrt();
     // Chilton–Colburn: h/(ρ c_p) Le^(−2/3), vapour in air at 20 °C (Massman)
     let d_v = 2.178e-5 * ((ta + 273.15) / 273.15f64).powf(1.81);
     let le = AIR_K / (AIR_RHO * AIR_CP) / d_v;
     let h_m = h_c / (AIR_RHO * AIR_CP) * le.powf(-2.0 / 3.0);
-    Plume { steam: s, temp_c: t, dew_c: dew, rho_v, u, half_m: half, h_c, h_m }
+    Plume { steam: s, temp_c: t, dew_c: dew, rho_v, u, half_m: half, h_c, h_m, scalar_half_m: scalar_half, reach_m: reach }
 }
 
 /// What steam condensed on a sheet over time (`condense`): at each step of
@@ -534,21 +569,22 @@ pub(crate) fn blown(p: &mut [f32], taken: f32) {
 /// What `Canvas::steam` did.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Steamed {
-    /// Water condensed where the mask is full, µm (g/m²).
+    /// The most water condensed, µm (g/m²): on the jet's track.
     pub water_um: f64,
     /// The face's temperature at the end, °C, and the jet's dew point.
     pub face_c: f64,
     pub dew_c: f64,
-    /// The hand's time, s: the jet played over the mask, its footprint at a
-    /// time a disc of its half-width.
+    /// The hand's time, s: the pass.
     pub secs: f64,
 }
 
 /// What `Canvas::sift` did. Volumes in mm³ as crushed (a stick's packing).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Sifted {
-    /// All that fell on the picture (the amount sifted).
+    /// All that fell on the picture.
     pub laid_mm3: f64,
+    /// What fell beside the picture, the sieve held over its edge.
+    pub off_mm3: f64,
     /// The fines that went into the tooth's pores.
     pub fines_mm3: f64,
     /// The crumbs lying on the tooth, loose (dry) or held by water (wet).
@@ -566,36 +602,35 @@ pub struct Sifted {
 }
 
 impl Canvas {
-    /// `seconds` of a kettle's steam `distance_mm` away, played over the
-    /// mask `m` (None: all of the sheet): each point the mask covers gets
-    /// its share of the seconds (a soft edge less), and the water the jet
-    /// condenses there in that time (`condense`) is laid as the wet pastel
+    /// A kettle's steam `distance_mm` away, moved along `pts` (units) at an
+    /// even pace in `seconds` (one point: held there). Each point of the
+    /// sheet is steamed for the time the jet's steam share is on it, by the
+    /// jet's Gaussian profile out to its reach (`steam_exposure`), and the
+    /// water the jet condenses there in that time (`condense`) is laid as the wet pastel
     /// switch's water (`wet_pastel::add_water`): the pastel's pores take it
     /// first, what is left stands and sinks into the sheet, the gum
     /// dissolves and sets again as it dries. Not under a mask sheet, on wet
     /// paint, or on pastel painted over. Needs paper, drawing optics and the
     /// wet pastel switch.
-    pub fn steam(&mut self, m: Option<&crate::Mask>, seconds: f64, distance_mm: f64) -> Result<Steamed, String> {
+    pub fn steam(&mut self, pts: &[(f32, f32)], seconds: f64, distance_mm: f64) -> Result<Steamed, String> {
         let p = *self.paper.as_ref().ok_or("steam: it is not a sheet of paper")?;
         if !(self.wet_pastel && self.drawing_optics) {
             return Err("steam: needs the wet pastel switch (water in pastel) and drawing optics".into());
         }
-        let cd = condense(&p, distance_mm, seconds);
         let pl = plume(distance_mm);
-        let f = self.f;
-        let s_mm = self.px_mm() as f64;
+        let taus = self.steam_exposure(pts, seconds, &pl);
+        let most = taus.iter().cloned().fold(0.0f64, f64::max);
+        let cd = condense(&p, distance_mm, most);
         self.drawing_mut();
         let film = std::mem::take(&mut self.film);
         let mut pxs = std::mem::take(&mut self.px);
         let mut d = self.drawing.take().expect("drawing_mut made it");
-        let mut area_mm2 = 0.0;
         let mut any = false;
         for i in 0..d.cells.len() {
-            let w = m.map_or(1.0, |m| m.data[f.whole_index(i)].clamp(0.0, 1.0));
-            if w <= 0.0 || self.sheet_over(i) || self.wet.vol[i] > 1e-5 {
+            let tau = taus[i];
+            if tau <= 0.0 || self.sheet_over(i) || self.wet.vol[i] > 1e-5 {
                 continue;
             }
-            area_mm2 += w as f64 * s_mm * s_mm;
             let c = &mut d.cells[i];
             if c.film >= 0.0 && film[i] > c.film + 1e-4 && c.loose + c.bound > 0.0 {
                 // (pastel under paint: the paint keeps the water off)
@@ -604,7 +639,7 @@ impl Canvas {
             if c.film < 0.0 || film[i] > c.film + 1e-4 {
                 c.restart(film[i], pxs[i]);
             }
-            let um = cd.at(seconds * w as f64) as f32;
+            let um = cd.at(tau) as f32;
             if um <= 0.0 {
                 continue;
             }
@@ -619,18 +654,114 @@ impl Canvas {
         self.film = film;
         self.px = pxs;
         self.drawing = Some(d);
-        let foot = std::f64::consts::PI * (pl.half_m * 1e3).powi(2);
-        Ok(Steamed {
-            water_um: cd.at(seconds),
-            face_c: *cd.face_c.last().unwrap_or(&STUDIO.air_c),
-            dew_c: pl.dew_c,
-            secs: seconds * (area_mm2 / foot).max(1.0),
+        Ok(Steamed { water_um: cd.at(most), face_c: *cd.face_c.last().unwrap_or(&STUDIO.air_c), dew_c: pl.dew_c, secs: seconds })
+    }
+
+    /// Each pixel's steaming time, s, for the jet `pl` moved along `pts`
+    /// (units) at an even pace in `seconds` (one point, or none apart: held
+    /// at the first): ∫ C(r(t))/C_c dt, the steam share on it over the
+    /// axis's (`Plume::share_at`), in closed form along each straight leg.
+    pub fn steam_exposure(&self, pts: &[(f32, f32)], seconds: f64, pl: &Plume) -> Vec<f64> {
+        let reach = pl.reach_m * 1e3;
+        let k = std::f64::consts::LN_2 / (pl.scalar_half_m * 1e3).powi(2);
+        let sk = k.sqrt();
+        let half_gauss = 0.5 * std::f64::consts::PI.sqrt() / sk;
+        self.over_path(pts, reach, |legs, total, x, y| {
+            if total <= 0.0 {
+                let (ax, ay) = legs[0].0;
+                let r = ((x - ax).powi(2) + (y - ay).powi(2)).sqrt();
+                return seconds * pl.share_at(r * 1e-3);
+            }
+            let mut t = 0.0;
+            for &((ax, ay), (ex, ey), l) in legs {
+                // along the leg u, across it y; the part of it within reach
+                let (u, v) = ((x - ax) * ex + (y - ay) * ey, -(x - ax) * ey + (y - ay) * ex);
+                if v.abs() >= reach {
+                    continue;
+                }
+                let h = (reach * reach - v * v).sqrt();
+                let (a, c) = ((u - h).max(0.0), (u + h).min(l));
+                if c <= a {
+                    continue;
+                }
+                let dt_per_mm = seconds / total;
+                t += dt_per_mm * (-k * v * v).exp() * half_gauss * (erf(sk * (u - a)) - erf(sk * (u - c)));
+            }
+            t
         })
+    }
+
+    /// The share of a sift held over `pts` (units) that falls on each pixel:
+    /// the sieve's mesh a disc `sieve_mm` across, the crumbs falling straight
+    /// down, moved along the points at an even pace (one point: held there).
+    pub fn sift_share(&self, pts: &[(f32, f32)], sieve_mm: f64) -> Vec<f64> {
+        let r = 0.5 * sieve_mm;
+        let px_mm2 = (self.px_mm() as f64).powi(2);
+        let disc = std::f64::consts::PI * r * r;
+        self.over_path(pts, r, |legs, total, x, y| {
+            if total <= 0.0 {
+                let (ax, ay) = legs[0].0;
+                return if (x - ax).powi(2) + (y - ay).powi(2) < r * r { px_mm2 / disc } else { 0.0 };
+            }
+            let mut along = 0.0;
+            for &((ax, ay), (ex, ey), l) in legs {
+                let (u, v) = ((x - ax) * ex + (y - ay) * ey, -(x - ax) * ey + (y - ay) * ex);
+                if v.abs() >= r {
+                    continue;
+                }
+                let h = (r * r - v * v).sqrt();
+                along += ((u + h).min(l) - (u - h).max(0.0)).max(0.0);
+            }
+            along / total * px_mm2 / disc
+        })
+    }
+
+    /// `f(legs, length, x, y)` at each pixel's middle (mm) within `reach_mm`
+    /// of the path `pts` (units), 0 elsewhere. The legs are (start, unit
+    /// direction, length), in mm; with no length, one leg at the first point.
+    fn over_path(&self, pts: &[(f32, f32)], reach_mm: f64, f: impl Fn(&[((f64, f64), (f64, f64), f64)], f64, f64, f64) -> f64) -> Vec<f64> {
+        let fr = self.f;
+        let mut out = vec![0.0; self.px.len()];
+        if pts.is_empty() || !(reach_mm > 0.0) {
+            return out;
+        }
+        let mpu = self.mm_per_unit() as f64;
+        let mm: Vec<(f64, f64)> = pts.iter().map(|&(x, y)| (x as f64 * mpu, y as f64 * mpu)).collect();
+        let mut legs = Vec::new();
+        let mut total = 0.0;
+        for w in mm.windows(2) {
+            let (dx, dy) = (w[1].0 - w[0].0, w[1].1 - w[0].1);
+            let l = (dx * dx + dy * dy).sqrt();
+            if l > 0.0 {
+                legs.push((w[0], (dx / l, dy / l), l));
+                total += l;
+            }
+        }
+        if legs.is_empty() {
+            legs.push((mm[0], (1.0, 0.0), 0.0));
+        }
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for &(x, y) in &mm {
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x);
+            y1 = y1.max(y);
+        }
+        let (x0, y0, x1, y1) = (x0 - reach_mm, y0 - reach_mm, x1 + reach_mm, y1 + reach_mm);
+        for (i, o) in out.iter_mut().enumerate() {
+            let (x, y) = (fr.ux(i % fr.w) as f64 * mpu, fr.uy(i / fr.w) as f64 * mpu);
+            if x < x0 || x > x1 || y < y0 || y > y1 {
+                continue;
+            }
+            *o = f(&legs, total, x, y);
+        }
+        out
     }
 
     /// Sift `vol_mm3` of crushed `stick` (its color, particle index, carbon
     /// and lift; a stick's packing) through a sieve of aperture `grain_mm`
-    /// over the mask `m` (None: all of it), spread by the mask's weight (§4).
+    /// and `sieve_mm` across, held over `pts` (`sift_share`, §4); what falls
+    /// beside the picture is lost.
     /// The fines (below `CRUMB_MIN_UM`) settle into the tooth's pores as a
     /// deposit does. The crumbs fall one by one (Poisson, by size bins of
     /// the crushing's distribution, `GGS_M`), and lie on the tooth where
@@ -640,16 +771,16 @@ impl Canvas {
     /// their pores first; once full, the water left standing gathers them
     /// into clusters (`cluster_um`), which fall in their place. `seed` makes
     /// the fall repeatable. Needs paper and drawing optics.
-    pub fn sift(&mut self, m: Option<&crate::Mask>, vol_mm3: f64, grain_mm: f64, stick: &Stick, seed: u64) -> Result<Sifted, String> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn sift(&mut self, pts: &[(f32, f32)], vol_mm3: f64, grain_mm: f64, sieve_mm: f64, stick: &Stick, seed: u64) -> Result<Sifted, String> {
         let p = *self.paper.as_ref().ok_or("sift: it is not a sheet of paper")?;
         if !self.drawing_optics {
             return Err("sift: needs drawing optics".into());
         }
-        if !(vol_mm3 >= 0.0 && grain_mm > 0.0) {
-            return Err("sift: the amount is mm³ (0 or more), the sieve's aperture mm (more than 0)".into());
+        if !(vol_mm3 >= 0.0 && grain_mm > 0.0 && sieve_mm > 0.0) {
+            return Err("sift: the amount is mm³ (0 or more), the sieve's aperture and width mm (more than 0)".into());
         }
         let top = grain_mm * 1e3;
-        let f = self.f;
         let s_mm = self.px_mm() as f64;
         let px_um2 = (s_mm * 1e3).powi(2);
         let sized = p.cobb60.is_some();
@@ -666,16 +797,21 @@ impl Canvas {
             Vec::new()
         };
         let crumb_d = mean_crumb_um(top);
-        // where it falls: the mask's weights
+        // where it falls: each pixel's share of it under the sieve
         let n = self.px.len();
-        let weights: Vec<f32> = (0..n).map(|i| m.map_or(1.0, |m| m.data[f.whole_index(i)].clamp(0.0, 1.0))).collect();
-        let total_w: f64 = weights.iter().map(|&w| w as f64).sum();
-        let mut out = Sifted { laid_mm3: vol_mm3, crumb_um: crumb_d, ..Sifted::default() };
+        let mut weights = self.sift_share(pts, sieve_mm);
+        // (the pixels' middles sample the mesh's disc: never more than all of it)
+        let raw: f64 = weights.iter().sum();
+        if raw > 1.0 {
+            weights.iter_mut().for_each(|w| *w /= raw);
+        }
+        let total_w = raw.min(1.0);
+        let mut out = Sifted { laid_mm3: vol_mm3 * total_w, off_mm3: vol_mm3 * (1.0 - total_w), crumb_um: crumb_d, ..Sifted::default() };
         if total_w <= 0.0 || vol_mm3 <= 0.0 {
             return Ok(out);
         }
-        // µm of stick volume over a pixel, per unit weight
-        let per_w = vol_mm3 * 1e9 / px_um2 / total_w;
+        // µm of stick volume over a pixel, per unit share
+        let per_w = vol_mm3 * 1e9 / px_um2;
         let global_free = self.damp_free() as f64;
         let sheet_area_mm2 = self.width() as f64 * self.height() as f64 * (self.mm_per_unit() as f64).powi(2);
         self.drawing_mut();
@@ -716,7 +852,7 @@ impl Canvas {
         let (mut drawn, mut expected) = (0.0f64, 0.0f64);
         let (mut cl_m, mut cl_v, mut film_m) = (0.0f64, 0.0f64, 0.0f64);
         for i in 0..n {
-            let w = weights[i] as f64;
+            let w = weights[i];
             if w <= 0.0 {
                 continue;
             }

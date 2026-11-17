@@ -1394,23 +1394,27 @@ and `steam` and `sift` don't exist in it. The numbers and their sources are in
 notes/research/steam_sift.md.
 
 ```lua
-m = rect(300, 200, 250, 300)
-w, t = steam(m, {seconds=8})           -- the kettle's jet over the patch: 12 µm of water, face 64 °C
-r = sift(pile{{"green earth", 1}, {"lead white", 2}}, m, {amount=4, grain=0.3})
-print(r.cluster)                       -- the clusters the drying drops gather, µm
+w, t = steam({{420, 350}}, {seconds=8})            -- the kettle held there: 12 µm of water on its axis, face 64 °C
+steam({{300, 200}, {550, 200}, {550, 500}}, {seconds=12})   -- moved along the points in 12 s
+r = sift(pile{{"green earth", 1}, {"lead white", 2}}, {{420, 350}}, {amount=4, grain=0.3})
+print(r.cluster, r.off)                -- the clusters the drying drops gather, µm; what fell beside the sheet
 p = pastel(pile{{"vermilion", 1}})
-sift(p, rect(600, 200, 200, 200), {amount=10})   -- the stick shortens by 10 mm³ over its section
+sift(p, {{600, 200}, {800, 400}}, {amount=10, sieve=40})   -- the stick shortens by 10 mm³ over its section
 tap()                                  -- dry crumbs fall; stuck ones stay
 ```
 
-- **`steam(mask, {seconds=, distance=})`** plays a boiling kettle's jet over the mask (nil:
-  the whole sheet). `seconds` is how long each point is in the jet (a soft mask edge gets
-  less); `distance` is mm from the spout (200 if not given, 100 to 600). At 200 mm the jet
-  is a fog of about 67 °C: in a second it condenses about 4 g/m² of water, in 10 s about
-  14, growing as the square root of the time once the paper's face has warmed (the board
-  behind takes the heat). The hand's time is `seconds` over the jet's footprint (a disc
-  about 38 mm across at 200 mm): a whole sheet takes minutes. Returns the water (µm, where
-  the mask is full) and the face's temperature.
+- **`steam({{x, y}, ...}, {seconds=, distance=})`** moves a boiling kettle's jet along the
+  points (units) at an even pace, the whole pass taking `seconds` (one point: the jet held
+  there that long); `distance` is mm from the spout (200 if not given, 100 to 600). It
+  takes no mask, function or field: where it steams is where the jet goes. At 200 mm the
+  jet is a fog of about 67 °C: on its axis it condenses about 4 g/m² of water in a second,
+  about 14 in 10 s, growing as the square root of the time once the paper's face has
+  warmed (the board behind takes the heat). Off the axis the steam thins as a round jet's
+  does, to half 22 mm out at 200 mm (11 mm at 100), and past where the air it mixes with
+  can't hold more vapour than air saturated at the sheet's 20 °C nothing condenses: 47 mm
+  out at 200 mm, 26 at 100. Each point is steamed for as long as the jet's steam is on
+  it. The hand's time is `seconds`. Returns the water on the jet's track (µm) and the
+  face's temperature there.
 - **What the water does** is what water does in pastel (`--@ wet-pastel`): the pastel's
   pores take it first and it darkens while wet; what is left stands on the sheet and
   sinks in as its sizing lets it (on the default sheet about 3 µm in the first second, 25
@@ -1419,9 +1423,13 @@ tap()                                  -- dry crumbs fall; stuck ones stay
   pastel that wasn't. Steam carries no color: nothing moves unless you work the wet
   pastel then (`b:wash` moves it as paste). Not under a mask sheet, on wet paint, or on
   pastel painted over.
-- **`sift(stick or pile, mask, {amount=, grain=})`** crushes `amount` mm³ of a stick (it
-  shortens; refused if under 5 mm would be left) or of a pile's color, and rubs it through
-  a sieve of `grain` mm (0.5 if not given) over the mask (nil: all of it), with no stroke.
+- **`sift(stick or pile, {{x, y}, ...}, {amount=, grain=, sieve=})`** crushes `amount` mm³
+  of a stick (it shortens; refused if under 5 mm would be left) or of a pile's color, and
+  rubs it through a sieve of `grain` mm aperture (0.5 if not given) and `sieve` mm across
+  (60, a tea strainer; 10 to 300), held over the points and moved along them at an even
+  pace (one point: held there), with no stroke. It takes no mask, function or field. The
+  crumbs fall straight down under the sieve's mesh; what falls beside the sheet is lost
+  (`off`).
   A soft crushing gives many fines: about a quarter of the mass is under 5 µm and settles
   into the tooth's pores; the rest lies on the tooth as crumbs up to the sieve's size,
   scattered as they fall (a coarse sieve speckles, a fine one veils). Takes 20 s of hand
@@ -1437,7 +1445,7 @@ tap()                                  -- dry crumbs fall; stuck ones stay
   water, the larger (about 10 µm over a 4 µm film, 30 µm over 19 µm). On a sized sheet the
   condensed drops sink in within half a minute, so sift a patch straight after steaming
   it; sifted later the crumbs still stick, but singly. As it dries, the gum binds them:
-  fixed without fixative. Returns a table: `laid`, `fines`, `loose`, `stuck`, `caught`
+  fixed without fixative. Returns a table: `laid` (on the sheet), `off`, `fines`, `loose`, `stuck`, `caught`
   (on a mask sheet or wet paint) in mm³, and `cluster`, `film` and `crumb` (the crumbs'
   mass-mean size) in µm.
 - Saves and checkpoints keep the crumbs lying on the tooth and whether they are held.

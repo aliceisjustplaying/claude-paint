@@ -175,8 +175,8 @@ pub const SURFACES_MARK: &str = "--@ surfaces";
 /// is accepted and installs nothing.
 pub const DAMP_PAPER_MARK: &str = "--@ damp-paper";
 /// The steam-and-sift switch, in the head of a session file (notes/cassatt_support.md gap 6;
-/// steam.rs): `steam(mask, {seconds=})` plays a kettle's jet over the sheet, its water binding
-/// loose pastel as it dries; `sift(stick or pile, mask, {amount=, grain=})` drops crushed
+/// steam.rs): `steam(pts, {seconds=})` moves a kettle's jet along points, its water binding
+/// loose pastel as it dries; `sift(stick or pile, pts, {amount=, grain=})` drops crushed
 /// pastel as crumbs, loose on a dry sheet (a tap takes them), stuck and clustered on a damp
 /// one. A new painting has it; a log without it replays as it was painted, with none of it.
 /// Its verbs work on a sheet of paper, so it installs them only beside the paper-and-pastel

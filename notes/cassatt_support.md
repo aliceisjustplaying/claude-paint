@@ -169,8 +169,8 @@ The ranking is by how much each gap matters for working as she did. Her output w
 - **Built:** the easel's `--@ steam-sift` (`steam`, `sift`; notes/research/steam_sift.md, notes/easel_guide.md).
 - **Why.** In a 1914 pastel she sifted crushed pastel onto a surface dampened by vapor, so that it dried in minute clusters (research §2). Degas's steaming is the same tool (notes/degas-materials.md §5).
 - **What it would model:**
-  - `steam(mask, {seconds=})`: wets the paper and the pastel's surface (the water state of gap 1), so loose pastel softens and partly binds as it dries
-  - `sift(pile or stick, mask, {amount=, grain=})`: drops crushed pastel as crumbs with no stroke. On dry paper most stays loose and comes away with `tap` or `blow`. On damp paper it sticks and agglomerates into clusters.
+  - `steam(pts, {seconds=})`: a kettle's jet moved along points; wets the paper and the pastel's surface (the water state of gap 1), so loose pastel softens and partly binds as it dries
+  - `sift(pile or stick, pts, {amount=, grain=})`: a sieve held over points; drops crushed pastel as crumbs with no stroke. On dry paper most stays loose and comes away with `tap` or `blow`. On damp paper it sticks and agglomerates into clusters.
 - **Dependencies:** gap 1's water state; the crumb model in pastel.rs (`lay_crumbs`).
 - **Research:** the Met article's description of its mock-up; Degas steaming accounts; how particle clusters form as a damp layer dries (estimates).
 

@@ -78,25 +78,33 @@ fn without_the_switch_it_is_byte_identical() {
         assert!(off.lua.globals().get::<Value>(verb).unwrap().is_nil(), "{verb}");
         assert!(!on.lua.globals().get::<Value>(verb).unwrap().is_nil(), "{verb}");
     }
-    let e = replay(&format!("{loff}\n--@ chunk 3\nsteam(nil, {{seconds=5}})\n")).err().unwrap();
+    let e = replay(&format!("{loff}\n--@ chunk 3\nsteam({{{{500, 500}}}}, {{seconds=5}})\n")).err().unwrap();
     assert!(e.contains("steam"), "{e}");
 }
 
 /// A stick crushed and sifted shortens by the volume over its section; on the dry sheet a tap
-/// sheds most of it. A patch steamed and sifted at once, while the condensed drops stand on the
-/// sized sheet, holds its crumbs in clusters through a tap. The log replays to the same sheet.
+/// sheds most of it. A patch steamed and sifted at once, the kettle and the sieve held over its
+/// middle while the condensed drops stand on the sized sheet, holds its crumbs in clusters
+/// through a tap. The log replays to the same sheet.
 #[test]
 fn sift_a_stick_dry_and_steamed() {
     let mut s = live();
     run(&mut s, PAPER);
-    let out = run(&mut s, "p = pastel(pile{{\"vermilion\", 1}, {\"lead white\", 1}})\nlocal l0 = p.length\nlocal r = sift(p, nil, {amount=20})\nprint(\"cut=\" .. (l0 - p.length) .. \" laid=\" .. r.laid .. \" loose=\" .. r.loose .. \" cluster=\" .. r.cluster)\nprint(\"fell=\" .. tap())");
+    let out = run(&mut s, "p = pastel(pile{{\"vermilion\", 1}, {\"lead white\", 1}})\nlocal l0 = p.length\nlocal r = sift(p, {{500, 500}}, {amount=20})\nprint(\"cut=\" .. (l0 - p.length) .. \" laid=\" .. r.laid .. \" off=\" .. r.off .. \" loose=\" .. r.loose .. \" cluster=\" .. r.cluster)\nprint(\"fell=\" .. tap())");
     let area = std::f64::consts::FRAC_PI_4 * 12.0 * 12.0;
     assert!((printed(&out, "cut") - 20.0 / area).abs() < 1e-4, "{out}");
-    assert!((printed(&out, "laid") - 20.0).abs() < 1e-9 && printed(&out, "cluster") == 0.0);
-    assert!(printed(&out, "fell") > 10.0, "most of the dry crumbs tap off: {out}");
+    // the 60 mm sieve over the middle of the 60 mm sheet: its disc just inside it
+    let (laid, off) = (printed(&out, "laid"), printed(&out, "off"));
+    assert!((laid + off - 20.0).abs() < 1e-6 && off < 0.01 * 20.0, "{out}");
+    assert!(printed(&out, "cluster") == 0.0);
+    assert!(printed(&out, "fell") > 0.5 * laid, "most of the dry crumbs tap off: {out}");
+    // held over the sheet's corner, three quarters fall beside it
+    let out = run(&mut s, "local r = sift(pile{{\"vermilion\", 1}}, {{0, 0}}, {amount=4})\nprint(\"laid=\" .. r.laid .. \" off=\" .. r.off)\ntap()");
+    assert!((printed(&out, "laid") - 1.0).abs() < 0.03 && (printed(&out, "off") - 3.0).abs() < 0.03, "{out}");
 
-    // a patch steamed (30 mm square, the jet's footprint) and sifted at once, while its drops stand
-    let out = run(&mut s, "m = rect(250, 250, 500, 500)\nlocal w, t = steam(m, {seconds=20})\nprint(\"water=\" .. w .. \" face=\" .. t)\nlocal r = sift(pile{{\"green earth\", 1}}, m, {amount=2, grain=0.3})\nprint(\"stuck=\" .. r.stuck .. \" cluster=\" .. r.cluster .. \" film=\" .. r.film)\nprint(\"fell=\" .. tap())");
+    // a patch steamed (the jet held over its middle) and sifted at once with a small sieve
+    // (20 mm, inside the jet's 47 mm reach), while its drops stand
+    let out = run(&mut s, "m = {{500, 500}}\nlocal w, t = steam(m, {seconds=20})\nprint(\"water=\" .. w .. \" face=\" .. t)\nlocal r = sift(pile{{\"green earth\", 1}}, m, {amount=2, grain=0.3, sieve=20})\nprint(\"stuck=\" .. r.stuck .. \" cluster=\" .. r.cluster .. \" film=\" .. r.film)\nprint(\"fell=\" .. tap())");
     let pl = paint::steam::plume(200.0);
     assert!(printed(&out, "water") > 5.0 && printed(&out, "face") < pl.dew_c, "{out}");
     assert!(printed(&out, "stuck") > 1.5 && printed(&out, "cluster") > 0.0 && printed(&out, "film") > 0.0, "{out}");
@@ -107,17 +115,25 @@ fn sift_a_stick_dry_and_steamed() {
 }
 
 /// `steam` asks for its seconds and keeps the kettle where the jet has mixed; `sift` asks for
-/// its amount and won't crush a stick shorter than the fingers hold.
+/// its amount and won't crush a stick shorter than the fingers hold. Both take the points the
+/// hand moves along: a mask, a function or nil (the whole sheet) is refused, saying so.
 #[test]
 fn the_verbs_refuse_what_they_cannot_do() {
     let mut s = live();
     run(&mut s, PAPER);
     for (src, word) in [
-        ("steam(nil, {})", "seconds"),
-        ("steam(nil, {seconds=5, distance=20})", "distance"),
-        ("sift(pastel(pile{{\"vermilion\", 1}}), nil, {})", "amount"),
-        ("sift(pastel(pile{{\"vermilion\", 1}}, {length=6}), nil, {amount=500})", "hold"),
-        ("sift(pastel(pile{{\"vermilion\", 1}}), nil, {amount=5, grain=9})", "grain"),
+        ("steam({{500, 500}}, {})", "seconds"),
+        ("steam({{500, 500}}, {seconds=5, distance=20})", "distance"),
+        ("sift(pastel(pile{{\"vermilion\", 1}}), {{500, 500}}, {})", "amount"),
+        ("sift(pastel(pile{{\"vermilion\", 1}}, {length=6}), {{500, 500}}, {amount=500})", "hold"),
+        ("sift(pastel(pile{{\"vermilion\", 1}}), {{500, 500}}, {amount=5, grain=9})", "grain"),
+        ("sift(pastel(pile{{\"vermilion\", 1}}), {{500, 500}}, {amount=5, sieve=2})", "sieve"),
+        ("steam({}, {seconds=5})", "1 to 10000 points"),
+        ("steam(nil, {seconds=5})", "not nil (the whole sheet): give the points"),
+        ("steam(rect(0, 0, 500, 500), {seconds=5})", "not a mask or field: give the points"),
+        ("steam(function(x, y) return 1 end, {seconds=5})", "not a function: give the points"),
+        ("sift(pile{{\"vermilion\", 1}}, rect(0, 0, 500, 500), {amount=5})", "moves the sieve along"),
+        ("sift(pile{{\"vermilion\", 1}}, nil, {amount=5})", "not nil (the whole sheet)"),
     ] {
         let e = s.run(src).err().unwrap_or_else(|| panic!("{src} ran")).to_string();
         assert!(e.contains(word), "{src}: {e}");

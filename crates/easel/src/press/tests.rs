@@ -58,8 +58,14 @@ fn num(out: &str, key: &str) -> f64 {
 /// Plan-intaglio §6.3: a drypoint plate printed on damp and on dry laid paper at three
 /// pressures; a wiped plate printed after a light and a heavy hand wipe; the prints looked at
 /// whole, in a crop and in relief, with the plate mark. Ink is conserved plate → sheet at every
-/// pull; more pressure takes more; a damp sheet more than a dry one; a light hand wipe leaves
-/// more plate tone to print.
+/// pull. Where the sheet touches the ink it takes its split share, and only where it touches
+/// (IP §6.4): so more pressure never takes less, and takes more only while the sheet's press-in
+/// falls short of the ink in some opening. The dry sheet, stiff, falls short of the deeper
+/// lines' ink at every pressure here, and takes more as it is pressed harder. The damp sheet,
+/// soft, is pressed nearly to the ink in every line already at a third of the press's rating:
+/// it takes nearly its whole split share of the plate's ink (`SPLIT_DAMP`) and never more, so
+/// more pressure gains it almost nothing. It takes more than the dry sheet at every pressure. A
+/// light hand wipe leaves more plate tone to print.
 #[test]
 fn the_test_sheet() {
     let mut s = live();
@@ -85,12 +91,19 @@ print("mpa=" .. r.pressure)"#
             assert!(t > 0.0, "{out}");
             assert!((0.1..20.0).contains(&mpa), "{out}");
             assert!((mark > 0.0) == damp, "{out}");
+            if damp {
+                // never more than the split share of all the plate's ink, and nearly all of it
+                let all = t + num(&out, "left");
+                let most = paint::plate::press::SPLIT_DAMP * all;
+                assert!(t <= most * (1.0 + 1e-9) && t > 0.97 * most, "damp at {p}: {t} of its split share {most}: {out}");
+            }
             taken.insert((damp, j), t);
         }
     }
     for damp in [false, true] {
-        assert!(taken[&(damp, 0)] < taken[&(damp, 1)] && taken[&(damp, 1)] < taken[&(damp, 2)], "more pressure, more ink: {taken:?}");
+        assert!(taken[&(damp, 0)] <= taken[&(damp, 1)] && taken[&(damp, 1)] <= taken[&(damp, 2)], "more pressure never takes less: {taken:?}");
     }
+    assert!(taken[&(false, 0)] < taken[&(false, 1)] && taken[&(false, 1)] < taken[&(false, 2)], "the dry sheet reaches further into the lines pressed harder: {taken:?}");
     for j in 0..3 {
         assert!(taken[&(true, j)] > taken[&(false, j)], "damp takes more than dry: {taken:?}");
     }

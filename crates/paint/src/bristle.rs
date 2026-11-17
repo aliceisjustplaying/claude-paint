@@ -852,6 +852,19 @@ pub(crate) struct Surf {
     /// divided by it, so clumps move paint across the brush's width without
     /// changing what the whole brush lays. 1 elsewhere.
     pub(crate) clump_mean: f32,
+    /// The canvas's millimetres per unit (`Canvas::mm_per_unit`): with the
+    /// stroke split, the clumps' width comes from the brush's hair in mm
+    /// (`coalesce`).
+    pub(crate) mm_per_unit: f32,
+}
+
+impl Surf {
+    /// With the stroke split, the canvas's mm per unit, for the clumps'
+    /// width (`clump_factor`); None without it.
+    #[inline]
+    pub(crate) fn clump_mm(&self) -> Option<f32> {
+        self.stroke_split.then_some(self.mm_per_unit)
+    }
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1130,6 +1143,7 @@ impl Canvas {
             touch_split: self.touch_split,
             stroke_split: self.stroke_split,
             clump_mean: 1.0,
+            mm_per_unit: self.mm_per_unit,
         }
     }
 
@@ -1689,15 +1703,161 @@ pub(crate) fn clump_stiffen(hide: &Prop) -> f32 {
     ((ps - 0.4) / 0.6).clamp(0.0, 1.0)
 }
 
+/// A brush's hair, for its clumps (`coalesce`). Sources and estimates:
+/// notes/research/stroke_film_split.md, "Clump width from elastocapillary
+/// coalescence".
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Fibre {
+    /// The hair's radius over the part outside the ferrule, m.
+    pub(crate) radius: f32,
+    /// Its Young's modulus in oil paint, Pa.
+    pub(crate) modulus: f32,
+    /// The share of the tuft's cross-section the hairs fill at the ferrule
+    /// (sets their spacing).
+    pub(crate) pack: f32,
+}
+
+/// Natural hair bristle's tangent modulus at 50 % RH, 680×10³ psi (DuPont,
+/// "Filament Performance in Brushes", Table 1). Water softens it to 410×10³
+/// psi; oil doesn't swell keratin, so a hair in oil paint keeps the dry
+/// value. Taken for every animal hair (sable and badger too: **estimate**,
+/// keratin like the bristle).
+const KERATIN_E: f32 = 4.69e9;
+/// The share of a tuft's cross-section its hairs fill at the ferrule:
+/// **estimate**, between loose (0.3) and close packing (0.6–0.9).
+const TUFT_PACK: f32 = 0.45;
+/// Hog bristle: whole bristles measure 268 µm across mid-shaft and 319 µm
+/// at the root (Mohan et al. 2014); a brush's hair out of the ferrule is
+/// the tapered, flagged tip end, 180 µm across (**estimate**).
+const HOG: Fibre = Fibre { radius: 90e-6, modulus: KERATIN_E, pack: TUFT_PACK };
+/// A fan's hog bristles spread in one thin, open layer: packing 0.2
+/// (**estimate**).
+const HOG_FAN: Fibre = Fibre { pack: 0.2, ..HOG };
+/// Kolinsky sable: guard hairs of the Siberian weasel measure 108–152 µm at
+/// their widest (Zhang et al., in the Mammalian Species account); a brush
+/// hair tapers to a point from its belly, 90 µm across (**estimate**).
+const SABLE: Fibre = Fibre { radius: 45e-6, modulus: KERATIN_E, pack: TUFT_PACK };
+/// Badger hair, 100 µm across (**estimate**).
+const BADGER: Fibre = Fibre { radius: 50e-6, modulus: KERATIN_E, pack: TUFT_PACK };
+/// A wet clump's hairs lie close-packed: π / (2√3), the densest packing of
+/// parallel cylinders.
+const CLUMP_PACK: f32 = 0.9069;
+/// The surface energy a wet clump gives up per length when two wet hairs
+/// (or clumps) of radius r come together, over γ·r: the arc of each fibre
+/// the wedge's menisci cover, less the menisci, for menisci of radius r
+/// (**estimate**: 1.90 for menisci of r/2, 2.28 for wide ones), 2π/3.
+const MENISCUS_GAIN: f32 = 2.0 * std::f32::consts::PI / 3.0;
+
+impl Tool {
+    /// The hair the brush is made of (`Fibre`): hog bristle for flats,
+    /// filberts and fans, kolinsky sable for rounds (the stippler too) and
+    /// riggers, badger for the blender.
+    pub(crate) fn fibre(&self) -> Fibre {
+        match self.kind {
+            Kind::Flat | Kind::Filbert => HOG,
+            Kind::Fan => HOG_FAN,
+            Kind::Round | Kind::Rigger => SABLE,
+            Kind::Blender => BADGER,
+        }
+    }
+
+    /// The length of hair (mm) out of the ferrule of a brush `width_mm`
+    /// wide: straight-line fits to makers' published widths and hair
+    /// lengths (notes/research/stroke_film_split.md). The fan's is an
+    /// **estimate**.
+    pub(crate) fn hair_out_mm(&self, width_mm: f32) -> f32 {
+        let (a, b) = match self.kind {
+            Kind::Flat => (12.18, 0.763),
+            Kind::Filbert => (4.95, 1.562),
+            Kind::Round => (8.86, 2.529),
+            Kind::Rigger => (23.27, 2.069),
+            Kind::Blender => (26.35, 0.144),
+            Kind::Fan => (15.0, 0.25),
+        };
+        a + b * width_mm
+    }
+}
+
+/// A brush's clumps (`coalesce`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Clumps {
+    /// Hairs to the largest clump.
+    pub(crate) hairs: f32,
+    /// The width of brush a clump gathers its hairs from (the spacing of
+    /// the clumps), mm.
+    pub(crate) width_mm: f32,
+}
+
+/// How a brush `width_mm` wide gathers into clumps in oil paint, from
+/// elastocapillary coalescence (Bico et al. 2004; Py et al. 2007;
+/// Roman & Bico 2010; notes/research/stroke_film_split.md). Two wet clumps
+/// of n hairs each, clamped in the ferrule, zip together from their tips
+/// down to the length `ℓ` from the ferrule where their bending (an S over
+/// `ℓ`, stiffness `n·EI`: the paint lets the hairs slide) balances the
+/// surface energy their joining gives up (`MENISCUS_GAIN·γ·r_n` per
+/// length, r_n the clump's radius):
+///
+///   `ℓ⁴ = 9·n·EI·g_n² / (MENISCUS_GAIN·γ·r_n)`,
+///
+/// with `g_n = √n·(d − 2r/√CLUMP_PACK)` the gap between them (`d` the
+/// hairs' spacing). Two lamellae give the published `ℓ⁴ = 9d²ℓ_ec²/2`;
+/// here `ℓ ∝ n^{3/8}`, as Roman & Bico give for fibres. The largest clump
+/// joins at the tip, `ℓ = L` (the hair out of the ferrule), and gathers
+/// `2n` hairs from a patch `d·√(2n)` across. None when two hairs can't
+/// join (the hairs stay apart).
+pub(crate) fn coalesce(tool: &Tool, width_mm: f32) -> Option<Clumps> {
+    let f = tool.fibre();
+    let (r, gamma, c) = (f.radius as f64, crate::surface::SIGMA as f64, MENISCUS_GAIN as f64);
+    let ei = f.modulus as f64 * std::f64::consts::PI * r.powi(4) / 4.0;
+    let l = tool.hair_out_mm(width_mm) as f64 * 1e-3;
+    let d = r * (std::f64::consts::PI / f.pack as f64).sqrt();
+    let pack = (CLUMP_PACK as f64).sqrt();
+    // two hairs: the gap between their surfaces, radius r
+    let pair = 9.0 * ei * (d - 2.0 * r).powi(2) / (c * gamma * r);
+    if !(l.powi(4) > pair) {
+        return None;
+    }
+    let g = d - 2.0 * r / pack;
+    if g <= 0.0 {
+        // the hairs already lie as close as a clump's: one clump
+        return Some(Clumps { hairs: f32::INFINITY, width_mm: f32::INFINITY });
+    }
+    // ℓ⁴ = n^{3/2}·9·EI·g²·√CLUMP_PACK / (MENISCUS_GAIN·γ·r) = L⁴
+    let n = (l.powi(4) * c * gamma * r / (9.0 * ei * g * g * pack)).powf(2.0 / 3.0);
+    let hairs = (2.0 * n).max(2.0);
+    Some(Clumps { hairs: hairs as f32, width_mm: (d * hairs.sqrt() * 1e3) as f32 })
+}
+
+/// With the stroke split (`mm_per_unit` given), the clumps' spacing
+/// (units) from `coalesce`: None when the hairs don't clump. Without it,
+/// None too (the caller keeps its own law).
+#[inline]
+pub(crate) fn clump_span(tool: &Tool, mm_per_unit: Option<f32>) -> Option<f32> {
+    let mm = mm_per_unit?;
+    coalesce(tool, tool.width * mm).map(|c| c.width_mm / mm)
+}
+
 /// Engine 4: the factor on what a hair at root offset `rx` lays in a
 /// stroke `id` with paint stiffened `stiffen > 0` (`clump_stiffen`). The
-/// hairs gather into clumps, a few to a clump, more the stiffer the paint:
-/// bands across the brush, one random level per band per stroke. A clump
-/// lays more and the gaps between clumps less.
+/// hairs gather into clumps: bands across the brush, one random level per
+/// band per stroke. A clump lays more and the gaps between clumps less.
+/// Without the stroke split (`mm_per_unit` None) the bands are a few hairs
+/// wide, more the stiffer the paint. With it (`mm_per_unit` the canvas's)
+/// they are as wide as `coalesce` gathers, whatever the paint's stiffness
+/// and the number of modelled hairs, and a brush that gathers into one
+/// clump (or none) lays evenly across.
 #[inline]
-pub(crate) fn clump_factor(tool: &Tool, rx: f32, stiffen: f32, id: u32) -> f32 {
-    let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
-    let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
+pub(crate) fn clump_factor(tool: &Tool, rx: f32, stiffen: f32, id: u32, mm_per_unit: Option<f32>) -> f32 {
+    let bands = match mm_per_unit {
+        None => {
+            let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
+            (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0)
+        }
+        Some(_) => match clump_span(tool, mm_per_unit) {
+            Some(span) if span < tool.width => tool.width / span,
+            _ => return 1.0,
+        },
+    };
     let u = (rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
     let (b0, f) = (u.floor(), u - u.floor());
     let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
@@ -1728,7 +1888,7 @@ pub(crate) fn clump_step_mean(sf: &Surf, held: &Held, contact: &[Option<((f32, f
         let travel = (seg / s).max(rb / s * 0.5);
         let w = ((b.vol + b.solvent) * (1.0 - (-travel / tool.run).exp())) as f64;
         let stiffen = clump_stiffen(&b.hide);
-        let k = if stiffen > 0.0 { clump_factor(tool, b.rx, stiffen, id) } else { 1.0 };
+        let k = if stiffen > 0.0 { clump_factor(tool, b.rx, stiffen, id, sf.clump_mm()) } else { 1.0 };
         sum += w * k as f64;
         sum_w += w;
     }
@@ -2006,7 +2166,7 @@ pub(crate) unsafe fn exchange(
         let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
             // (with the stroke split, over the brush's width the clumps
             // average to 1: `Surf::clump_mean`)
-            let k = clump_factor(tool, br.rx, stiffen, id);
+            let k = clump_factor(tool, br.rx, stiffen, id, sf.clump_mm());
             let k = if sf.stroke_split { k / sf.clump_mean } else { k };
             (dep_total * k).min(liquid * 0.95)
         } else {
@@ -2040,7 +2200,13 @@ pub(crate) unsafe fn exchange(
         let off = if dep.is_some() {
             rb + 1.0
         } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
-            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
+            // (with the stroke split, the clumps are as wide as `coalesce`
+            // gathers)
+            match (sf.clump_mm(), clump_span(tool, sf.clump_mm())) {
+                (None, _) => (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0),
+                (Some(_), Some(span)) => (span * s).max(2.0 * hair).min(3.0),
+                (Some(_), None) => 2.0 * hair,
+            }
         } else {
             2.0 * hair
         };
@@ -4053,5 +4219,81 @@ mod stroke_split {
         assert!(!canvas(true).with_engine(5).stroke_split());
         assert!(!Canvas::new(50, 1.0, [1.0; 3]).with_engine(9).stroke_split());
     }
-}
 
+    /// The clumps' width with the switch is elastocapillary coalescence's
+    /// (`coalesce`), worked here for two brushes of different hair from the
+    /// law in notes/research/stroke_film_split.md (a separate working of
+    /// it, in f64): a hog flat 8 mm wide (18.3 mm of hair out of the
+    /// ferrule) gathers 56 hairs to a clump 1.79 mm across, a sable round
+    /// 4.4 mm wide (20.0 mm of hair) 720 hairs, 3.19 mm, nearly the whole
+    /// brush (a wet round draws to a point). And the engine lays the bands
+    /// that wide: the closest two turning points of the factor across the
+    /// brush (`clump_factor`, a band's level at each), over many strokes,
+    /// lie one clump apart, for the hog flat and for a hog fan (7.5 bands).
+    #[test]
+    fn with_the_switch_a_clump_is_as_wide_as_coalescence_makes_it() {
+        let mm = 0.2;
+        let flat = Tool::hog_flat(40.0);
+        let round = Tool::round_sable(22.0);
+        for (tool, hairs, width) in [(&flat, 56.3509, 1.78510), (&round, 720.288, 3.19106)] {
+            let c = coalesce(tool, tool.width * mm).unwrap();
+            assert!((c.hairs / hairs - 1.0).abs() < 1e-3, "{:?}: {} hairs to a clump, the law's {hairs}", tool.kind, c.hairs);
+            assert!((c.width_mm / width - 1.0).abs() < 1e-3, "{:?}: a clump {} mm, the law's {width}", tool.kind, c.width_mm);
+        }
+        for (tool, width) in [(flat, 1.78510f32), (Tool::fan(40.0), 1.06690)] {
+            let n = 4000;
+            let mut closest = f32::INFINITY;
+            for id in 1..40 {
+                let k: Vec<f32> = (0..=n).map(|i| clump_factor(&tool, -1.0 + 2.0 * i as f32 / n as f32, 1.0, id, Some(mm))).collect();
+                let turns: Vec<usize> = (1..n).filter(|&i| (k[i] - k[i - 1]) * (k[i + 1] - k[i]) < 0.0).collect();
+                for t in turns.windows(2) {
+                    closest = closest.min((t[1] - t[0]) as f32 * 2.0 / n as f32);
+                }
+            }
+            // (rx spans the brush's width from −1 to 1)
+            let measured = closest * 0.5 * tool.width * mm;
+            assert!((measured / width - 1.0).abs() < 0.01, "{:?}: bands {measured} mm apart, the law's {width}", tool.kind);
+        }
+    }
+
+    /// The clumps' width is the hair's and the paint's, not the drawing's:
+    /// with the switch a hog flat's factor across its width is the same with
+    /// 70, 140 or 280 modelled hairs (and its clumps are as wide however
+    /// stiff the paint). Before it the bands were a few modelled hairs wide.
+    #[test]
+    fn with_the_switch_the_clumps_do_not_depend_on_the_modelled_hair_count() {
+        let across = |bristles: usize, stiffen: f32, mm: Option<f32>| -> Vec<f32> {
+            let t = Tool { bristles, ..Tool::hog_flat(40.0) };
+            (1..8u32).flat_map(|id| (0..=200).map(move |i| (i, id))).map(|(i, id)| (clump_factor(&t, -1.0 + i as f32 / 100.0, stiffen, id, mm) - 1.0) / stiffen).collect()
+        };
+        let base = across(140, 1.0, Some(0.2));
+        for (bristles, stiffen) in [(70, 1.0), (280, 1.0), (140, 0.3)] {
+            let other = across(bristles, stiffen, Some(0.2));
+            let apart = base.iter().zip(&other).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+            assert!(apart < 1e-5, "{bristles} hairs, stiffen {stiffen}: the bands moved by {apart}");
+        }
+        assert!(across(70, 1.0, None) != across(280, 1.0, None), "before the switch the bands followed the hair count");
+    }
+
+    /// Without the switch a stroke's clumps are as they were: hog flat and
+    /// filbert strokes in stiff paint on engine 9 and on engine 6 (the
+    /// older exchange) save the canvas the engine before this change
+    /// (48ae1279) saved (fnv1a of `write_state(.., "")`).
+    #[test]
+    fn without_the_switch_the_clumps_are_as_before() {
+        let fnv = |b: &[u8]| b.iter().fold(0xcbf29ce484222325u64, |h, &x| (h ^ x as u64).wrapping_mul(0x100000001b3));
+        let mut got = Vec::new();
+        for engine in [9, 6] {
+            let mut c = Canvas::new(400, 1.0, hex("#e8e0d0")).with_engine(engine).with_size_mm(200.0);
+            for (k, tool) in [Tool::hog_flat(40.0), Tool::filbert(40.0)].into_iter().enumerate() {
+                let mut h = loaded(tool);
+                let y = 400.0 + 200.0 * k as f32;
+                c.drag(&mut h, &Gesture::line((300.0, y), (700.0, y)), None);
+            }
+            let mut saved = Vec::new();
+            c.write_state(&mut saved, "").unwrap();
+            got.push(format!("{:016x}", fnv(&saved)));
+        }
+        assert_eq!(got, ["8d9b16184878b107", "54e567ed19c61e8e"], "the old clumps changed");
+    }
+}

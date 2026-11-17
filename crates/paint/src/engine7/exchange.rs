@@ -33,7 +33,7 @@
 use super::Rect;
 use super::add::{Film, Paint7};
 use super::window::{self, COVER, CURE, HIDE0, Hit, LAT0, PACK, SOLV, VOL, Window};
-use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, clump_factor, clump_stiffen, fine_cover, grow, mix_cure};
+use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, clump_factor, clump_span, clump_stiffen, fine_cover, grow, mix_cure};
 use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Prop, mix_into};
@@ -196,7 +196,13 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let off = if dep.is_some() {
             rb + 1.0
         } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
-            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
+            // (with the stroke split, the clumps are as wide as `coalesce`
+            // gathers)
+            match (sf.clump_mm(), clump_span(tool, sf.clump_mm())) {
+                (None, _) => (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0),
+                (Some(_), Some(span)) => (span * s).max(2.0 * hair).min(3.0),
+                (Some(_), None) => 2.0 * hair,
+            }
         } else {
             2.0 * hair
         };
@@ -369,7 +375,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
             // (with the stroke split, over the brush's width the clumps
             // average to 1: `Surf::clump_mean`)
-            let k = clump_factor(tool, br.rx, stiffen, id);
+            let k = clump_factor(tool, br.rx, stiffen, id, sf.clump_mm());
             let k = if sf.stroke_split { k / sf.clump_mean } else { k };
             (dep_total * k).min(liquid * 0.95)
         } else {

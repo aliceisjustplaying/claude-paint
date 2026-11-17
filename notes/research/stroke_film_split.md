@@ -51,7 +51,9 @@ parts come from two other places:
   1 from stroke to stroke. The same 12 mm stroke, drawn as the first,
   second ... twelfth stroke of a canvas, gives 7.7, 10.7, 11.1, 11.8, 8.4,
   14.8, 13.1, 11.4, 8.8, 13.0, 14.7 and 11.6 % of its load. The earlier
-  note measured the first of these, the lowest.
+  note measured the first of these, the lowest. The switch now makes the
+  clumps average to 1 over the brush ("Clumps move paint across the
+  width", below).
 - **Ramps.** A stroke presses down over its first 8 % and lifts off over its
   last 15 %. Over a 12 mm stroke that is a quarter of its length at lower
   pressure, so fewer hairs touch.
@@ -62,10 +64,19 @@ Averaged over the twelve stroke ids and drawn without ramps, a 60-unit
 | | stroke | dragged touch | touch / stroke |
 |---|---|---|---|
 | before the switch | 15.6 % | 18.6 % | 1.20 |
-| with the switch | 19.6 % | 21.9 % | 1.11 |
+| with the switch, clumps as before | 19.6 % | 21.9 % | 1.11 |
+| with the switch, clumps averaging 1 | 20.3 % | 21.9 % | 1.08 |
 | the split law, `(1 − e^{−(ℓ+d)/run}) / (1 − e^{−d/run})` | | | 1.13 |
 
-`ℓ` is the pressed patch's mean length (touch_film_split.md).
+`ℓ` is the pressed patch's mean length (touch_film_split.md). With the
+clumps averaging 1, the stroke lays a little more than its hairs' law
+over 60 units, `1 − e^{−60/run}` = 19.3 %. Its hairs travel a little
+farther than the hand: the first step counts at least half a hair's
+width, and the last step draws the trailing tips to the end. So the
+ratio falls 5 % short of the law. With the default ramps, the stroke
+lays 15.2 % and the ratio is 1.44 (1.63 before the switch). The law has
+no ramps, because a touch has none, so this ratio is not expected to
+match it.
 
 ## Is the lift physical?
 
@@ -167,26 +178,164 @@ and a stroke of length d lay in the ratio the split law gives (1.11 measured
 against 1.13). On wet paint the stroke still lifts some of the paint under
 it, at most its pickup share, and it gives more than before.
 
-| brush, 12 mm stroke, share of load the canvas kept | before | with the switch |
-|---|---|---|
-| filbert, bare ground | 7.7 % | 9.7 % |
-| filbert, wet white | 5.6 % | 9.6 % |
-| hog flat, bare ground | 15.2 % | 18.6 % |
-| hog flat, wet white | 12.8 % | 17.8 % |
-| round sable 4 mm, bare | 15.9 % | 17.5 % |
+| brush, 12 mm stroke, share of load the canvas kept | before | with the switch, clumps as before | with the switch |
+|---|---|---|---|
+| filbert, bare ground | 7.7 % | 9.7 % | 15.3 % |
+| filbert, wet white | 5.6 % | 9.6 % | 11.5 % |
+| hog flat, bare ground | 15.2 % | 18.6 % | 25.9 % |
+| hog flat, wet white | 12.8 % | 17.8 % | 20.4 % |
+| round sable 4 mm, bare | 15.9 % | 17.5 % | 26.1 % |
 
 (On the wet white the stroke lifted 2.1 mm³ with the switch against 4.3 mm³
-before, out of a filbert load of 51 mm³.)
+before, out of a filbert load of 51 mm³. That was with the clumps as
+before. The knife's mark takes a stroke id, so in the first two columns
+the strokes on bare ground and on the wet white had different clumps.
+With the clumps averaging 1, the two compare directly.)
+
+The stroke ids in this table are the first ones on their canvases. Those
+ids happened to lay the least before (7.7 % against a mean over twelve ids
+of 11.4 % for the filbert), so the jump in the last column is mostly the
+clumps. With 120 and 240 hairs the filbert lays 20.4 % and 20.3 %
+(unramped).
+
+## Clumps move paint across the width
+
+**What they are.** A wet brush's hairs pull together into bundles. The
+liquid's surface tension draws neighbouring fibres together, and their
+bending stiffness resists. Bico, Roman, Moulin and Boudaoud showed this
+with a model brush of elastic lamellae dipped in a wetting liquid
+[BRMB04]. Pairs of bundles merge in turn into a hierarchical pattern.
+Wet fibres do the same in three dimensions [PBBRB07]. Bundles merge only
+up to a largest size set by the balance of the two forces [BBR07]. The
+deformation depends on the system's size against the elastocapillary
+length `ℓ_ec = (B/γ)^{1/2}`, with B the bending stiffness and γ the
+surface tension [BRMB04, as given by later work in G14].
+
+**What that conserves.** Coalescence moves hairs, and the paint between
+them, across the brush's width. It neither makes paint nor holds any
+back, and it doesn't change the force the hand presses with. So the
+engine's per-hair clump factor should change where a stroke lays its
+paint, not how much it lays in total. Before, the factor's mean over a
+narrow brush's few bands was a random number per stroke id. On the
+8 mm filbert it ranged from about 0.7 to 1.3, so the same stroke laid
+7.7–14.8 % of its load depending only on its id.
+
+**The law with the switch.** At each step of a stroke, `drag_on` takes
+the mean of the clump factor over the hairs touching at that step. Each
+hair is weighted by what its law would lay over the step without clumps:
+its paint times `1 − e^{−travel/run}`, the same as `exchange`. Each
+hair's factor is divided by that mean (`Surf::clump_mean`,
+`clump_step_mean`). The bands, their levels and their contrast stay as
+they were. Only their mean over the brush is now 1. The weighting leaves
+out the parts of a hair's deposit that only its pixel pass knows (how much
+of its track touches the weave, and the tack). Those differ little from
+hair to hair.
+
+Measured on the same scene (12 stroke ids, filbert and hog flat 8 mm,
+load 0.6). With the default hand, the filbert's stroke lays 15.2 % of
+its load and the hog flat's 25.7 %, with spreads (largest less smallest,
+over the mean) of 0.6 % and 2.3 %. Before the switch they laid 11.4 % and
+20.9 %, with spreads of 62 % and 53 %. The remaining spread
+is the hand's own wander in pressure and path. With a steady hand
+(`shake = 0`), the twelve ids lay within 0.06 % (filbert) and 0.5 % (hog
+flat) of each other.
+
+The marks still differ. Across the stroke's middle, each id's mark
+(normalised to what it laid) differs from the ids' mean mark by 0.107 of
+its paint for the filbert and 0.082 for the hog flat (summed |difference|
+over rows). Before the switch these were 0.120 and 0.092. So the clumps
+keep about 90 % of their across-width effect.
+
+**Clump width against elastocapillary theory.** The engine's clump is
+`2·clump_u = 2·r_h·(1 + 4·stiffen²)` wide. Here `r_h` is the modelled
+hair's share of the brush's area (`Tool::hair_radius`). For the 8 mm
+filbert, the clump is 0.57 mm in barely stiff paint and 2.8 mm in stiff
+body paint, with 14 and 2.8 bands across the brush.
+
+An estimate from the energy balance follows. Take a hair of radius a,
+clamped in the ferrule, with a wetted free length L. It joins a clump
+whose axis is δ = W/2 away. It bends over a length ℓ in an S shape
+(clamped at the ferrule, lying along the clump beyond it), which stores
+`6·EI·δ²/ℓ³`. Along the remaining `L − ℓ` it lies wetted against the
+clump, which gives up a surface energy of about `2γa` per length. That
+prefactor is an **[est]** of the meniscus between touching fibres.
+Minimising over ℓ gives `ℓ = (3·δ·ℓ_ec)^{1/2}`, where
+`ℓ_ec = (EI/(γa))^{1/2}` is the fibre form of the elastocapillary length.
+A clump holds while ℓ < L, so
+
+  `W_max ≈ 2·L² / (3·ℓ_ec)`.
+
+The input values:
+
+- γ: 35 mN/m for the oil (`surface::SIGMA`; 33–36 mN/m measured,
+  oil_paint_physics.md).
+- E: natural hair bristle's 680×10³ psi = 4.7 GPa dry (410×10³ psi wet
+  with water, which oil is not) [DuP].
+- a: pig bristle measures 160–380 µm across, mid-shaft 268 µm and root
+  319 µm [M14, ICAR]. An artist's hog brush is made of the tapered,
+  flagged tip ends, so a = 50–80 µm near the paint is an **[est]** at
+  the fine end of that range.
+- L: the wetted free length, 10–15 mm on a No. 8 filbert, is an **[est]**.
+
+| a | ℓ_ec | W at L = 10 mm | W at L = 15 mm |
+|---|---|---|---|
+| 50 µm | 115 mm | 0.58 mm | 1.3 mm |
+| 80 µm | 232 mm | 0.29 mm | 0.65 mm |
+| 134 µm (mid-shaft) | 504 mm | 0.13 mm | 0.30 mm |
+
+So the theory puts a hog brush's clumps in oil at about 0.1–1.3 mm. The
+engine's 0.57 mm, in barely stiff paint, lies inside that range. Its
+2.8 mm, in stiff paint, is about twice the theory's upper end. Hierarchical
+merging [BRMB04] and the uncertainty in L, which enters squared, leave
+room for a factor of two, but not a factor of ten. The engine's widths
+are left as they were and remain **[est]**, for three reasons:
+
+- In the theory the width depends on the fibres (a, E), on L and on γ.
+  γ is about the same for fluid and stiff oil paint. The engine instead
+  ties the width and the contrast (`0.6·stiffen`) to the paint's
+  stiffness. Stiffness does decide whether the ridges a clump leaves
+  survive levelling (the yield-stress floor in oil_paint_physics.md), so
+  `stiffen` is a stand-in for levelling at a hair's scale, not for
+  coalescence.
+- `r_h` is the modelled hair's share of the area, so the clump width
+  changes with the number of modelled hairs. That number is a drawing
+  resolution, not a property of the brush.
+- The tool has no fibre radius or wetted length to compute W from.
+
+Setting W from the formula above would need per-brush fibre data and its
+own switch. That is left open.
 
 ## Left open
 
-- The clump modulation's per-stroke mean is not 1 for a narrow brush. The
-  same stroke lays ±35 % depending on its id. Clumping moves paint across
-  the width of the brush and should not change how much the whole brush
-  lays. Normalizing the bands to mean 1 over the brush's width would be a
-  separate switch.
+- The clump width and contrast (above): unsourced constants, the width
+  of the same order as the elastocapillary estimate but tied to the
+  paint's stiffness and to the modelled hair count rather than to the
+  fibres and γ.
 
 ## Sources
+
+- [BRMB04] J. Bico, B. Roman, L. Moulin and A. Boudaoud, "Elastocapillary
+  coalescence in wet hair", *Nature* 432 (2004) 690, doi:10.1038/432690a:
+  a model brush of elastic lamellae withdrawn from a wetting liquid
+  bundles hierarchically; the elastocapillary length (B/γ)^{1/2}.
+- [PBBRB07] C. Py, R. Bastien, J. Bico, B. Roman and A. Boudaoud, "3D
+  aggregation of wet fibers", *EPL* 77 (2007) 44005,
+  doi:10.1209/0295-5075/77/44005.
+- [BBR07] A. Boudaoud, J. Bico and B. Roman, "Elastocapillary
+  coalescence: aggregation and fragmentation with a maximal size",
+  *Phys. Rev. E* 76 (2007) 060102.
+- [G14] A fluid-mechanical model of elastocapillary coalescence, arXiv:1310.4530
+  (2014): states ℓ_ec = (B/γ)^{1/2} after [BRMB04], and the "collaborative
+  stiffening" of a bundle that limits its size.
+- [DuP] DuPont Filaments, "Filament Performance in Brushes" (brochure,
+  2014), Table 1: tangent modulus of natural hair bristle 680×10³ psi at
+  50 % RH, 410×10³ psi wet.
+- [M14] Mohan et al., "Tensile properties of hair fibres obtained from
+  different breeds of pigs", *Biosystems Engineering* (2014),
+  sciencedirect.com/science/article/pii/S153751101400004X (abstract):
+  mid-shaft 267.9 ± 8.1 µm, root 319.2 ± 6.5 µm.
+- [ICAR] ICAR, "Value added products from pig bristles": bristles
+  210–320 µm across; a review of Indian breeds gives 185–380 µm.
 
 - [CMS86] D. J. Coyle, C. W. Macosko and L. E. Scriven, "Film-splitting
   flows in forward roll coating", *J. Fluid Mech.* 171 (1986) 183–207,

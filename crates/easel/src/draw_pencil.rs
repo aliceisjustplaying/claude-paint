@@ -13,6 +13,7 @@ use crate::api::{S, check_keys, err, frame, num, paint_mask_of, points, seed_of,
 use mlua::{Lua, Result, Table, Value};
 use paint::graphite::{self, Lead, Mark};
 use paint::{Canvas, Mask, Shape};
+use std::rc::Rc;
 
 const PENCIL_KEYS: &[&str] = &["grade", "kind"];
 const LINE_KEYS: &[&str] = &["pressure", "smooth", "ruler", "tremor", "seed"];
@@ -237,8 +238,47 @@ fn profile(o: Option<&Table>, default: f32) -> Result<Vec<f32>> {
     }
 }
 
+/// `fix(pts, {distance=, cone=, speed=, seconds=})`: fixative sprayed from a
+/// can whose nozzle follows the points `distance` mm off the picture, its
+/// cone `cone` degrees across, swept at `speed` mm/s (one point: a burst of
+/// `seconds`). Paint's spray.rs. Returns the solution laid, g.
+fn spray_fix(st: &S, a: &Value, o: Value) -> Result<f32> {
+    use paint::spray::{BURST_S, CONE_DEG, DISTANCE_MM, SWEEP_MM_S, Spray};
+    crate::api::gesture_verb(st, "fix(points)")?;
+    let o = match o {
+        Value::Nil => None,
+        Value::Table(t) => Some(t),
+        v => return err(format!("fix: the options are a table {{distance=, cone=, speed=, seconds=}}, not a {}", v.type_name())),
+    };
+    if let Some(o) = &o {
+        check_keys(o, &["distance", "cone", "speed", "seconds"], "fix")?;
+    }
+    let get = |k: &str, d: f32| -> Result<f32> { Ok(o.as_ref().map(|o| num(o, k)).transpose()?.flatten().unwrap_or(d)) };
+    let pts = points(a)?;
+    if pts.is_empty() {
+        return err("fix: the nozzle's path is one point (a burst) or more (a sweep)");
+    }
+    let sp = Spray { path: pts, distance_mm: get("distance", DISTANCE_MM)?, cone_deg: get("cone", CONE_DEG)?, speed_mm_s: get("speed", SWEEP_MM_S)?, burst_s: get("seconds", BURST_S)? };
+    if !(50.0..=1000.0).contains(&sp.distance_mm) || !(5.0..=90.0).contains(&sp.cone_deg) || !(20.0..=2000.0).contains(&sp.speed_mm_s) || !(0.05..=10.0).contains(&sp.burst_s) {
+        return err("fix: distance 50–1000 mm (a can's directions: 300–400), cone 5–90° across (aerosol cans: 20–30), speed 20–2000 mm/s (a sweep: about 300), seconds 0.05–10 (a burst at one point)");
+    }
+    if o.as_ref().is_some_and(|o| o.contains_key("seconds").unwrap_or(false)) && sp.path.len() > 1 {
+        return err("fix: seconds= is a burst at one point; along a path the nozzle moves at speed=");
+    }
+    if o.as_ref().is_some_and(|o| o.contains_key("speed").unwrap_or(false)) && sp.path.len() == 1 {
+        return err("fix: speed= is a sweep along a path; at one point give seconds=");
+    }
+    crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
+        let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+        let g = c.spray_fix(&sp).map_err(|e| mlua::Error::runtime(format!("fix: {e}")))?;
+        c.tally_mut().secs += sp.secs(c.mm_per_unit()) as f64 + 1.0;
+        Ok(g)
+    })
+}
+
 /// Draw marks with the pencil `p`, wearing its point; returns mm drawn.
 fn draw_marks(st: &S, p: &Table, marks: &[Mark], seed: u64) -> Result<f32> {
+    crate::api::draw_tape::no_tape(st, "a pencil's line")?;
     let lead = lead_of(p)?;
     let mut worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
     let drawn = crate::time::verb(st, crate::time::Verb::Pass, |s| {
@@ -494,6 +534,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
             let strength = get("strength")?.unwrap_or(0.9);
+            crate::api::draw_tape::no_tape(&st1, "erase")?;
             let f = frame(&st1)?;
             let m = match &a {
                 Value::UserData(_) => {
@@ -525,7 +566,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // and a pastel stick's pastel
     {
         let st1 = st.clone();
-        g.set("fix", lua.create_function(move |_, a: Value| {
+        g.set("fix", lua.create_function(move |_, (a, o): (Value, Value)| {
+            // fix(pts, {distance=, cone=, speed=, seconds=}): sprayed from a can along a path
+            if let Value::Table(_) = &a {
+                // (it returns the solution laid; `fix()` and `fix(mask)` return nothing, as they did)
+                return spray_fix(&st1, &a, o).map(|g| mlua::MultiValue::from_vec(vec![Value::Number(g as f64)]));
+            }
+            crate::api::draw_tape::no_tape(&st1, "fix()")?;
             let m = match &a {
                 Value::Nil => None,
                 v => {
@@ -549,7 +596,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 c.fix_drawing(m.as_deref());
             }
             s.mark_effects += 1;
-            Ok(())
+            Ok(mlua::MultiValue::new())
         })?)?;
     }
     // drawing_guide(): the drawn lines as continuous coverage over the whole
@@ -840,8 +887,19 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if let Some(o) = &o {
                 check_keys(o, &["grammage", "tone"], "lay_sheet")?;
             }
-            crate::api::gestures_only(&st1, "lay_sheet")?;
-            let m = paint_mask_of(&st1, &a)?;
+            let m = if let Value::Table(_) = &a {
+                // a sheet with a shape cut along the points: it covers what lies
+                // inside the cut, and its edge is the cut, pixel sharp
+                crate::api::gesture_verb(&st1, "lay_sheet(points)")?;
+                let pts = points(&a)?;
+                if pts.len() < 3 {
+                    return err("lay_sheet: the cut is a closed shape of three points or more");
+                }
+                Rc::new(Mask::from_shape(frame(&st1)?, Shape::new().poly(&pts)))
+            } else {
+                crate::api::gestures_only(&st1, "lay_sheet")?;
+                paint_mask_of(&st1, &a)?
+            };
             let grammage = o.as_ref().map(|o| num(o, "grammage")).transpose()?.flatten().unwrap_or(120.0);
             if !(40.0..=400.0).contains(&grammage) {
                 return err("lay_sheet: grammage is g/m² (40 to 400; a mask is usually 80–160)");

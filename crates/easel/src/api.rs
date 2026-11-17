@@ -29,6 +29,8 @@ pub(crate) mod draw_pencil;
 mod draw_rag;
 #[path = "draw_soak.rs"]
 mod draw_soak;
+#[path = "draw_tape.rs"]
+pub(crate) mod draw_tape;
 
 /// Grid spacing (units) that painter fields are sampled on.
 pub const FIELD_STEP: f32 = 2.0;
@@ -142,6 +144,16 @@ pub(crate) fn gestures_only(st: &S, call: &str) -> Result<()> {
         return err(format!(
             "{call}: refused in this painting (--@ gestures-only): no tool is told where to act by a mask, a function or a field; give the points the hand moves along, with a stroke or a touch of the tool"
         ));
+    }
+    Ok(())
+}
+
+/// The gesture verbs that came with the gestures-only switch (tape, a frisket
+/// cut along points, fixative sprayed along a path, a blender stroke, a film
+/// on one stroke): `call` is refused in a painting begun before it.
+pub(crate) fn gesture_verb(st: &S, call: &str) -> Result<()> {
+    if !st.borrow().tubes.gestures_only {
+        return err(format!("{call}: in a painting begun with the gestures-only switch only (its log's head says --@ gestures-only)"));
     }
     Ok(())
 }
@@ -585,8 +597,10 @@ impl UserData for Brush {
             }
             let mut g = Gesture::new(pts);
             let mut clip = None;
+            let mut film = None;
             if let Some(o) = &o {
-                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell", "clip"], "stroke")?;
+                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell", "clip", "film"], "stroke")?;
+                film = film_of(&b.st, o, "b:stroke")?;
                 if let Some((a, z)) = pair(o, "pressure")? {
                     g = g.pressure(a, z);
                 }
@@ -605,7 +619,44 @@ impl UserData for Brush {
                 clip = mask_opt(&b.st, o.get("clip")?, "b:stroke")?;
             }
             time::verb(&b.st, Verb::Marks, |s| {
-                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                match film {
+                    Some(coats) => c.drag_film(&mut b.held.borrow_mut(), &g, coats),
+                    None => c.drag(&mut b.held.borrow_mut(), &g, clip.as_deref()),
+                }
+                Ok(())
+            })
+        });
+        // b:blend(points, {pressure=, ramps=, orient=, shake=, swell=}): a clean-blender
+        // stroke: the brush wiped on the rag, then drawn through the wet paint along
+        // the points; it lays only what it picks up (paint's `Canvas::blend_stroke`)
+        m.add_method("blend", |_, b, (pts, o): (Value, Option<Table>)| {
+            gesture_verb(&b.st, "b:blend")?;
+            let pts = points(&pts)?;
+            if pts.len() < 2 {
+                return err("b:blend: needs at least two points");
+            }
+            let mut g = Gesture::new(pts);
+            if let Some(o) = &o {
+                check_keys(o, &["pressure", "ramps", "orient", "shake", "swell"], "b:blend")?;
+                if let Some((a, z)) = pair(o, "pressure")? {
+                    g = g.pressure(a, z);
+                }
+                if let Some((a, z)) = pair(o, "ramps")? {
+                    g = g.ramps(a, z);
+                }
+                if let Some(or) = orient_of(o.get("orient")?)? {
+                    g = g.orient(or);
+                }
+                if let Some(s) = num(o, "shake")? {
+                    g = g.shake(s);
+                }
+                if let Some(s) = o.get::<Option<Vec<f32>>>("swell")? {
+                    g = g.swell(s);
+                }
+            }
+            time::verb(&b.st, Verb::Marks, |s| {
+                s.canvas.as_mut().ok_or_else(no_canvas)?.blend_stroke(&mut b.held.borrow_mut(), &g);
                 Ok(())
             })
         });
@@ -656,9 +707,10 @@ impl UserData for Brush {
                 .collect();
             let mut wobble = 0.0f32;
             let mut g_orient = None;
-            let (mut ramps, mut shake, mut clip) = (None, None, None);
+            let (mut ramps, mut shake, mut clip, mut film) = (None, None, None, None);
             if let Some(o) = &o {
-                check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
+                check_keys(o, &["wobble", "orient", "ramps", "shake", "clip", "film"], "gesture")?;
+                film = film_of(&b.st, o, "b:gesture")?;
                 wobble = num(o, "wobble")?.unwrap_or(0.0);
                 if !(wobble.is_finite() && (0.0..=100.0).contains(&wobble)) { return err("gesture: wobble must be 0 to 100 units"); }
                 g_orient = orient_of(o.get("orient")?)?;
@@ -758,7 +810,11 @@ impl UserData for Brush {
                 g = g.shake(s);
             }
             time::verb(&b.st, Verb::Marks, |s| {
-                s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                match film {
+                    Some(coats) => c.drag_film(&mut b.held.borrow_mut(), &g, coats),
+                    None => c.drag(&mut b.held.borrow_mut(), &g, clip.as_deref()),
+                }
                 Ok(())
             })
         });
@@ -1202,6 +1258,25 @@ pub(crate) fn paint_mask(st: &S, mut m: Rc<Mask>) -> Rc<Mask> {
 
 pub(crate) fn paint_mask_of(st: &S, v: &Value) -> Result<Rc<Mask>> {
     Ok(paint_mask(st, mask_of(v)?))
+}
+
+/// A mark's `film=`: `"glaze"` (a thin film, `Style::GLAZE_FILM`, about
+/// 7.5 µm) or `"scumble"` (`Style::SCUMBLE_FILM`, about 5 µm): the most wet
+/// film the stroke adds anywhere (paint's `Canvas::drag_film`). None if nil.
+fn film_of(st: &S, o: &Table, call: &str) -> Result<Option<f32>> {
+    let v: Value = o.get("film")?;
+    if v.is_nil() {
+        return Ok(None);
+    }
+    gesture_verb(st, &format!("{call}: film="))?;
+    if !st.borrow().tubes.glaze_film {
+        return err(format!("{call}: film= needs the glaze film (a painting begun with it)"));
+    }
+    match v {
+        Value::String(s) if s.to_str()?.as_ref() == "glaze" => Ok(Some(Style::GLAZE_FILM)),
+        Value::String(s) if s.to_str()?.as_ref() == "scumble" => Ok(Some(Style::SCUMBLE_FILM)),
+        v => err(format!("{call}: film is \"glaze\" (a thin film, about 7.5 µm) or \"scumble\" (about 5 µm), not {}", v.to_string().unwrap_or_else(|_| v.type_name().to_string()))),
+    }
 }
 
 /// A mark's `clip=` mask (none if nil); refused with the gestures-only switch (`call`
@@ -2546,6 +2621,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(0.0..=MAX_WAIT_MIN).contains(&minutes) {
                 return err(format!("wait({minutes}): want minutes from 0 to {MAX_WAIT_MIN} (10 years); days are fine: wait(3 * 24 * 60)"));
             }
+            draw_tape::no_tape(&st1, "wait")?;
             time::verb(&st1, Verb::Wait, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.wait(minutes as f32);
                 Ok(())
@@ -2583,6 +2659,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     }
     crate::draw_outline::install(lua, st.clone())?;
     crate::draw_edges::install(lua, st.clone())?;
+    // tape and stencils come with the gestures-only switch (an older log's
+    // globals are as they were)
+    if st.borrow().tubes.gestures_only {
+        draw_tape::install(lua, st.clone())?;
+    }
     Ok(())
 }
 
@@ -3302,6 +3383,9 @@ b = brush("round", 4) b:load(p, 0.6) b:stroke({{10, 10}, {90, 90}}, {clip=above(
             ("outline:below", "m = outline{{0, 50}, {100, 50}, open=true}:below()"),
             ("outline:above", "m = outline{{0, 50}, {100, 50}, open=true}:above()"),
             ("outline:band", "m = outline{{0, 50}, {100, 50}, open=true}:band(4)"),
+            ("outline:inset", "o = outline{{10, 10}, {90, 10}, {50, 90}}:inset(5)"),
+            ("outline:offset", "o = outline{{10, 10}, {90, 10}, {50, 90}}:offset(5)"),
+            ("aerial", "a = aerial(10, 1000)"),
             ("body_of", "o = body_of{spine={{50, 90}, {50, 20}}, widths={10, 5}}"),
             ("body.ellipsoid", "x = body.ellipsoid({0, 0, 5}, {1, 1, 1})"),
             ("body.block", "x = body.block({0, 0, 5}, {1, 1, 1})"),
@@ -3351,7 +3435,7 @@ h = pencil("2B") r = rag{width=20} o = outline{{10, 10}, {90, 10}, {50, 90}}"#).
         let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap();
         s.run(CANVAS).unwrap();
         s.run(r#"x = rand(0, 1) + randn(0, 1) + lerp(0, 1, 0.5) + clamp(2) + smoothstep(0, 1, 0.5) + math.random()
-u = uneven(4, 0, 100) a = aerial(10, 1000)
+u = uneven(4, 0, 100)
 p = pile{{"lead white", 1}} b = brush("round", 4) b:load(p, 0.5)
 b:stroke({{10, 10}, {40, 40}}) b:gesture({{10, 60, 0.3}, {50, 70, 0.8}, {90, 60, 0}}) b:touch(70, 20)
 k = knife{width=10} k:load(p, 0.5) k:lay({{20, 80}, {60, 80}})
@@ -3359,5 +3443,149 @@ h = pencil("2B") h:line({{10, 90}, {90, 90}}) erase({{10, 90}, {50, 90}}) fix()
 r = rag{width=20} r:wipe({{10, 10}, {40, 40}}) r:blot(20, 20)
 o = outline{{10, 10}, {90, 10}, {50, 90}} o:paint(b) print(#o:paths())
 palette{dirty=0.2} wait(10) print(drying(20, 20))"#).unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    fn wet_at(s: &Session, x: f32, y: f32) -> f32 {
+        s.canvas().unwrap().wet_um(x, y)
+    }
+
+    /// Tape on an oil painting: a stroke across it lays paint on both sides
+    /// and none reaches the canvas under it; lifting it takes its paint.
+    /// The chunk must lift it, and waiting with it down is refused.
+    #[test]
+    fn tape_keeps_paint_off_what_it_covers_and_takes_its_paint_away() {
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"Prussian blue", 1}} b = brush("flat", 60) b:load(p, 1)"#).unwrap();
+        s.run(r#"tape({{500, 0}, {500, 1000}}, {width=24})
+b:stroke({{150, 500}, {850, 500}}, {pressure=0.8})
+on = drying(500, 500)
+print(lift_tape() > 0)"#).unwrap_or_else(|e| panic!("{e}"));
+        assert!(wet_at(&s, 500.0, 500.0) < 1e-3, "paint reached the canvas under the tape: {}", wet_at(&s, 500.0, 500.0));
+        assert!(wet_at(&s, 300.0, 500.0) > 1.0 && wet_at(&s, 700.0, 500.0) > 1.0);
+        let e = s.run(r#"tape({{0, 100}, {1000, 100}}, {width=12})"#).expect_err("a chunk ended with tape down");
+        assert!(e.contains("lift it (lift_tape())"), "{e}");
+        assert!(!s.canvas().unwrap().has_tape(), "the failed chunk kept its tape");
+        let e = s.run(r#"tape({{0, 100}, {1000, 100}}, {width=12}) wait(5)"#).expect_err("waited with tape down");
+        assert!(e.contains("wait: tape lies on the picture"), "{e}");
+        // over wet paint it doesn't hold; a width is a tape's
+        let e = s.run(r#"tape({{300, 0}, {300, 1000}}, {width=12}) lift_tape()"#).expect_err("taped wet paint");
+        assert!(e.contains("still wet or tacky"), "{e}");
+        let e = s.run(r#"tape({{0, 100}, {1000, 100}}, {width=500}) lift_tape()"#).expect_err("a 500 mm tape");
+        assert!(e.contains("width is 1 to 100 mm"), "{e}");
+    }
+
+    /// A stencil lets the paint through its hole and nowhere else.
+    #[test]
+    fn a_stencil_lets_paint_through_its_cut_only() {
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"Prussian blue", 1}} b = brush("flat", 60) b:load(p, 1)
+stencil({{400, 400}, {600, 400}, {600, 600}, {400, 600}})
+b:stroke({{150, 500}, {850, 500}}, {pressure=0.8})
+lift_tape()"#).unwrap_or_else(|e| panic!("{e}"));
+        assert!(wet_at(&s, 500.0, 500.0) > 1.0 && wet_at(&s, 250.0, 500.0) < 1e-3 && wet_at(&s, 750.0, 500.0) < 1e-3);
+    }
+
+    /// A frisket cut along points keeps the pastel off what lies inside the cut.
+    #[test]
+    fn a_frisket_cut_along_points_keeps_its_shape_clean() {
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        s.run(PAPER).unwrap();
+        let lum = |s: &Session, x: f32, y: f32| {
+            let c = s.canvas().unwrap();
+            let p = c.pixels()[c.frame().index(x, y)];
+            p[0] + p[1] + p[2]
+        };
+        let paper = lum(&s, 500.0, 500.0);
+        s.run(r#"k = pastel(pile{{"bone black", 1}})
+lay_sheet({{400, 300}, {600, 300}, {600, 700}, {400, 700}})
+k:side({{100, 500}, {900, 500}}, {force=3})
+lift_sheet()"#).unwrap_or_else(|e| panic!("{e}"));
+        assert!(lum(&s, 500.0, 500.0) > 0.98 * paper && lum(&s, 250.0, 500.0) < 0.9 * paper, "under the frisket {} / beside {} / paper {paper}", lum(&s, 500.0, 500.0), lum(&s, 250.0, 500.0));
+        let e = s.run("lay_sheet({{0, 0}, {10, 10}}) lift_sheet()").expect_err("a two-point cut");
+        assert!(e.contains("three points or more"), "{e}");
+    }
+
+    /// Fixative sprayed in a burst binds the pastel under its cone, and the
+    /// eraser then takes the loose pastel beyond it and not what it bound.
+    #[test]
+    fn a_spray_binds_under_its_cone_and_nowhere_else() {
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        s.run(PAPER).unwrap();
+        let lum = |s: &Session, x: f32, y: f32| {
+            let c = s.canvas().unwrap();
+            let p = c.pixels()[c.frame().index(x, y)];
+            p[0] + p[1] + p[2]
+        };
+        s.run(r#"k = pastel(pile{{"bone black", 1}}) k:side({{100, 500}, {900, 500}}, {force=3})"#).unwrap();
+        let drawn = (lum(&s, 200.0, 500.0), lum(&s, 800.0, 500.0));
+        s.run(r#"g = fix({{200, 500}}, {distance=100, cone=25, seconds=1}) assert(g > 0, g)"#).unwrap_or_else(|e| panic!("{e}"));
+        s.run(r#"erase({{100, 500}, {900, 500}}, {strength=1, width=80}) erase({{100, 500}, {900, 500}}, {strength=1, width=80})"#).unwrap();
+        let (near, far) = (lum(&s, 200.0, 500.0), lum(&s, 800.0, 500.0));
+        assert!(near < far && (near - drawn.0) < 0.5 * (far - drawn.1), "fixed: {} -> {near}, loose: {} -> {far}", drawn.0, drawn.1);
+        let e = s.run(r#"fix({{200, 500}, {300, 500}}, {seconds=1})"#).expect_err("a burst along a path");
+        assert!(e.contains("seconds= is a burst at one point"), "{e}");
+    }
+
+    /// A blender stroke and a film on one stroke run in a new painting.
+    #[test]
+    fn a_blender_stroke_and_a_film_stroke_run() {
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"vermilion", 1}, medium=0.6} b = brush("filbert", 30) b:load(p, 1)
+b:stroke({{100, 300}, {900, 300}}, {film="glaze"})
+b:gesture({{100, 600, 0.4}, {500, 620, 0.6}, {900, 600, 0.4}}, {film="scumble"})
+c = brush("badger", 40) c:blend({{100, 300}, {900, 300}}, {pressure=0.4})"#).unwrap_or_else(|e| panic!("{e}"));
+        assert!(wet_at(&s, 500.0, 300.0) <= 7.5 * 1.0001 && wet_at(&s, 500.0, 300.0) > 0.0, "{}", wet_at(&s, 500.0, 300.0));
+        let e = s.run(r#"b:stroke({{100, 300}, {900, 300}}, {film="thick"})"#).expect_err("a film that isn't one");
+        assert!(e.contains("film is \"glaze\""), "{e}");
+    }
+
+    /// A log begun before the switch has none of the gesture verbs: no tape,
+    /// stencil or lift_tape globals, and the points forms, b:blend and film=
+    /// refused; `fix()` returns nothing, as it did.
+    #[test]
+    fn an_older_log_has_none_of_the_gesture_verbs() {
+        let mut s = Session::with_box(W, mask_box()).unwrap().with_paper(true).unwrap();
+        s.run(PAPER).unwrap();
+        s.run(r#"assert(tape == nil and stencil == nil and lift_tape == nil) assert(select('#', fix()) == 0)
+p = pile{{"lead white", 1}} b = brush("round", 4) b:load(p, 0.5)"#).unwrap_or_else(|e| panic!("{e}"));
+        for (call, src) in [
+            ("fix(points)", "fix({{10, 10}})"),
+            ("lay_sheet(points)", "lay_sheet({{10, 10}, {50, 10}, {30, 40}})"),
+            ("b:blend", "b:blend({{10, 10}, {40, 40}})"),
+        ] {
+            let e = s.run(src).expect_err(src);
+            assert!(e.contains(&format!("{call}: in a painting begun with the gestures-only switch only")), "{src}: {e}");
+        }
+    }
+
+    /// An older log with the calls this switch now refuses or changes (aerial,
+    /// an outline's inset and offset, fix() and a mask's lay_sheet) replays to
+    /// the bits and the output it was painted with.
+    #[test]
+    fn an_older_log_with_the_refused_calls_replays_the_same() {
+        let mut live = Session::with_box(W, mask_box()).unwrap().with_paper(true).unwrap();
+        for chunk in [
+            PAPER,
+            r#"print(aerial(10, 1000)) o = outline{{100, 100}, {900, 100}, {500, 900}} i = o:inset(20) f = o:offset(20)
+print(#i:paths(), #f:paths(), select('#', fix()))"#,
+            r#"k = pastel(pile{{"bone black", 1}}) lay_sheet(rect(400, 300, 200, 400)) k:side({{100, 500}, {900, 500}}, {force=3}) lift_sheet() fix()"#,
+        ] {
+            live.run(chunk).unwrap_or_else(|e| panic!("{chunk}: {e}"));
+        }
+        let program = live.program("older");
+        let tubes = box_for(Some(&program)).unwrap();
+        assert!(!tubes.gestures_only);
+        let mut replay = Session::replay_with(W, tubes).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            replay.run(&chunk).unwrap_or_else(|e| panic!("{chunk}: {e}"));
+        }
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        live.canvas().unwrap().write_state(&mut a, "").unwrap();
+        replay.canvas().unwrap().write_state(&mut b, "").unwrap();
+        assert!(a == b, "the older log replays to other bits");
+        assert_eq!(live.st.borrow().out, replay.st.borrow().out);
     }
 }

@@ -64,7 +64,10 @@ fn num(out: &str, key: &str) -> f64 {
 /// lines' ink at every pressure here, and takes more as it is pressed harder. The damp sheet,
 /// soft, is pressed nearly to the ink in every line already at a third of the press's rating:
 /// it takes nearly its whole split share of the plate's ink (`SPLIT_DAMP`) and never more, so
-/// more pressure gains it almost nothing. It takes more than the dry sheet at every pressure. A
+/// more pressure gains it almost nothing. (Most of this plate's ink is in its deep lines, the
+/// lee's film being wiped under the contact laws, and the sheet reaches 96–98 % of their width
+/// at 0.3–0.9: above 95 % of the split share. While a wide band of film beside each burr, which
+/// the sheet always touches, held most of the ink, it was above 97 %.) It takes more than the dry sheet at every pressure. A
 /// light hand wipe leaves more plate tone to print.
 #[test]
 fn the_test_sheet() {
@@ -95,7 +98,7 @@ print("mpa=" .. r.pressure)"#
                 // never more than the split share of all the plate's ink, and nearly all of it
                 let all = t + num(&out, "left");
                 let most = paint::plate::press::SPLIT_DAMP * all;
-                assert!(t <= most * (1.0 + 1e-9) && t > 0.97 * most, "damp at {p}: {t} of its split share {most}: {out}");
+                assert!(t <= most * (1.0 + 1e-9) && t > 0.95 * most, "damp at {p}: {t} of its split share {most}: {out}");
             }
             taken.insert((damp, j), t);
         }

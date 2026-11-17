@@ -9,12 +9,12 @@ n = needle{tip=40, cone=30}"#;
 /// A line plate: ground, two needle lines, a bite, the lower line stopped out, a second bite,
 /// cleaned; then an aquatint, melted and bitten.
 const ETCH: &str = r#"use(k)
-k:ground("hard", {um=4})
+k:ground("hard", {{0, 375}, {1000, 375}}, {um=4})
 r = k:needle(n, {{100, 200}, {900, 200}})
 assert(r.touched)
 k:needle(n, {{100, 500}, {900, 500}})
 b = k:bite{acid="ferric", baume=36, minutes=10}
-k:stop_out(rect(0, 400, 1000, 350))
+k:stop_out({{60, 500}, {940, 500}}, {pressure=0.85})
 k:bite{acid="ferric", baume=36, minutes=20, rock=true}
 k:clean()
 a = k:aquatint{box=0.6, wait=30, minutes=1}
@@ -86,7 +86,7 @@ fn a_plate_is_etched_on_the_clock() {
     assert!(depth(&p, 8.0) > 1.5 * depth(&p, 20.0), "{} {}", depth(&p, 8.0), depth(&p, 20.0));
     let out = s.run("print(k:feel(500, 750).words)").unwrap();
     assert!(out.out.contains("melted rosin"), "{}", out.out);
-    let e = s.run("k:ground(\"hard\")").unwrap_err();
+    let e = s.run("k:ground(\"hard\", {{0, 375}, {1000, 375}})").unwrap_err();
     assert!(e.contains("clean it first"), "{e}");
     {
         let st = s.st.borrow();
@@ -216,7 +216,7 @@ fn without_the_switch_byte_identical() {
     let r = replay(&loff).unwrap();
     assert!(plates(&r) == plates(&off));
     let mut r = r;
-    let e = r.run("use(k)\nk:ground(\"hard\")").unwrap_err();
+    let e = r.run("use(k)\nk:ground(\"hard\", {{0, 375}, {1000, 375}})").unwrap_err();
     assert!(e.contains("doesn't etch"), "{e}");
 }
 
@@ -247,7 +247,7 @@ fn the_switch_comes_from_the_log_head() {
 
 /// A grounded plate with two needle lines, in hand.
 const LINES: &str = r#"use(k)
-k:ground("hard", {um=4})
+k:ground("hard", {{0, 375}, {1000, 375}}, {um=4})
 k:needle(n, {{100, 200}, {900, 200}})
 k:needle(n, {{100, 500}, {900, 500}})"#;
 const STUDY: &str = r#"st = sheet{name="study", size=60, aspect=1, paper={grammage=200}, seed=3}"#;
@@ -370,7 +370,7 @@ fn a_warmer_bath_bites_faster_and_stop_out_keeps_depth() {
     assert!((ratio / arrh - 1.0).abs() < 1e-3 && (ratio - 1.40).abs() < 0.01, "{ratio} against {arrh}");
 
     let mut s = lined();
-    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nwait(10)\nk:lift()\nk:stop_out(rect(0, 400, 1000, 350))");
+    run(&mut s, "k:immerse{acid=\"ferric\", baume=36}\nwait(10)\nk:lift()\nk:stop_out({{60, 500}, {940, 500}}, {pressure=0.85})");
     // (the lower line at y 500 units, 20 mm down the 40 mm plate, under the varnish; the upper at 8 mm)
     let at = |s: &Session| {
         let p = plate(s);
@@ -401,7 +401,7 @@ fn a_plate_in_its_bath_refuses_work_and_is_seen_as_it_would_come_out() {
         ("k:immerse{acid=\"ferric\"}", "immerse"),
         ("k:bite{acid=\"ferric\", minutes=1}", "bite"),
         ("k:needle(n, {{100,700},{900,700}})", "needle"),
-        ("k:stop_out(rect(0, 0, 100, 100))", "stop_out"),
+        ("k:stop_out({{100, 100}, {200, 100}})", "stop_out"),
         ("k:clean()", "clean"),
         ("k:feel(500, 200)", "feel"),
         ("k:drypoint(n, {{100,700},{900,700}})", "drypoint"),
@@ -422,4 +422,50 @@ fn a_plate_in_its_bath_refuses_work_and_is_seen_as_it_would_come_out() {
     assert!(plate(&s).in_bath().is_some(), "a look leaves it in");
     let r = s.run("r = k:lift()\nprint(r.minutes)").unwrap();
     assert_eq!(r.out.trim(), "3.0");
+}
+
+/// The hand's tools take no region: stopping-out and the ground refuse a mask, a function, bare
+/// options or nothing, and say to give the points the tool is moved along; the varnish lies where
+/// the brush went, a brush runs dry, and the ground lies where the roller rolled.
+#[test]
+fn hand_tools_go_where_the_points_go() {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    run(&mut s, "use(k)");
+    for (src, words) in [
+        ("k:ground(\"hard\", {um=4})", "options but no points"),
+        ("k:ground(\"hard\")", "no points"),
+        ("k:ground(\"hard\", rect(0, 0, 1000, 750))", "no mask or region"),
+        ("k:stop_out(rect(0, 400, 1000, 350))", "no mask or region"),
+        ("k:stop_out(function(x, y) return 1 end)", "no function"),
+        ("k:stop_out()", "no points"),
+    ] {
+        let e = s.run(src).unwrap_err();
+        assert!(e.contains(words) && e.contains("points it is moved along"), "{src}: {e}");
+    }
+    // the roller over the top half only: the bottom is bare
+    let r = s.run("r = k:ground(\"hard\", {{0, 150}, {1000, 150}}, {roller=100})\nprint(r.covered)").unwrap();
+    let covered: f64 = r.out.trim().parse().unwrap();
+    // (a 100 mm roller rolled 6 mm down the 30 mm plate reaches its whole height)
+    assert!(covered > 99.0, "{covered}");
+    run(&mut s, "k:clean()");
+    let r = s.run("r = k:ground(\"hard\", {{0, 100}, {1000, 100}}, {roller=20})\nprint(r.covered)").unwrap();
+    let covered: f64 = r.out.trim().parse().unwrap();
+    // (a 20 mm roller along 4 mm down: 0 to 14 mm of the 30, to a cell of 1.5 mm)
+    assert!((covered - 100.0 * 14.0 / 30.0).abs() < 6.0, "{covered}");
+    let p = plate(&s);
+    let c = |mm: f64| (mm * 1000.0 / p.pitch_um()) as usize;
+    assert!(p.grounded(c(20.0), c(10.0)) && !p.grounded(c(20.0), c(20.0)));
+    // more of the same ground covers the rest; another thickness is refused
+    let e = s.run("k:ground(\"hard\", {{0, 600}, {1000, 600}}, {um=6})").unwrap_err();
+    assert!(e.contains("roll more of the same"), "{e}");
+    run(&mut s, "k:ground(\"hard\", {{0, 500}, {1000, 500}}, {roller=150})");
+    assert!((plate(&s).ground_share() - 1.0).abs() < 1e-9);
+    // a small brush lightly loaded runs dry and says so
+    let r = s.run("r = k:stop_out({{50, 300}, {950, 300}}, {brush=1, load=0.1, pressure=0.85})\nprint(r.dry, r.length, r.width)").unwrap();
+    assert!(r.out.contains("ran dry") && r.out.contains("true"), "{}", r.out);
+    let p = plate(&s);
+    let c = |mm: f64| (mm * 1000.0 / p.pitch_um()) as usize;
+    assert!(p.etch(c(3.0), c(12.0)).stopped && !p.etch(c(30.0), c(12.0)).stopped);
 }

@@ -406,9 +406,12 @@ impl Plate {
     /// The pinholes a thinned coat lets the acid through on cell (x, y), as
     /// their number per µm² (each `etch::PINHOLE_UM` across at the face), where
     /// they bare at least `etch::PINHOLE_LEAST` of it (`etch::bared_share`);
-    /// None where the coat holds, or there is none.
+    /// None where the coat holds, or there is none. A coat no rag has thinned
+    /// is as it was laid, and holds (a ground rolled 1 µm thick, the easel's
+    /// thinnest, bares 10⁻¹⁵ of the face).
     pub fn pinholes_at(&self, x: usize, y: usize) -> Option<f64> {
-        if !self.etch(x, y).stopped && !self.grounded(x, y) {
+        let e = self.etch(x, y);
+        if !e.thinned() || (!e.stopped && !self.grounded(x, y)) {
             return None;
         }
         let p = etch::bared_share(self.coat_um(x, y));

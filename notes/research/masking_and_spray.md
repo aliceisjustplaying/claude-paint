@@ -21,9 +21,11 @@ and `fix(points)` verbs). Tags: [M] measured or a manufacturer's datasheet,
   wherever the paint under it is not touch-dry.
 - **[E] Its color** is only how it looks while it is down. Nothing about it
   stays once it is lifted.
+- **It stays down** across chunks, waits and saves (the checkpoint's tape
+  section, version 23). Paint on it dries where it lies. Lifting it parts
+  the paint across its edges as §4 says.
 - **Not modeled:** paint creeping under the edge (the tape is taken as
-  pressed down along its edge), wet impasto torn along the edge as the tape
-  comes away, and the tape lifting a weak ground.
+  pressed down along its edge), and the tape lifting a weak ground.
 
 ## 2. Stencil film
 
@@ -88,3 +90,64 @@ pastel is bound. The resin wets 0.15·m/20 of the bound particles (capped at
 
 **Not modeled:** droplets drifting past the cone (overspray), runs from a
 spray held too close, and the spray's own nonuniformity within the cone.
+
+## 4. Lifting tape across paint
+
+When tape comes up, the paint laid across its edge since it went down must
+part there. How it parts depends on the film's state (paint's `tape::part`).
+
+- **A wet film is a liquid** and parts at the edge.
+- **A set film is a solid.** Its modulus and work of fracture are taken to
+  grow linearly from nothing at the gel point (`drying::GEL`) to their
+  touch-dry values, by its cure `sub` [E: no measurement of a film between
+  gel and touch-dry was found].
+  - **[M] Modulus** 33 ± 3 MPa: an unaged oil paint film in micro-tension,
+    rising to 270 ± 19 MPa after 16 weeks of ageing, with strain at break
+    falling from 0.077 to 0.019 ("A multiscale in-situ experimental method
+    for characterizing the mechanical response of oil paint", Experimental
+    Mechanics, 2026, https://link.springer.com/article/10.1007/s11340-026-01297-z;
+    from the abstract). `FILM_E_PA`. **[E] Poisson ratio** 0.4.
+  - **[M] Work of fracture** 10–40 J/m² at first crack for oil paints aged
+    about 30 years, the lowest (zinc white, raw umber, lead white with
+    litharge) about 15 J/m². An animal-glue ground is about 100 J/m², an
+    alkyd 250 J/m² (Janas, Avgerou, Charalambides, Fuster-López & Bratasz,
+    "Fracture toughness of aged oil paints", npj Herit. Sci. 12, 103, 2024,
+    doi 10.1186/s40494-024-01224-2). **[E]** A young film is taken at
+    15 J/m². `FILM_FRACTURE_J_M2`.
+  - **[E] Adhesion** of the new film to the touch-dry surface beside the
+    tape: 2 J/m² on dry paint or a sealed ground, 10 J/m² on a ground still
+    absorbent (the new film's oil keyed into it). Coating interfaces measure
+    1–300 J/m² (reviews of coating delamination). No measurement for oil on
+    oil was found.
+- **[S] Tear or turn.** A crack running down through a film meets the
+  interface at 90°. It turns into the interface when the interface's
+  toughness is under about 0.26 of the film's, the ratio of the energy
+  release rates of the deflected and the penetrating crack for elastically
+  like layers (He & Hutchinson, "Crack deflection at an interface between
+  dissimilar elastic materials", Int. J. Solids Struct. 25, 1053, 1989).
+  `DEFLECT`. Otherwise it tears the film at the edge.
+- **[M] The flap.** A film that turns into the interface is peeled with the
+  tape as a flap. Its two tears converge at the angle θ with
+  sin θ = α√(2Bτ)/(2γt) for a wide flap (Kruglova, Brau, Villers & Damman,
+  "How geometry controls the tearing of adhesive thin films on curved
+  surfaces", PRL 107, 164303, 2011, eq. 6, arXiv:1106.5366; the flat case
+  of Hamm, Reis, LeBlanc, Roman & Cerda, "Tearing as a test for mechanical
+  characterization of thin adhesive films", Nature Materials 7, 386, 2008).
+  B = Et³/12(1 − ν²) is the bending stiffness, τ the adhesion, γt the work
+  of fracture times thickness, and α the peel angle (**[E] 90°**: tape
+  pulled up and back, about square to the picture). The ridge joining flap
+  and film is L = α√(BW/2(2γt + τW)), which tends to α√(B/2τ) for a wide
+  flap (their eq. 3). That is taken as the width the film lifts off beside
+  the tape. Where sin θ ≥ 1 the flap tears off at once, at the edge.
+- **What it gives [D].** A touch-dry film on dry paint (τ/Γ = 0.13 < 0.26)
+  turns into the interface. Up to about 25 µm thick the flap converges, and
+  the film lifts off over about 0.1–0.2 mm beside the edge (a few pixels on
+  a fine canvas, none on a coarse one). Thicker, sin θ ≥ 1 and it tears at
+  the edge. A still-tacky film (weak) and a film on an absorbent ground
+  (keyed in) tear. Each edge point is judged from the film's thickness
+  there.
+- **[E] Kept beside the tape**: the touch-dry picture within 10 mm of it,
+  as it was when the tape went down (`APRON_MM`), so a lifted film can show
+  it again. This bounds the computation; it is not a physical constant.
+- **Not modeled:** the tear's wander finer than a pixel, and the film
+  lifting beyond the ridge where the adhesion is locally weak.

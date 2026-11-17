@@ -66,7 +66,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("lift_tape", lua.create_function(move |_, ()| {
             crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
                 let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-                let mm3 = c.lift_tape().ok_or_else(|| mlua::Error::runtime("lift_tape: no tape lies on the picture"))?;
+                let mm3 = c.lift_tape().map(|l| l.taken_mm3).ok_or_else(|| mlua::Error::runtime("lift_tape: no tape lies on the picture"))?;
                 c.tally_mut().secs += 3.0;
                 Ok(mm3)
             })

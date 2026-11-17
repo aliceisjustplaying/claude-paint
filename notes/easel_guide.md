@@ -350,6 +350,40 @@ double-loaded brush spatters both colors), and lands in the wet layer like
 any paint. It returns how many droplets landed; `b:fullness()` shows what is
 left on the brush.
 
+## Gestures only
+
+A new painting's log has the line `--@ gestures-only` in its head. In such
+a painting a tool acts only where a hand moves it: along the points of a
+stroke, a gesture, a knife's lay or scrape, a pencil's or a stick's line, an
+eraser's or a rag's path, or at a touch, a blot or a spatter's point. No
+call that tells a tool where to act by a mask, a function or a field runs,
+and no call that makes one runs. Each of these stops its chunk with an error
+naming the call:
+
+| refused | what it is |
+|---|---|
+| `mask(fn)`, `everywhere()`, `rect`, `ellipse`, `poly`, `below`, `above`, `ribbon` | masks |
+| `o:mask()`, `o:below()`, `o:above()`, `o:band()` on an outline, and `body_of{}` | an outline's regions; a silhouette computed from a skeleton |
+| `drawing_guide()` | the drawn lines as a mask |
+| `noise{}`, `worley{}` | computed fields |
+| `body.ellipsoid`, `body.block`, `body.half_space`, `form{}`, `terrain{}`, `world{}` | solids and scenes whose light, shadow and depth come out as masks and fields |
+| `work`, `blend`, `stipple`, `lose`, `h:hatch(m)` | strokes planned over a mask, with their `function(x, y)` options |
+| `erase(m)`, `fix(m)`, `smudge(m)`, `lay_sheet(m)`, `r:wipe(m)` | the mask forms of these verbs; their path forms (and `fix()` over the whole surface) run |
+| `clip=` on `b:stroke`, `b:gesture`, `b:touch`, `b:spatter` and `o:paint` | a mark cut off at a mask's edge |
+| `canvas{style=, palette=}` | a styled canvas with its procedural trees, rocks and firs |
+
+What runs: the points written in a chunk; `rand`, `randn`, `math.random`,
+`lerp`, `clamp`, `smoothstep`, `uneven` and `aerial`, which give numbers;
+`outline{}` with `o:paint`, `o:path`, `o:paths`, `o:strokes`, `o:at`,
+`o:inset`, `o:offset`, `o:length` and `o:corners`, which give points; the
+canvas and its ground or paper; piles, mixes and `palette{}`; loading and
+wiping tools; `wait`; `fix()`, `blow` and `tap`; and the questions
+`drying`, `soaked` and `feel`.
+
+A painting whose log's head has no `--@ gestures-only` line was begun
+before the switch and replays as it was painted, with all of the calls
+above. The sections below describe those calls as they run there.
+
 ## Covering an area
 
 ```lua
@@ -359,6 +393,8 @@ stipple(m, {pile=p, width=<units>, coverage=<layers>})
 work(m, {hand="glaze", pile=q})          -- a thin layer brushed on with a soft brush
 lose(m, {pile=p, where=0.5})
 ```
+
+(Refused in a new painting: see [Gestures only](#gestures-only).)
 
 `work` covers a mask with strokes of a real brush, planned the way a hand
 lays them. `hand` picks a starting handling, which the options below
@@ -455,6 +491,8 @@ strokes.
 `at=` and `view=` (see [Depth](#depth)).
 
 ## Masks and geometry
+
+(Refused in a new painting: see [Gestures only](#gestures-only).)
 
 Masks are maps of the whole canvas, and operations return new masks. Shapes
 and `mask(fn)` give coverage (0..1). `m:distance()` gives signed distance in
@@ -752,7 +790,8 @@ about 150 mm a second; a blot about a second; a refold 3 seconds; a dip
 ## Solids, light and space
 
 These are scaffolds for shapes you give them: they answer where light
-and shadow fall and what lies in front of what.
+and shadow fall and what lies in front of what. (Refused in a new
+painting: see [Gestures only](#gestures-only).)
 
 **Form.** Solids in canvas units, z toward you, lit by one light:
 
@@ -915,8 +954,9 @@ each campaign, and compare before and after.
   far and the painting's clock. Once the chunk is in the log and the easel
   is still finishing its reply, `status` says that instead.
 - **Option types.** Each option takes the type shown in this guide.
-  Options documented as `function(x, y)` accept a Lua function; numeric
-  options take the computed number.
+  Options documented as `function(x, y)` accept a Lua function in a
+  painting begun before the gestures-only switch (see
+  [Gestures only](#gestures-only)); numeric options take the computed number.
 - **Globals persist, locals don't.** Each chunk is its own Lua chunk:
   `p = pile{...}` is there in later chunks, `local p = ...` is not.
 - **Randomness is deterministic.** `math.random`, `rand` and `randn` are

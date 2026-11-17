@@ -246,6 +246,22 @@ impl Plate {
     /// stretch, the length of the stretch within the pad's radius of the
     /// cell's middle over the pad's width (see the module's notes).
     pub fn slide(&self, pts: &[Point], width: &dyn Fn(&Point) -> f64, step_mm: f64) -> Vec<Stretch> {
+        self.slide_by(pts, width, step_mm, false)
+    }
+
+    /// `slide` for a pad pressed as a smooth compliant body (under the
+    /// contact laws): its pressure falls from the middle to nothing at its
+    /// rim, `hertz`, and each cell's share of a pass is weighted by it, the
+    /// integral of the pressure along the cell's chord through the pad over
+    /// the mean pressure times the pad's width [D: real contact, and so what
+    /// a touch takes, goes with the load]. A straight pass rubs the point
+    /// under its middle 3π/8 ≈ 1.18 of a pass and a point at u from it
+    /// (3π/8)(1 − u²/r²); summed across the pad, as much as the flat pad.
+    pub fn slide_pressed(&self, pts: &[Point], width: &dyn Fn(&Point) -> f64, step_mm: f64) -> Vec<Stretch> {
+        self.slide_by(pts, width, step_mm, true)
+    }
+
+    fn slide_by(&self, pts: &[Point], width: &dyn Fn(&Point) -> f64, step_mm: f64, soft: bool) -> Vec<Stretch> {
         let p = self.pitch * 1e-3;
         let step = step_mm.max(p);
         let mut out = Vec::new();
@@ -280,7 +296,17 @@ impl Plate {
                             let h = (r * r - u * u).sqrt();
                             let over = (s + h).min(l) - (s - h).max(0.0);
                             if over > 0.0 {
-                                cells.push((x, y, (over / w) as f32));
+                                let share = if soft {
+                                    // ∫ (3/2)·√(h² − ξ²)/r dξ over where the point lies under the pad
+                                    let prim = |z: f64| {
+                                        let z = z.clamp(-h, h);
+                                        0.5 * (z * (h * h - z * z).max(0.0).sqrt() + h * h * (z / h).clamp(-1.0, 1.0).asin())
+                                    };
+                                    1.5 * (prim(s.min(h)) - prim((s - l).max(-h))) / r / w
+                                } else {
+                                    over / w
+                                };
+                                cells.push((x, y, share as f32));
                             }
                         }
                     }
@@ -289,6 +315,16 @@ impl Plate {
             }
         }
         out
+    }
+
+    /// A smooth compliant body pressed on the plate over a disc `a` mm in
+    /// radius by a mean pressure p̄: the share of p̄ it presses at `rho` mm from
+    /// the middle, Hertz's (3/2)·√(1 − ρ²/a²) [D: a rounded elastic body (a
+    /// dabber's domed felt, a poupée's wad, a bunched cloth) touches with a
+    /// pressure that falls to nothing at the edge of its contact; Hertz's is
+    /// the elastic sphere's].
+    pub fn hertz(rho: f64, a: f64) -> f64 {
+        if a <= 0.0 || rho >= a { 0.0 } else { 1.5 * (1.0 - (rho / a).powi(2)).sqrt() }
     }
 
     /// A face `width(pose)` mm across set down at each of `pts`: the disc of

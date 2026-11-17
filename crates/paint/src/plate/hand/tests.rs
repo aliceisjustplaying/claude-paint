@@ -157,3 +157,31 @@ fn a_slid_pad_rubs_by_the_length_it_slides() {
     let len: f64 = pts.windows(2).map(|w| ((w[1].x - w[0].x) as f64).hypot((w[1].y - w[0].y) as f64)).sum();
     assert!((r[50 * 200 + 100] as f64 - len / 6.0).abs() < 1e-3, "{} against {}", r[50 * 200 + 100], len / 6.0);
 }
+
+/// A pad pressed as a smooth compliant body (`slide_pressed`, under the
+/// contact laws): a straight pass well past a point rubs it by the pressure
+/// along its chord, Hertz's (3/2)·√(1 − ρ²/r²) of the mean, so (3π/8)(1 −
+/// u²/r²) of a pass at u from the path; nothing at the rim, and summed across
+/// the pad as much as the flat pad's chord law gives.
+#[test]
+fn a_pressed_pad_rubs_by_its_pressure() {
+    let p = tiny();
+    let w = 6.0;
+    let path = [pt(-10.0, 5.0), pt(30.0, 5.0)];
+    let (soft, flat) = (p.touches(&p.slide_pressed(&path, &|_| w, 1.5)), p.touches(&p.slide(&path, &|_| w, 1.5)));
+    let (mut ss, mut sf) = (0.0f64, 0.0f64);
+    for y in 0..100 {
+        let u = ((y as f64 + 0.5) * 0.1 - 5.0).abs();
+        let (a, b) = (soft[y * 200 + 100] as f64, flat[y * 200 + 100] as f64);
+        let want = if u < 3.0 { 3.0 * std::f64::consts::PI / 8.0 * (1.0 - (u / 3.0).powi(2)) } else { 0.0 };
+        assert!((a - want).abs() < 1e-4, "{u} mm off the path: {a} against {want}");
+        if u < 3.0 {
+            assert!((b - (1.0 - (u / 3.0).powi(2)).sqrt()).abs() < 1e-4, "the flat pad's chord share");
+        }
+        ss += a;
+        sf += b;
+    }
+    assert!((ss / sf - 1.0).abs() < 2e-3, "as much in all: {ss} against {sf}");
+    assert_eq!(Plate::hertz(3.0, 3.0), 0.0);
+    assert!((Plate::hertz(0.0, 3.0) - 1.5).abs() < 1e-12);
+}

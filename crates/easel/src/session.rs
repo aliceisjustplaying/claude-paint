@@ -64,6 +64,10 @@ pub const BLEND_FEATHER_MARK: &str = "--@ blend-feather";
 /// A log's head line: a brush's paint laid on wet paint stays on top of it
 /// (`paint::Canvas::with_brush_skim`). Every new painting has it.
 pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
+/// A log's head line: a touch (`b:touch`, `stipple`) lays the film a stroke
+/// lays where it starts, and a dragged touch what a stroke of its drag lays
+/// (`paint::Canvas::with_touch_split`). Every new painting has it.
+pub const TOUCH_SPLIT_MARK: &str = "--@ touch-split";
 /// A log's head line: its rag keeps what it lifts and a mask wipe stays
 /// inside its mask (`paint::Canvas::with_rag_lift`). Every new painting has
 /// it.
@@ -747,6 +751,9 @@ impl Session {
         }
         if self.st.borrow().tubes.brush_skim {
             let _ = writeln!(s, "{BRUSH_SKIM_MARK}");
+        }
+        if self.st.borrow().tubes.touch_split {
+            let _ = writeln!(s, "{TOUCH_SPLIT_MARK}");
         }
         if self.st.borrow().tubes.blend_at_masks {
             let _ = writeln!(s, "{BLEND_MARK}");
@@ -1542,8 +1549,8 @@ fn box_list() -> String {
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
 /// (`LIMBS_MARK`), and likewise for the blender's feather
-/// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`) and
-/// blends and glazes at masks (`BLEND_MARK`).
+/// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`), the
+/// touch's split (`TOUCH_SPLIT_MARK`) and blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
@@ -1568,6 +1575,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
+        b.touch_split = true;
         b.rag_lift = true;
         b.drain = true;
         return Ok(b);
@@ -1593,6 +1601,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::PIGMENT_MIXER) {
             return Err(format!("the log's switch {mark:?} requires engine 7, 8 or 9"));
         }
+    }
+    let touch_split = head(TOUCH_SPLIT_MARK);
+    if touch_split && !paint::engine7::active(engine) {
+        return Err(format!("the log's touch split switch ({TOUCH_SPLIT_MARK}) requires engine 7, 8 or 9"));
     }
     let drain = logged_drain(text);
     if drain && engine < 5 {
@@ -1636,6 +1648,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
+    b.touch_split = touch_split;
     b.rag_lift = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == RAG_LIFT_MARK);
     if b.rag_lift && !paint::engine7::active(engine) {
         return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7, 8 or 9"));
@@ -2079,6 +2092,45 @@ mod tests {
                 assert!(restored.knife_skim());
             }
         }
+        assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting's touches lay the film a stroke starts with
+    /// (`paint::Canvas::with_touch_split`), and its log's head says so; a
+    /// replay of that log and a save of it do too. A log without the line
+    /// (every painting before it) replays its touches as they were painted,
+    /// and the line only counts in the head.
+    #[test]
+    fn new_paintings_record_the_touch_split_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=200, aspect=1, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let touch = "b = brush{kind=\"filbert\", width=40}; b:load(pile{{\"cobalt blue\", 1}}, 0.6); b:touch(500, 500, {pressure=0.8})";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        live.run(touch).unwrap();
+        assert!(live.canvas().unwrap().touch_split());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{TOUCH_SPLIT_MARK}\n")), "{text}");
+        let mut laid = Vec::new();
+        for (log, split) in [(text.clone(), true), (text.replace(&format!("{TOUCH_SPLIT_MARK}\n"), ""), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let c = replay.canvas().unwrap();
+            assert_eq!(c.touch_split(), split);
+            assert_eq!(replay.program("p"), log);
+            laid.push(c.wet_total());
+            let mut saved = Vec::new();
+            c.write_state(&mut saved, "").unwrap();
+            let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+            assert_eq!(restored.touch_split(), split);
+            assert!(restored.brush_skim() && restored.knife_skim());
+        }
+        assert_eq!(laid[0], live.canvas().unwrap().wet_total());
+        assert!(laid[0] > 4.0 * laid[1], "a touch with the split lays {} against {} without", laid[0], laid[1]);
+        // (a line past the head is not the switch)
+        let late = text.replace(&format!("{TOUCH_SPLIT_MARK}\n"), "") + &format!("{TOUCH_SPLIT_MARK}\n");
+        assert!(!box_for(Some(&late)).unwrap().touch_split);
         assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
     }
 

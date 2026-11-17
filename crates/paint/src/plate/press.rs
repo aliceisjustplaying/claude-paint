@@ -151,6 +151,10 @@ pub struct SheetFeel {
     pub stiffness: f64,
     pub damp: bool,
     pub absorbent: f64,
+    /// Its strain beside its size as made (fractions; across its width, along
+    /// its height): the water in its fibre walls swells it (`damp::strain`,
+    /// `Moisture::size_mm`). The press reads it under the contact laws.
+    pub strain: (f64, f64),
 }
 
 impl SheetFeel {
@@ -220,7 +224,12 @@ impl Plate {
         }
         let f = sheet.window();
         let (pw, ph) = (self.width_mm as f64, self.height_mm as f64);
-        let (sw, sh_mm) = (f.full_w as f64 * ps / 1000.0, f.full_h as f64 * ps / 1000.0);
+        // the sheet as it is now: its pixels are its fibres as made, so a mm
+        // of it now is 1/(1 + strain) of a mm as made (under the contact laws;
+        // without them, as made). `at_mm` is measured on the sheet now from its
+        // top left edge, where it is held.
+        let (gx, gy) = if self.contact { (1.0 / (1.0 + feel.strain.0), 1.0 / (1.0 + feel.strain.1)) } else { (1.0, 1.0) };
+        let (sw, sh_mm) = (f.full_w as f64 * ps / 1000.0 / gx, f.full_h as f64 * ps / 1000.0 / gy);
         if at_mm.0 < -1e-9 || at_mm.1 < -1e-9 || at_mm.0 + pw > sw + 1e-6 || at_mm.1 + ph > sh_mm + 1e-6 {
             return Err("the plate doesn't lie within the sheet there".into());
         }
@@ -235,7 +244,7 @@ impl Plate {
         let a = self.pitch * self.pitch;
         // the sheet's pixel (in its window) under a point of the plate (mm from its left and top), mirrored
         let under = |x_mm: f64, y_mm: f64| -> Option<usize> {
-            let (sx, sy) = (((at_mm.0 + pw - x_mm) * 1000.0 / ps).floor(), ((at_mm.1 + y_mm) * 1000.0 / ps).floor());
+            let (sx, sy) = (((at_mm.0 + pw - x_mm) * gx * 1000.0 / ps).floor(), ((at_mm.1 + y_mm) * gy * 1000.0 / ps).floor());
             if sx < 0.0 || sy < 0.0 {
                 return None;
             }
@@ -253,7 +262,7 @@ impl Plate {
             for wy in 0..f.h {
                 for wx in 0..f.w {
                     let (cx, cy) = ((f.x0 + wx) as f64 + 0.5, (f.y0 + wy) as f64 + 0.5);
-                    let (x_mm, y_mm) = (at_mm.0 + pw - cx * ps / 1000.0, cy * ps / 1000.0 - at_mm.1);
+                    let (x_mm, y_mm) = (at_mm.0 + pw - cx * ps / 1000.0 / gx, cy * ps / 1000.0 / gy - at_mm.1);
                     if x_mm < 0.0 || y_mm < 0.0 || x_mm >= pw || y_mm >= ph {
                         continue;
                     }
@@ -276,13 +285,13 @@ impl Plate {
         // a row or column of pixels with none where the two drift apart by a
         // pixel, and lays two cells' ink on one where they drift back)
         let area = (self.pitch / ps).powi(2);
-        let k = self.pitch / ps;
+        let (kx, ky) = (self.pitch * gx / ps, self.pitch * gy / ps);
         let pitch = self.pitch;
         let footprint = move |x: usize, y: usize| -> Vec<(usize, f64)> {
             // the cell's corners on the sheet, in pixels (mirrored in x)
-            let u0 = (at_mm.0 + pw - (x as f64 + 1.0) * pitch / 1000.0) * 1000.0 / ps;
-            let v0 = (at_mm.1 + y as f64 * pitch / 1000.0) * 1000.0 / ps;
-            let (u1, v1) = (u0 + k, v0 + k);
+            let u0 = (at_mm.0 + pw - (x as f64 + 1.0) * pitch / 1000.0) * gx * 1000.0 / ps;
+            let v0 = (at_mm.1 + y as f64 * pitch / 1000.0) * gy * 1000.0 / ps;
+            let (u1, v1) = (u0 + kx, v0 + ky);
             let mut out = Vec::with_capacity(4);
             let mut sy = v0.floor();
             while sy < v1 {
@@ -290,7 +299,7 @@ impl Plate {
                 let mut sx = u0.floor();
                 while sx < u1 {
                     let ox = (u1.min(sx + 1.0) - u0.max(sx)).max(0.0);
-                    let w = ox * oy / (k * k);
+                    let w = ox * oy / (kx * ky);
                     if w > 0.0 && sx >= 0.0 && sy >= 0.0 {
                         let (px, py) = (sx as usize, sy as usize);
                         if px >= f.x0 && py >= f.y0 && px < f.x0 + f.w && py < f.y0 + f.h {

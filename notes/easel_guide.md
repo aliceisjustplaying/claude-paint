@@ -1715,7 +1715,9 @@ use("painting")
   below the yarns' reach, an open bite of several millimetres is wiped clean but for a band at
   its rim (none if it is shallower than a yarn's radius). Past a burr the cloth is held off
   the plate for (B·h/p)^¼, half a millimetre or so either side: wiping across a drypoint
-  line keeps that ink, the velvet of a drypoint; wiping along it doesn't. More `stiff`
+  line keeps that ink, the velvet of a drypoint; wiping along it doesn't (under the contact
+  laws the cloth drapes over the burr instead, the same whichever way the pad goes: below,
+  "The tarlatan's drape"). More `stiff`
   starch holds the cloth stiffer: less from wide lines. Reports `before`, `after`, `taken`,
   `laid`, `kept` (mm³: `kept` is what the cloth now holds, `before − after`), `film` and
   `lines` (µm left over the area), `seconds`, `temp`; `t.load`, `t.ink` (mm³ held).
@@ -1767,13 +1769,25 @@ was printed.
   that turn the short way (above, "Plough or cut").
 - **The palm** is held off past a burr by the gap the burr opens, and reaches only the ink
   above that gap (above, `k:hand_wipe`).
-- **The tarlatan's lee** past a burr runs evenly along a slanting line: each cell's piece of
-  burr reaches as far along the line as the cell's share of it. Without the laws the pieces
-  of a slanting line left gaps between them.
+- **The tarlatan's drape.** Past a burr the starched cloth bends as a beam lifted by it, and
+  lies off the plate for (72·B·h/p)^¼ either side: 1.5–2 mm past the burr of a 1–4 N line. It takes only
+  the ink standing above its drape, whichever way it moves (wiping along a line keeps its
+  velvet as wiping across does), and the drape runs evenly along a slanting line. Without the
+  laws the cloth was held off for (B·h/p)^¼ and only as far as it crossed the line, so a pad
+  wiped in circles took the velvet and a drypoint printed as thin as a pen line.
+- **The polish.** No wipe takes the film below the ink in the plate's finest scratches: half
+  its roughness, 0.05 µm on a plate polished to Ra 0.1 µm (an estimate). Printed, a faint
+  trace (OD about 0.01 in black); visible plate tone needs a lighter wipe.
+- **The sheet's size.** `press{}` places the plate by the sheet's size at the pull: a damp
+  sheet is larger than as made (`damp_of(s)`'s `width` and `made_width`), so the print, dried,
+  is smaller than its plate by the same share (1.2 % for a soaked and blotted cream laid sheet).
+  `at` is measured on the sheet as it is, from its top left edge, where it is held. Plates pulled at one
+  dampness meet exactly; a sheet left open between them is out of register by its change in
+  size times the distance from that edge.
 - **A plate's save** under them is `PLAT` version 4: its laws, then the layout it would
   otherwise have. A plate made without them is written as before.
-- **Physics and estimates:** notes/research/intaglio_physics.md §1.2 ("Stream by stream")
-  and §5.6.
+- **Physics and estimates:** notes/research/intaglio_physics.md §1.2 ("Stream by stream"),
+  §5.6 and §6.6.
 
 ### The press
 

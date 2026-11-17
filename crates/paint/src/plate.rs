@@ -193,6 +193,10 @@ pub struct Groove {
     /// it cut (β ≥ β_c: the groove's metal leaves as a chip).
     pub beta: f64,
     pub cut: bool,
+    /// The share of the groove's section that left as a chip (0..1): all or
+    /// nothing by `groove`, the streams of metal the face meets steeper than
+    /// β_c by `groove_streams`.
+    pub chip: f64,
     /// The burr's cross-section on each side (µm²; left and right of the
     /// way the needle went) and its height (µm).
     pub burr_l: f64,
@@ -252,16 +256,131 @@ pub fn groove(h_pa: f64, tip_um: f64, cone_deg: f64, force: f64, along_deg: f64,
     let beta = 90.0 - cone_deg - along_deg;
     let cut = beta >= BETA_C_DEG;
     let burr = if cut { 0.0 } else { area };
-    let (sl, sr) = if a <= tip_um * cone.cos() {
-        (0.5, 0.5)
+    let (sl, sr) = burr_sides(tip_um, cone, a, side_deg);
+    Groove { w, d, area, beta, cut, chip: if cut { 1.0 } else { 0.0 }, burr_l: burr * sl, burr_r: burr * sr, burr_h: BURR_HEIGHT_PER_DEPTH * d, tip: tip_um, cone }
+}
+
+/// The burr's shares (left, right) for a groove `a` µm half-wide under a
+/// point of radius `tip` and half-angle `cone` (radians) leaned `side_deg`
+/// to the right (`groove`).
+fn burr_sides(tip: f64, cone: f64, a: f64, side_deg: f64) -> (f64, f64) {
+    if a <= tip * cone.cos() {
+        return (0.5, 0.5);
+    }
+    let lim = 89.0f64.to_radians();
+    let s = side_deg.to_radians();
+    let l = (cone + s).clamp(0.0, lim).tan();
+    let r = (cone - s).clamp(0.0, lim).tan();
+    if l + r <= 0.0 { (0.5, 0.5) } else { (l / (l + r), r / (l + r)) }
+}
+
+/// `groove` with its regime decided stream by stream (`Plate::contact`, the
+/// easel's `--@ intaglio-contact`; notes/research/intaglio_physics.md §1.2).
+///
+/// β_c is measured on a plane face meeting the metal square on (Sedriks &
+/// Mulhearn's pyramids, a face leading). A needle's face is a cone: each
+/// stream of metal it meets, across the groove, meets the face at the face's
+/// own slope along the way the needle goes, tan α = −n·x̂ / n·ẑ for the
+/// face's outward normal n where that stream reaches the plate's surface
+/// [D, geometry]. On an upright cone that is cot θ·cos φ: steepest at the
+/// front (90° − θ), shallower toward the flanks, so an upright needle ploughs
+/// unless its point is finer than 90° − β_c (drypoint manuals: held upright
+/// it throws a burr on both sides [P]). The streams the face meets steeper
+/// than β_c leave as a chip, the rest ploughs [D; the mixed mode of a
+/// conical tool, Wang & Subhash 2002]; the shares are the groove's section
+/// across those streams. Within the rounded point the face is the sphere's,
+/// whose slope at the surface's edge is a·cos φ/(R − d). Leaning the needle
+/// tilts the cone: pulled (`along` > 0) its front lies back toward the
+/// plate, pushed or leaned to the side it stands up. `beta` is the steepest
+/// angle the face meets the metal at.
+pub fn groove_streams(h_pa: f64, tip_um: f64, cone_deg: f64, force: f64, along_deg: f64, side_deg: f64) -> Groove {
+    let mut g = groove(h_pa, tip_um, cone_deg, force, along_deg, side_deg);
+    let a = 0.5 * g.w;
+    if a <= 0.0 || g.area <= 0.0 {
+        return g;
+    }
+    // (each sample: its place across the groove, its attack angle in degrees)
+    let n = 720;
+    let mut fr: Vec<(f64, f64)> = Vec::with_capacity(n);
+    let cone = cone_deg.to_radians();
+    if a <= tip_um * cone.cos() {
+        // the sphere: its edge at the surface, a across, R − d over the centre
+        let r_d = (tip_um - g.d).max(1e-9);
+        for i in 0..n {
+            let phi = -0.5 * std::f64::consts::PI + (i as f64 + 0.5) * std::f64::consts::PI / n as f64;
+            fr.push((a * phi.sin(), (a * phi.cos() / r_d).atan().to_degrees()));
+        }
     } else {
-        let lim = 89.0f64.to_radians();
-        let s = side_deg.to_radians();
-        let l = (cone + s).clamp(0.0, lim).tan();
-        let r = (cone - s).clamp(0.0, lim).tan();
-        if l + r <= 0.0 { (0.5, 0.5) } else { (l / (l + r), r / (l + r)) }
-    };
-    Groove { w, d, area, beta, cut, burr_l: burr * sl, burr_r: burr * sr, burr_h: BURR_HEIGHT_PER_DEPTH * d, tip: tip_um, cone }
+        // the cone about its axis, the needle's top leaning `along` ahead and `side` to the right
+        let (ta, ts) = (along_deg.to_radians().tan(), side_deg.to_radians().tan());
+        let m = (ta * ta + ts * ts + 1.0).sqrt();
+        let ax = [ta / m, ts / m, 1.0 / m];
+        // a unit vector square to the axis, and the third
+        let e1 = {
+            let k = [ax[2], 0.0, -ax[0]];
+            let l = (k[0] * k[0] + k[2] * k[2]).sqrt();
+            [k[0] / l, 0.0, k[2] / l]
+        };
+        let e2 = [ax[1] * e1[2] - ax[2] * e1[1], ax[2] * e1[0] - ax[0] * e1[2], ax[0] * e1[1] - ax[1] * e1[0]];
+        // the virtual apex lies tip(1/sin θ − 1) under the rounded point
+        let depth = g.d + tip_um * (1.0 / cone.sin() - 1.0);
+        for i in 0..n {
+            let phi = (i as f64 + 0.5) * std::f64::consts::TAU / n as f64;
+            let (c, s) = (phi.cos(), phi.sin());
+            let gn: [f64; 3] = std::array::from_fn(|j| ax[j] * cone.cos() + cone.sin() * (e1[j] * c + e2[j] * s));
+            if gn[2] <= 1e-9 {
+                continue;
+            }
+            let nrm: [f64; 3] = std::array::from_fn(|j| (gn[j] * cone.cos() - ax[j]) / cone.sin());
+            // the face meeting the metal ahead: its normal points forward
+            if nrm[0] <= 0.0 {
+                continue;
+            }
+            let y = gn[1] * depth / gn[2];
+            fr.push((y, nrm[0].atan2(-nrm[2]).to_degrees()));
+        }
+    }
+    if fr.len() < 2 {
+        return g;
+    }
+    fr.sort_by(|p, q| p.0.total_cmp(&q.0));
+    let (lo, hi) = (fr[0].0, fr[fr.len() - 1].0);
+    let span = (hi - lo).max(1e-9);
+    let (mut all, mut cut, mut beta) = (0.0f64, 0.0f64, 0.0f64);
+    for k in 0..fr.len() {
+        // (this stream's width across the front, mapped onto the groove's width)
+        let y0 = if k == 0 { lo } else { 0.5 * (fr[k - 1].0 + fr[k].0) };
+        let y1 = if k + 1 == fr.len() { hi } else { 0.5 * (fr[k].0 + fr[k + 1].0) };
+        let u = -a + ((0.5 * (y0 + y1)) - lo) / span * 2.0 * a;
+        let wt = (y1 - y0).max(0.0) * g.depth_at(u);
+        all += wt;
+        beta = beta.max(fr[k].1);
+        if fr[k].1 > BETA_C_DEG {
+            cut += wt;
+        }
+    }
+    let chip = if all > 0.0 { (cut / all).clamp(0.0, 1.0) } else { 0.0 };
+    // the ploughed share parts to the sides as `groove` parts it
+    let (sl, sr) = burr_sides(tip_um, cone, a, side_deg);
+    let burr = g.area * (1.0 - chip);
+    g.beta = beta;
+    g.chip = chip;
+    g.cut = chip >= 0.5;
+    (g.burr_l, g.burr_r) = (burr * sl, burr * sr);
+    g
+}
+
+/// A path's azimuths (degrees) made to turn the short way between points, so
+/// that a needle following its line round past due left (±180°) doesn't
+/// swing back through 0° between two points (`Plate::contact`).
+fn azimuths_unwound(pts: &[Point]) -> Vec<Point> {
+    let mut out = pts.to_vec();
+    for i in 1..out.len() {
+        let prev = out[i - 1].az as f64;
+        let d = (out[i].az as f64 - prev + 180.0).rem_euclid(360.0) - 180.0;
+        out[i].az = (prev + d) as f32;
+    }
+    out
 }
 
 impl Groove {
@@ -696,6 +815,12 @@ pub struct Plate {
     coats: Option<Box<etched::Coats>>,
     /// Its ink (`inked`, the easel's `--@ press`): None until it is inked.
     ink: Option<Box<inked::Inking>>,
+    /// The contact laws of the easel's `--@ intaglio-contact` (set when a plate is
+    /// made under it, kept with the plate): a drypoint needle's regime stream
+    /// by stream (`groove_streams`) along azimuths that turn the short way,
+    /// and a wipe held off by a burr over the gap it leaves (`inked`). False:
+    /// as the plate was first released.
+    pub contact: bool,
 }
 
 impl Plate {
@@ -704,7 +829,7 @@ impl Plate {
     pub fn new(metal: Metal, temper: Temper, width_mm: f32, height_mm: f32, thickness_mm: f32, bevel_deg: f32, w: usize, h: usize) -> Plate {
         let pitch = width_mm as f64 * 1000.0 / w as f64;
         let (tw, th) = (w.div_ceil(TILE), h.div_ceil(TILE));
-        Plate { metal, temper, facing: None, width_mm, height_mm, thickness_mm, bevel_deg, w, h, pitch, tiles: vec![None; tw * th], ops: Vec::new(), chip_um3: 0.0, clip: None, coats: None, ink: None }
+        Plate { metal, temper, facing: None, width_mm, height_mm, thickness_mm, bevel_deg, w, h, pitch, tiles: vec![None; tw * th], ops: Vec::new(), chip_um3: 0.0, clip: None, coats: None, ink: None, contact: false }
     }
 
     pub fn size_px(&self) -> (usize, usize) {
@@ -862,6 +987,13 @@ impl Plate {
     fn drypoint(&mut self, tip_um: f64, cone_deg: f64, pts: &[Point]) -> Report {
         let h_pa = self.hardness_pa();
         let p = self.pitch;
+        let unwound;
+        let pts = if self.contact {
+            unwound = azimuths_unwound(pts);
+            &unwound[..]
+        } else {
+            pts
+        };
         let (samples, total) = Self::samples(pts, p / 4000.0);
         let mut rep = Report { length_mm: total, secs: Self::secs(&samples), ..Report::default() };
         for &(x, y, (tx, ty), s, pose, ds) in &samples {
@@ -872,23 +1004,20 @@ impl Plate {
             let (rx, ry) = (-ty, tx);
             let along = (lean * (ax * tx + ay * ty)).atan().to_degrees();
             let side = (lean * (ax * rx + ay * ry)).atan().to_degrees();
-            let g = groove(h_pa, tip_um, cone_deg, f, along, side);
+            let g = if self.contact { groove_streams(h_pa, tip_um, cone_deg, f, along, side) } else { groove(h_pa, tip_um, cone_deg, f, along, side) };
             if g.w <= 0.0 || g.area <= 0.0 {
                 continue;
             }
             if g.w > rep.width_um {
-                (rep.width_um, rep.depth_um, rep.burr_um, rep.beta_deg) = (g.w, g.d, if g.cut { 0.0 } else { g.burr_h }, g.beta);
+                (rep.width_um, rep.depth_um, rep.burr_um, rep.beta_deg) = (g.w, g.d, if g.chip >= 1.0 { 0.0 } else { g.burr_h }, g.beta);
             }
-            rep.cut |= g.cut;
-            rep.ploughed |= !g.cut;
+            rep.cut |= g.chip > 0.0;
+            rep.ploughed |= g.chip < 1.0;
             let len_um = ds * 1000.0;
             rep.groove_um3 += g.area * len_um;
-            if g.cut {
-                rep.chip_um3 += g.area * len_um;
-                self.chip_um3 += g.area * len_um;
-            } else {
-                rep.burr_um3 += (g.burr_l + g.burr_r) * len_um;
-            }
+            rep.chip_um3 += g.chip * g.area * len_um;
+            self.chip_um3 += g.chip * g.area * len_um;
+            rep.burr_um3 += (g.burr_l + g.burr_r) * len_um;
             // the line's direction over 0..180, and its sides as seen along it
             let ang = ty.atan2(tx).to_degrees().rem_euclid(360.0);
             let flip = ang >= 180.0;
@@ -1209,6 +1338,7 @@ impl Plate {
     pub fn rebuilt(&self, factor: usize, window: (usize, usize, usize, usize)) -> Plate {
         let mut p = Plate::new(self.metal, self.temper, self.width_mm, self.height_mm, self.thickness_mm, self.bevel_deg, self.w * factor, self.h * factor);
         p.facing = self.facing;
+        p.contact = self.contact;
         p.clip = Some(window);
         for op in &self.ops {
             p.run(op);
@@ -1314,12 +1444,20 @@ impl Plate {
     /// inked: as version 2, but its coats (version 2's, the bath slot among
     /// them) only if it has any (a word, 0 or 1, before them), then its ink
     /// (`inked`). A plate never inked is written
-    /// as version 1 or 2 as before.
+    /// as version 1 or 2 as before. Version 4 (`--@ intaglio-contact`) is a plate
+    /// made under the contact laws (`contact`): a word of its laws (bit 0,
+    /// `contact`) and the version it would otherwise be written as, then that
+    /// version's layout. A plate made without them is written as before.
     pub fn write(&self, w: &mut impl Write) -> io::Result<()> {
         let v3 = self.ink.is_some();
         let v2 = v3 || self.coats.is_some() || self.ops.iter().any(Op::etching);
+        let base = if v3 { 3 } else if v2 { 2 } else { 1 };
         w.write_all(PLAT_MAGIC)?;
-        put64(w, if v3 { PLAT_V } else if v2 { 2 } else { 1 })?;
+        if self.contact {
+            put64(w, PLAT_V)?;
+            put64(w, 1)?;
+        }
+        put64(w, base)?;
         put64(w, self.metal.word())?;
         put64(w, self.temper.word())?;
         for v in [self.width_mm, self.height_mm, self.thickness_mm, self.bevel_deg] {
@@ -1414,7 +1552,7 @@ impl Plate {
         Ok(())
     }
 
-    /// `write` read back (version 1, 2 or 3): refuses another version, a
+    /// `write` read back (version 1, 2, 3 or 4): refuses another version, a
     /// damaged size, a tool it doesn't know and trailing data.
     pub fn read(r: &mut impl Read) -> io::Result<Plate> {
         let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, format!("plate: {m}"));
@@ -1423,9 +1561,22 @@ impl Plate {
         if &m != PLAT_MAGIC {
             return Err(bad("not a plate's section"));
         }
-        let v = get64(r)?;
+        let mut v = get64(r)?;
         if !(1..=PLAT_V).contains(&v) {
             return Err(bad(&format!("a plate of version {v}: this build reads versions 1 to {PLAT_V}")));
+        }
+        let mut contact = false;
+        if v == 4 {
+            // (version 4: its laws, then the version its layout is)
+            let laws = get64(r)?;
+            if laws != 1 {
+                return Err(bad(&format!("laws {laws:#x} this build doesn't know")));
+            }
+            contact = true;
+            v = get64(r)?;
+            if !(1..=3).contains(&v) {
+                return Err(bad(&format!("a version-4 plate laid out as version {v}")));
+            }
         }
         let metal = Metal::of(get64(r)?).ok_or_else(|| bad("a metal this build doesn't know"))?;
         let temper = Temper::of(get64(r)?).ok_or_else(|| bad("a temper this build doesn't know"))?;
@@ -1445,6 +1596,7 @@ impl Plate {
             return Err(bad("its pitch is damaged"));
         }
         p.chip_um3 = chip;
+        p.contact = contact;
         p.facing = match get64(r)? {
             0 => None,
             1 => Some(Facing { hv: f(r)?, um: f(r)? }),
@@ -1562,10 +1714,11 @@ impl Plate {
 }
 
 const PLAT_MAGIC: &[u8; 4] = b"PLAT";
-/// The newest version of a plate's section (`write`): 3, a plate that has
-/// been inked (`--@ press`); 2, a plate an etching tool has touched, and 1
-/// are still written for plates without ink, and read.
-pub const PLAT_V: u64 = 3;
+/// The newest version of a plate's section (`write`): 4, a plate made under
+/// the contact laws (`--@ intaglio-contact`), around one of the others' layouts;
+/// 3, a plate that has been inked (`--@ press`); 2, a plate an etching tool
+/// has touched, and 1 are still written for plates without them, and read.
+pub const PLAT_V: u64 = 4;
 
 fn put64(w: &mut impl Write, v: u64) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())

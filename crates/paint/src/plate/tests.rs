@@ -269,3 +269,88 @@ fn a_crop_is_rebuilt_from_the_vectors() {
     let lit = fine.seen((0, 90, 400, 110), Some((135.0, 25.0)));
     assert!(lit.iter().all(|c| c.iter().all(|v| v.is_finite())));
 }
+
+
+/// Under the contact laws (`groove_streams`) each stream of metal across the
+/// groove meets the needle's face at its own slope, cot θ·cos φ on an upright
+/// cone: the streams within |u| < a·√(1 − (tan β_c·tan θ)²) of the middle cut
+/// a chip, the rest ploughs. An upright 30° cone meets the metal at 60° only
+/// at its very front, so it ploughs and throws its burr both sides (held
+/// upright, a drypoint needle throws a burr on both sides [P]), where the old
+/// law cut; pulled at 55° it ploughs at 25°; within the rounded point, at
+/// the sphere's slope a/(R − d), it ploughs even pushed; pushed with a cone,
+/// its middle cuts and its flanks plough.
+#[test]
+fn a_needle_ploughs_or_cuts_stream_by_stream() {
+    let h = hardness_pa(90.0);
+    let g = groove_streams(h, 25.0, 30.0, 2.0, 0.0, 0.0);
+    assert!(groove(h, 25.0, 30.0, 2.0, 0.0, 0.0).cut, "the old law: upright, it cut");
+    assert_eq!(g.chip, 0.0);
+    assert!(g.burr_l == g.burr_r && (g.burr_l + g.burr_r - g.area).abs() < 1e-9 * g.area);
+    assert!((g.beta - 60.0).abs() < 0.01, "{}", g.beta);
+    let g = groove_streams(h, 25.0, 30.0, 2.0, 35.0, 0.0);
+    assert!(g.chip == 0.0 && (g.beta - 25.0).abs() < 0.01, "{g:?}");
+    // fine points held upright: the middle cuts, by the slope of each stream
+    for theta in [10.0f64, 15.0, 20.0] {
+        let g = groove_streams(h, 25.0, theta, 2.0, 0.0, 0.0);
+        let a = 0.5 * g.w;
+        assert!(a > 25.0 * theta.to_radians().cos(), "on the cone");
+        let uc = a * (1.0 - (BETA_C_DEG.to_radians().tan() * theta.to_radians().tan()).powi(2)).sqrt();
+        let n = 20000;
+        let (mut all, mut cut) = (0.0, 0.0);
+        for i in 0..n {
+            let u = -a + (i as f64 + 0.5) * 2.0 * a / n as f64;
+            all += g.depth_at(u);
+            if u.abs() < uc {
+                cut += g.depth_at(u);
+            }
+        }
+        assert!((g.chip - cut / all).abs() < 0.01, "{theta}°: chip {} against {}", g.chip, cut / all);
+        assert!(((g.burr_l + g.burr_r) - g.area * (1.0 - g.chip)).abs() < 1e-9 * g.area);
+        assert!((g.beta - (90.0 - theta)).abs() < 0.01);
+    }
+    // a light line, within the point's sphere, pushed: the sphere's slope
+    let g = groove_streams(h, 25.0, 30.0, 0.3, -35.0, 0.0);
+    let a = 0.5 * g.w;
+    assert!(a < 25.0 * 30f64.to_radians().cos());
+    assert_eq!(g.chip, 0.0);
+    assert!((g.beta - (a / (25.0 - g.d)).atan().to_degrees()).abs() < 0.01);
+    // pushed: its front stands at 95°; the flanks, meeting the metal aslant, plough
+    let g = groove_streams(h, 25.0, 30.0, 2.0, -35.0, 0.0);
+    assert!((g.beta - 95.0).abs() < 0.01 && g.chip > 0.8 && g.chip < 1.0, "{g:?}");
+}
+
+/// Under the contact laws a needle following a leftward line turns the short
+/// way between azimuths of 179.4° and −179.7°; without them it swings round
+/// through 0° (pushed) and cuts there. A plate under them saves as version 4
+/// and reads back with them; one without them as before.
+#[test]
+fn azimuths_turn_the_short_way_and_the_laws_are_kept() {
+    let line = |contact: bool| {
+        let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 30.0, 20.0, 1.3, 45.0, 300, 200);
+        p.contact = contact;
+        let pt = |x: f32, y: f32, az: f32| Point { x, y, force: 2.0, alt: 55.0, az, speed: 30.0 };
+        let r = p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(25.0, 10.0, 179.4), pt(15.0, 10.1, -179.7), pt(5.0, 10.0, 180.0)] });
+        (p, r)
+    };
+    let (old, ro) = line(false);
+    let (new, rn) = line(true);
+    assert!(ro.chip_um3 > 0.0 && ro.cut && ro.ploughed, "{ro:?}");
+    assert!(rn.chip_um3 == 0.0 && !rn.cut && rn.ploughed, "{rn:?}");
+    assert!((rn.groove_um3 - ro.groove_um3).abs() < 1e-9 * ro.groove_um3);
+    let bytes = |p: &Plate| {
+        let mut b = Vec::new();
+        p.write(&mut b).unwrap();
+        b
+    };
+    let (bo, bn) = (bytes(&old), bytes(&new));
+    assert_eq!(u64::from_le_bytes(bo[4..12].try_into().unwrap()), 1);
+    assert_eq!(u64::from_le_bytes(bn[4..12].try_into().unwrap()), 4);
+    assert_eq!(bn.len(), bo.len() + 16);
+    let back = Plate::read(&mut &bn[..]).unwrap();
+    assert!(back == new && back.contact);
+    assert!(!Plate::read(&mut &bo[..]).unwrap().contact);
+    let mut bad = bn.clone();
+    bad[12] = 2;
+    assert!(Plate::read(&mut &bad[..]).is_err(), "laws it doesn't know");
+}

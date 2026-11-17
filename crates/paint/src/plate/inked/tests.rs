@@ -550,83 +550,172 @@ fn the_palm_leaves_a_narrow_smooth_tone_by_a_burr() {
     assert!(((ta.0 + ta.1) / (tb.0 + tb.1) - 1.0).abs() < 0.03, "{ta:?} {tb:?}");
 }
 
-/// The tarlatan's drape over a burr (`cloth_span_um`, `cloth_gap_um`): a
-/// beam of rigidity B under a uniform load p lifted h by a line support
-/// touches down smoothly at L = (72Bh/p)^¼, its gap p·s³(4L − 3s)/(72B) from
-/// the touchdown: h over the support, level there, and zero with zero slope
-/// and moment at L.
+/// The cloth's face (`Face`, the contact laws): a fibre mass by van Wyk's
+/// law, p·(T − T_c)³ the same at every load, through the KES reference loads
+/// with `FACE_EMC` of `FACE_T0_UM` squeezed off between them. At the pad's 10
+/// kPa its give left is s = 75/(100^⅓ − 1)·(1/2)^⅓ = 16.3 µm, its stiffness
+/// 3p/s = 1.8 × 10⁹ Pa/m and its squeeze from free 79 µm, so it bears
+/// (s/(s + u))³ of p lifted u and opens a true gap only past 79 µm. The
+/// softened cloth's rigidity is Peirce's W·c³.
 #[test]
-fn the_cloths_drape_over_a_burr_is_a_lifted_beam() {
-    let (h, p, b) = (40.0, 1e4, 5e-5);
-    let l = cloth_span_um(h, p, b);
-    assert!((l - 1e6 * (72.0 * b * h * 1e-6 / p).powf(0.25)).abs() < 1e-6);
-    assert!((l / lee_um(h, p, b) - 72f64.powf(0.25)).abs() < 1e-9, "the scale (Bh/p)^¼ times 72^¼");
-    let g = |x: f64| cloth_gap_um(h, p, b, l, x);
-    assert!((g(1e-9) - h).abs() < 1e-3 * h && g(l) == 0.0);
-    // level over the support, flat at the touchdown, and its curvature gone there too
-    let e = 1e-3 * l;
-    assert!((g(e) - h).abs() / e < 1e-2 * h / l);
-    assert!(g(l - e) / e < 1e-4 * h / l);
-    let curv = |x: f64| (g(x + e) - 2.0 * g(x) + g(x - e)) / (e * e);
-    assert!(curv(l - 2.0 * e).abs() < 0.05 * curv(0.5 * l).abs());
-    // falling all the way
-    let mut last = h;
-    for k in 1..20 {
-        let v = g(k as f64 * l / 20.0);
-        assert!(v < last);
-        last = v;
+fn the_cloths_face_is_a_fibre_mass() {
+    let (a, b) = (Face::at(KES_PA.0), Face::at(KES_PA.1));
+    assert!(a.delta.abs() < 1e-9);
+    assert!((b.delta - FACE_EMC * FACE_T0_UM).abs() < 1e-9, "T0 − Tm = EMC·T0");
+    for p in [200.0, 1e4, 2e4] {
+        let f = Face::at(p);
+        assert!((p * f.s.powi(3) / (KES_PA.1 * b.s.powi(3)) - 1.0).abs() < 1e-9);
+        assert!((f.k_pa_m() - 3.0 * p / (f.s * 1e-6)).abs() < 1e-6 * f.k_pa_m());
+    }
+    let f = Face::at(1e4);
+    let sm = 75.0 / (100f64.cbrt() - 1.0);
+    assert!((f.s - sm * 0.5f64.cbrt()).abs() < 1e-9 && (16.0..16.6).contains(&f.s), "{}", f.s);
+    assert!((f.delta - (sm * 100f64.cbrt() - f.s)).abs() < 1e-9 && (78.0..80.0).contains(&f.delta), "{}", f.delta);
+    assert!((1.8e9..1.9e9).contains(&f.k_pa_m()));
+    assert_eq!(f.state(0.0), (1.0, 0.0));
+    assert!((f.state(f.s).0 - 0.125).abs() < 1e-12);
+    assert_eq!(f.state(f.delta + 3.0), (0.0, 3.0));
+    assert!((softened_bend_nm(0.0) - 0.045 * 9.81 * 0.02f64.powi(3)).abs() < 1e-15);
+    assert!((softened_bend_nm(1.0) - 0.045 * 9.81 * 0.03f64.powi(3)).abs() < 1e-15);
+}
+
+/// The tarlatan over a burr on its face (`cloth_lift`):
+/// - a burr far lower than the face's give barely lifts the cloth, which
+///   settles as a plate on a Winkler skin under a line load does, u(x) =
+///   u₀·e^(−βx)(cos βx + sin βx), β = (k/4B)^¼ (Hetényi);
+/// - it is in balance: what the burr's top bears beyond p is what the face
+///   lacks beside it;
+/// - a drypoint burr (15–48 µm, 0.5–4 N) squeezes the face over its top
+///   nearly to its core and lifts the cloth by the rest: h − u₀ < s; the face
+///   beside it bears little; no true gap opens at a hand's pressures (2–20
+///   kPa), the lift short of the face's squeeze δ; and it settles within a
+///   few bending lengths.
+#[test]
+fn the_cloth_over_a_burr_lies_on_its_face() {
+    let b = softened_bend_nm(0.7);
+    let p = 1e4;
+    let f = Face::at(p);
+    let beta = (f.k_pa_m() / (4.0 * b)).powf(0.25) * 1e-6;
+    let small = cloth_lift(0.3, 10.0, p, b);
+    let u0 = small.at(0.0);
+    assert!(u0 > 0.0 && u0 < 0.1, "{u0}");
+    for x in [100.0, 200.0, 400.0, 600.0] {
+        let bx = beta * x;
+        let want = (-bx).exp() * (bx.cos() + bx.sin());
+        assert!((small.at(x) / u0 - want).abs() < 0.03, "{x} µm: {} against Hetényi's {want}", small.at(x) / u0);
+    }
+    for (h, c) in [(15.0, 10.0), (29.0, 15.0), (48.0, 25.0)] {
+        let l = cloth_lift(h, c, p, b);
+        // balance over the half line (the burr's top at its raised base)
+        let mut sum = 0.0;
+        let mut top = 0.0;
+        let bears = |u: f64, hb: f64| if u - hb >= f.delta { 0.0 } else { p * (f.s / (f.s + u - hb)).powi(3) };
+        for i in 0..l.u.len() {
+            // each node's span (node 0's half), the burr's top over its share of it
+            let (lo, hi) = (if i == 0 { 0.0 } else { (i as f64 - 0.5) * l.dx }, (i as f64 + 0.5) * l.dx);
+            let on = ((c - lo) / (hi - lo)).clamp(0.0, 1.0);
+            let u = l.u[i] as f64;
+            let (qb, qf) = (bears(u, h) - p, bears(u, 0.0) - p);
+            sum += (on * qb + (1.0 - on) * qf) * (hi - lo);
+            top += on * qb * (hi - lo);
+        }
+        assert!(sum.abs() < 0.05 * top, "{h} µm: unbalanced by {sum} of {top}");
+        let u0 = l.at(0.0);
+        assert!(h - u0 < f.s && h - u0 > 0.0, "{h} µm: lifted {u0}, the face's give {}", f.s);
+        assert!(f.state(l.at(c + 20.0)).0 < 0.5, "beside it the face bears little");
+        let lam = 2f64.sqrt() / beta;
+        assert!(l.at(4.0 * lam) < 0.05 * u0, "{h} µm: settled within four bending lengths");
+        for q in [2e3, 2e4] {
+            let fq = Face::at(q);
+            let lq = cloth_lift(h, c, q, b);
+            assert!(lq.u.iter().all(|&u| (u as f64) < fq.delta), "{h} µm at {q} Pa: no true gap");
+        }
     }
 }
 
-/// The cloth under the contact laws: across a slanting burred line its lee is
-/// as even along the line as across a straight one, and it is the same
-/// whichever way the pad moves (a drape is static: the cloth slides over the
-/// burr as over the flat), wider than the bare scale (B·h/p)^¼.
-#[test]
-fn the_cloths_lee_is_even_and_the_same_whichever_way_it_wipes() {
-    let make = |deg: f64| {
-        let mut p = square(20.0, 100.0);
-        p.contact = true;
-        let (c, s) = (deg.to_radians().cos() as f32, deg.to_radians().sin() as f32);
-        let az = deg as f32;
-        let pts = vec![Point { x: 10.0 - 7.0 * c, y: 10.0 - 7.0 * s, force: 3.0, alt: 55.0, az, speed: 25.0 }, Point { x: 10.0 + 7.0 * c, y: 10.0 + 7.0 * s, force: 3.0, alt: 55.0, az, speed: 25.0 }];
-        p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
-        p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
-        p
-    };
-    let band = |p: &Plate, deg: f64, d0: f64, d1: f64| {
-        let a = deg.to_radians();
-        let mut v = Vec::new();
-        for y in 0..200 {
-            for x in 0..200 {
-                let (dx, dy) = ((x as f64 + 0.5) * 0.1 - 10.0, (y as f64 + 0.5) * 0.1 - 10.0);
-                let (along, across) = (dx * a.cos() + dy * a.sin(), (dy * a.cos() - dx * a.sin()).abs());
-                if along.abs() < 5.0 && (d0..d1).contains(&across) {
-                    v.push(p.ink_cell(x, y).film as f64);
-                }
+/// A burred drypoint line (2 N, a needle ploughing at 55°) across a 20 mm
+/// plate at `deg`, its burr kept, inked by `inked`, under the contact laws.
+fn burred(deg: f64, inked: &dyn Fn(&mut Plate)) -> Plate {
+    let mut p = square(20.0, 100.0);
+    p.contact = true;
+    let (c, s) = (deg.to_radians().cos() as f32, deg.to_radians().sin() as f32);
+    let az = deg as f32;
+    let pts = vec![Point { x: 10.0 - 7.0 * c, y: 10.0 - 7.0 * s, force: 2.0, alt: 55.0, az, speed: 25.0 }, Point { x: 10.0 + 7.0 * c, y: 10.0 + 7.0 * s, force: 2.0, alt: 55.0, az, speed: 25.0 }];
+    p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
+    inked(&mut p);
+    p
+}
+
+/// The films (µm) of the cells `d0..d1` mm from the line at `deg` through
+/// the plate's middle, on side `side` (±1, or 0 for both), away from its ends.
+fn beside(p: &Plate, deg: f64, side: f64, d0: f64, d1: f64) -> Vec<f64> {
+    let a = deg.to_radians();
+    let mut v = Vec::new();
+    for y in 0..200 {
+        for x in 0..200 {
+            let (dx, dy) = ((x as f64 + 0.5) * 0.1 - 10.0, (y as f64 + 0.5) * 0.1 - 10.0);
+            let (along, across) = (dx * a.cos() + dy * a.sin(), dy * a.cos() - dx * a.sin());
+            let d = if side == 0.0 { across.abs() } else { across * side };
+            if along.abs() < 5.0 && (d0..d1).contains(&d) {
+                v.push(p.ink_cell(x, y).film as f64);
             }
         }
-        v
-    };
+    }
+    v
+}
+
+/// The cloth's lee under the contact laws is a fine halo: a drypoint line's
+/// velvet. Where the burr lifts the cloth the face bears a share of the pad's
+/// pressure and takes that share as fast; so a band beside the line keeps
+/// several times the open plate's film, and it is gone within a couple of
+/// millimetres (prints show a sub-millimetre halo [P]): wiped along the line
+/// the film 1.5–2.5 mm off is the open plate's. Slanting lines keep it as
+/// evenly along them as straight ones, and as evenly as the cloth's creases
+/// leave the open plate (no comb).
+#[test]
+fn the_cloths_lee_is_a_fine_halo() {
     for deg in [0.0f64, 30.0, 45.0] {
-        let wiped = |way: f64| {
-            let mut p = make(deg);
-            // a 60 mm pad slid straight through the middle the way `way` goes, well past the plate
-            let (c, s) = (way.to_radians().cos() as f32, way.to_radians().sin() as f32);
-            let mut t = Rag::tarlatan(60.0, 3, 0.7);
-            p.wipe(&mut t, &[pt(10.0 - 50.0 * c, 10.0 - 50.0 * s, 0.5), pt(10.0 + 50.0 * c, 10.0 + 50.0 * s, 0.5)], 2, 1.0);
-            p
-        };
-        let (along, across) = (wiped(deg), wiped(deg + 90.0));
-        let far = mean_cv(&band(&across, deg, 4.0, 5.0)).0;
-        for k in 2..8 {
-            let (d0, d1) = (0.1 * k as f64, 0.1 * (k + 1) as f64);
-            let (m, cv) = mean_cv(&band(&across, deg, d0, d1));
-            let (ma, _) = mean_cv(&band(&along, deg, d0, d1));
-            assert!(m > 5.0 * far, "{deg}°, {d0} mm: {m} µm kept beside the burr against {far} on the open plate");
-            assert!(cv < 0.15, "{deg}°, {d0}–{d1} mm: even along the line ({cv})");
-            assert!((ma - m).abs() < 0.05 * m, "{deg}°, {d0} mm: wiped along {ma}, across {m}");
+        let mut p = burred(deg, &|p| {
+            p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+        });
+        let (c, s) = (deg.to_radians().cos() as f32, deg.to_radians().sin() as f32);
+        let mut t = Rag::tarlatan(40.0, 3, 0.7);
+        p.wipe(&mut t, &[pt(10.0 - 50.0 * c, 10.0 - 50.0 * s, 0.5), pt(10.0 + 50.0 * c, 10.0 + 50.0 * s, 0.5)], 2, 1.0);
+        let far = mean_cv(&beside(&p, deg, 0.0, 3.5, 5.0)).0;
+        let near = mean_cv(&beside(&p, deg, 0.0, 0.1, 0.3)).0;
+        assert!(near > 3.0 * far, "{deg}°: {near} µm by the line against {far} on the open plate");
+        let off = mean_cv(&beside(&p, deg, 0.0, 1.5, 2.5)).0;
+        assert!((off / far - 1.0).abs() < 0.2, "{deg}°: {off} µm 1.5–2.5 mm off against {far}");
+        // as even along the line as the cloth's own creases leave the open plate
+        for side in [-1.0, 1.0] {
+            let (_, open) = mean_cv(&beside(&p, deg, side, 3.5, 5.0));
+            for k in 1..4 {
+                let (d0, d1) = (0.1 * k as f64, 0.1 * (k + 1) as f64);
+                let (_, cv) = mean_cv(&beside(&p, deg, side, d0, d1));
+                assert!(cv < open + 0.05, "{deg}°, {d0}–{d1} mm on side {side}: {cv} along the line, the open plate {open}");
+            }
         }
+    }
+}
+
+/// The wipe's way matters (Ross: "if they wipe perpendicularly to the line,
+/// they can actually increase the pile of ink on the other side"): each
+/// point of the cloth's face carries what it has picked up along its track,
+/// and lays it back on past where it took it. A line inked by a narrow card
+/// on a clean plate, wiped across once: the plate past the inked band on the
+/// side the pad goes to takes much more of the line's ink than the side it
+/// comes from, and wiped the other way, the other side does.
+#[test]
+fn the_cloth_carries_ink_the_way_it_wipes() {
+    let inked = |p: &mut Plate| {
+        p.ink(&black(), InkTool { width_mm: 2.0, ..InkTool::of(Inker::Card) }, &[pt(-5.0, 10.0, 2.0), pt(25.0, 10.0, 2.0)], 0.0).unwrap();
+    };
+    for (way, ahead) in [(1.0f32, 1.0), (-1.0, -1.0)] {
+        let mut p = burred(0.0, &inked);
+        let mut t = Rag::tarlatan(40.0, 3, 0.7);
+        p.wipe(&mut t, &[pt(10.0, 10.0 - 50.0 * way, 0.5), pt(10.0, 10.0 + 50.0 * way, 0.5)], 1, 1.0);
+        let (to, from) = (mean_cv(&beside(&p, 0.0, ahead, 1.5, 5.0)).0, mean_cv(&beside(&p, 0.0, -ahead, 1.5, 5.0)).0);
+        assert!(to > 1.6 * from, "wiped {way}: {to} µm on the side it goes to, {from} on the side it comes from");
     }
 }
 
@@ -677,6 +766,44 @@ fn a_poupee_inks_the_disc_it_is_dabbed_on() {
     assert!(line(&twice) > line(&p));
 }
 
+/// A poupée under the contact laws is a rounded compliant wad: pressed with
+/// the force that gives its size its working pressure, it touches a disc as
+/// wide, at Hertz's pressure (3/2)·p̄·√(1 − ρ²/a²), nothing at the rim. Each
+/// cell's line fills by that pressure for the dab's time, and the film it
+/// lays is the full one where the pressure passes the dabber's working
+/// pressure and falls with it toward the rim: a soft edge, no hard disc.
+/// Pressed eight times as hard its contact is twice as wide (a ∝ F^⅓).
+#[test]
+fn a_poupee_dabs_a_soft_edged_disc() {
+    let (w, d) = (2.0, 60.0);
+    let mut p = square(20.0, 100.0);
+    p.contact = true;
+    cut(&mut p, 0, 200, 0, 200, w, d, 0.01);
+    let tool = InkTool { width_mm: 6.0, ..InkTool::of(Inker::Poupee) };
+    let f = tool.force();
+    let mut hard = p.clone();
+    p.ink(&black(), tool, &[pt(10.0, 10.0, f as f32)], 0.0).unwrap();
+    let eta = black().eta(20.0);
+    let flat = 0.99;
+    for x in 100..140 {
+        let rho = ((x as f64 + 0.5) * 0.1 - 10.0).hypot(0.05);
+        let pr = DABBER_PA * Plate::hertz(rho, 3.0);
+        let ic = p.ink_cell(x, 100);
+        let film = DABBER_FILM_UM * (pr / DABBER_PA).min(1.0) * flat;
+        assert!((ic.film as f64 - film).abs() < 1e-4, "{rho} mm: film {} against {film}", ic.film);
+        if pr > 0.0 {
+            let line = ic.lines() as f64 / (0.01 * d);
+            assert!((line - fill(w, d, pr, DAB_S, eta, YIELD_PA)).abs() < 1e-5, "{rho} mm: fill {line}");
+        } else {
+            assert_eq!(ic.total(), 0.0, "{rho} mm: past the rim");
+        }
+    }
+    assert!(p.ink_cell(100, 100).film as f64 > 0.99 * DABBER_FILM_UM * flat && p.ink_cell(128, 100).film < 0.5 * p.ink_cell(100, 100).film, "full in the middle, thin by the rim");
+    hard.ink(&black(), tool, &[pt(10.0, 10.0, 8.0 * f as f32)], 0.0).unwrap();
+    assert!((tool.contact_mm(8.0 * f) - 12.0).abs() < 1e-9);
+    assert!(hard.ink_cell(155, 100).total() > 0.0 && hard.ink_cell(161, 100).total() == 0.0, "twice as wide pressed eight times as hard");
+}
+
 /// A pad wipes only where it slides: a 10 mm pad drawn along y 5 mm leaves the
 /// film at y 15 mm as the card laid it.
 #[test]
@@ -720,4 +847,45 @@ fn the_polish_keeps_a_film_no_wipe_reaches() {
     assert!((new - POLISH_HOLD_UM).abs() < 1e-3 * POLISH_HOLD_UM, "under the laws the film comes to the polish's hold: {new} µm");
     assert!(old < 1e-3 * POLISH_HOLD_UM, "without them the palm takes it all: {old} µm");
     assert!((POLISH_HOLD_UM - POLISH_RA_UM / 2.0).abs() < 1e-12);
+}
+
+/// Where a burr is tall enough to lift the cloth clear of the plate (two 4
+/// N lines crossing, at the easel's 42 µm cells), a true gap opens: the face
+/// doesn't touch the film there, and the loose fibre ends that hang in touch
+/// only `FIBRE_END_SHARE` of it (0.0225), drawing what capillarity lifts. So
+/// beside the tallest burr the plate keeps its velvet: no cell within a
+/// millimetre of the crossing is wiped bare (to the polish's hold, half the
+/// open plate's film here); none is thinner than the open plate by more than
+/// the cloth's creases vary it (some 20 %).
+#[test]
+fn a_gap_under_the_cloth_keeps_its_film() {
+    assert!((FIBRE_END_SHARE - 5.0 * 3000.0 * 15e-6 * 0.1).abs() < 1e-12);
+    let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 10.0, 10.0, 1.3, 45.0, 240, 240);
+    p.contact = true;
+    for (a, b) in [((1.0, 5.0), (9.0, 5.2)), ((1.5, 1.5), (8.5, 8.5))] {
+        let pts = vec![Point { x: a.0, y: a.1, force: 4.0, alt: 90.0, az: 0.0, speed: 25.0 }, Point { x: b.0, y: b.1, force: 4.0, alt: 90.0, az: 0.0, speed: 25.0 }];
+        p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
+    }
+    // some piece of burr stands clear of the face's squeeze
+    let f = Face::at(1e4);
+    let tall = p.fences().iter().map(|q| q.h).fold(0.0, f64::max);
+    assert!(cloth_lift(tall, 20.0, 1e4, softened_bend_nm(0.7)).u.iter().any(|&u| (u as f64) > f.delta), "{tall} µm lifts it clear");
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    let ring: Vec<Point> = (0..=72).map(|i| {
+        let a = i as f32 / 24.0 * std::f32::consts::TAU;
+        pt(5.0 + 3.0 * a.cos(), 5.0 + 3.0 * a.sin(), 0.5)
+    }).collect();
+    let mut t = Rag::tarlatan(40.0, 3, 0.7);
+    p.wipe(&mut t, &ring, 2, 1.0);
+    let at = |x: f64, y: f64| p.ink_cell((x / 0.04167) as usize, (y / 0.04167) as usize).film as f64;
+    let open = (0..10).map(|k| at(0.5 + 0.2 * k as f64, 8.5)).sum::<f64>() / 10.0;
+    let mut least = f64::MAX;
+    for y in 96..144 {
+        for x in 96..144 {
+            if p.cell(x, y).open_share() < 0.5 {
+                least = least.min(p.ink_cell(x, y).film as f64 / (1.0 - p.cell(x, y).open_share() as f64));
+            }
+        }
+    }
+    assert!(least > 0.7 * open && least > 1.4 * POLISH_HOLD_UM, "the thinnest film by the crossing {least} µm, the open plate {open}");
 }

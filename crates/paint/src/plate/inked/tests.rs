@@ -219,6 +219,35 @@ fn every_wipe_conserves_ink() {
     assert_eq!(p.ink_um3(), (0.0, 0.0));
 }
 
+/// Inks dabbed on stripes side by side and wiped with one tarlatan (à la
+/// poupée): the cloth lays back what its face carries where it is. A point of
+/// the face slides along its way, keeping (1 − SMEAR)(1 − SOAK) of its pool
+/// over each quarter of the pad's width, so over a plate taking up ink alike
+/// everywhere, at `d` from the edge of a stripe the ink it carries from beyond
+/// it is that share to the power d / (pad/4) of all it carries, at most (the
+/// slanting ways cross more of the stripe first). The middle of each stripe
+/// keeps its own ink but for that.
+#[test]
+fn a_tarlatan_lays_back_the_ink_where_it_wipes() {
+    let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 150.0, 30.0, 1.3, 45.0, 600, 120);
+    cut(&mut p, 0, 600, 0, 120, 30.0, 15.0, 0.4);
+    let mk = |n: &str| Ink { name: n.into(), tubes: vec![(n.into(), 1.0)], ..black() };
+    for (j, n) in ["vermilion", "Prussian blue", "chrome yellow"].iter().enumerate() {
+        let mask: Vec<f32> = (0..600 * 120).map(|i| if (i % 600) / 200 == j { 1.0 } else { 0.0 }).collect();
+        p.ink(&mk(n), Some(&mask), Inker::Card, 0.0).unwrap();
+    }
+    let pad_mm = 40.0;
+    let w = p.wipe(&mut Rag::tarlatan(pad_mm, 2, 0.7), None, 0.5, 3, Pattern::Circles, 1.0);
+    assert!(w.laid_um3 > 0.2 * w.taken_um3, "the cloth lays a good share back: {w:?}");
+    let d_mm = 25.0;
+    let beyond = ((1.0 - crate::rag::SMEAR as f64) * (1.0 - crate::rag::SOAK as f64)).powf(d_mm / (pad_mm as f64 / 4.0));
+    for j in 0..3 {
+        let c = p.ink_cell(100 + 200 * j, 60);
+        let own = c.shares()[j] as f64;
+        assert!(c.lines() > 0.0 && 1.0 - own <= beyond, "stripe {j}: its own ink {own}, from beyond at most {beyond}");
+    }
+}
+
 /// Plate tone (IP §5.4): tarlatan leaves a film the rag's smear lays back,
 /// thinner with more passes; the palm with whiting polishes it to a few
 /// hundredths of what tarlatan left, and reaches only the top of a fine line:

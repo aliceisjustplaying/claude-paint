@@ -107,11 +107,7 @@ fn press(lua: &Lua, st: &S, o: Option<Table>) -> Result<Table> {
             // the inks as the sheet's oil paint: their tubes from the box, their added plate oil as medium
             let mut paints = Vec::new();
             for ink in plate.inking().map(|k| k.inks.clone()).unwrap_or_default() {
-                let parts: Vec<(usize, f32)> = ink.tubes.iter().filter_map(|(n, p)| tubes.tubes.iter().position(|t| t.name == n.as_str()).map(|i| (i, *p))).collect();
-                if parts.len() != ink.tubes.len() {
-                    return Err(mlua::Error::runtime(format!("press: the ink {:?} is made of tubes this box hasn't", ink.name)));
-                }
-                paints.push(tubes.pile(parts).paint(ink.oil));
+                paints.push(ink.paint(&tubes).map_err(|e| mlua::Error::runtime(format!("press: {e}")))?);
             }
             let (sheet_w, sheet_h) = (c.mm_per_unit() as f64 * 1000.0, c.mm_per_unit() as f64 * c.height() as f64);
             let at = match at {

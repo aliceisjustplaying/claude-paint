@@ -150,3 +150,86 @@ fn a_pull_conserves_ink_and_replays() {
     assert!(off.lua.globals().get::<mlua::Value>("press").unwrap().is_nil());
 }
 
+
+/// An engine-9 painting's head, as a log names its switches (`session::box_for`): the
+/// session's box is made from it as a replay's is.
+const HEAD9: &str = "-- easel session \"inks\"\n--@ box impressionist\n--@ engine 9\n--@ palette-carried-paint\n--@ glaze-film\n--@ oil-k\n--@ drain\n--@ oils\n--@ paper\n--@ paper-presets\n--@ surfaces\n--@ plate\n--@ etch\n--@ damp-paper\n--@ press\n";
+
+fn live9() -> Session {
+    let b = box_for(Some(HEAD9)).unwrap();
+    assert!(b.engine == paint::PIGMENT_MIXER && b.glaze_film && b.carried_paint && b.oils && b.press);
+    Session::replay_with(W, b).unwrap().with_paper(true).unwrap()
+}
+
+/// An ink prints as the oil paint a brush lays from its tubes: the pile of the same parts
+/// (whatever they sum to: shares by volume) thinned with its plate oil as medium.
+#[test]
+fn an_ink_prints_as_the_pile_of_its_tubes_in_its_plate_oil() {
+    let mut s = live9();
+    run(&mut s, r#"canvas{size=100, aspect=1, seed=3, paper={grammage=250}}"#);
+    let tubes = s.st.borrow().tubes.clone();
+    for (recipe, given) in [
+        (r#"{"vermilion", 1}"#, vec![("vermilion", 1.0)]),
+        (r#"{"lead white", 1}, {"rose madder", 1}"#, vec![("lead white", 1.0), ("rose madder", 1.0)]),
+        (r#"{"Prussian blue", 1}, {"lead white", 0.3}"#, vec![("Prussian blue", 1.0), ("lead white", 0.3)]),
+    ] {
+        run(&mut s, &format!("p = pile{{{recipe}, medium=0.1}}"));
+        let brush = s.lua.globals().get::<mlua::AnyUserData>("p").unwrap().borrow::<crate::api::PileU>().unwrap().paint();
+        let parts: Vec<(String, f32)> = given.iter().map(|&(n, p)| (n.to_string(), p)).collect();
+        let ink = paint::plate::inked::Ink::of_tubes(&tubes, &parts, 0.1, 1.0, "i".into()).unwrap();
+        let printed = ink.paint(&tubes).unwrap();
+        let lat = |p: &paint::Paint| p.latent().color;
+        let close = |a: f32, b: f32| (a - b).abs() <= 1e-5 * a.abs().max(b.abs()).max(1e-6);
+        assert!(lat(&printed).iter().zip(lat(&brush).iter()).all(|(a, b)| close(*a, *b)), "{recipe}: the pigment");
+        assert!(printed.prop().iter().zip(brush.prop().iter()).all(|(a, b)| close(*a, *b)), "{recipe}: {:?} against the brush's {:?}", printed.prop(), brush.prop());
+        assert_eq!(printed.color, brush.color, "{recipe}");
+    }
+}
+
+/// Six-colour à la poupée, three here: one plate, an aquatint, each ink dabbed on its own
+/// stripe, one tarlatan wiped over the whole, pressed on damp paper (engine 9). Each stripe
+/// prints its own ink: the cloth lays back what it carries where it is, the last few cm of
+/// its slide (`rag::SMEAR`), not the plate's inks mixed.
+#[test]
+fn a_poupee_plate_prints_each_stripe_its_own_ink() {
+    let mut s = live9();
+    run(&mut s, r#"canvas{size=200, aspect=4/3, seed=11, paper={grammage=250, tone={{"lead white", 6}, {"yellow ochre", 0.15}}}}"#);
+    run(&mut s, r#"inks = {ink{{"vermilion", 1}, name="v"}, ink{{"Prussian blue", 1}, name="pb"}, ink{{"chrome yellow", 1}, name="cy"}}
+c = plate{name="col", metal="copper", size={150, 60}}
+use(c)
+c:aquatint{box=0.6, wait=30, minutes=1}
+c:melt()
+c:bite{acid="ferric", baume=38, minutes=3}
+c:clean()
+for i, k in ipairs(inks) do c:ink(k, {mask=rect((i-1)*1000/3, 0, 1000/3, 1000)}) end
+t = tarlatan{stiff=0.7}
+t:wipe(c, nil, {pressure=0.5, passes=3})
+use("painting")
+soak("painting", {minutes=20}); blot("painting")
+r = press{plate=c, sheet="painting", pressure=0.7}"#);
+    let st = s.st.borrow();
+    let c = st.canvas.as_ref().unwrap();
+    let seen = c.seen();
+    let f = c.window();
+    let (w, h) = (f.w, f.h);
+    let mm = c.mm_per_unit() / f.scale;
+    // the print, centred and mirrored: plate stripe i (of 50 mm) lands at the sheet's
+    // x0 + 150 − (i + ½)·50 mm
+    let x0 = (200.0 - 150.0) / 2.0;
+    let at = |i: usize| {
+        let x = ((x0 + 150.0 - (i as f32 + 0.5) * 50.0) / mm) as usize;
+        let (mut sum, mut n) = ([0.0f32; 3], 0.0);
+        for y in h / 2 - 2..h / 2 + 2 {
+            for dx in 0..3 {
+                let p = seen[y * w + x + dx - 1];
+                (0..3).for_each(|q| sum[q] += p[q]);
+                n += 1.0;
+            }
+        }
+        sum.map(|v| v / n)
+    };
+    let (v, pb, cy) = (at(0), at(1), at(2));
+    assert!(v[0] > 1.5 * v[1] && v[0] > 1.5 * v[2], "vermilion prints red: {v:?}");
+    assert!(pb[2] > pb[0] && pb[2] > 0.0, "Prussian blue prints blue: {pb:?}");
+    assert!(cy[0] > 2.0 * cy[2] && cy[1] > 2.0 * cy[2] && cy[0] > cy[1], "chrome yellow prints a warm yellow: {cy:?}");
+}

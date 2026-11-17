@@ -302,6 +302,21 @@ impl Ink {
         Ok(Ink { name, tubes: tubes.to_vec(), oil, stiff, pvc: pvc * thin, k: k.map(|v| v * thin), s: s.map(|v| v * thin), drying })
     }
 
+    /// The ink as the oil paint it prints: its tubes from `pal` mixed by
+    /// their shares (its parts over their sum, as `of_tubes` takes them),
+    /// thinned with its plate oil as a brush's pile is with medium, drying
+    /// at its tubes' rate (`Mixture::laid`). Err: a tube the box hasn't.
+    pub fn paint(&self, pal: &crate::palette::Palette) -> Result<crate::wet::Paint, String> {
+        let total: f32 = self.tubes.iter().map(|t| t.1.max(0.0)).sum();
+        if total <= 0.0 {
+            return Err(format!("the ink {:?} has no parts", self.name));
+        }
+        let parts = self.tubes.iter().map(|(n, p)| {
+            pal.tubes.iter().position(|t| t.name == n.as_str()).map(|i| (i, p.max(0.0) / total)).ok_or_else(|| format!("the ink {:?} is made of tubes this box hasn't", self.name))
+        }).collect::<Result<Vec<_>, _>>()?;
+        Ok(pal.pile(parts).laid(self.oil))
+    }
+
     /// Its viscosity (Pa·s) at `temp_c`: the plate oil's, raised by its
     /// pigment (`krieger`), lowered by warmth (`warmth`).
     pub fn eta(&self, temp_c: f64) -> f64 {
@@ -456,6 +471,20 @@ impl Pattern {
             }
         }
     }
+}
+
+/// The tracks a cloth's face draws over `cells` moving `v`: each point of
+/// the face slides along `v`, so what it carries stays on its line. The
+/// cells as (track: their row across `v`, a cell wide; their place along
+/// `v`, in cells; their index in `cells`), track by track, each in the
+/// order the face passes them.
+fn tracks(cells: &[(usize, usize, f32)], v: (f64, f64)) -> Vec<(i64, f64, usize)> {
+    let mut t: Vec<(i64, f64, usize)> = cells.iter().enumerate().map(|(i, &(x, y, _))| {
+        let (px, py) = (x as f64 + 0.5, y as f64 + 0.5);
+        ((py * v.0 - px * v.1).floor() as i64, px * v.0 + py * v.1, i)
+    }).collect();
+    t.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    t
 }
 
 /// A tarlatan's own state beside its rag's face (`Rag::cloth`).
@@ -855,9 +884,11 @@ impl Plate {
     }
 
     /// Take `scale` of each cell's asks off the plate: the ink taken (µm
-    /// over cells) and its shares, summed.
-    fn take(&mut self, asks: &[(usize, usize, f64, [f64; BINS])], scale: f64) -> (f64, [f64; INKS]) {
+    /// over cells) and its shares, summed; and each cell's (µm and shares,
+    /// aligned with `asks`).
+    fn take(&mut self, asks: &[(usize, usize, f64, [f64; BINS])], scale: f64) -> (f64, [f64; INKS], Vec<(f64, [f32; INKS])>) {
         let (mut got, mut mix) = (0.0f64, [0.0f64; INKS]);
+        let mut each = Vec::with_capacity(asks.len());
         for &(x, y, flat, bins) in asks {
             let ic = self.ink_cell_mut(x, y);
             let sh = ic.shares();
@@ -875,20 +906,21 @@ impl Plate {
             for i in 0..INKS {
                 mix[i] += t * sh[i] as f64;
             }
+            each.push((t, sh));
         }
-        (got, mix)
+        (got, mix, each)
     }
 
-    /// Lay `um` (µm over cells) of ink of shares `mix` back on `cells`, by
-    /// their weights (all alike if none weighs anything): on each cell's
-    /// flat by its share of the cell, into its openings by theirs.
-    fn lay(&mut self, cells: &[(usize, usize, f64)], um: f64, mix: &[f32; INKS], cure: f32) {
+    /// Lay `um` (µm over cells) of ink back on `cells`, by their weights
+    /// (all alike if none weighs anything), the `j`th of shares `mix(j)`: on
+    /// each cell's flat by its share of the cell, into its openings by theirs.
+    fn lay(&mut self, cells: &[(usize, usize, f64)], um: f64, mix: impl Fn(usize) -> [f32; INKS], cure: f32) {
         let total: f64 = cells.iter().map(|c| c.2).sum();
         if cells.is_empty() || um <= 0.0 {
             return;
         }
         let even = total <= 0.0;
-        for &(x, y, wt) in cells {
+        for (j, &(x, y, wt)) in cells.iter().enumerate() {
             let a = if even { um / cells.len() as f64 } else { um * wt / total };
             if a <= 0.0 {
                 continue;
@@ -903,7 +935,7 @@ impl Plate {
                     ic.line[k] += (a * c.open[k] as f64 / c.open_share() as f64 * open) as f32;
                 }
             }
-            ic.blend(had, a as f32, mix, cure);
+            ic.blend(had, a as f32, &mix(j), cure);
         }
     }
 
@@ -947,6 +979,15 @@ impl Plate {
         let (mut taken, mut laid) = (0.0f64, 0.0f64);
         let pressure = pressure.clamp(0.0, 1.0);
         let unit = self.pitch * self.pitch;
+        // the face's tracks over the cells, each way (`tracks`), and what a
+        // track keeps of its pool over a µm of its slide: the share it keeps
+        // a quarter of the pad's width, `rag::SMEAR` laid back and
+        // `rag::SOAK` soaked in
+        let tracks: Vec<Vec<(i64, f64, usize)>> = ways.iter().map(|&v| tracks(&cells, v)).collect();
+        let fade_um = -((1.0 - crate::rag::SMEAR as f64) * (1.0 - crate::rag::SOAK as f64)).ln() / (pad_um / 4.0);
+        let mut at = vec![u32::MAX; self.w * self.h];
+        // the ink the face comes to the plate with: its pool from before
+        let (pool0_um3, pool0_mix) = (cloth.pool_um3, cloth.pool_mix);
         for pass in 0..passes {
             for (j, &v) in ways.iter().enumerate() {
                 let rate = crate::rag::LIFT as f64 * (0.7 + 0.6 * pressure as f64) * rag.thirst() as f64 / kk;
@@ -964,7 +1005,7 @@ impl Plate {
                 let want: f64 = asks.iter().map(|a| a.2 + a.3.iter().sum::<f64>()).sum::<f64>() * unit;
                 let room = (1.0 - rag.load as f64).max(0.0) * cap;
                 let scale = if want > room && want > 0.0 { room / want } else { 1.0 };
-                let (got, mix) = self.take(&asks, scale);
+                let (got, mix, each) = self.take(&asks, scale);
                 let got_um3 = got * unit;
                 // the face's surface: laid back as it slides, soaking in
                 let cl = rag.cloth.as_mut().unwrap();
@@ -996,7 +1037,45 @@ impl Plate {
                     let sf = shield.as_ref().map_or(0.0, |(f, _)| f[y * self.w + x] as f64);
                     (x, y, m as f64 * (1.0 - sf))
                 }).collect();
-                self.lay(&wts, lay_um3 / unit, &lay_shares, 0.0);
+                // what it lays at a cell is what its face carries there: a
+                // point of the face slides along its track, so the pool it
+                // lays from is the ink it took along the track, fading by
+                // the smear law behind it; on the first sweep, with its
+                // share of the pool the face came to the plate with (the face
+                // `pad_um` wide, a track a cell's). (The face's pool, kept
+                // whole above, counts the volumes it lays.)
+                let entering = if pass == 0 && j == 0 { pool0_um3 } else { 0.0 };
+                for (k, a) in asks.iter().enumerate() {
+                    at[a.1 * self.w + a.0] = k as u32;
+                }
+                let track_share = self.pitch / pad_um;
+                let mut carried = vec![lay_shares; cells.len()];
+                let mut pool = [0.0f64; INKS];
+                let mut last: Option<(i64, f64)> = None;
+                for &(row, s, ci) in &tracks[j] {
+                    match last {
+                        Some((r, s0)) if r == row => {
+                            let keep = (-fade_um * (s - s0) * self.pitch).exp();
+                            pool.iter_mut().for_each(|q| *q *= keep);
+                        }
+                        _ => pool = std::array::from_fn(|i| entering * track_share * pool0_mix[i] as f64),
+                    }
+                    last = Some((row, s));
+                    let (x, y, _) = cells[ci];
+                    if let Some(&(t, sh)) = each.get(at[y * self.w + x] as usize) {
+                        for i in 0..INKS {
+                            pool[i] += t * unit * sh[i] as f64;
+                        }
+                    }
+                    let sum: f64 = pool.iter().sum();
+                    if sum > 0.0 {
+                        carried[ci] = std::array::from_fn(|i| (pool[i] / sum) as f32);
+                    }
+                }
+                for a in &asks {
+                    at[a.1 * self.w + a.0] = u32::MAX;
+                }
+                self.lay(&wts, lay_um3 / unit, |k| carried[k], 0.0);
                 let cl = rag.cloth.as_mut().unwrap();
                 cl.held_um3 += got_um3 - lay_um3;
                 taken += got_um3;
@@ -1119,7 +1198,7 @@ impl Plate {
                         wts.push((xx as usize, yy as usize, 1.0));
                     }
                 }
-                self.lay(&wts, lay, &sh, cure);
+                self.lay(&wts, lay, |_| sh, cure);
             }
         }
         let after = self.ink_um3();

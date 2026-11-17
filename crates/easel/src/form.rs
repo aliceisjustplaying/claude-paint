@@ -7,7 +7,7 @@
 //! `form{}` builds and lights the whole depth buffer in one call), so a
 //! failed chunk never has to repair them.
 
-use crate::api::{FromLuaValue, S, check_keys, err, frame, num, pair, wrap};
+use crate::api::{FromLuaValue, S, check_keys, err, frame, gestures_only, gestures_only_lua, num, pair, wrap};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value};
 use paint::form::{Sample, V3, aerial};
 use paint::{Form, Light, Mask, Relief, Sdf, Shade, Solid};
@@ -395,17 +395,25 @@ pub(crate) fn light_of(t: &Table) -> Result<Light> {
 pub fn install(lua: &Lua, st: S) -> Result<()> {
     let g = lua.globals();
     let body = lua.create_table()?;
-    body.set("ellipsoid", lua.create_function(|_, (c, r): (Value, Value)| Ok(SolidU::Body(Arc::new(Sdf::ellipsoid(v3(&c, "center")?, v3(&r, "radii")?)))))?)?;
-    body.set("block", lua.create_function(|_, (c, size, round): (Value, Value, Option<f32>)| {
+    body.set("ellipsoid", lua.create_function(|lua, (c, r): (Value, Value)| {
+        gestures_only_lua(lua, "body.ellipsoid")?;
+        Ok(SolidU::Body(Arc::new(Sdf::ellipsoid(v3(&c, "center")?, v3(&r, "radii")?))))
+    })?)?;
+    body.set("block", lua.create_function(|lua, (c, size, round): (Value, Value, Option<f32>)| {
+        gestures_only_lua(lua, "body.block")?;
         Ok(SolidU::Body(Arc::new(Sdf::block(v3(&c, "center")?, v3(&size, "size")?, round.unwrap_or(2.0)))))
     })?)?;
-    body.set("half_space", lua.create_function(|_, (at, n): (Value, Value)| Ok(SolidU::Body(Arc::new(Sdf::half_space(v3(&at, "at")?, v3(&n, "normal")?)))))?)?;
+    body.set("half_space", lua.create_function(|lua, (at, n): (Value, Value)| {
+        gestures_only_lua(lua, "body.half_space")?;
+        Ok(SolidU::Body(Arc::new(Sdf::half_space(v3(&at, "at")?, v3(&n, "normal")?))))
+    })?)?;
     g.set("body", body)?;
 
 
     // terrain{area={x0, y0, x1, y1}, height=function(x, y) return z (or nil) end, step=1, facet=0}
     // (the engine's Relief; `relief()` is the finishing verb)
-    g.set("terrain", lua.create_function(|_, o: Table| {
+    g.set("terrain", lua.create_function(|lua, o: Table| {
+        gestures_only_lua(lua, "terrain")?;
         check_keys(&o, &["area", "height", "step", "facet"], "terrain")?;
         let a: Vec<f32> = o.get("area")?;
         if a.len() != 4 {
@@ -437,6 +445,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // form{ {solid, dist=0.5}, {solid, dist={at, per_z}}, ..., light={from=, front=, ...} }
     let st1 = st.clone();
     g.set("form", lua.create_function(move |_, o: Table| {
+        gestures_only(&st1, "form")?;
         let f = frame(&st1)?;
         let mut form = Form::new(f);
         let mut parts = 0u16;

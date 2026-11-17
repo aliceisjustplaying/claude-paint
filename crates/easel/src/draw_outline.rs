@@ -11,7 +11,7 @@
 //!             limbs={{{102,502},{102,510}}}, char="soft"}
 //! ```
 
-use crate::api::{S, check_keys, err, frame, mask_of, num, points, seed_of, wrap};
+use crate::api::{S, check_keys, err, frame, gestures_only, mask_of, num, points, seed_of, wrap};
 use mlua::{AnyUserData, ObjectLike, Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use paint::outline::{Bone, Character, Outline, hand_scale};
 use std::rc::Rc;
@@ -196,6 +196,8 @@ fn widths_of(v: Value, n: usize, what: &str) -> Result<Vec<f32>> {
 }
 
 fn body_of(st: &S, o: Table) -> Result<OutlineU> {
+    // (a silhouette the easel computes from a skeleton and its widths)
+    gestures_only(st, "body_of")?;
     check_keys(&o, BODY_KEYS, "body_of")?;
     let spine = points(&o.get::<Value>("spine")?)?;
     if spine.is_empty() {
@@ -245,6 +247,7 @@ impl UserData for OutlineU {
             });
         }
         m.add_method("mask", |_, o, ()| {
+            gestures_only(&o.st, "outline:mask")?;
             // an inset that ate the shape is not open: its mask is empty
             if o.o.is_open() {
                 return err("outline:mask(): this line is open; use :below() or :above() (or closed=true)");
@@ -252,12 +255,17 @@ impl UserData for OutlineU {
             Ok(wrap(o.o.mask(frame(&o.st)?)))
         });
         m.add_method("below", |_, o, bottom: Option<f32>| {
+            gestures_only(&o.st, "outline:below")?;
             let f = frame(&o.st)?;
             Ok(wrap(o.o.below(f, bottom.unwrap_or(f.height() + 1.0))))
         });
-        m.add_method("above", |_, o, ()| Ok(wrap(o.o.above(frame(&o.st)?))));
+        m.add_method("above", |_, o, ()| {
+            gestures_only(&o.st, "outline:above")?;
+            Ok(wrap(o.o.above(frame(&o.st)?)))
+        });
         // o:band(width, taper?): a band along the line (taper 1: as wide as the pressure)
         m.add_method("band", |_, o, (w, taper): (f32, Option<f32>)| {
+            gestures_only(&o.st, "outline:band")?;
             if w.is_nan() || w <= 0.0 {
                 return err("band(width): want > 0");
             }
@@ -313,6 +321,7 @@ impl UserData for OutlineU {
             let clip = match opts.get::<Value>("clip")? {
                 Value::Nil => None,
                 v => {
+                    gestures_only(&o.st, "outline:paint: clip=")?;
                     mask_of(&v)?;
                     Some(v)
                 }
@@ -401,7 +410,7 @@ print(string.format("%.2f %.2f %.2f", bar, m:at(530, 800), m:at(474, 400)))"#;
     /// replays its bars as it did.
     #[test]
     fn body_of_joins_a_limb_to_the_nearest_limb() {
-        let mut s = Session::with_box(320, box_for(None).unwrap()).unwrap();
+        let mut s = Session::with_box(320, crate::session::mask_box()).unwrap();
         s.run(CANVAS).unwrap();
         let [bar, near, far] = covered(&mut s)[..] else { panic!() };
         assert!(bar < 0.05, "the branch grew a bar back to the trunk ({bar})");

@@ -134,6 +134,27 @@ pub(crate) fn err<T>(msg: impl Into<String>) -> Result<T> {
     Err(mlua::Error::runtime(msg.into()))
 }
 
+/// The gestures-only switch (session.rs `GESTURES_ONLY_MARK`): in a painting whose log has
+/// it, `call`, an input that tells a tool where to act by a mask, a function or a field (or
+/// makes one), is refused before it does anything. In an older log it runs as it ran.
+pub(crate) fn gestures_only(st: &S, call: &str) -> Result<()> {
+    if st.borrow().tubes.gestures_only {
+        return err(format!(
+            "{call}: refused in this painting (--@ gestures-only): no tool is told where to act by a mask, a function or a field; give the points the hand moves along, with a stroke or a touch of the tool"
+        ));
+    }
+    Ok(())
+}
+
+/// `gestures_only` from a call that holds only the Lua state (the painting's state is its
+/// app data, `install`).
+pub(crate) fn gestures_only_lua(lua: &Lua, call: &str) -> Result<()> {
+    match lua.app_data_ref::<S>() {
+        Some(st) => gestures_only(&st, call),
+        None => Ok(()),
+    }
+}
+
 // ---------------------------------------------------------------- fields
 
 /// A painter field sampled on a grid in canvas units.
@@ -581,7 +602,7 @@ impl UserData for Brush {
                 if let Some(s) = o.get::<Option<Vec<f32>>>("swell")? {
                     g = g.swell(s);
                 }
-                clip = mask_opt(&b.st, o.get("clip")?)?;
+                clip = mask_opt(&b.st, o.get("clip")?, "b:stroke")?;
             }
             time::verb(&b.st, Verb::Marks, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
@@ -643,7 +664,7 @@ impl UserData for Brush {
                 g_orient = orient_of(o.get("orient")?)?;
                 ramps = pair(o, "ramps")?;
                 shake = num(o, "shake")?;
-                clip = mask_opt(&b.st, o.get("clip")?)?;
+                clip = mask_opt(&b.st, o.get("clip")?, "b:gesture")?;
             }
             // a Catmull-Rom curve through the points, a sample every unit or so,
             // with the pressure carried along it
@@ -759,7 +780,7 @@ impl UserData for Brush {
                 if let Some(a) = num(o, "angle")? {
                     t = t.angle(a);
                 }
-                clip = mask_opt(&b.st, o.get("clip")?)?;
+                clip = mask_opt(&b.st, o.get("clip")?, "b:touch")?;
             }
             time::verb(&b.st, Verb::Marks, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.touch(&mut b.held.borrow_mut(), &t, clip.as_deref());
@@ -785,7 +806,7 @@ impl UserData for Brush {
             if !(0.0..=1.0).contains(&force) {
                 return err("spatter: force is how hard the flick is, 0 to 1");
             }
-            let clip = mask_opt(&b.st, o.get("clip")?)?;
+            let clip = mask_opt(&b.st, o.get("clip")?, "b:spatter")?;
             let seed = b.st.borrow_mut().rng.next_u64();
             let sp = paint::Spatter { at, toward, spread, force, seed };
             time::verb(&b.st, Verb::Marks, |s| Ok(s.canvas.as_mut().ok_or_else(no_canvas)?.spatter(&mut b.held.borrow_mut(), &sp, clip.as_deref())))
@@ -1183,10 +1204,15 @@ pub(crate) fn paint_mask_of(st: &S, v: &Value) -> Result<Rc<Mask>> {
     Ok(paint_mask(st, mask_of(v)?))
 }
 
-fn mask_opt(st: &S, v: Value) -> Result<Option<Rc<Mask>>> {
+/// A mark's `clip=` mask (none if nil); refused with the gestures-only switch (`call`
+/// names the mark).
+fn mask_opt(st: &S, v: Value, call: &str) -> Result<Option<Rc<Mask>>> {
     match v {
         Value::Nil => Ok(None),
-        v => paint_mask_of(st, &v).map(Some),
+        v => {
+            gestures_only(st, &format!("{call}: clip="))?;
+            paint_mask_of(st, &v).map(Some)
+        }
     }
 }
 
@@ -2016,6 +2042,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let o = o.ok_or_else(|| mlua::Error::runtime(CANVAS_HELP))?;
                 // an old log's canvas: a named style and palette (legacy.rs)
                 if !crate::studio::painter_lua() && crate::legacy::asks(&o)? {
+                    // (a styled canvas brings procedural trees, rocks and firs)
+                    gestures_only(&st, "canvas{style=, palette=}")?;
                     return crate::legacy::canvas(lua, &st, o);
                 }
                 let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
@@ -2320,7 +2348,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     g.set("clamp", lua.create_function(|_, (x, a, b): (f32, Option<f32>, Option<f32>)| Ok(x.clamp(a.unwrap_or(0.0), b.unwrap_or(1.0))))?)?;
     // noise{seed=, octaves=, period=, persistence=, kind="fbm"|"ridged"|"billow",
     //       warp={period, amount, twice}, stretch={angle, k}}
-    g.set("noise", lua.create_function(|_, o: Option<Table>| {
+    g.set("noise", lua.create_function(|lua, o: Option<Table>| {
+        gestures_only_lua(lua, "noise")?;
         let o = match o {
             None => return Ok(Noise { kind: NoiseKind::Fbm(Fbm::new(1, 4, 200.0)), warp: None, stretch: None }),
             Some(o) => o,
@@ -2359,7 +2388,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         Ok(Noise { kind, warp, stretch })
     })?)?;
     // worley{seed=, period=, jitter=}: cells
-    g.set("worley", lua.create_function(|_, o: Option<Table>| {
+    g.set("worley", lua.create_function(|lua, o: Option<Table>| {
+        gestures_only_lua(lua, "worley")?;
         let (seed, period, jitter) = match &o {
             None => (1, 40.0, None),
             Some(o) => {
@@ -2381,17 +2411,28 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // masks
     {
         let st1 = st.clone();
-        g.set("mask", lua.create_function(move |_, f: Function| Ok(wrap(eval_mask(frame(&st1)?, &f)?)))?)?;
+        g.set("mask", lua.create_function(move |_, f: Function| {
+            gestures_only(&st1, "mask")?;
+            Ok(wrap(eval_mask(frame(&st1)?, &f)?))
+        })?)?;
         let st1 = st.clone();
-        g.set("everywhere", lua.create_function(move |_, ()| Ok(wrap(Mask::full(frame(&st1)?))))?)?;
+        g.set("everywhere", lua.create_function(move |_, ()| {
+            gestures_only(&st1, "everywhere")?;
+            Ok(wrap(Mask::full(frame(&st1)?)))
+        })?)?;
         let st1 = st.clone();
         g.set("ellipse", lua.create_function(move |_, (cx, cy, rx, ry): (f32, f32, f32, Option<f32>)| {
+            gestures_only(&st1, "ellipse")?;
             Ok(wrap(Mask::from_shape(frame(&st1)?, Shape::new().ellipse(cx, cy, rx, ry.unwrap_or(rx)))))
         })?)?;
         let st1 = st.clone();
-        g.set("rect", lua.create_function(move |_, (x, y, w, h): (f32, f32, f32, f32)| Ok(wrap(Mask::from_shape(frame(&st1)?, Shape::new().rect(x, y, w, h)))))?)?;
+        g.set("rect", lua.create_function(move |_, (x, y, w, h): (f32, f32, f32, f32)| {
+            gestures_only(&st1, "rect")?;
+            Ok(wrap(Mask::from_shape(frame(&st1)?, Shape::new().rect(x, y, w, h))))
+        })?)?;
         let st1 = st.clone();
         g.set("poly", lua.create_function(move |_, (p, smooth): (Value, Option<bool>)| {
+            gestures_only(&st1, "poly")?;
             let pts = points(&p)?;
             if pts.len() < 3 {
                 return err("poly: needs at least three points");
@@ -2402,12 +2443,14 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         // below(curve, bottom?): everything under a curve (points or function(x) -> y)
         let st1 = st.clone();
         g.set("below", lua.create_function(move |_, (c, bottom): (Value, Option<f32>)| {
+            gestures_only(&st1, "below")?;
             let f = frame(&st1)?;
             let pts = curve_of(&c, f.width())?;
             Ok(wrap(Mask::from_shape(f, Shape::new().below(&pts, bottom.unwrap_or(f.height() + 1.0)))))
         })?)?;
         let st1 = st.clone();
         g.set("above", lua.create_function(move |_, c: Value| {
+            gestures_only(&st1, "above")?;
             let f = frame(&st1)?;
             let pts = curve_of(&c, f.width())?;
             Ok(wrap(Mask::from_shape(f, Shape::new().below(&pts, f.height() + 1.0)).invert()))
@@ -2415,6 +2458,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         // ribbon(points, widths): a band along a line
         let st1 = st.clone();
         g.set("ribbon", lua.create_function(move |_, (p, w): (Value, Value)| {
+            gestures_only(&st1, "ribbon")?;
             let pts = points(&p)?;
             let ws: Vec<f32> = match w {
                 Value::Table(t) => t.sequence_values::<f32>().collect::<Result<_>>()?,
@@ -2475,14 +2519,21 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // covering areas
     {
         let st1 = st.clone();
-        g.set("work", lua.create_function(move |_, (m, o): (Value, Table)| work(&st1, mask_of(&m)?, o, None))?)?;
+        g.set("work", lua.create_function(move |_, (m, o): (Value, Table)| {
+            gestures_only(&st1, "work")?;
+            work(&st1, mask_of(&m)?, o, None)
+        })?)?;
         let st1 = st.clone();
         g.set("blend", lua.create_function(move |lua, (m, o): (Value, Option<Table>)| {
+            gestures_only(&st1, "blend")?;
             let o = o.unwrap_or(lua.create_table()?);
             work(&st1, mask_of(&m)?, o, Some("blend"))
         })?)?;
         let st1 = st.clone();
-        g.set("stipple", lua.create_function(move |_, (m, o): (Value, Table)| stipple(&st1, mask_of(&m)?, o))?)?;
+        g.set("stipple", lua.create_function(move |_, (m, o): (Value, Table)| {
+            gestures_only(&st1, "stipple")?;
+            stipple(&st1, mask_of(&m)?, o)
+        })?)?;
     }
 
     // time
@@ -2867,13 +2918,13 @@ mod carried_palette_tests {
 // a new painting's calls agree with each other (session.rs CALLS_AGREE_MARK); an older log's as they were
 #[cfg(test)]
 mod calls_agree_tests {
-    use crate::session::{Session, box_for};
+    use crate::session::Session;
 
     const CANVAS: &str = r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#;
 
     fn sessions() -> [(bool, Session); 2] {
         [false, true].map(|agree| {
-            let mut tubes = box_for(None).unwrap();
+            let mut tubes = crate::session::mask_box();
             tubes.calls_agree = agree;
             let mut s = Session::with_box(16, tubes).unwrap();
             s.run(CANVAS).unwrap();
@@ -3015,7 +3066,7 @@ mod blend_at_masks_tests {
     const CANVAS: &str = r#"canvas{size=400, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",3},{"yellow ochre",1}}, um=120, apply="knife"}}}"#;
 
     fn new_painting() -> Session {
-        let mut s = Session::with_box(320, box_for(None).unwrap()).unwrap();
+        let mut s = Session::with_box(320, crate::session::mask_box()).unwrap();
         s.run(CANVAS).unwrap();
         s
     }
@@ -3119,7 +3170,7 @@ mod reload_finite_tests {
     const LOAD: &str = r#"b = brush("filbert", 8) p = pile{{"lead white", 2}, {"yellow ochre", 1}} b:load(p, 0.5)"#;
 
     fn new_painting() -> Session {
-        let mut s = Session::with_box(320, box_for(None).unwrap()).unwrap();
+        let mut s = Session::with_box(320, crate::session::mask_box()).unwrap();
         s.run(CANVAS).unwrap();
         s.run(LOAD).unwrap();
         s
@@ -3154,5 +3205,159 @@ mod reload_finite_tests {
         let mut old = older_log();
         old.run("b:reload(p, 0/0)").unwrap();
         old.run("assert(b:fullness() ~= b:fullness(), 'an older log no longer reloads a NaN')").unwrap();
+    }
+}
+
+// a new painting refuses every input that tells a tool where to act by a mask, a function or a
+// field (session.rs GESTURES_ONLY_MARK); an older log's runs as it ran
+#[cfg(test)]
+mod gestures_only_tests {
+    use crate::session::{GESTURES_ONLY_MARK, Session, box_for, mask_box, parse_program};
+    use std::rc::Rc;
+
+    const W: usize = 32;
+    const CANVAS: &str = r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#;
+    const PAPER: &str = r#"canvas{size=100, aspect=1, seed=3, paper={grammage=200}}"#;
+
+    fn refused(s: &mut Session, call: &str, src: &str) {
+        let e = s.run(src).expect_err(&format!("{src} was accepted"));
+        assert!(e.contains(&format!("{call}: refused in this painting (--@ gestures-only)")) && e.contains("give the points the hand moves along"), "{src}: {e}");
+    }
+
+    /// A new painting has the switch and writes it in its log's head, and a save keeps it; a
+    /// log without the line, or with it after the first chunk, has none.
+    #[test]
+    fn a_new_painting_records_the_switch_and_an_older_log_has_none() {
+        assert!(box_for(None).unwrap().gestures_only);
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        let program = s.program("gestures");
+        assert!(program.lines().take_while(|l| !l.starts_with(crate::session::MARK)).any(|l| l == GESTURES_ONLY_MARK), "{program}");
+        assert!(box_for(Some(&program)).unwrap().gestures_only);
+        assert!(!box_for(Some("--@ engine 9\n")).unwrap().gestures_only);
+        assert!(!box_for(Some(&format!("--@ engine 9\n--@ chunk 1\n{GESTURES_ONLY_MARK}\n"))).unwrap().gestures_only);
+        let path = std::env::temp_dir().join(format!("easel-gestures-only-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(&path).unwrap();
+        assert!(restored.st.borrow().tubes.gestures_only);
+        refused(&mut restored, "rect", "m = rect(0, 0, 10, 10)");
+        let older = mask_box();
+        assert!(!Session::with_box(W, older).unwrap().program("older").lines().any(|l| l == GESTURES_ONLY_MARK));
+    }
+
+    /// A log whose head has no switch still takes masks, functions and fields, and replays to
+    /// the same bits it was painted with.
+    #[test]
+    fn an_older_log_takes_masks_functions_and_fields_and_replays_the_same() {
+        let mut live = Session::with_box(W, mask_box()).unwrap();
+        for chunk in [
+            CANVAS,
+            r#"p = pile{{"lead white", 2}, {"cobalt blue", 1}} q = pile{{"yellow ochre", 1}}
+n = noise{seed=2, period=40} c = worley{seed=3}
+front = below(function(x) return 50 + 0.2 * x end) * mask(function(x, y) return x > 47 and 1 or 0 end)"#,
+            r#"work(front, {hand="body", pile=p, coverage=1, angle=function(x, y) return n(x, y) end, load_at=n, seed=4})
+work(ellipse(50, 50, 20), {hand="body", piles={{p, function(x, y) return x / 100 end}, {q, 1}}, coverage=1, seed=5})"#,
+            r#"stipple(rect(10, 10, 30, 30), {pile=q, coverage=function(x, y) return c(x, y) / 40 end, seed=6})
+blend(ribbon({{10, 80}, {90, 80}}, 6), {seed=7})
+b = brush("round", 4) b:load(p, 0.6) b:stroke({{10, 10}, {90, 90}}, {clip=above({{0, 60}, {100, 40}})})"#,
+        ] {
+            live.run(chunk).unwrap_or_else(|e| panic!("{chunk}: {e}"));
+        }
+        let program = live.program("older");
+        assert!(!program.lines().any(|l| l == GESTURES_ONLY_MARK), "{program}");
+        let tubes = box_for(Some(&program)).unwrap();
+        assert!(!tubes.gestures_only);
+        let mut replay = Session::replay_with(W, tubes).unwrap();
+        for chunk in parse_program(&program) {
+            replay.run(&chunk).unwrap_or_else(|e| panic!("{chunk}: {e}"));
+        }
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        live.canvas().unwrap().write_state(&mut a, "").unwrap();
+        replay.canvas().unwrap().write_state(&mut b, "").unwrap();
+        assert!(a == b, "the older log replays to other bits");
+        assert_eq!(live.st.borrow().clock.to_bits(), replay.st.borrow().clock.to_bits());
+    }
+
+    /// In a new painting every call that makes a mask, a field or a computed region is refused
+    /// by name, and so is a styled canvas (procedural trees, rocks and firs).
+    #[test]
+    fn a_new_painting_refuses_masks_fields_and_computed_regions() {
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap();
+        refused(&mut s, "canvas{style=, palette=}", r#"canvas{style="friedrich"}"#);
+        s.run(CANVAS).unwrap();
+        for (call, src) in [
+            ("mask", "m = mask(function(x, y) return 1 end)"),
+            ("everywhere", "m = everywhere()"),
+            ("ellipse", "m = ellipse(50, 50, 10)"),
+            ("rect", "m = rect(0, 0, 10, 10)"),
+            ("poly", "m = poly({{0, 0}, {10, 0}, {0, 10}})"),
+            ("below", "m = below(function(x) return 50 end)"),
+            ("above", "m = above({{0, 50}, {100, 50}})"),
+            ("ribbon", "m = ribbon({{0, 50}, {100, 50}}, 4)"),
+            ("noise", "n = noise{period=40}"),
+            ("worley", "c = worley()"),
+            ("drawing_guide", "m = drawing_guide()"),
+            ("outline:mask", "m = outline{{10, 10}, {90, 10}, {50, 90}}:mask()"),
+            ("outline:below", "m = outline{{0, 50}, {100, 50}, open=true}:below()"),
+            ("outline:above", "m = outline{{0, 50}, {100, 50}, open=true}:above()"),
+            ("outline:band", "m = outline{{0, 50}, {100, 50}, open=true}:band(4)"),
+            ("body_of", "o = body_of{spine={{50, 90}, {50, 20}}, widths={10, 5}}"),
+            ("body.ellipsoid", "x = body.ellipsoid({0, 0, 5}, {1, 1, 1})"),
+            ("body.block", "x = body.block({0, 0, 5}, {1, 1, 1})"),
+            ("body.half_space", "x = body.half_space({0, 0, 0}, {0, 1, 0})"),
+            ("form", "f = form{}"),
+            ("terrain", "t = terrain{area={0, 0, 10, 10}, height=function(x, y) return 0 end}"),
+            ("world", "w = world{}"),
+        ] {
+            refused(&mut s, call, src);
+        }
+    }
+
+    /// In a new painting every verb told where to act by a mask is refused by name (the masks
+    /// made before the switch is turned on: a new painting can't make one).
+    #[test]
+    fn a_new_painting_refuses_every_verb_told_where_to_act_by_a_mask() {
+        let mut s = Session::with_box(W, mask_box()).unwrap().with_paper(true).unwrap();
+        s.run(PAPER).unwrap();
+        s.run(r#"m = rect(10, 10, 30, 30) p = pile{{"lead white", 1}} b = brush("round", 4) b:load(p, 0.5)
+h = pencil("2B") r = rag{width=20} o = outline{{10, 10}, {90, 10}, {50, 90}}"#).unwrap();
+        Rc::make_mut(&mut s.st.borrow_mut().tubes).gestures_only = true;
+        for (call, src) in [
+            ("work", r#"work(m, {hand="body", pile=p})"#),
+            ("blend", "blend(m)"),
+            ("stipple", "stipple(m, {pile=p})"),
+            ("lose", "lose(m, {pile=p})"),
+            ("hatch", "h:hatch(m)"),
+            ("erase(mask)", "erase(m)"),
+            ("fix(mask)", "fix(m)"),
+            ("smudge(mask)", "smudge(m)"),
+            ("lay_sheet", "lay_sheet(m)"),
+            ("r:wipe(mask)", "r:wipe(m)"),
+            ("b:stroke: clip=", "b:stroke({{10, 10}, {40, 40}}, {clip=m})"),
+            ("b:gesture: clip=", "b:gesture({{10, 10, 0.5}, {40, 40, 0.5}}, {clip=m})"),
+            ("b:touch: clip=", "b:touch(20, 20, {clip=m})"),
+            ("b:spatter: clip=", "b:spatter{at={20, 20}, toward={10, 0}, clip=m}"),
+            ("outline:paint: clip=", "o:paint(b, {clip=m})"),
+        ] {
+            refused(&mut s, call, src);
+        }
+    }
+
+    /// A new painting keeps the scalar helpers, the points the painter writes, and the
+    /// whole-surface acts.
+    #[test]
+    fn a_new_painting_keeps_points_scalars_and_whole_surface_acts() {
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"x = rand(0, 1) + randn(0, 1) + lerp(0, 1, 0.5) + clamp(2) + smoothstep(0, 1, 0.5) + math.random()
+u = uneven(4, 0, 100) a = aerial(10, 1000)
+p = pile{{"lead white", 1}} b = brush("round", 4) b:load(p, 0.5)
+b:stroke({{10, 10}, {40, 40}}) b:gesture({{10, 60, 0.3}, {50, 70, 0.8}, {90, 60, 0}}) b:touch(70, 20)
+k = knife{width=10} k:load(p, 0.5) k:lay({{20, 80}, {60, 80}})
+h = pencil("2B") h:line({{10, 90}, {90, 90}}) erase({{10, 90}, {50, 90}}) fix()
+r = rag{width=20} r:wipe({{10, 10}, {40, 40}}) r:blot(20, 20)
+o = outline{{10, 10}, {90, 10}, {50, 90}} o:paint(b) print(#o:paths())
+palette{dirty=0.2} wait(10) print(drying(20, 20))"#).unwrap_or_else(|e| panic!("{e}"));
     }
 }

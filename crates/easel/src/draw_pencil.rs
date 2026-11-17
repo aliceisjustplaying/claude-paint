@@ -368,6 +368,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         methods.set("hatch", lua.create_function(move |lua, (p, m, o): (Table, Value, Option<Table>)| {
+            crate::api::gestures_only(&st1, "hatch")?;
             if let Some(o) = &o {
                 check_keys(o, if st1.borrow().paper { &["angle", "spacing", "length", "pressure", "graded", "seed"] } else { HATCH_KEYS }, "hatch")?;
             }
@@ -495,7 +496,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let strength = get("strength")?.unwrap_or(0.9);
             let f = frame(&st1)?;
             let m = match &a {
-                Value::UserData(_) => (*paint_mask_of(&st1, &a)?).clone(),
+                Value::UserData(_) => {
+                    crate::api::gestures_only(&st1, "erase(mask)")?;
+                    (*paint_mask_of(&st1, &a)?).clone()
+                }
                 Value::Table(_) => {
                     let pts = points(&a)?;
                     let mmu = {
@@ -524,7 +528,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("fix", lua.create_function(move |_, a: Value| {
             let m = match &a {
                 Value::Nil => None,
-                v => Some(paint_mask_of(&st1, v)?),
+                v => {
+                    crate::api::gestures_only(&st1, "fix(mask)")?;
+                    Some(paint_mask_of(&st1, v)?)
+                }
             };
             let mut s = st1.borrow_mut();
             let paper = s.paper;
@@ -550,6 +557,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         g.set("drawing_guide", lua.create_function(move |_, ()| {
+            crate::api::gestures_only(&st1, "drawing_guide")?;
             Ok(wrap(crate::time::read("drawing_guide", || {
                 let s = st1.borrow();
                 let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
@@ -784,6 +792,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
                     })
                 }
                 Value::UserData(_) => {
+                    crate::api::gestures_only(&st1, "smudge(mask)")?;
                     let m = paint_mask_of(&st1, &a)?;
                     if angle.is_some_and(|v| !(v.is_finite() && (-360.0..=360.0).contains(&v))) {
                         return err("smudge: angle is the lanes' direction in degrees, -360 to 360");
@@ -831,6 +840,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if let Some(o) = &o {
                 check_keys(o, &["grammage", "tone"], "lay_sheet")?;
             }
+            crate::api::gestures_only(&st1, "lay_sheet")?;
             let m = paint_mask_of(&st1, &a)?;
             let grammage = o.as_ref().map(|o| num(o, "grammage")).transpose()?.flatten().unwrap_or(120.0);
             if !(40.0..=400.0).contains(&grammage) {
@@ -953,7 +963,8 @@ mod tests {
         use crate::session::{DRAWING_OPTICS_MARK, box_for};
         for enabled in [false, true] {
             let old = "--@ engine 8\n--@ paper\n--@ sealed-drawing-guide\n";
-            let mut s = Session::with_box(64, box_for(if enabled { None } else { Some(old) }).unwrap()).unwrap().with_paper(true).unwrap();
+            let tubes = if enabled { crate::session::mask_box() } else { box_for(Some(old)).unwrap() };
+            let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
             run(&mut s, r#"canvas{size=64, aspect=1, seed=4, paper={grammage=200}}
                 p=pencil("6B") p:line({{100,500},{900,500}}, {ruler=true, pressure=0.8}) fix()"#);
             let original = s.canvas().unwrap().pixels().to_vec();
@@ -1016,7 +1027,7 @@ mod tests {
 
     #[test]
     fn erasing_a_sealed_drawing_keeps_its_guide() {
-        let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();
+        let mut s = Session::with_box(W, crate::session::mask_box()).unwrap();
         run(&mut s, CANVAS);
         run(&mut s, r#"p = pencil("2B") p:line({{100, 200}, {900, 200}}, {ruler=true, pressure=0.7})
 work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=true, clip=true, seed=9})"#);

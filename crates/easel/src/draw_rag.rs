@@ -106,6 +106,7 @@ impl UserData for RagU {
             let pr = pressures(o.as_ref())?;
             match &a {
                 Value::UserData(_) => {
+                    crate::api::gestures_only(&u.st, "r:wipe(mask)")?;
                     let m = paint_mask_of(&u.st, &a)?;
                     let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
                     if pr.len() != 1 {
@@ -281,7 +282,7 @@ print(n, h, type(rag))"#;
     #[test]
     fn a_faint_mask_wipe_lifts_by_its_value() {
         let lift = |scale: f32| {
-            let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();
+            let mut s = Session::with_box(W, crate::session::mask_box()).unwrap();
             run(&mut s, CANVAS);
             let lum = |s: &Session| {
                 let c = s.canvas().unwrap();

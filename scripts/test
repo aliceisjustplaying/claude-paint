@@ -319,7 +319,12 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   api::calls_agree_tests::a_misspelled_brush_option_is_refused api::calls_agree_tests::brush_and_knife_loads_refuse_the_same_amounts \
   api::calls_agree_tests::recipes_and_mixes_whose_parts_overflow_are_refused depth::tests::view_queries_pick_as_passes_do \
   api::draw_rag::tests::a_faint_mask_wipe_lifts_by_its_value \
-  api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask
+  api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask \
+  api::gestures_only_tests::a_new_painting_records_the_switch_and_an_older_log_has_none \
+  api::gestures_only_tests::an_older_log_takes_masks_functions_and_fields_and_replays_the_same \
+  api::gestures_only_tests::a_new_painting_refuses_masks_fields_and_computed_regions \
+  api::gestures_only_tests::a_new_painting_refuses_every_verb_told_where_to_act_by_a_mask \
+  api::gestures_only_tests::a_new_painting_keeps_points_scalars_and_whole_surface_acts
 # The first 2.0 painting is the judge of knife skim over wet dark paint.
 known_rust knife-skim paint 'lib paint test' bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'

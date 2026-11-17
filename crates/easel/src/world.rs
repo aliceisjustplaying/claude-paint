@@ -11,7 +11,7 @@
 //! as its recipe and rebuilt when a body is added (cheap: nothing is traced
 //! until `w:view()`).
 
-use crate::api::{FromLuaValue, S, check_keys, err, frame, num, points, wrap};
+use crate::api::{FromLuaValue, S, check_keys, err, frame, gestures_only, num, points, wrap};
 use crate::form::{FormHolder, FormU, SolidU, shade_table};
 use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value};
 use paint::scene::{Point, View, What};
@@ -364,6 +364,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     //       visibility=, backdrop=}
     let st1 = st.clone();
     g.set("world", lua.create_function(move |_, o: Table| {
+        gestures_only(&st1, "world")?;
         check_keys(&o, &["horizon", "eye", "fov", "view", "ground", "water", "sun", "visibility", "backdrop"], "world")?;
         let f = frame(&st1)?;
         let view = match o.get::<Option<Vec<f32>>>("view")? {

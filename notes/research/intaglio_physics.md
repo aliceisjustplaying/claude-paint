@@ -417,6 +417,68 @@ The outside reference for the printed line (the engine's physics is derived abov
     - Not modelled, each a few tens of µm or less: the fin's lean (a needle leaned to the side throws its fin over the flat), the faces' roughness (≈0.5 µm, §1.4), yarns crossing the fin (a shade 1.12 times wider on average, §5.6), and the ink's squeeze in the damp sheet. That last is small: the sheet, softened to E* ≈ 0.5–1 MPa (§6.2) and pressed at 2.7 MPa, lies on the plate's flat in full contact, so ink leaves a line's edge only by the sheet's give over a film's thickness (§6.4's 5–15 µm, gravure's few µm); and a 45 % pigment suspension is filtered at pores of a few µm, so what wicks on into the sheet as it dries is the oil, a halo, not the pigment.
 - The test (`a_printed_drypoint_line_is_peaked_like_real_ones`) bounds the engine's line from above, half-peak ≤ 0.35 mm, OD ≤ 0.15 at 0.3 mm off and a peak below 1.5 (a matte black), and from below by Rembrandt's narrowest: half-peak ≥ 0.17 mm (0.225 now), OD > 0.1 over ≥ 0.28 mm (0.425) and OD > 0.3 over ≥ 0.17 mm (0.225).
 
+### 5.8 The printer's stiff ink: copperplate paste, its yield stress, and what reads them [M] [D] [P] [E]
+
+**The choice.** Copperplate ink is dry pigment ground stiff in burnt plate oil by the ink maker.
+An ink mixed from artists' tubes holds the tubes' own pigment share, which for the blacks is low
+(the engine's bone black tube paste is 0.22–0.26 pigment by volume). `ink{..., paste="copperplate"}`
+is the ink maker's paste: the same pigments at 0.75 of their critical pigment volume share (CPVC)
+[E]. The CPVC comes from the pigment's oil absorption OA and density ρ, 1/(1 + OA·ρ/(100·0.93))
+[M, the standard relation, ASTM D281 oil absorption]: bone black (OA 43–49, ρ 2.3–2.6) 0.45, so its
+copperplate ink holds 0.34. The 0.75 is set by the one etching ink with a published composition:
+Gamblin's etching inks are 50–60 % solids by weight (SDS rev. 03/2017, §9), 0.27–0.36 by volume in
+bone black, 0.6–0.8 of its CPVC [P, converted with Gamblin's burnt plate oil at 0.92–0.97 g/cm³].
+The suggested 0.40 fits a carbon-black ink better than a bone black one (carbon black, ρ 1.8, gives
+0.35–0.44 from the same solids). Banknote intaglio inks are leaner, 0.23–0.29 by volume (US
+8,080,307; 5,569,701; 6,833,395, derived) [P]. A mix of tubes takes the volume-weighted oil demand
+of its pigments. Its absorption and scattering per coat are the tubes' times the ratio of the
+pigment shares, and the print's paint is the tubes' paste with that much more pigment to its
+volume (a pile with oil drawn out, at most 1.5 times the tube's pigment: only the most oily bone
+black tube reaches it). The plate oil stays the painter's `stiff=` (heavy #3 by default).
+
+**Viscosity.** The ink's viscosity is the plate oil's raised by Krieger–Dougherty, as before:
+a bone black copperplate ink in #3 oil (4 Pa·s) is some 13 Pa·s at 20 °C, inside the measured
+banknote intaglio range, 4–30 Pa·s (US 6,833,395), 15–100 Pa·s at 25 °C (US 2016/0009075) [P].
+Burnt plate oil's grades have no published viscosities [not found]: Graphic Chemical's run "#0000
+almost like water to #8 tar-like"; bodied linseed of #3's body measures 4–5 Pa·s (Kremer's stand
+oil 40–50 dPa·s; Gardner–Holdt Z4 ≈ 6 Pa·s) [M], so `PLATE_OIL_PA_S` stands; #7–#8 would be
+40–70 Pa·s (Gardner Z7–Z8) [E], beyond the engine's `stiff` 1.
+
+**Yield stress.** The constant 300 Pa is now the yield stress at a stiff paste's pigment share,
+0.33, and it rises as (φ/0.33)^5.5 [M: zinc white in linseed oil, τ_y ∝ φ^5.5 and G′ ∝ φ^5.6,
+Salvant Plisson et al. 2014] [E: borrowed for other pigments]. Offset inks measure 50–620 Pa by
+falling rod (ASTM D4040; US 4,806,391, 5,922,118, 9,441,120) [M]. So a tube-paste black in light
+oil with oil added is a few tens of Pa, a copperplate black some 350 Pa, and the stiffer
+paste fills a fine line less in the card's time (its plug, p·w/2τ, `pushed_um`).
+
+**What reads it, and why.** Practitioners: a loose ink "wipes out from incised lines" (Akua); adding
+heavy #3 oil makes "it harder to wipe the ink out of the lines", light #00 oil gives "more plate
+tone, danger is over wiping" (course notes); Gamblin's stiffer carbon black is "hard wiping, heavy
+plate tone", its bone black "easy wiping, light plate tone" [P].
+- *The card* drags a film as √η (Reynolds' slider, §5.6): a stiff ink leaves several times the
+  film, the heavier plate tone after the same wipe.
+- *The tarlatan's fibre ends* hang into the lines wherever the cloth goes and draw up the ink below
+  its reach by their capillary rise in a touch: Lucas–Washburn at the ink's viscosity, but no
+  further than a plug of a yield-stress liquid can be drawn into a pore, where 2γ/r over its
+  section meets τ_y on its wall, L = γ/τ_y, whatever the pore's size [D] (`capillary_um`), over the
+  share of the opening their tips touch (`FIBRE_END_SHARE`). A loose ink rises several times
+  further, so it wipes out of the lines and a stiff one holds. Retroussage and the fibre ends in a
+  gap use the same rise, and the solvent rag's draw too (etch_physics.md §8).
+- *The press* does not read the ink's stiffness, and need not: the ink splits at capillary numbers
+  ηU/γ of 3–17, far above any measured cell-transfer dependence (transfer is about constant at
+  0.3–0.6 above Ca ≈ 0.1: Yin & Kumar 2006, Campana & Carvalho 2013; Kumar 2015) [M], and the
+  tension a split can pull before the ink cavitates, about an atmosphere, drives a plug out of a
+  groove w wide only to a depth p·w/(2τ_y), several millimetres for a 50 µm line at 350 Pa [D]; a
+  yield stress plays a minor role in a filament's pinch-off [M, JNNFM 2020]. A stiff ink prints
+  differently because the plate holds a different ink: more of it in the lines and on the flat,
+  each µm with more pigment.
+
+On a 40 × 30 mm drypoint plate inked and wiped alike (four tarlatan passes) and pulled on a damp
+sheet (`a_copperplate_ink_wipes_and_prints_stiffer_than_a_loose_one`): the box's darkest tube as
+paste in #00 oil with 0.3 oil added against it as copperplate ink in #3: 64 times the viscosity,
+7.3 times the yield stress, 1.43 times the pigment; the lines kept 0.041 against 0.039 µm over the
+plate, the flat 1.14 against 0.19 µm of plate tone, and the sheet took 0.87 against 0.17 mm³.
+
 ## 6. The press
 
 ### 6.1 Pressure [M] [D] [P]
@@ -700,3 +762,9 @@ Ranked by how much each changes a print.
 - Not read and needed: A. Stijnman, *Engraving and Etching 1400–2000* (2012), the standard technical history (plates, grounds, mordants, presses); N. M. Mathews & B. S. Shapiro, *Mary Cassatt: The Color Prints* (1989), for her plates, inks, mordant and registration; Part 2 of Aoki & Murakami; Kawabata data for starched cotton gauze.
 - [Pheasant, Bodyspace] S. Pheasant, C. Haslegrave, *Bodyspace: Anthropometry, Ergonomics and the Design of Work*: hand breadth at the metacarpals, as tabulated by City University of Hong Kong's online anthropometry (https://personal.cityu.edu.hk/meachan/online%20anthropometry/chapter2/Ch2-29.htm) and RoyMech (https://www.roymech.co.uk/Useful_Tables/Ergonomics/Human_sizes.html).
 - [Del Pesco] Belinda Del Pesco, collagraph inking: a dauber rolled from two-inch strips of felt: https://www.belindadelpesco.com/collagraph-tutorial.html/
+- Gamblin, Etching/Litho/Relief Ink SDS (rev. 03/23/2017), §9 "Solids by weight 50–60 %"; Gamblin Burnt Plate Oil SDS (2015), density 0.92–0.97; Gamblin's etching ink colour chart (wiping and plate tone of carbon and bone black).
+- Graphic Chemical & Ink, burnt plate oil grades (#0000 to #8), via Takach Press; Kremer #73200 linseed stand oil SDS, 40–50 dPa·s.
+- L. Salvant Plisson et al., "Rheology of white paints: how Van Gogh achieved his famous impasto", *Colloids and Surfaces A* 458, 134 (2014): yield stress of zinc white in linseed oil ∝ φ^5.5.
+- US patents 4,806,391; 5,922,118; 9,441,120 (offset ink yield values, ASTM D4040); 6,833,395, 8,080,307, 5,569,701, US 2016/0009075 and EP 2,417,207 (intaglio ink compositions and viscosities).
+- X. Yin, S. Kumar, "Flow visualization of the liquid-emptying process in scaled-up gravure grooves and cells", *Chem. Eng. Sci.* 61, 1146 (2006); D. Campana, M. Carvalho, COBEM 2013; S. Kumar, "Liquid transfer in printing processes", *Annu. Rev. Fluid Mech.* 47, 67 (2015).
+- Akua Intaglio Ink instructions; Printmaking ART 2421 course notes (plate oil grades and wiping).

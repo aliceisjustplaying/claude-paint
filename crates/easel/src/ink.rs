@@ -1,8 +1,9 @@
 //! Ink, inking and wiping a plate (`--@ press`; notes/plan-intaglio.md §5, phase P3b).
 //!
-//! - `black = ink{{"bone black", 3}, {"raw umber", 1}, oil=0.1, stiff=1, name=}`: an etching
-//!   ink, tubes from the box ground in burnt plate oil (`oil`: plate oil added, its share of
-//!   the ink; `stiff`: the plate oil's grade, 0 light #00 .. 1 heavy #3).
+//! - `black = ink{{"bone black", 3}, {"raw umber", 1}, paste=, oil=0.1, stiff=1, name=}`: an
+//!   etching ink, tubes from the box ground in burnt plate oil (`paste`: "tube", the tubes' own
+//!   paste, or "copperplate", the pigment ground stiff as an ink maker sells it; `oil`: plate oil
+//!   added, its share of the ink; `stiff`: the plate oil's grade, 0 light #00 .. 1 heavy #3).
 //! - `k:warm(40)`: the plate on the hot plate at 40 °C; it cools in air from then.
 //! - `k:ink(black, pts, {by="card" | "dabber" | "poupee", width=, force=, speed=, dab=})`: ink
 //!   pushed into the plate's lines and pits and a film left on its flat, where the card's edge is
@@ -30,12 +31,12 @@ use crate::surfaces::{Kind, SurfaceU};
 use crate::time::{self, Verb};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use paint::plate::Plate;
-use paint::plate::inked::{Ink, InkTool, Inker, WipeReport, pace};
+use paint::plate::inked::{Ink, InkTool, Inker, Paste, WipeReport, pace};
 use paint::rag::Rag;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const INK_HELP: &str = "ink{{\"<tube>\", <parts>}, ..., oil=<plate oil added, share of the ink, 0 to 0.6>, stiff=<the plate oil: 0 light (#00) to 1 heavy (#3)>, name=}";
+const INK_HELP: &str = "ink{{\"<tube>\", <parts>}, ..., paste=\"tube\" | \"copperplate\", oil=<plate oil added, share of the ink, 0 to 0.6>, stiff=<the plate oil: 0 light (#00) to 1 heavy (#3)>, name=}";
 const TARLATAN_HELP: &str = "tarlatan{stiff=<starch: 0 soft to 1 stiff>, width=<the pad, mm>, seed=}";
 /// A tarlatan pad's width when none is given (mm): a rag's pad (`rag::PAD_MM`), a cloth bunched
 /// in the hand.
@@ -59,9 +60,10 @@ impl UserData for InkU {
         f.add_field_method_get("name", |_, i| Ok(i.0.name.clone()));
         f.add_field_method_get("pigment", |_, i| Ok(i.0.pvc));
         f.add_field_method_get("viscosity", |_, i| Ok(i.0.eta(20.0)));
+        f.add_field_method_get("yield", |_, i| Ok(i.0.yield_pa()));
     }
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_meta_method(MetaMethod::ToString, |_, i, ()| Ok(format!("ink {:?} ({} Pa·s at 20 °C, pigment {}% of it)", i.0.name, fmt_num(i.0.eta(20.0) as f32), (i.0.pvc * 100.0).round())));
+        m.add_meta_method(MetaMethod::ToString, |_, i, ()| Ok(format!("ink {:?} ({} Pa·s at 20 °C, yield {} Pa, pigment {}% of it)", i.0.name, fmt_num(i.0.eta(20.0) as f32), fmt_num(i.0.yield_pa().round() as f32), (i.0.pvc * 100.0).round())));
     }
 }
 
@@ -125,7 +127,7 @@ fn make_ink(st: &S, o: Option<Table>) -> Result<InkU> {
         let (k, _) = pair?;
         match k {
             Value::Integer(_) => {}
-            Value::String(s) if ["oil", "stiff", "name"].contains(&&*s.to_str()?) => {}
+            Value::String(s) if ["oil", "stiff", "name", "paste"].contains(&&*s.to_str()?) => {}
             k => return err(format!("ink: unknown key {}\n{INK_HELP}", k.to_string().unwrap_or_default())),
         }
     }
@@ -144,8 +146,13 @@ fn make_ink(st: &S, o: Option<Table>) -> Result<InkU> {
         return err(format!("ink: stiff is the plate oil's grade, 0 light (#00) to 1 heavy (#3)\n{INK_HELP}"));
     }
     let name = o.get::<Option<String>>("name")?.unwrap_or_else(|| tubes.iter().map(|t| t.0.clone()).collect::<Vec<_>>().join(" and "));
+    let paste = match o.get::<Option<String>>("paste")?.as_deref() {
+        None | Some("tube") => Paste::Tube,
+        Some("copperplate") => Paste::Copperplate,
+        Some(p) => return err(format!("ink: paste={p:?}: \"tube\" (the box's tube paste) or \"copperplate\" (pigment ground stiff in burnt plate oil, as an ink maker sells it)\n{INK_HELP}")),
+    };
     let tubes_box = st.borrow().tubes.clone();
-    let ink = Ink::of_tubes(&tubes_box, &tubes, oil, stiff, name).map_err(|e| mlua::Error::runtime(format!("ink: {e}")))?;
+    let ink = Ink::made(&tubes_box, &tubes, oil, stiff, paste, name).map_err(|e| mlua::Error::runtime(format!("ink: {e}")))?;
     Ok(InkU(Rc::new(ink)))
 }
 

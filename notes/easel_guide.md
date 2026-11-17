@@ -1680,12 +1680,24 @@ k:clean_ink({{0,100},{1000,100},{1000,375},{0,375},{0,650},{1000,650}}, {passes=
 use("painting")
 ```
 
-- **`ink{{tube, parts}, ..., oil=, stiff=, name=}`.** Pigment from the box's tubes in burnt
-  plate oil. `oil` (0 to 0.6, default 0) is plate oil added, its share of the ink: it thins
-  the pigment's colour per µm and makes the ink fatter (slower to dry). `stiff` is the oil's
-  grade, 0 light (#00) to 1 heavy (#3, the default). The ink's viscosity is the oil's raised
-  by its pigment (Krieger–Dougherty) and halving with every 17.5 °C of warmth: `black.viscosity`
-  (Pa·s at 20 °C), `black.pigment` (its share of the ink).
+- **`ink{{tube, parts}, ..., paste=, oil=, stiff=, name=}`.** Pigment from the box's tubes in burnt
+  plate oil. `paste` is how the pigment comes: `"tube"` (the default) is the tubes' own paste, as
+  thin in pigment as a painter's tube; `"copperplate"` is the ink maker's stiff paste, the same
+  pigments ground to three quarters of the most their oil can carry (bone black some 34 % of the
+  ink, against its tube's 22–26 %): darker per µm, more viscous and much stiffer. `oil` (0 to 0.6,
+  default 0) is plate oil added, its share of the ink: it thins the pigment's colour per µm and
+  makes the ink fatter (slower to dry). `stiff` is the oil's grade, 0 light (#00) to 1 heavy (#3,
+  the default). The ink's viscosity is the oil's raised by its pigment (Krieger–Dougherty) and
+  halving with every 17.5 °C of warmth; its yield stress rises steeply with its pigment (300 Pa at
+  a third of the ink, as the 5.5th power): `black.viscosity` (Pa·s at 20 °C), `black.yield` (Pa),
+  `black.pigment` (its share of the ink).
+  - **What the stiffness does.** The card drags a thicker film of a stiffer ink (more plate tone
+    after the same wipe); a stiff ink fills the finest lines less in the card's time; the
+    tarlatan's fibre ends, hanging into the lines wherever it goes, draw a loose ink up out of
+    them several times further than a stiff one (its capillary rise, which a yield stress stops),
+    so a loose ink wipes out of the lines; retroussage and the solvent rag draw a stiff ink less.
+    The press itself splits any ink alike: a stiff ink prints differently because the plate holds
+    more of it. Physics: intaglio_physics.md §5.8.
 - **`k:warm(t)`** puts the plate on the hot plate (2 minutes of hand time); it comes off at
   `t` °C and cools in air with a time constant from its metal and thickness (copper 1.3 mm:
   7.5 minutes). A warm plate's ink is thinner: it fills fine lines more fully and

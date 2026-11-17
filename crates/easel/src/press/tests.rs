@@ -259,3 +259,45 @@ r = press{plate=c, sheet="painting", pressure=0.7}"#);
     assert!(pb[2] > pb[0] && pb[2] > 0.0, "Prussian blue prints blue: {pb:?}");
     assert!(cy[0] > 2.0 * cy[2] && cy[1] > 2.0 * cy[2] && cy[0] > cy[1], "chrome yellow prints a warm yellow: {cy:?}");
 }
+
+/// The printer's choice of ink (IP §5.8): the box's darkest tube as its own paste in light
+/// plate oil with oil added, and ground stiff as a copperplate ink in heavy plate oil
+/// (`paste="copperplate"`): the stiff one is more viscous and has a higher yield stress; on the
+/// same plate, inked and wiped alike, its lines keep more of their ink, its card leaves more
+/// plate tone, and pulled on the same damp sheet it prints more ink, each µm of it darker. An
+/// unknown paste is refused.
+#[test]
+fn a_copperplate_ink_wipes_and_prints_stiffer_than_a_loose_one() {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    let d = darkest(&s);
+    let e = s.run(&format!("ink{{{{\"{d}\", 1}}, paste=\"oil\"}}")).unwrap_err();
+    assert!(e.contains("copperplate"), "{e}");
+    let out = run(&mut s, &format!(
+        r#"loose = ink{{{{"{d}", 1}}, oil=0.3, stiff=0}}
+stiff = ink{{{{"{d}", 1}}, paste="copperplate"}}
+print("eta=" .. stiff.viscosity / loose.viscosity)
+print("yield=" .. stiff.yield / loose.yield)
+print("pigment=" .. stiff.pigment / loose.pigment)
+function pull(i, name)
+  use(k)
+  k:clean_ink({{{{0, 100}}, {{1000, 100}}, {{1000, 375}}, {{0, 375}}, {{0, 650}}, {{1000, 650}}}}, {{passes=3}})
+  k:ink(i, {{{{0, 375}}, {{1000, 375}}}})
+  local t = tarlatan{{stiff=0.7, seed=5}}
+  local w = t:wipe(k, {{{{0, 375}}, {{1000, 375}}}}, {{passes=4}})
+  print(name .. "_lines=" .. w.lines)
+  print(name .. "_film=" .. w.film)
+  local pr = sheet{{name=name, size=60, aspect=1, paper={{grammage=250}}, seed=3}}
+  soak(pr, {{minutes=30}}); blot(pr)
+  local r = press{{plate=k, sheet=pr, pressure=0.6}}
+  print(name .. "_taken=" .. r.taken)
+end
+pull(loose, "loose")
+pull(stiff, "stiff")"#
+    ));
+    assert!(num(&out, "eta") > 10.0 && num(&out, "yield") > 2.0 && num(&out, "pigment") > 1.0, "{out}");
+    assert!(num(&out, "stiff_lines") > num(&out, "loose_lines"), "the lines keep more of the stiff ink: {out}");
+    assert!(num(&out, "stiff_film") > num(&out, "loose_film"), "more plate tone: {out}");
+    assert!(num(&out, "stiff_taken") > num(&out, "loose_taken"), "it prints more: {out}");
+}

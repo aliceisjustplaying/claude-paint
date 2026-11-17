@@ -275,6 +275,10 @@ pub struct Canvas {
     /// Engine 7: a brush's paint laid on wet paint stays on top of it
     /// (`bristle::BRUSH_SKIM_COATS`).
     pub(crate) brush_skim: bool,
+    /// A sheet the press has printed on (`--@ press`): its ink is a print's,
+    /// matte, and light carried sideways in the paper under it is counted
+    /// (`crate::print_optics`). Saved (the engine word's `PRINT_OPTICS`).
+    pub(crate) print_optics: bool,
     /// While a blender pass with `blend_feather` runs: how much of the paint
     /// a bristle carries each pixel takes (0..1, see `Canvas::receptive`).
     pub(crate) receptive: Option<Vec<f32>>,
@@ -353,6 +357,7 @@ impl Canvas {
             knife_skim: false,
             blend_feather: false,
             brush_skim: false,
+            print_optics: false,
             receptive: None,
             soak: None,
             drain: false,
@@ -530,6 +535,12 @@ impl Canvas {
 
     pub fn brush_skim(&self) -> bool {
         self.brush_skim
+    }
+
+    /// Whether the press has printed on this sheet: its optics are a
+    /// print's (`crate::print_optics`).
+    pub fn print_optics(&self) -> bool {
+        self.print_optics
     }
 
     /// Physical width of the painting in mm (default 700).

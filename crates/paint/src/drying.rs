@@ -1002,7 +1002,11 @@ impl Canvas {
                         if oils {
                             g *= 1.0 - crate::palette::WAX_MATTE * self.wet.hide[i][9].clamp(0.0, 1.0);
                         }
-                        self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
+                        // (a print's ink is matte: its surface is the film split
+                        // from the plate, which its yield stress keeps: `print_optics`)
+                        if !self.print_optics {
+                            self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
+                        }
                         self.absorb[i] *= (-coats / 0.4).exp();
                     }
                 }
@@ -1038,6 +1042,8 @@ impl Canvas {
         let px_um = self.px_mm() * 1000.0;
         let spectral = self.spectral_films();
         let volume_latent = self.engine >= crate::PIGMENT_MIXER;
+        // (a print: the films as they bake, alone, and the picture under them: `print_optics`)
+        let print = self.print_films(ex, &add, &t, &cover, px_um);
         if spectral && self.backing.is_empty() {
             self.backing.resize(self.px.len(), Default::default());
         }
@@ -1084,6 +1090,9 @@ impl Canvas {
                     cv[x] = 1.0;
                 }
             });
+        if let Some((films, under)) = print {
+            self.print_bake(&films, &under);
+        }
         self.clear_bare_solvent(ex);
         // (the new material keeps each baked film curing from the top down)
         if self.skins() {

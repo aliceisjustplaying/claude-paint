@@ -25,7 +25,9 @@
 //!   and the ink by the burr are always touched.
 //! - **The print** is the plate mirrored, an oil film of the ink's paint on
 //!   the sheet (`Canvas::lay_ink`), at its place. What isn't taken stays on
-//!   the plate.
+//!   the plate. The sheet then shows a print's optics (`crate::print_optics`):
+//!   the ink's surface, split from the plate's, is matte, and the light its
+//!   paper carries sideways under the ink is counted.
 //! - **Embossing** (IP §6.3). A damp sheet (free water in its pores: its
 //!   bonds open) keeps the shape it was pressed into as it dries: the lines
 //!   stand up on the print by their press-in, the burr's shape is pressed
@@ -357,6 +359,8 @@ impl Plate {
                 }
             }
         }
+        // the sheet is a print: its ink matte, its paper's lateral light counted (`print_optics`)
+        sheet.print_optics = true;
         for (i, sh, coats, cure) in lays {
             for (k, paint) in paints.iter().enumerate().take(inks) {
                 if sh[k] > 0.0 {

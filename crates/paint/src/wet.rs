@@ -567,6 +567,9 @@ impl Canvas {
         use rayon::prelude::*;
         if self.engine >= 4 {
             // engine 4: a matte surface veils its colors (wet paint is oily, glossy)
+            // (a print: its ink matte, the paper's lateral light under it: `print_optics`)
+            let printed = self.printed();
+            let bodies = self.print_bodies();
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {
@@ -576,9 +579,9 @@ impl Canvas {
                     // (the thinnest wet film lets the surface under it show: no edge where it ends)
                     let v = self.wet.vol[i];
                     let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);
-                    let gloss_share = if cover > 0.0 { cover * crate::smoothstep(0.0, 0.1, v / cover) } else { 0.0 };
+                    let gloss_share = if printed { 0.0 } else if cover > 0.0 { cover * crate::smoothstep(0.0, 0.1, v / cover) } else { 0.0 };
                     let g = crate::lerp(self.gloss[i], 1.0, gloss_share);
-                    let p = crate::canvas::haze(self.look_px(i), g);
+                    let p = crate::canvas::haze(bodies.as_ref().map_or_else(|| self.look_px(i), |b| b[i]), g);
                     // bare charcoal has no veil (`unveiled`), where wet paint doesn't cover it
                     match self.unveiled(i, crate::canvas::SURFACE_REFLECTANCE * (1.0 - g.clamp(0.0, 1.0))) {
                         Some(u) => {

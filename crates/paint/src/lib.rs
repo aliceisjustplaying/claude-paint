@@ -31,6 +31,7 @@ pub mod plate;
 pub mod etch;
 pub mod pigment;
 pub mod prepared_optics;
+pub mod print_optics;
 pub mod rng;
 #[cfg(feature = "render-snapshot")]
 pub mod render_snapshot;

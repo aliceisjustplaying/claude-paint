@@ -52,15 +52,15 @@ fn print_plate(s: &mut Session) -> String {
     format!(
         r#"black = ink{{{{"{d}", 1}}, oil=0.1, stiff=1}}
 k:warm(40)
-r = k:ink(black)
+r = k:ink(black, {{{{0, 375}}, {{1000, 375}}}})
 assert(r.added > 0 and r.film > 0 and r.fill > 0.5, "inked")
 t = tarlatan{{stiff=0.7}}
-w = t:wipe(k, nil, {{passes=3}})
+w = t:wipe(k, {{{{0, 375}}, {{1000, 375}}}}, {{passes=3}})
 assert(math.abs((w.before - w.after) - w.kept) <= 1e-6 * w.before, "the tarlatan keeps what the plate lost")
 assert(math.abs(t.ink - w.kept) <= 1e-6 * w.before, "t.ink")
-h = k:hand_wipe(nil, {{passes=2}})
+h = k:hand_wipe({{{{0, 375}}, {{1000, 375}}}}, {{passes=2}})
 assert(h.film < w.film, "the palm polishes the tone")
-k:retrousse(rect(0, 250, 1000, 100))
+k:retrousse({{{{0, 300}}, {{1000, 300}}}}, {{width=10}})
 print(k:feel(500, 300).words)"#
     )
 }
@@ -107,7 +107,7 @@ fn an_inked_plate_survives_replay_save_checkpoint_and_handoff() {
     assert!(plates(&r) == plates(&s), "the replay's plate is the painting's");
 
     let before = plates(&s);
-    let e = s.run("t:wipe(k, nil, {passes=2})\nerror(\"no\")").unwrap_err();
+    let e = s.run("t:wipe(k, {{0, 375}, {1000, 375}}, {passes=2})\nerror(\"no\")").unwrap_err();
     assert!(e.contains("no"));
     assert!(plates(&s) == before, "a failed chunk puts the plate back");
 
@@ -153,7 +153,7 @@ fn an_inked_plate_survives_replay_save_checkpoint_and_handoff() {
     run(&mut b, CANVAS);
     run(&mut b, &format!("k = receive(\"{}/key.surface\", {{after={}, sha256=\"{sha}\"}})\nuse(k)", dir.display(), 3 * 24 * 60));
     assert!(plate(&b) == sent, "the plate arrives as it left (its ink aged when it is next worked)");
-    let w = run(&mut b, "t = tarlatan{}\nw = t:wipe(k, nil, {passes=1})\nprint(w.taken)");
+    let w = run(&mut b, "t = tarlatan{}\nw = t:wipe(k, {{0, 375}, {1000, 375}}, {passes=1})\nprint(w.taken)");
     assert_eq!(w.trim(), "0.0", "three days on, the ink has set: {w}");
     let got = plate(&b);
     assert!(got.ink_set(100, 100) || got.ink_cell(100, 100).total() == 0.0);
@@ -161,7 +161,7 @@ fn an_inked_plate_survives_replay_save_checkpoint_and_handoff() {
     let mut c = live();
     run(&mut c, CANVAS);
     run(&mut c, &format!("k = receive(\"{}/key.surface\", {{after=1, sha256=\"{sha}\"}})\nuse(k)", dir.display()));
-    let w = run(&mut c, "t = tarlatan{}\nw = t:wipe(k, nil, {passes=1})\nprint(w.taken > 0)");
+    let w = run(&mut c, "t = tarlatan{}\nw = t:wipe(k, {{0, 375}, {1000, 375}}, {passes=1})\nprint(w.taken > 0)");
     assert_eq!(w.trim(), "true");
     // a session without the switch refuses an inked plate
     let mut nb = box_for(None).unwrap();
@@ -238,10 +238,10 @@ fn an_inked_plate_is_cleaned_before_it_is_worked() {
     run(&mut s, CANVAS);
     run(&mut s, PLATE);
     let d = darkest(&s);
-    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nk:ink(black)"));
+    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nk:ink(black, {{{{0, 375}}, {{1000, 375}}}})"));
     let e = s.run("k:drypoint(n, {{100, 700}, {900, 700}})").unwrap_err();
     assert!(e.contains("inked"), "{e}");
-    let e = s.run("k:ground(\"hard\")").unwrap_err();
+    let e = s.run("k:ground(\"hard\", {{0, 375}, {1000, 375}})").unwrap_err();
     assert!(e.contains("inked"), "{e}");
     run(&mut s, "c = k:clean_ink()\nassert(c.taken > 0)\nk:drypoint(n, {{100, 700}, {900, 700}})");
 }
@@ -255,12 +255,12 @@ fn a_plate_in_its_bath_is_lifted_before_it_is_inked() {
     run(&mut s, CANVAS);
     run(&mut s, PLATE);
     let d = darkest(&s);
-    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nt = tarlatan{{}}\nk:ground(\"hard\")\nk:needle(needle{{tip=40, cone=30}}, {{{{100, 700}}, {{900, 700}}}})\nk:immerse{{acid=\"ferric\", baume=36}}\nwait(5)"));
+    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nt = tarlatan{{}}\nk:ground(\"hard\", {{{{0, 375}}, {{1000, 375}}}})\nk:needle(needle{{tip=40, cone=30}}, {{{{100, 700}}, {{900, 700}}}})\nk:immerse{{acid=\"ferric\", baume=36}}\nwait(5)"));
     for src in ["k:warm(40)", "k:ink(black)", "t:wipe(k)", "k:hand_wipe()", "k:retrousse()", "k:clean_ink()"] {
         let e = s.run(src).unwrap_err();
         assert!(e.contains("in its ferric bath") && e.contains("k:lift()"), "{src}: {e}");
     }
-    run(&mut s, "k:lift()\nk:clean()\nk:warm(40)\nk:ink(black)\nt:wipe(k, nil, {passes=2})");
+    run(&mut s, "k:lift()\nk:clean()\nk:warm(40)\nk:ink(black, {{0, 375}, {1000, 375}})\nt:wipe(k, {{0, 375}, {1000, 375}}, {passes=2})");
     let e = s.run("k:immerse{acid=\"ferric\", baume=36}").unwrap_err();
     assert!(e.contains("inked"), "{e}");
     let p = plate(&s);
@@ -276,4 +276,48 @@ fn a_plate_in_its_bath_is_lifted_before_it_is_inked() {
     assert!(plates(&back.session) == plates(&s), "an etched, inked plate through a save");
     assert!(plates(&replay(&log).unwrap()) == plates(&s), "and through a replay");
     let _ = std::fs::remove_dir_all(&abs);
+}
+
+/// Inking and wiping take no region: a mask, an angle, bare options or nothing is refused with
+/// words saying to give the points the tool is moved along; the card inks only the band it is
+/// dragged over; a poupée inks the disc it is dabbed on.
+#[test]
+fn ink_and_wipes_go_where_the_points_go() {
+    let mut s = live();
+    run(&mut s, CANVAS);
+    run(&mut s, PLATE);
+    let d = darkest(&s);
+    run(&mut s, &format!("black = ink{{{{\"{d}\", 1}}}}\nt = tarlatan{{}}"));
+    for (src, words) in [
+        ("k:ink(black)", "no points"),
+        ("k:ink(black, {by=\"dabber\"})", "options but no points"),
+        ("k:ink(black, {mask=rect(0, 0, 500, 750)})", "takes no mask"),
+        ("k:ink(black, rect(0, 0, 500, 750))", "no mask or region"),
+        ("k:ink(black, function(x, y) return 1 end)", "no function"),
+    ] {
+        let e = s.run(src).unwrap_err();
+        assert!(e.contains(words) && e.contains("points it is moved along") || e.contains(words) && e.contains("give the points"), "{src}: {e}");
+    }
+    // a card 10 mm long dragged along the top: only that band takes ink
+    run(&mut s, "r = k:ink(black, {{0, 125}, {1000, 125}}, {width=10})\nassert(r.area > 0)");
+    let p = plate(&s);
+    let c = |mm: f64| (mm * 1000.0 / p.pitch_um()) as usize;
+    assert!(p.ink_cell(c(20.0), c(5.0)).total() > 0.0 && p.ink_cell(c(20.0), c(20.0)).total() == 0.0);
+    for (src, words) in [
+        ("t:wipe(k)", "no points"),
+        ("t:wipe(k, nil, {passes=3})", "no points"),
+        ("t:wipe(k, rect(0, 0, 1000, 750))", "no mask or region"),
+        ("t:wipe(k, {{0, 125}, {1000, 125}}, {angle=90})", "no angle"),
+        ("k:hand_wipe(nil, {passes=2})", "no points"),
+        ("k:hand_wipe({mask=rect(0, 0, 1000, 750)})", "options but no points"),
+        ("k:retrousse(rect(0, 250, 1000, 100))", "no mask or region"),
+    ] {
+        let e = s.run(src).unwrap_err();
+        assert!(e.contains(words), "{src}: {e}");
+    }
+    run(&mut s, "k:clean_ink()");
+    // a poupée dabbed at the middle inks its face's disc (20 mm) and not the corner
+    run(&mut s, "k:ink(black, {{500, 375}}, {by=\"poupee\"})");
+    let p = plate(&s);
+    assert!(p.ink_cell(c(20.0), c(15.0)).total() > 0.0 && p.ink_cell(c(2.0), c(2.0)).total() == 0.0);
 }

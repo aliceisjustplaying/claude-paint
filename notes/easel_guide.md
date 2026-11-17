@@ -1432,14 +1432,14 @@ touched saves and replays byte for byte as before. Ink and wiping come with `--@
 
 ```lua
 use(k)
-k:ground("hard", {um=4})                        -- rolled over the face
+k:ground("hard", {{0,100},{1000,100},{1000,300},{0,300},{0,500},{1000,500}}, {um=4})  -- rolled where the roller goes
 n = needle{tip=40, cone=30}
 r = k:needle(n, {{100,200},{900,200}}, {force=0.3})   -- through the ground: r.touched, r.width (the window)
 k:immerse{acid="ferric", baume=36}             -- into the bath (face down by default): it bites on the clock
 use(study)                                      -- ... while you draw on another surface, or wait
 use(k)
 r = k:lift()                                    -- out, rinsed and dried: r.minutes it lay there, r.depth
-k:stop_out(rect(0, 400, 1000, 300))             -- varnish: no acid there
+k:stop_out({{120,420},{480,430},{860,410}}, {brush=3.9, load=1, pressure=0.6})  -- a brushstroke of varnish: no acid there
 k:bite{acid="ferric", baume=36, minutes=30, rock=true}   -- in, 30 minutes, out, in one
 k:clean()                                       -- solvent: ground, varnish, rosin off
 k:aquatint{box=0.6, wait=30, minutes=1}         -- the dust box: wait s after stirring, minutes in it
@@ -1449,10 +1449,21 @@ print(k:feel(500, 200).words)
 use("painting")
 ```
 
-- **`k:ground("hard", {um=})`.** A hard ground (beeswax, bitumen, rosin) rolled over the
-  whole face, 4 µm by default (an estimate: 2–8). It covers whatever lines are already
-  there. It goes on a clean plate (`k:clean()` first), and takes 10 minutes of hand time.
-  Soft ground is `--@ soft-ground`, later.
+- **`k:ground("hard", pts, {um=, roller=, speed=})`.** A hard ground (beeswax, bitumen,
+  rosin) rolled on with a leather roller moved along the points (plate units, as a needle's
+  path). It lies only where the roller's line of contact went: a cell it crossed over half of.
+  - **The roller** is `roller` mm long (150, the size printmakers' manuals give; makers sell
+    100–200). Roll overlapping strokes to cover the plate; `covered` says how much of it the
+    ground lies on, and `probe` gives the share under the ground.
+  - **Where the roller didn't go the plate is bare,** and the acid bites it as an open face.
+  - **Thickness:** 4 µm by default (an estimate: 2–8). It covers whatever lines are already
+    there. More of the same ground can be rolled onto a plate that holds only ground;
+    another thickness, or ground over varnish, rosin or needle lines, wants `k:clean()` first.
+  - **Hand time:** the roller's path at `speed` (100 mm/s), and 8 minutes to warm the plate
+    and let it cool (estimates).
+  - Points alone are needed: `k:ground("hard", {um=4})` is refused ("options but no
+    points"), as is a mask or a function.
+  - Soft ground is `--@ soft-ground`, later.
 - **`k:needle(n, pts, {force=, alt=, azimuth=, speed=})`** draws an etching needle
   (`needle{}`) through the ground.
   - **The window.** It parts the ground where its point is wider than the ground is thick.
@@ -1463,9 +1474,25 @@ use("painting")
     nothing, and the verb says so (`touched`).
   - The default speed is 40 mm/s. An etching needle needs a ground: without one, use
     `k:drypoint`.
-- **`k:stop_out(mask)`.** Stopping-out varnish brushed where the mask (made while the plate
-  is in hand) is at least half. No acid reaches there until `k:clean()`. Hand time is its
-  area at 160 mm²/s (an estimate).
+- **`k:stop_out(pts, {brush=, load=, pressure=, speed=})`.** Stopping-out varnish
+  (asphaltum in turpentine) brushed along the points with a round brush. No acid reaches
+  the cells the strip covers over half of until `k:clean()`. It takes no mask, function or
+  region: brush where the varnish should go.
+  - **The brush:** `brush` is the round's width in mm (3.9, a size 6 sable); `load` how full
+    its belly is (1). Its belly holds a cone of liquid 4.7 times as long as it is wide, 0.6
+    full: 44 mm³ for a size 6.
+  - **The strip's width** is what the wet tuft presses out at `pressure` (0 to 1, a number or
+    a list along the points): it widens with the pressure until the whole belly is down at
+    0.85, the bristle model's law.
+  - **It runs dry.** The brush lays a film 20 µm thick (an estimate) until its belly is
+    spent. Then it lays nothing more; the verb says how far it got (`dry`, `length`, `left`
+    mm³): dip it again with another `k:stop_out` for the rest.
+  - **The edge** creeps out as the liquid spreads before it sets (Tanner's law for a ridge,
+    over the 10 minutes it flows): some 25 µm for a size 6 (`edge`, µm), so the edge is the brush's.
+    Where the brush comes down and lifts it leaves the disc of its tuft.
+  - **Hand time** is the stroke at `speed` (20 mm/s).
+  - Reports `area` (mm² newly stopped), `length`, `width` (mm), `edge`, `left`, `seconds`,
+    `dry`.
 - **`k:immerse{acid=, …}`** puts the plate into its tray, and **`k:lift()`** takes it out.
   - **The bath is on the session's clock.** While the plate lies in it, it bites through
     whatever the session does meanwhile: work on another surface, `wait`, paint drying.
@@ -1633,11 +1660,12 @@ plate never inked saves and replays byte for byte as before.
 black = ink{{"bone black", 3}, {"raw umber", 1}, oil=0.1, stiff=1}  -- tubes from the box, in burnt plate oil
 use(k)
 k:warm(40)                                   -- on the hot plate at 40 °C; it cools in air from then
-r = k:ink(black)                             -- by card; {by="dabber"}, {mask=m}
+r = k:ink(black, {{0,150},{1000,150},{0,450},{1000,450}})        -- the card dragged along the points
+k:ink(blue, {{420,300},{440,320},{460,300}}, {by="poupee"})      -- à la poupée: dabbed at each point
 t = tarlatan{stiff=0.7}                      -- starched tarlatan bunched to a pad (width= mm)
-w = t:wipe(k, nil, {pressure=0.5, passes=3}) -- in circles; {angle=90}: back and forth across
-k:hand_wipe(nil, {passes=2})                 -- the palm, with whiting ({whiting=false}: without)
-k:retrousse(rect(0, 250, 1000, 100))         -- a soft muslin drawing ink up beside the lines
+w = t:wipe(k, {{0,150},{1000,150},{0,450},{1000,450}}, {pressure=0.5, passes=2})  -- where the pad goes
+k:hand_wipe({{0,300},{1000,300}}, {passes=2})            -- the palm, with whiting ({whiting=false}: without)
+k:retrousse({{300,250},{700,260}}, {width=20})           -- a soft muslin drawing ink up beside the lines
 print(k:feel(500, 300).words)                -- "wet ink, 12 µm in the lines and a film of 0.02 µm; …"
 k:clean_ink()                                -- solvent and a rag: all the ink off
 use("painting")
@@ -1653,14 +1681,35 @@ use("painting")
   `t` °C and cools in air with a time constant from its metal and thickness (copper 1.3 mm:
   7.5 minutes). A warm plate's ink is thinner: it fills fine lines more fully and
   retroussage draws up more.
-- **`k:ink(black, {mask=, by=})`** pushes ink into every line and pit (to 90 % of it, the
-  air trapped at the bottom, unless the ink is too stiff to be pushed into a very fine line in
-  the time) and leaves a film on the flat: the card's edge drags a film by Reynolds' slider
-  law, some tens of µm of a stiff ink. Reports `added` (mm³), `film` (µm), `fill`, `temp`,
+- **Every inking and wiping tool goes where the hand moves it.** Each takes the points
+  (plate units, as a needle's path) it is moved along, and acts only where it touches. None
+  takes a mask, a function or a region: those are refused with words saying to give the
+  points. Old forms are refused the same way: `k:ink(black)`, `{mask=}`, `t:wipe(k, nil)`,
+  `{angle=}`.
+- **`k:ink(black, pts, {by=, width=, force=, speed=, dab=})`** pushes ink into the lines and
+  pits the tool reaches (to 90 % of them, the air trapped at the bottom, unless the ink is too
+  stiff to be pushed into a very fine line in the time) and leaves a film on the flat.
+  - **`by="card"`** (the default): a card's edge `width` mm long (50) dragged along the points
+    with `force` N (10) at `speed` (20 mm/s). It inks the band its edge passes over. Its bead
+    presses at the force over the edge and its 2 mm bead; a point lies under it 5 mm over the
+    speed each time it passes, and the pushes add, so going over twice (across, then
+    diagonally) fills a fine line more. Its edge drags a film by Reynolds' slider law at its
+    speed and pressure, some tens of µm of a stiff ink.
+  - **`by="dabber"`** (a face 30 mm across, 20 N) and **`by="poupee"`** (à la poupée: a small
+    rolled dabber, 20 mm, at the dabber's pressure): dabbed once at each point, inking the
+    disc of the face, 0.2 s a dab; dabbed again on the same place, it pushes the ink further.
+    `dab=false` rubs the face along the points instead: it inks what it slides over, for the
+    time it slides there. Each leaves a 10 µm film.
+  - Reports `added` (mm³), `film` (µm), `fill`, `temp`,
   `viscosity`, `area` (mm²), `seconds`. A coated plate (ground, rosin) refuses ink. A plate
   still in its acid (`k:immerse{}`) refuses ink, warmth and the wipes until `k:lift()`, and
   an inked plate refuses `k:immerse` and `k:bite` until `k:clean_ink()`.
-- **`t:wipe(k, mask, {pressure=, passes=, angle=})`.** A tarlatan is a rag: its face loads,
+- **`t:wipe(k, pts, {pressure=, passes=, speed=})`.** The pad (its `width`, 40 mm) is slid
+  along the points: in strokes, back and forth, or round in circles, as the points go. It rubs
+  each cell for as far as it slides while the cell is under it: a straight stroke one pass
+  under its middle, less towards its rim, none beyond. Going back over the same way rubs again;
+  `passes` repeats the whole path. `pressure` is 0 to 1, a number or a list along the points.
+  Nothing is wiped where the pad doesn't go. A tarlatan is a rag: its face loads,
   takes less as it fills, smears a little back (the plate tone), and is refolded with
   `t:refold()`. It reaches a line's ink by its yarns (a 75 µm yarn dips 4 µm into a 50 µm
   line, 19 µm into a 100 µm one, its radius into a wider one) and by its sag across a wide
@@ -1672,10 +1721,12 @@ use("painting")
   starch holds the cloth stiffer: less from wide lines. Reports `before`, `after`, `taken`,
   `laid`, `kept` (mm³: `kept` is what the cloth now holds, `before − after`), `film` and
   `lines` (µm left over the area), `seconds`, `temp`; `t.load`, `t.ink` (mm³ held).
-- **`k:hand_wipe(mask, {pressure=, passes=, whiting=, angle=})`.** The palm: soft skin bulges
+- **`k:hand_wipe(pts, {pressure=, passes=, whiting=, speed=})`.** The palm, 80 mm across (a
+  hand's breadth), drawn along the points, rubbing as the pad does. Soft skin bulges
   only a few µm into a fine line and right into an open bite, parts from the film it touches
   taking half (with whiting nearly all), and is held off past a burr further than the cloth.
-  Two passes with whiting take a tarlatan's tone to almost nothing: the bare metal shines.
+  Two passes over a place with whiting take a tarlatan's tone to almost nothing: the bare
+  metal shines.
   - **Under the contact laws** (`--@ intaglio-contact`): the skin is propped up only by the
     gap a burr opens in its contact. That is some 0.4–0.6 mm either side of a 40 µm burr at
     the default pressure, standing highest by the burr and closing smoothly. The palm takes
@@ -1683,9 +1734,10 @@ use("painting")
     smoothly within a millimetre, the drypoint's velvet. It is the same whichever way the
     palm moves. Without the laws the palm is held off for 2–3 mm past a burr, keeping
     all of a heavy film there, with a ragged edge along a slanting line.
-- **`k:retrousse(mask, {passes=})`.** A soft cloth's fibre ends hang into the lines and draw
-  ink up by capillarity (more from a warm plate), laying it on the plate within half a
-  millimetre around: lines soften and spread.
+- **`k:retrousse(pts, {passes=, width=, speed=})`.** A soft muslin (`width` mm, 40) passed
+  lightly along the points. Its fibre ends hang into the lines it passes over and draw ink up
+  by capillarity (more from a warm plate), laying it on the plate within half a millimetre
+  around: lines soften and spread where the cloth went.
 - **Drying.** The ink dries as an oil film of its thickness, on the clock: it wipes for hours,
   and a day or two later it has set and nothing moves it. A plate handed off inked
   (`handoff`) arrives aged by its time on the way: received three days later, its ink has
@@ -1693,9 +1745,11 @@ use("painting")
 - **`k:feel`** adds the ink (`ink`, `film`, `cure` and words: wet, tacky or set); `probe` adds
   the ink in the lines and the film over the area, and the plate's temperature. `look --surface`
   shows the ink as a Kubelka–Munk film over the metal, black in the lines.
-- **Hand time.** From Cassatt's account of printing with Leroy (15–20 minutes to ink and wipe
-  each plate of a proof, plates about 35 × 21 cm): the card 277 mm² a second, a tarlatan pass
-  416, a palm pass 555; a small plate takes proportionally less.
+- **Hand time** is the area a tool passes over (each pass counted, a slid pad's by its share
+  of a pass), at Cassatt's pace (15–20 minutes to ink and wipe each plate of a proof with
+  Leroy, plates about 35 × 21 cm): the card's edge 555 mm² a second (her card went over twice
+  at 277), a dab 1390 (ten dabs on a point), a tarlatan pass 416, a touch of the palm 2220 (a
+  pass of hers touched each point four times at 555), a muslin 555.
 - **Saves, checkpoints, replay and handoff** keep the ink in the plate's section (`PLAT`
   version 3: version 2's layout, the coats with their bath slot, then the ink; versions 1 and
   2 still read and are still written for plates never inked). The

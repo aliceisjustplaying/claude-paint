@@ -36,10 +36,10 @@ fn bench(s: &Session) -> String {
 function inked(heavy)
   use(k)
   k:clean_ink()
-  k:ink(black)
+  k:ink(black, {{{{0, 375}}, {{1000, 375}}}})
   local t = tarlatan{{stiff=0.7, seed=5}}
-  t:wipe(k, nil, {{passes=5}})
-  if heavy then k:hand_wipe(nil, {{passes=3, whiting=true}}) else k:hand_wipe(nil, {{passes=1, whiting=false, pressure=0.2}}) end
+  t:wipe(k, {{{{0, 375}}, {{1000, 375}}}}, {{passes=5}})
+  if heavy then k:hand_wipe({{{{0, 375}}, {{1000, 375}}}}, {{passes=3, whiting=true}}) else k:hand_wipe({{{{0, 375}}, {{1000, 375}}}}, {{passes=1, whiting=false, pressure=0.2}}) end
 end
 function sheet_of(name, damp)
   local s = sheet{{name=name, size=60, aspect=1, paper={{grammage=250, laid={{per_cm=9, chain=25}}}}, seed=3}}
@@ -186,12 +186,13 @@ fn an_ink_prints_as_the_pile_of_its_tubes_in_its_plate_oil() {
     }
 }
 
-/// Six-colour à la poupée, three here: one plate, an aquatint, each ink dabbed on its own
-/// stripe, one tarlatan wiped over the whole, pressed on damp paper (engine 9). Each stripe
+/// Several colours on one plate, three here: an aquatint, each ink laid on its own stripe by a
+/// card dragged down it, each stripe wiped in small circles within it with one tarlatan
+/// refolded between, pressed on damp paper (engine 9). Each stripe
 /// prints its own ink: the cloth lays back what it carries where it is, the last few cm of
 /// its slide (`rag::SMEAR`), not the plate's inks mixed.
 #[test]
-fn a_poupee_plate_prints_each_stripe_its_own_ink() {
+fn a_plate_inked_in_stripes_prints_each_its_own_ink() {
     let mut s = live9();
     run(&mut s, r#"canvas{size=200, aspect=4/3, seed=11, paper={grammage=250, tone={{"lead white", 6}, {"yellow ochre", 0.15}}}}"#);
     run(&mut s, r#"inks = {ink{{"vermilion", 1}, name="v"}, ink{{"Prussian blue", 1}, name="pb"}, ink{{"chrome yellow", 1}, name="cy"}}
@@ -201,9 +202,18 @@ c:aquatint{box=0.6, wait=30, minutes=1}
 c:melt()
 c:bite{acid="ferric", baume=38, minutes=3}
 c:clean()
-for i, k in ipairs(inks) do c:ink(k, {mask=rect((i-1)*1000/3, 0, 1000/3, 1000)}) end
+for i, k in ipairs(inks) do c:ink(k, {{(i-0.5)*1000/3, 0}, {(i-0.5)*1000/3, c.H}}, {width=50}) end
 t = tarlatan{stiff=0.7}
-t:wipe(c, nil, {pressure=0.5, passes=3})
+-- each stripe wiped in small circles within it, the cloth refolded to a clean face between
+for i = 1, 3 do
+  local pts = {}
+  for j = 0, 32 do
+    local a = j / 16 * math.pi
+    pts[#pts + 1] = {(i - 0.5) * 1000 / 3 + 50 * math.cos(a), c.H / 2 + 50 * math.sin(a)}
+  end
+  t:wipe(c, pts, {pressure=0.5, passes=2})
+  t:refold()
+end
 use("painting")
 soak("painting", {minutes=20}); blot("painting")
 r = press{plate=c, sheet="painting", pressure=0.7}"#);

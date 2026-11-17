@@ -4,13 +4,16 @@
 //!   ink, tubes from the box ground in burnt plate oil (`oil`: plate oil added, its share of
 //!   the ink; `stiff`: the plate oil's grade, 0 light #00 .. 1 heavy #3).
 //! - `k:warm(40)`: the plate on the hot plate at 40 °C; it cools in air from then.
-//! - `k:ink(black, {mask=, by="card" | "dabber"})`: ink pushed into the plate's lines and pits
-//!   and a film left on its flat.
-//! - `t = tarlatan{stiff=0.7, width=40, seed=}` and `t:wipe(k, mask, {pressure=, passes=,
-//!   angle=})`: starched tarlatan bunched into a pad, wiped in circles (or back and forth at
-//!   `angle` degrees) over the plate; `t:refold()`.
-//! - `k:hand_wipe(mask, {pressure=, passes=, whiting=, angle=})`: the palm.
-//! - `k:retrousse(mask, {passes=})`: a soft muslin passed lightly over the wiped plate.
+//! - `k:ink(black, pts, {by="card" | "dabber" | "poupee", width=, force=, speed=, dab=})`: ink
+//!   pushed into the plate's lines and pits and a film left on its flat, where the card's edge is
+//!   dragged along the points or a dabber or poupée is dabbed at them (or rubbed along them).
+//! - `t = tarlatan{stiff=0.7, width=40, seed=}` and `t:wipe(k, pts, {pressure=, passes=,
+//!   speed=})`: starched tarlatan bunched into a pad and wiped along the points (circles,
+//!   strokes: whatever they trace); `t:refold()`.
+//! - `k:hand_wipe(pts, {pressure=, passes=, whiting=, speed=})`: the palm drawn along the points.
+//! - `k:retrousse(pts, {passes=, width=, speed=})`: a soft muslin passed lightly along the points.
+//!
+//! Every one of them acts only where its tool goes: none takes a mask, a function or a region.
 //! - `k:clean_ink()`: solvent and a rag: all the ink off.
 //!
 //! The physics is paint's (`plate::inked`; notes/research/intaglio_physics.md §5): the ink is
@@ -21,12 +24,12 @@
 //! (`PLAT` version 3) through saves, checkpoints and handoffs.
 
 use crate::api::{S, check_keys, err, fmt_num, num};
-use crate::plate::{Rep, in_hand};
+use crate::plate::{Rep, hand_path, in_hand};
 use crate::surfaces::{Kind, SurfaceU};
 use crate::time::{self, Verb};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use paint::plate::Plate;
-use paint::plate::inked::{Ink, Inker, Pattern, WipeReport, pace};
+use paint::plate::inked::{Ink, InkTool, Inker, WipeReport, pace};
 use paint::rag::Rag;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -39,6 +42,12 @@ const PAD_MM: f32 = paint::rag::PAD_MM;
 /// A tarlatan's starch when none is given: well starched, as sold [E: Takach sells "stiff"
 /// and "regular"; the printer softens it before use].
 const STIFF: f32 = 0.7;
+/// The card's speed when none is given (mm/s): the card's slider law's (`inked::CARD_MM_S`).
+const CARD_SPEED: f32 = paint::plate::inked::CARD_MM_S as f32;
+/// A tarlatan pad's and the palm's speed when none is given (mm/s) [E: a wiping hand moves
+/// briskly; the hand time is the area passed over at Cassatt's pace, `inked::pace`].
+const TARLATAN_MM_S: f32 = 100.0;
+const PALM_SPEED: f32 = 100.0;
 
 /// An ink in the hand, as `ink{}` mixed it.
 #[derive(Clone)]
@@ -152,26 +161,45 @@ pub(crate) fn refuse_inked(p: &Plate) -> std::result::Result<(), String> {
     if p.inked() { Err("the plate is inked: clean it first (k:clean_ink())".into()) } else { Ok(()) }
 }
 
-/// The mask `v` names as the plate's raster (one value a cell), or None (the whole plate).
-fn plate_mask(st: &S, v: &Value, verb: &str) -> Result<Option<Vec<f32>>> {
-    if let Value::Nil = v {
-        return Ok(None);
+const INK_HOW: &str = "k:ink(black, {{x, y}, ...}, {by=\"card\" | \"dabber\" | \"poupee\", width=<mm>, force=<N>, speed=, dab=true | false}): where the card is dragged, or the dabber or poupée dabbed";
+const WIPE_HOW: &str = "t:wipe(k, {{x, y}, ...}, {pressure=, passes=, speed=}): the pad's path, in circles or strokes as the points go";
+const PALM_HOW: &str = "k:hand_wipe({{x, y}, ...}, {pressure=, passes=, whiting=, speed=}): the palm's path";
+const RETRO_HOW: &str = "k:retrousse({{x, y}, ...}, {passes=, width=, speed=}): the muslin's path";
+
+/// Options a hand's tool no longer takes, refused with what to do instead.
+fn refuse_gone(o: Option<&Table>, verb: &str, how: &str) -> Result<()> {
+    let Some(o) = o else { return Ok(()) };
+    if !matches!(o.get::<Value>("mask")?, Value::Nil) {
+        return err(format!("{verb}: it takes no mask: a hand's tool acts only where it goes, so give the points it is moved along: {how}"));
     }
-    let m = crate::api::mask_of(v)?;
-    let (w, h) = st.borrow().plate.as_ref().map(|p| p.size_px()).ok_or_else(|| mlua::Error::runtime("no plate in hand"))?;
-    if (m.f.w, m.f.h) != (w, h) {
-        return err(format!("{verb}: the mask isn't the plate's: make it while the plate is in hand"));
+    if !matches!(o.get::<Value>("angle")?, Value::Nil) {
+        return err(format!("{verb}: no angle: the hand goes the way the points go, so give points back and forth (or round in circles) where it should wipe: {how}"));
     }
-    Ok(Some(m.data.clone()))
+    Ok(())
 }
 
-/// The pad's way: in circles, or back and forth at `angle` degrees.
-fn pattern(o: Option<&Table>) -> Result<Pattern> {
-    match o.map(|o| num(o, "angle")).transpose()?.flatten() {
-        None => Ok(Pattern::Circles),
-        Some(a) if a.is_finite() => Ok(Pattern::Along(a)),
-        Some(_) => err("angle: degrees, the way the strokes go (0 to the right, 90 down the plate)"),
+/// The ink tool `by=` names, at `width=` mm (or its usual size), dabbed or (`dab=false`)
+/// rubbed along.
+fn ink_tool(o: Option<&Table>) -> Result<InkTool> {
+    let by = match o.map(|o| o.get::<Option<String>>("by")).transpose()?.flatten().as_deref() {
+        None | Some("card") => Inker::Card,
+        Some("dabber") => Inker::Dabber,
+        Some("poupee") | Some("poupée") => Inker::Poupee,
+        Some(b) => return err(format!("ink: by={b:?}: \"card\", \"dabber\" or \"poupee\"")),
+    };
+    let mut t = InkTool::of(by);
+    if let Some(w) = o.map(|o| num(o, "width")).transpose()?.flatten() {
+        if !(3.0..=300.0).contains(&w) {
+            return err("ink: width is the card's edge or the face's diameter in mm, 3 to 300");
+        }
+        t.width_mm = w as f64;
     }
+    match o.map(|o| o.get::<Option<bool>>("dab")).transpose()?.flatten() {
+        None => {}
+        Some(_) if by == Inker::Card => return err("ink: a card is dragged along its points; dab= is for a dabber or a poupée"),
+        Some(d) => t.moved = !d,
+    }
+    Ok(t)
 }
 
 fn passes(o: Option<&Table>, default: u32) -> Result<u32> {
@@ -180,14 +208,6 @@ fn passes(o: Option<&Table>, default: u32) -> Result<u32> {
         return err("passes: a whole number, 1 to 50");
     }
     Ok(v as u32)
-}
-
-fn pressure(o: Option<&Table>) -> Result<f32> {
-    let v = o.map(|o| num(o, "pressure")).transpose()?.flatten().unwrap_or(0.5);
-    if !(0.0..=1.0).contains(&v) {
-        return err("pressure: 0 to 1 (0.5 a working wipe)");
-    }
-    Ok(v)
 }
 
 /// The plate in hand, worked on: `f` gets the plate and the clock now (minutes), and the hand
@@ -237,22 +257,23 @@ impl UserData for TarlatanU {
             let r = t.rag.borrow();
             Ok(format!("tarlatan(width {:.0} mm, load {:.2})", r.width, r.load))
         });
-        // t:wipe(k, mask, {pressure=, passes=, angle=}): the pad over the plate in hand
-        m.add_method("wipe", |lua, t, (k, mask, o): (Value, Value, Option<Table>)| {
-            let Value::UserData(k) = k else { return err("wipe: the plate first: t:wipe(k, mask, {...})") };
-            let k = k.borrow::<SurfaceU>().map_err(|_| mlua::Error::runtime("wipe: the plate first: t:wipe(k, mask, {...})"))?.clone();
+        // t:wipe(k, pts, {pressure=, passes=, speed=}): the pad along pts over the plate in hand
+        m.add_method("wipe", |lua, t, (k, pts, o): (Value, Value, Option<Table>)| {
+            let Value::UserData(k) = k else { return err(format!("wipe: the plate first: {WIPE_HOW}")) };
+            let k = k.borrow::<SurfaceU>().map_err(|_| mlua::Error::runtime(format!("wipe: the plate first: {WIPE_HOW}")))?.clone();
             pressing(&t.st, &k, "wipe")?;
+            refuse_gone(o.as_ref(), "wipe", WIPE_HOW)?;
             if let Some(o) = &o {
-                check_keys(o, &["pressure", "passes", "angle"], "wipe")?;
+                check_keys(o, &["pressure", "passes", "speed"], "wipe")?;
             }
-            let mask = plate_mask(&t.st, &mask, "wipe")?;
-            let (pr, n, pat) = (pressure(o.as_ref())?, passes(o.as_ref(), 3)?, pattern(o.as_ref())?);
+            let pts = hand_path(&t.st, &k, "wipe", WIPE_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.0, 1.0), TARLATAN_MM_S, 2)?;
+            let n = passes(o.as_ref(), 1)?;
             let rag = t.rag.clone();
             let r = work(&t.st, move |p, now| {
                 if !p.inked() {
                     return Err("wipe: the plate has no ink on it (k:ink(...) first)".into());
                 }
-                Ok(wipe_rep(&p.wipe(&mut rag.borrow_mut(), mask.as_deref(), pr, n, pat, now)))
+                Ok(wipe_rep(&p.wipe(&mut rag.borrow_mut(), &pts, n, now)))
             })?;
             if t.rag.borrow().load >= paint::rag::FULL {
                 t.st.borrow_mut().out.push_str("tarlatan: the face in use is full of ink; t:refold() turns out a cleaner one\n");
@@ -291,66 +312,67 @@ pub(crate) fn methods<M: UserDataMethods<SurfaceU>>(m: &mut M) {
         })?;
         table(lua, &["temp", "seconds"], &r)
     });
-    // k:ink(black, {mask=, by=}): ink into the lines, a film on the flat
-    m.add_method("ink", |lua, k, (i, o): (Value, Option<Table>)| {
+    // k:ink(black, pts, {by=, width=, force=, speed=, dab=}): ink where the card or dabber goes
+    m.add_method("ink", |lua, k, (i, pts, o): (Value, Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
         pressing(&st, k, "ink")?;
-        let Value::UserData(i) = i else { return err(format!("ink: the ink first: k:ink(black, {{mask=, by=}}), black = {INK_HELP}")) };
+        let Value::UserData(i) = i else { return err(format!("ink: the ink first: {INK_HOW}, black = {INK_HELP}")) };
         let ink = i.borrow::<InkU>().map_err(|_| mlua::Error::runtime(format!("ink: the ink first: black = {INK_HELP}")))?.0.clone();
-        if let Some(o) = &o {
-            check_keys(o, &["mask", "by"], "ink")?;
+        // (the old k:ink(black, {mask=, by=}): its options where the points go)
+        if let Value::Table(t) = &pts {
+            refuse_gone(Some(t), "ink", INK_HOW)?;
         }
-        let by = match o.as_ref().map(|o| o.get::<Option<String>>("by")).transpose()?.flatten().as_deref() {
-            None | Some("card") => Inker::Card,
-            Some("dabber") => Inker::Dabber,
-            Some("poupee") => return err("ink: by=\"poupee\" (à la poupée) is the registration switch's, later"),
-            Some(b) => return err(format!("ink: by={b:?}: \"card\" or \"dabber\"")),
-        };
-        let mask = match &o {
-            Some(o) => plate_mask(&st, &o.get::<Value>("mask")?, "ink")?,
-            None => None,
-        };
+        refuse_gone(o.as_ref(), "ink", INK_HOW)?;
+        if let Some(o) = &o {
+            check_keys(o, &["by", "width", "force", "speed", "dab"], "ink")?;
+        }
+        let tool = ink_tool(o.as_ref())?;
+        let least = if tool.by == Inker::Card || tool.moved { 2 } else { 1 };
+        let pts = hand_path(&st, k, "ink", INK_HOW, &pts, o.as_ref(), ("force", tool.force() as f32, 0.1, 100.0), CARD_SPEED, least)?;
         let r = work(&st, move |p, now| {
             if p.coated() {
                 return Err("ink: the plate has a ground, varnish or rosin on it: clean it first (k:clean())".into());
             }
-            let r = p.ink(&ink, mask.as_deref(), by, now)?;
+            let r = p.ink(&ink, tool, &pts, now)?;
             Ok(((vec![r.added_um3 * 1e-9, r.film_um, r.fill, r.temp_c, r.eta, r.area_mm2, r.secs], false, false), r.secs))
         })?;
         table(lua, &["added", "film", "fill", "temp", "viscosity", "area", "seconds"], &r)
     });
-    // k:hand_wipe(mask, {pressure=, passes=, whiting=, angle=}): the palm
-    m.add_method("hand_wipe", |lua, k, (mask, o): (Value, Option<Table>)| {
+    // k:hand_wipe(pts, {pressure=, passes=, whiting=, speed=}): the palm along pts
+    m.add_method("hand_wipe", |lua, k, (pts, o): (Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
         pressing(&st, k, "hand_wipe")?;
+        refuse_gone(o.as_ref(), "hand_wipe", PALM_HOW)?;
         if let Some(o) = &o {
-            check_keys(o, &["pressure", "passes", "whiting", "angle"], "hand_wipe")?;
+            check_keys(o, &["pressure", "passes", "whiting", "speed"], "hand_wipe")?;
         }
-        let mask = plate_mask(&st, &mask, "hand_wipe")?;
-        let (pr, n, pat) = (pressure(o.as_ref())?, passes(o.as_ref(), 2)?, pattern(o.as_ref())?);
+        let pts = hand_path(&st, k, "hand_wipe", PALM_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.0, 1.0), PALM_SPEED, 2)?;
+        let n = passes(o.as_ref(), 1)?;
         let whiting = o.as_ref().map(|o| o.get::<Option<bool>>("whiting")).transpose()?.flatten().unwrap_or(true);
         let r = work(&st, move |p, now| {
             if !p.inked() {
                 return Err("hand_wipe: the plate has no ink on it (k:ink(...) first)".into());
             }
-            Ok(wipe_rep(&p.hand_wipe(mask.as_deref(), pr, n, whiting, pat, now)))
+            Ok(wipe_rep(&p.hand_wipe(&pts, n, whiting, now)))
         })?;
         table(lua, &WIPE_NAMES, &r)
     });
-    // k:retrousse(mask, {passes=}): a soft cloth drawing ink up beside the lines
-    m.add_method("retrousse", |lua, k, (mask, o): (Value, Option<Table>)| {
+    // k:retrousse(pts, {passes=, width=, speed=}): a soft cloth along pts drawing ink up beside the lines
+    m.add_method("retrousse", |lua, k, (pts, o): (Value, Option<Table>)| {
         let st = crate::api::studio(lua)?;
         pressing(&st, k, "retrousse")?;
+        refuse_gone(o.as_ref(), "retrousse", RETRO_HOW)?;
         if let Some(o) = &o {
-            check_keys(o, &["passes"], "retrousse")?;
+            check_keys(o, &["passes", "width", "speed"], "retrousse")?;
         }
-        let mask = plate_mask(&st, &mask, "retrousse")?;
+        let pts = hand_path(&st, k, "retrousse", RETRO_HOW, &pts, o.as_ref(), ("pressure", 0.5, 0.0, 1.0), PALM_SPEED, 2)?;
         let n = passes(o.as_ref(), 1)?;
+        let width = crate::plate::opt(o.as_ref(), "width", PAD_MM, 5.0, 200.0, "the muslin pad's width in mm")? as f64;
         let r = work(&st, move |p, now| {
             if !p.inked() {
                 return Err("retrousse: the plate has no ink on it (k:ink(...) first)".into());
             }
-            Ok(wipe_rep(&p.retrousse(mask.as_deref(), n, now)))
+            Ok(wipe_rep(&p.retrousse(&pts, width, n, now)))
         })?;
         table(lua, &WIPE_NAMES, &r)
     });

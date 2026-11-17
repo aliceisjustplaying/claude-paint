@@ -3,11 +3,20 @@
 //! Tiny plates and sheets only.
 
 use super::*;
-use crate::plate::inked::{Ink, Inker, Pattern};
+use crate::plate::inked::{Ink, InkTool, Inker};
 use crate::rag::Rag;
 
 fn black() -> Ink {
     Ink { name: "black".into(), tubes: vec![("bone black".into(), 1.0)], oil: 0.1, stiff: 1.0, pvc: 0.45, k: [8.0, 8.5, 9.0], s: [0.5, 0.5, 0.5], drying: 0.4 }
+}
+
+fn pt(x: f32, y: f32, force: f32) -> crate::plate::Point {
+    crate::plate::Point { x, y, force, alt: 90.0, az: 0.0, speed: 20.0 }
+}
+
+/// The card (50 mm, 10 N) dragged across a 20 mm plate: its edge spans it.
+fn card() -> Vec<crate::plate::Point> {
+    vec![pt(0.0, 10.0, 10.0), pt(20.0, 10.0, 10.0)]
 }
 
 /// A plate 20 × 20 mm at 0.1 mm a cell.
@@ -89,7 +98,7 @@ fn transfer_rises_with_fill_and_press_in_to_the_split_share() {
     for pressure in [0.3, 0.6, 0.9] {
         let mut p = plate();
         cut(&mut p, 20, 180, 100, 101, 100.0, 50.0, 1.0);
-        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
         let before = p.ink_um3();
         let mut sh = sheet();
         let fe = feel(&sh, true);
@@ -127,8 +136,8 @@ fn a_damp_sheet_takes_more_and_the_print_is_mirrored() {
         let mut p = plate();
         // a line on the plate's left half only
         cut(&mut p, 10, 90, 100, 101, 100.0, 50.0, 1.0);
-        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
-        p.wipe(&mut Rag::tarlatan(40.0, 2, 0.7), None, 0.5, 5, Pattern::Circles, 1.0);
+        p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+        p.wipe(&mut Rag::tarlatan(40.0, 2, 0.7), &[pt(-25.0, 10.0, 0.5), pt(45.0, 10.0, 0.5)], 5, 1.0);
         p
     };
     let mut took = Vec::new();
@@ -194,7 +203,7 @@ fn a_damp_sheet_keeps_the_plate_mark_and_the_lines() {
 #[test]
 fn a_cell_lays_its_ink_over_the_pixels_it_covers() {
     let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 20.0, 20.0, 1.3, 45.0, 199, 199);
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let mut sh = sheet();
     let fe = feel(&sh, true);
     let v0 = sh.wet_coats();

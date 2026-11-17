@@ -28,6 +28,31 @@ fn cut(p: &mut Plate, x0: usize, x1: usize, y0: usize, y1: usize, w: f64, d: f64
     }
 }
 
+fn pt(x: f32, y: f32, force: f32) -> Point {
+    Point { x, y, force, alt: 90.0, az: 0.0, speed: 20.0 }
+}
+
+/// The card (50 mm, 10 N) dragged across a 20 mm plate once: its edge spans it.
+fn card() -> Vec<Point> {
+    vec![pt(0.0, 10.0, 10.0), pt(20.0, 10.0, 10.0)]
+}
+
+/// A 40 mm pad slid across a 20 mm plate at pressure 0.5, along x and along y:
+/// every cell lies within its radius of the path, the middle rows under its
+/// middle.
+fn along_x() -> Vec<Point> {
+    vec![pt(-25.0, 10.0, 0.5), pt(45.0, 10.0, 0.5)]
+}
+
+fn along_y() -> Vec<Point> {
+    vec![pt(10.0, -25.0, 0.5), pt(10.0, 45.0, 0.5)]
+}
+
+/// The palm (80 mm) drawn across, at pressure 0.5.
+fn palm_x() -> Vec<Point> {
+    vec![pt(-45.0, 10.0, 0.5), pt(65.0, 10.0, 0.5)]
+}
+
 fn line_ink(p: &Plate, x0: usize, x1: usize, y0: usize, y1: usize) -> f64 {
     let mut t = 0.0;
     for y in y0..y1 {
@@ -73,8 +98,9 @@ fn fill_and_the_cards_film_follow_their_formulas() {
     assert!(fill(w, d, p, t, warm, YIELD_PA) > fill(w, d, p, t, eta, YIELD_PA));
     // the pigment's share raises the oil's viscosity by (1 − φ/φm)^(−2.5 φm)
     assert!((eta / (4.0 * (1.0 - 0.45f64 / 0.64).powf(-1.6))).abs() - 1.0 < 1e-9);
-    let h = card_film_um(eta);
+    let h = card_film_um(eta, CARD_MM_S, CARD_PA);
     assert!((h - (6.0 * 0.0267 * eta * 0.02 * 1e-3 / CARD_PA).sqrt() * 1e6).abs() < 1e-9);
+    assert!((CARD_PA - 10.0 / (0.05 * 0.002)).abs() < 1e-6);
     // a wide line fills to the air's limit
     assert_eq!(fill(100.0, 30.0, p, t, eta, YIELD_PA), PHI_AIR);
 }
@@ -99,11 +125,11 @@ fn a_fine_line_keeps_its_ink_under_tarlatan() {
         let mut p = square(20.0, pitch);
         let (share, cells) = if w <= pitch { (w / pitch, 1) } else { (1.0, (w / pitch).round() as usize) };
         cut(&mut p, 20, 180, 100, 100 + cells, w, d, share);
-        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
         let filled = line_ink(&p, 20, 180, 100, 100 + cells);
         assert!((filled - share * PHI_AIR * d).abs() < 1e-3 * filled, "{w} µm: filled {filled}");
         let mut t = Rag::tarlatan(40.0, 7, 0.7);
-        p.wipe(&mut t, None, 0.5, 3, Pattern::Circles, 1.0);
+        p.wipe(&mut t, &along_x(), 3, 1.0);
         let b = Tarlatan::new(0.7).bend_nm;
         let reach = yarn_dip_um(YARN_UM, w.min(2.0 * YARN_UM)) + if w > 2.0 * YARN_UM { sag_um(w, 0.5 * w, 0.5 * PAD_PA, b) } else { 0.0 };
         let below = share * (d - reach);
@@ -121,9 +147,9 @@ fn an_open_bite_is_wiped_clean_but_its_edges() {
     let (pitch, w, d) = (100.0, 5000.0, 120.0);
     let mut p = square(20.0, pitch);
     cut(&mut p, 75, 125, 75, 125, w, d, 1.0);
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let mut t = Rag::tarlatan(40.0, 3, 0.7);
-    p.wipe(&mut t, None, 0.5, 3, Pattern::Circles, 1.0);
+    p.wipe(&mut t, &along_x(), 3, 1.0);
     let (b, pr) = (Tarlatan::new(0.7).bend_nm, 0.5 * PAD_PA);
     let filled = PHI_AIR * d;
     // the edge band: x where the yarn (75 µm) and the sag reach the floor
@@ -161,7 +187,7 @@ fn wiping_across_a_burr_keeps_its_lee_and_along_it_does_not() {
         // side (past its cone's half-angle): it ploughs, its burr all on one side
         let pts = vec![Point { x: 2.0, y: 10.0, force: 3.0, alt: 30.0, az: 60.0, speed: 1.0 }, Point { x: 18.0, y: 10.0, force: 3.0, alt: 30.0, az: 60.0, speed: 1.0 }];
         p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
-        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
         p
     };
     // the flat within the burr's lee, both sides of the line, away from its
@@ -185,8 +211,8 @@ fn wiping_across_a_burr_keeps_its_lee_and_along_it_does_not() {
     assert!(burr > 5.0, "the needle threw a burr: {burr} µm");
     let mut along = across.clone();
     // (wiped down to a thin tone: eight times back and forth)
-    across.wipe(&mut Rag::tarlatan(40.0, 5, 0.7), None, 0.5, 8, Pattern::Along(90.0), 1.0);
-    along.wipe(&mut Rag::tarlatan(40.0, 5, 0.7), None, 0.5, 8, Pattern::Along(0.0), 1.0);
+    across.wipe(&mut Rag::tarlatan(40.0, 5, 0.7), &along_y(), 8, 1.0);
+    along.wipe(&mut Rag::tarlatan(40.0, 5, 0.7), &along_x(), 8, 1.0);
     let (a, l) = (band(&across), band(&along));
     assert!(a > 3.0 * l, "across keeps {a} µm in the lee, along {l}");
     assert!(a > 3.0 * far(&across), "across keeps {a} µm in the lee and {} far from it", far(&across));
@@ -200,44 +226,44 @@ fn every_wipe_conserves_ink() {
     let mut p = square(20.0, 100.0);
     cut(&mut p, 20, 180, 50, 51, 80.0, 40.0, 0.8);
     cut(&mut p, 60, 120, 100, 140, 3000.0, 60.0, 1.0);
-    let r = p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    let r = p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let (l, f) = p.ink_um3();
     assert!((r.added_um3 - (l + f)).abs() < 1e-6 * (l + f));
     let mut t = Rag::tarlatan(40.0, 9, 0.7);
-    let w = p.wipe(&mut t, None, 0.5, 3, Pattern::Circles, 1.0);
+    let w = p.wipe(&mut t, &along_x(), 3, 1.0);
     assert!(w.taken_um3 > 0.0 && w.laid_um3 > 0.0, "{w:?}");
     let rel = |a: f64, b: f64| (a - b).abs() <= 1e-5 * a.abs().max(b.abs()).max(1.0);
     assert!(rel(w.before_um3 - w.after_um3, w.kept_um3), "{w:?}");
     assert!(rel(t.cloth.as_ref().unwrap().held_um3, w.kept_um3));
     assert!(t.load > 0.0);
-    let h = p.hand_wipe(None, 0.5, 2, true, Pattern::Circles, 2.0);
+    let h = p.hand_wipe(&palm_x(), 2, true, 2.0);
     assert!(rel(h.before_um3 - h.after_um3, h.kept_um3), "{h:?}");
-    let r = p.retrousse(None, 1, 3.0);
+    let r = p.retrousse(&along_x(), 40.0, 1, 3.0);
     assert!(rel(r.before_um3 - r.after_um3, r.taken_um3 - r.laid_um3), "{r:?}");
     let left = p.ink_um3();
     assert!(rel(p.clean_ink(), left.0 + left.1));
     assert_eq!(p.ink_um3(), (0.0, 0.0));
 }
 
-/// Inks dabbed on stripes side by side and wiped with one tarlatan (à la
-/// poupée): the cloth lays back what its face carries where it is. A point of
+/// Inks laid on stripes side by side and wiped with one tarlatan slid along
+/// them and back: the cloth lays back what its face carries where it is. A point of
 /// the face slides along its way, keeping (1 − SMEAR)(1 − SOAK) of its pool
 /// over each quarter of the pad's width, so over a plate taking up ink alike
 /// everywhere, at `d` from the edge of a stripe the ink it carries from beyond
-/// it is that share to the power d / (pad/4) of all it carries, at most (the
-/// slanting ways cross more of the stripe first). The middle of each stripe
-/// keeps its own ink but for that.
+/// it is that share to the power d / (pad/4) of all it carries, at most. The
+/// middle of each stripe keeps its own ink but for that.
 #[test]
 fn a_tarlatan_lays_back_the_ink_where_it_wipes() {
     let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 150.0, 30.0, 1.3, 45.0, 600, 120);
     cut(&mut p, 0, 600, 0, 120, 30.0, 15.0, 0.4);
     let mk = |n: &str| Ink { name: n.into(), tubes: vec![(n.into(), 1.0)], ..black() };
+    // each ink by a card 50 mm long dragged down its own stripe
     for (j, n) in ["vermilion", "Prussian blue", "chrome yellow"].iter().enumerate() {
-        let mask: Vec<f32> = (0..600 * 120).map(|i| if (i % 600) / 200 == j { 1.0 } else { 0.0 }).collect();
-        p.ink(&mk(n), Some(&mask), Inker::Card, 0.0).unwrap();
+        let x = 25.0 + 50.0 * j as f32;
+        p.ink(&mk(n), InkTool::of(Inker::Card), &[pt(x, 0.0, 10.0), pt(x, 30.0, 10.0)], 0.0).unwrap();
     }
     let pad_mm = 40.0;
-    let w = p.wipe(&mut Rag::tarlatan(pad_mm, 2, 0.7), None, 0.5, 3, Pattern::Circles, 1.0);
+    let w = p.wipe(&mut Rag::tarlatan(pad_mm, 2, 0.7), &[pt(-25.0, 15.0, 0.5), pt(175.0, 15.0, 0.5), pt(-25.0, 15.0, 0.5)], 2, 1.0);
     assert!(w.laid_um3 > 0.2 * w.taken_um3, "the cloth lays a good share back: {w:?}");
     let d_mm = 25.0;
     let beyond = ((1.0 - crate::rag::SMEAR as f64) * (1.0 - crate::rag::SOAK as f64)).powf(d_mm / (pad_mm as f64 / 4.0));
@@ -257,14 +283,14 @@ fn the_palm_polishes_the_tone_and_spares_the_lines() {
     let mut p = square(20.0, 100.0);
     let (w, d) = (100.0, 50.0);
     cut(&mut p, 20, 180, 100, 101, w, d, 1.0);
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let mut one = p.clone();
-    one.wipe(&mut Rag::tarlatan(40.0, 2, 0.7), None, 0.5, 1, Pattern::Circles, 1.0);
-    let t = p.wipe(&mut Rag::tarlatan(40.0, 2, 0.7), None, 0.5, 4, Pattern::Circles, 1.0);
+    one.wipe(&mut Rag::tarlatan(40.0, 2, 0.7), &along_x(), 1, 1.0);
+    let t = p.wipe(&mut Rag::tarlatan(40.0, 2, 0.7), &along_x(), 4, 1.0);
     let film1 = one.ink_um3().1;
     assert!(t.film_um > 0.0 && p.ink_um3().1 < film1, "more passes, less tone");
     let lines = line_ink(&p, 20, 180, 100, 101);
-    let h = p.hand_wipe(None, 0.5, 2, true, Pattern::Circles, 2.0);
+    let h = p.hand_wipe(&palm_x(), 2, true, 2.0);
     assert!(h.film_um < 0.05 * t.film_um, "palm {} against tarlatan {}", h.film_um, t.film_um);
     let dip = 0.5 * PALM_PA * w * (1.0 - SKIN_NU * SKIN_NU) / SKIN_PA;
     assert!((palm_dip_um(w, 0.5 * w, 0.5 * PALM_PA) - dip).abs() < 1e-9 && dip < 5.0);
@@ -278,16 +304,16 @@ fn the_palm_polishes_the_tone_and_spares_the_lines() {
 fn retroussage_draws_ink_beside_the_lines() {
     let mut p = square(20.0, 100.0);
     cut(&mut p, 20, 180, 100, 101, 200.0, 150.0, 1.0);
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
-    p.wipe(&mut Rag::tarlatan(40.0, 4, 0.7), None, 0.5, 3, Pattern::Circles, 1.0);
-    p.hand_wipe(None, 0.5, 2, true, Pattern::Circles, 2.0);
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    p.wipe(&mut Rag::tarlatan(40.0, 4, 0.7), &along_x(), 3, 1.0);
+    p.hand_wipe(&palm_x(), 2, true, 2.0);
     let beside = |p: &Plate| (20..180).map(|x| p.ink_cell(x, 102).film as f64).sum::<f64>();
     let mut warm = p.clone();
     let (b0, l0) = (beside(&p), line_ink(&p, 20, 180, 100, 101));
-    p.retrousse(None, 1, 3.0);
+    p.retrousse(&along_x(), 40.0, 1, 3.0);
     assert!(beside(&p) > b0 && line_ink(&p, 20, 180, 100, 101) < l0);
     warm.warm(45.0, 3.0);
-    warm.retrousse(None, 1, 3.0);
+    warm.retrousse(&along_x(), 40.0, 1, 3.0);
     assert!(l0 - line_ink(&warm, 20, 180, 100, 101) > l0 - line_ink(&p, 20, 180, 100, 101));
     let eta = black().eta(20.0);
     assert!((washburn_um(eta, RETRO_TOUCH_S) - (0.033 * 10e-6 * 0.05 / (2.0 * eta)).sqrt() * 1e6).abs() < 1e-9);
@@ -299,14 +325,14 @@ fn retroussage_draws_ink_beside_the_lines() {
 fn ink_left_on_a_plate_dries_in() {
     let mut p = square(20.0, 100.0);
     cut(&mut p, 20, 180, 100, 101, 100.0, 40.0, 1.0);
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let mut hour = p.clone();
     let mut week = p.clone();
-    let h = hour.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), None, 0.5, 1, Pattern::Circles, 60.0);
+    let h = hour.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), &along_x(), 1, 60.0);
     assert!(h.taken_um3 > 0.5 * h.before_um3, "{h:?}");
     week.age_ink(7.0 * 24.0 * 60.0);
     assert!(week.ink_set(100, 100), "cure {}", week.ink_cell(100, 100).cure);
-    let w = week.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), None, 0.5, 1, Pattern::Circles, 7.0 * 24.0 * 60.0);
+    let w = week.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), &along_x(), 1, 7.0 * 24.0 * 60.0);
     assert_eq!(w.taken_um3, 0.0);
 }
 
@@ -320,8 +346,8 @@ fn an_inked_plate_reads_back() {
     assert_eq!(u64::from_le_bytes(b[4..12].try_into().unwrap()), 1);
     cut(&mut p, 20, 180, 100, 101, 100.0, 40.0, 1.0);
     p.warm(35.0, 0.0);
-    p.ink(&black(), None, Inker::Card, 0.5).unwrap();
-    p.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), None, 0.5, 2, Pattern::Circles, 1.0);
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.5).unwrap();
+    p.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), &along_x(), 2, 1.0);
     let mut b = Vec::new();
     p.write(&mut b).unwrap();
     assert_eq!(u64::from_le_bytes(b[4..12].try_into().unwrap()), 3);
@@ -356,9 +382,9 @@ fn ink_darkens_the_metal_it_lies_on() {
     let mut p = square(20.0, 100.0);
     cut(&mut p, 0, 200, 100, 101, 100.0, 50.0, 1.0);
     let bare = p.seen((100, 100, 101, 101), None)[0];
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
-    p.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), None, 0.5, 3, Pattern::Circles, 1.0);
-    p.hand_wipe(None, 0.5, 2, true, Pattern::Circles, 2.0);
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    p.wipe(&mut Rag::tarlatan(40.0, 1, 0.7), &along_x(), 3, 1.0);
+    p.hand_wipe(&palm_x(), 2, true, 2.0);
     let line = p.seen((100, 100, 101, 101), None)[0];
     let flat = p.seen((100, 50, 101, 51), None)[0];
     let metal = Plate::bare_rgb(Metal::Copper);
@@ -376,8 +402,8 @@ fn an_etched_and_inked_plate_reads_back_with_its_coats() {
     use super::etched::BathSpec;
     use crate::etch::{self, Acid, Face};
     let mut p = square(20.0, 100.0);
-    p.apply(Op::Ground { um: etch::GROUND_UM as f32 });
     let pt = |x: f32| Point { x, y: 10.0, force: 0.3, alt: 80.0, az: 0.0, speed: 20.0 };
+    p.apply(Op::Ground { um: etch::GROUND_UM as f32, roller_mm: etch::ROLLER_MM as f32, pts: vec![pt(0.0), pt(20.0)] });
     p.apply(Op::Needle { tip_um: 25.0, cone_deg: 30.0, pts: vec![pt(4.0), pt(16.0)] });
     let bath = BathSpec { acid: Acid::Ferric, molar: 2.2, temp_c: 20.0, face: Face::Down, rock: None, feather: None, fresh: false };
     p.immerse(bath, 10.0).unwrap();
@@ -390,7 +416,7 @@ fn an_etched_and_inked_plate_reads_back_with_its_coats() {
     p.apply(Op::Clean);
     assert!(p.coats().is_some() && p.in_bath().is_none());
     p.warm(35.0, 30.0);
-    p.ink(&black(), None, Inker::Card, 30.5).unwrap();
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 30.5).unwrap();
     let mut b = Vec::new();
     p.write(&mut b).unwrap();
     assert_eq!(u64::from_le_bytes(b[4..12].try_into().unwrap()), 3);
@@ -430,18 +456,28 @@ fn the_palms_gap_past_a_burr_is_a_crack_opening() {
     assert!(palm_lee_um(h, p) > 4.0 * a, "uniform pressure's span {} against {a}", palm_lee_um(h, p));
 }
 
+/// The palm worked round in circles 5 mm across the middle of a 20 mm plate,
+/// `laps` times: every cell under it is rubbed from every way.
+fn circles(laps: usize) -> Vec<Point> {
+    let n = 48;
+    (0..=laps * n).map(|i| {
+        let a = i as f32 / n as f32 * std::f32::consts::TAU;
+        pt(10.0 + 5.0 * a.cos(), 10.0 + 5.0 * a.sin(), 0.5)
+    }).collect()
+}
+
 /// A slanting drypoint line with burr (a needle pulled the way it goes at 55°:
-/// it ploughs), inked by card, then one palm pass in circles; the plate under
+/// it ploughs), inked by card, then the palm along `path`; the plate under
 /// the contact laws or not. Returns it and the ink in its lines before the palm.
-fn palmed_slant(contact: bool, pattern: Pattern) -> (Plate, f64) {
+fn palmed_slant(contact: bool, path: &[Point]) -> (Plate, f64) {
     let mut p = square(20.0, 100.0);
     p.contact = contact;
     let az = 8.0f32.atan2(14.0).to_degrees();
     let pts = vec![Point { x: 3.0, y: 6.0, force: 3.0, alt: 55.0, az, speed: 25.0 }, Point { x: 17.0, y: 14.0, force: 3.0, alt: 55.0, az, speed: 25.0 }];
     p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
-    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
     let lines = p.ink_um3().0;
-    p.hand_wipe(None, 0.5, 1, false, pattern, 2.0);
+    p.hand_wipe(path, 1, false, 2.0);
     (p, lines)
 }
 
@@ -480,8 +516,9 @@ fn mean_cv(v: &[f64]) -> (f64, f64) {
 /// the palm moves.
 #[test]
 fn the_palm_leaves_a_narrow_smooth_tone_by_a_burr() {
-    let (old, _) = palmed_slant(false, Pattern::Circles);
-    let (new, lines) = palmed_slant(true, Pattern::Circles);
+    // (ten laps round 31 mm under an 80 mm palm: some four passes, every way)
+    let (old, _) = palmed_slant(false, &circles(10));
+    let (new, lines) = palmed_slant(true, &circles(10));
     for side in [-1.0, 1.0] {
         let far_old = mean_cv(&band_films(&old, side, 5.0, 6.0)).0;
         let far = mean_cv(&band_films(&new, side, 5.0, 6.0)).0;
@@ -505,9 +542,12 @@ fn the_palm_leaves_a_narrow_smooth_tone_by_a_burr() {
         assert!(last < 0.5 * mean_cv(&band_films(&new, side, 0.15, 0.2)).0);
     }
     assert!(new.ink_um3().0 > 0.98 * lines, "the line keeps its ink: {} of {lines}", new.ink_um3().0);
-    let (a, _) = palmed_slant(true, Pattern::Along(0.0));
-    let (b, _) = palmed_slant(true, Pattern::Along(90.0));
-    assert_eq!(a.ink_um3(), b.ink_um3(), "the skin's gap is the same whichever way the palm moves");
+    // along x and along y the palm slides over each cell within a few per cent alike (its
+    // chord there over its 80 mm): the skin's gap doesn't care which way it moves
+    let (a, _) = palmed_slant(true, &[pt(-45.0, 10.0, 0.5), pt(65.0, 10.0, 0.5)]);
+    let (b, _) = palmed_slant(true, &[pt(10.0, -45.0, 0.5), pt(10.0, 65.0, 0.5)]);
+    let (ta, tb) = (a.ink_um3(), b.ink_um3());
+    assert!(((ta.0 + ta.1) / (tb.0 + tb.1) - 1.0).abs() < 0.03, "{ta:?} {tb:?}");
 }
 
 /// The cloth under the contact laws (`shields_tiled`): across a slanting
@@ -522,7 +562,7 @@ fn the_cloths_lee_is_even_along_a_slanting_line() {
         let az = deg as f32;
         let pts = vec![Point { x: 10.0 - 7.0 * c, y: 10.0 - 7.0 * s, force: 3.0, alt: 55.0, az, speed: 25.0 }, Point { x: 10.0 + 7.0 * c, y: 10.0 + 7.0 * s, force: 3.0, alt: 55.0, az, speed: 25.0 }];
         p.apply(Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts });
-        p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+        p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
         p
     };
     // the lee's share of each cell near the line, wiping square across it
@@ -546,4 +586,66 @@ fn the_cloths_lee_is_even_along_a_slanting_line() {
         let min = v.iter().cloned().fold(f64::MAX, f64::min);
         assert!(min > 0.99, "{deg}°: every cell beside the line is in the lee (least {min})");
     }
+}
+
+/// The ink goes only where the card's edge goes: a 10 mm card dragged along
+/// the middle inks the band it covers, and nothing beside it.
+#[test]
+fn the_card_inks_where_it_goes() {
+    let mut p = square(20.0, 100.0);
+    cut(&mut p, 0, 200, 0, 200, 80.0, 40.0, 0.5);
+    let tool = InkTool { width_mm: 10.0, ..InkTool::of(Inker::Card) };
+    let r = p.ink(&black(), tool, &card(), 0.0).unwrap();
+    for y in 0..200 {
+        let d = ((y as f64 + 0.5) * 0.1 - 10.0).abs();
+        let ic = p.ink_cell(100, y);
+        if d < 4.95 {
+            assert!(ic.total() > 0.0, "row {y} under the card");
+        }
+        if d > 5.05 {
+            assert_eq!(ic.total(), 0.0, "row {y} beside it");
+        }
+    }
+    assert!((r.area_mm2 - 20.0 * 10.0).abs() < 0.5, "{}", r.area_mm2);
+    // the bead's pressure is the hand's 10 N over the shorter card's bead
+    assert!((tool.pressure(10.0) - 10.0 / (0.01 * 0.002)).abs() < 1e-6);
+}
+
+/// À la poupée: a poupée dabbed at a point inks the disc of its face there,
+/// and dabbed twice it pushes ink in for twice the time (the pushes add: a
+/// fine line fills as √(p·2t)).
+#[test]
+fn a_poupee_inks_the_disc_it_is_dabbed_on() {
+    let (w, d) = (2.0, 60.0);
+    let mut p = square(20.0, 100.0);
+    cut(&mut p, 0, 200, 0, 200, w, d, 0.01);
+    let tool = InkTool { width_mm: 6.0, ..InkTool::of(Inker::Poupee) };
+    let f = tool.force();
+    assert!((tool.pressure(f) - DABBER_PA).abs() < 1e-6 * DABBER_PA, "the dabber's pressure when no force is given");
+    let mut twice = p.clone();
+    p.ink(&black(), tool, &[pt(10.0, 10.0, f as f32)], 0.0).unwrap();
+    twice.ink(&black(), tool, &[pt(10.0, 10.0, f as f32), pt(10.0, 10.0, f as f32)], 0.0).unwrap();
+    assert!(p.ink_cell(100, 100).film > 0.0 && p.ink_cell(100, 128).film > 0.0);
+    assert_eq!(p.ink_cell(100, 135).total(), 0.0, "beyond the face's 3 mm");
+    assert_eq!(p.ink_cell(10, 10).total(), 0.0);
+    let eta = black().eta(20.0);
+    let line = |q: &Plate| q.ink_cell(100, 100).lines() as f64 / (0.01 * d);
+    assert!((line(&p) - fill(w, d, DABBER_PA, DAB_S, eta, YIELD_PA)).abs() < 1e-5, "{}", line(&p));
+    assert!((line(&twice) - fill(w, d, DABBER_PA, 2.0 * DAB_S, eta, YIELD_PA)).abs() < 1e-5, "{}", line(&twice));
+    assert!(line(&twice) > line(&p));
+}
+
+/// A pad wipes only where it slides: a 10 mm pad drawn along y 5 mm leaves the
+/// film at y 15 mm as the card laid it.
+#[test]
+fn the_pad_wipes_where_it_goes() {
+    let mut p = square(20.0, 100.0);
+    p.ink(&black(), InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+    let laid = p.ink_cell(100, 150).film;
+    let w = p.wipe(&mut Rag::tarlatan(10.0, 3, 0.7), &[pt(-10.0, 5.0, 0.5), pt(30.0, 5.0, 0.5)], 2, 1.0);
+    assert!(p.ink_cell(100, 50).film < 0.5 * laid, "wiped under the pad");
+    assert_eq!(p.ink_cell(100, 150).film, laid, "untouched beyond it");
+    assert!((w.area_mm2 - 20.0 * 10.0).abs() < 1.0, "{}", w.area_mm2);
+    let h = p.hand_wipe(&[pt(10.0, -45.0, 0.5), pt(10.0, -41.0, 0.5)], 1, true, 2.0);
+    assert_eq!(h.taken_um3, 0.0, "the palm drawn off the plate takes nothing");
 }

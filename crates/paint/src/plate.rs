@@ -772,13 +772,15 @@ pub enum Op {
     Scrape { width_mm: f32, passes: u32, pts: Vec<Point> },
     Roulette { pitch_mm: f32, tooth_um: f32, cone_deg: f32, pts: Vec<Point> },
     // the etching tools (`etched`, the easel's `--@ etch`)
-    /// A hard ground laid over the face, `um` thick.
-    Ground { um: f32 },
+    /// A hard ground `um` thick rolled along `pts` with a roller
+    /// `roller_mm` long.
+    Ground { um: f32, roller_mm: f32, pts: Vec<Point> },
     /// An etching needle drawn through the ground.
     Needle { tip_um: f32, cone_deg: f32, pts: Vec<Point> },
-    /// Stopping-out varnish brushed where `bits` (a `w` × `h` raster over the
-    /// plate, a bit a cell, row by row) is set.
-    StopOut { w: u32, h: u32, bits: Vec<u8> },
+    /// Stopping-out varnish brushed along `pts` (each point's force the
+    /// hand's pressure, 0..1) with a round brush `brush_mm` across, loaded to
+    /// `load` of its belly.
+    StopOut { brush_mm: f32, load: f32, pts: Vec<Point> },
     /// Rosin dust from the box: grains per µm² by size bin, and the seed they
     /// are scattered from.
     Aquatint { per_um2: Vec<f32>, seed: u64 },
@@ -1540,14 +1542,9 @@ impl Plate {
                 Op::Burnish { radius_mm, passes, pts } => (1, *radius_mm, *passes as f32, 0.0, pts.as_slice()),
                 Op::Scrape { width_mm, passes, pts } => (2, *width_mm, *passes as f32, 0.0, pts.as_slice()),
                 Op::Roulette { pitch_mm, tooth_um, cone_deg, pts } => (3, *pitch_mm, *tooth_um, *cone_deg, pts.as_slice()),
-                Op::Ground { um } => (4, *um, 0.0, 0.0, none),
+                Op::Ground { um, roller_mm, pts } => (4, *um, *roller_mm, 0.0, pts.as_slice()),
                 Op::Needle { tip_um, cone_deg, pts } => (5, *tip_um, *cone_deg, 0.0, pts.as_slice()),
-                Op::StopOut { w, h, bits } => {
-                    blob.extend_from_slice(&w.to_le_bytes());
-                    blob.extend_from_slice(&h.to_le_bytes());
-                    blob.extend_from_slice(bits);
-                    (6, 0.0, 0.0, 0.0, none)
-                }
+                Op::StopOut { brush_mm, load, pts } => (6, *brush_mm, *load, 0.0, pts.as_slice()),
                 Op::Aquatint { per_um2, seed } => {
                     blob.extend_from_slice(&seed.to_le_bytes());
                     for v in per_um2 {
@@ -1694,15 +1691,9 @@ impl Plate {
             let w32 = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
             let w64 = |b: &[u8], i: usize| u64::from_le_bytes(b[i..i + 8].try_into().unwrap());
             p.ops.push(match tag {
-                4 => Op::Ground { um: a },
+                4 => Op::Ground { um: a, roller_mm: b, pts },
                 5 => Op::Needle { tip_um: a, cone_deg: b, pts },
-                6 if blob.len() >= 8 => {
-                    let (bw, bh) = (w32(&blob, 0), w32(&blob, 4));
-                    if (bw as usize * bh as usize).div_ceil(8) != blob.len() - 8 {
-                        return Err(bad("a stopping-out is damaged"));
-                    }
-                    Op::StopOut { w: bw, h: bh, bits: blob[8..].to_vec() }
-                }
+                6 => Op::StopOut { brush_mm: a, load: b, pts },
                 7 if blob.len() == 8 + 4 * crate::etch::DUST_BINS => Op::Aquatint { seed: w64(&blob, 0), per_um2: (0..crate::etch::DUST_BINS).map(|i| f32::from_bits(w32(&blob, 8 + 4 * i))).collect() },
                 8 => Op::Melt,
                 9 if blob.len() >= 8 && (blob.len() - 8) % 8 == 0 => {
@@ -1797,6 +1788,7 @@ fn get32(r: &mut (impl Read + ?Sized)) -> io::Result<u32> {
 }
 
 pub mod etched;
+pub mod hand;
 pub mod inked;
 pub mod press;
 

@@ -16,6 +16,11 @@
 //! (µm over the cell), the ink's cure, and which of the plate's inks it is
 //! (volume shares, at most `INKS`). Stored in tiles beside the cells.
 //!
+//! **Where.** Every tool here is moved by the hand along points the painter
+//! gives and acts only where it touches (`plate::hand`): the card's edge
+//! where it passes, a dabbed face's disc, a slid pad (tarlatan, palm, muslin)
+//! for as far as it slides over a point. None takes a region.
+//!
 //! **Inking** pushes ink into every opening under the card or dabber and
 //! leaves a film on the flat (`Plate::ink`). **Wiping** takes it off where a
 //! cloth reaches it (`Plate::wipe`): a tarlatan is a `Rag` with its own
@@ -65,23 +70,37 @@ pub const YIELD_PA: f64 = 300.0;
 /// plan-intaglio §5.1's 0.9 until Unknown 3 is weighed].
 pub const PHI_AIR: f64 = 0.9;
 
-/// The card (IP §5.2): pressed with 10 N [E: a hand pushing a card's edge]
-/// on a bead 50 mm long and 2 mm across [E], so 100 kPa in the bead; drawn at
-/// 20 mm/s [E] with a bead 5 mm long in the way it moves [E], so a point
-/// lies under the bead 0.25 s, twice over (across, then diagonally [P]).
-pub const CARD_PA: f64 = 10.0 / (50e-3 * 2e-3);
-pub const CARD_DWELL_S: f64 = 2.0 * 5.0 / 20.0;
+/// The card (IP §5.2), dragged along the painter's points: its edge 50 mm
+/// long [E] pressed with 10 N [E: a hand pushing a card's edge] on a bead
+/// 2 mm across [E], so 100 kPa in the bead; the bead 5 mm long in the way it
+/// moves [E], so a point lies under it 5 mm over the card's speed each time
+/// the edge passes (0.25 s at 20 mm/s; printers go across, then diagonally
+/// [P]). The pressure is the hand's force over the bead.
+pub const CARD_MM: f64 = 50.0;
+pub const CARD_N: f64 = 10.0;
+pub const CARD_BEAD_MM: f64 = 2.0;
+pub const CARD_RUN_MM: f64 = 5.0;
+pub const CARD_PA: f64 = CARD_N / (CARD_MM * 1e-3 * CARD_BEAD_MM * 1e-3);
 /// The card's edge drags a film behind it as a sliding pad does (Reynolds'
 /// inclined slider, IP §5.2 [D]): h = √(6·K·η·U·ℓ/p), K = 0.0267 at the
-/// best inclination [M, Reynolds' slider solution], U 20 mm/s and the edge
-/// 1 mm across in the way it moves [E: a card's bevel], p `CARD_PA`.
+/// best inclination [M, Reynolds' slider solution], U the card's speed (20
+/// mm/s when none is given [E]) and the edge 1 mm across in the way it moves
+/// [E: a card's bevel], p the bead's pressure.
 pub const SLIDER_K: f64 = 0.0267;
 pub const CARD_MM_S: f64 = 20.0;
 pub const CARD_EDGE_MM: f64 = 1.0;
 /// The dabber (a roll of felt worked with a twist, IP §5.2): 20 N on a face
-/// 30 mm across [E], ten dabs on a point of 0.2 s each [E].
-pub const DABBER_PA: f64 = 20.0 / (std::f64::consts::PI * 0.015 * 0.015);
-pub const DABBER_DWELL_S: f64 = 10.0 * 0.2;
+/// 30 mm across [E], a dab 0.2 s on the plate [E]. The face, soft, is pressed
+/// flat on the plate: it touches its disc, at the hand's force over it.
+pub const DABBER_MM: f64 = 30.0;
+pub const DABBER_N: f64 = 20.0;
+pub const DAB_S: f64 = 0.2;
+pub const DABBER_PA: f64 = DABBER_N / (std::f64::consts::PI * 0.25 * DABBER_MM * 1e-3 * DABBER_MM * 1e-3);
+/// The poupée (à la poupée inking): a small dabber of rolled felt or
+/// tarlatan, its face 20 mm across [E: rolled from a strip of felt two inches
+/// wide (Belinda Del Pesco's dauber), sized to the colour it carries], pressed
+/// at the dabber's pressure when no force is given.
+pub const POUPEE_MM: f64 = 20.0;
 /// The film a dabber leaves: half (a film's split, IP §6.4) of a charge
 /// 20 µm thick on its face [E].
 pub const DABBER_FILM_UM: f64 = 10.0;
@@ -109,15 +128,23 @@ pub const PALM_PA: f64 = 10e3;
 /// all of it: 0.9 [E: unmeasured].
 pub const PALM_SPLIT: f64 = 0.5;
 pub const WHITING_SPLIT: f64 = 0.9;
-/// Times a hand wipe's pass touches each point [E: the palm sweeps the plate
-/// in overlapping strokes].
+/// Times a hand wipe's pass over the plate touched each point in Cassatt's
+/// pace (`pace::PALM_MM2_S`) [E: the palm sweeps in overlapping strokes]:
+/// it makes the pace of one touch (`pace::PALM_TOUCH_MM2_S`). Each touch is
+/// a pass of the palm's edge over the point along the painter's points.
 pub const PALM_TOUCHES: f64 = 4.0;
+/// The palm's breadth across the way it is drawn: 80 mm [M: hand breadth at
+/// the metacarpals, 50th percentile 85 mm for British men and 75 mm for
+/// women (Pheasant, Bodyspace)].
+pub const PALM_MM: f64 = 80.0;
 /// Retroussage (IP §5.4): a soft muslin passed lightly over the plate. Its
 /// loose fibre ends, cotton 15 µm thick [M: cotton fibres are 12–20 µm
 /// across], hang into any opening wider than a fibre and touch the ink in
 /// it; it draws ink up into its fibres by capillarity (Lucas–Washburn, h =
 /// √(γ·r·t/(2η))): linseed oil's surface tension 0.033 N/m [M], the pores
-/// between its fibres 10 µm [E], 0.05 s on a point a pass [E]. What it draws
+/// between its fibres 10 µm [E], 0.05 s on a point each time the cloth
+/// passes over it [E]. The cloth is a pad as wide as a rag's
+/// (`rag::PAD_MM`) when none is given. What it draws
 /// up it lays beside the line within 0.5 mm [E: the cloth's contact along
 /// its pass], but for what soaks into it (`rag`'s soaking share).
 pub const FIBRE_UM: f64 = 15.0;
@@ -141,6 +168,13 @@ pub const ROOM_C: f64 = 20.0;
 /// 17.5 min, shared as a quarter to the card, a half to the tarlatan and a
 /// quarter to the palm [E: the split]: 728 cm² in 262 s for the card, and
 /// 525 s over three passes and 262 s over two for tarlatan and palm.
+///
+/// A tool moved along points takes the area it passes over (each pass
+/// counted) at the pace of one pass: the card's inking went over the plate
+/// twice (across, then diagonally [P]), so a pass of the card is twice its
+/// pace; the dabber's was ten dabs on a point, so a dab covers its face ten
+/// times as fast; a tarlatan pass is one pass; a pass of the palm touched
+/// each point `PALM_TOUCHES` times.
 pub mod pace {
     pub const CARD_MM2_S: f64 = 72_800.0 / 262.5;
     pub const DABBER_MM2_S: f64 = 72_800.0 / 262.5 / 2.0;
@@ -148,6 +182,11 @@ pub mod pace {
     pub const PALM_MM2_S: f64 = 2.0 * 72_800.0 / 262.5;
     /// Retroussage: a light pass, as fast as the palm's [E].
     pub const RETRO_MM2_S: f64 = PALM_MM2_S;
+    /// A pass of the card's edge (or of a dabber's face rubbed along), a dab,
+    /// and a touch of the palm.
+    pub const CARD_PASS_MM2_S: f64 = 2.0 * CARD_MM2_S;
+    pub const DAB_MM2_S: f64 = 10.0 * DABBER_MM2_S;
+    pub const PALM_TOUCH_MM2_S: f64 = super::PALM_TOUCHES * PALM_MM2_S;
     /// Warming a plate on the hot plate: copper's ρct over a contact
     /// conductance of 300 W/m²K is 15 s, four of them to come within 2 % of
     /// the hot plate [D; the conductance E], with the reach to it and back.
@@ -195,9 +234,10 @@ pub fn fill(w: f64, d: f64, p: f64, t: f64, eta: f64, tau: f64) -> f64 {
     (pushed_um(w, p, t, eta, tau) / d).min(PHI_AIR)
 }
 
-/// The film (µm) a card's edge leaves on the flat (`SLIDER_K`).
-pub fn card_film_um(eta: f64) -> f64 {
-    (6.0 * SLIDER_K * eta * CARD_MM_S * 1e-3 * CARD_EDGE_MM * 1e-3 / CARD_PA).sqrt() * 1e6
+/// The film (µm) a card's edge drawn at `u_mm_s` and pressing its bead at
+/// `p` Pa leaves on the flat (`SLIDER_K`).
+pub fn card_film_um(eta: f64, u_mm_s: f64, p: f64) -> f64 {
+    (6.0 * SLIDER_K * eta * u_mm_s * 1e-3 * CARD_EDGE_MM * 1e-3 / p.max(1.0)).sqrt() * 1e6
 }
 
 /// A cloth's sag (µm) at `x` µm in from the rim of a gap `w` µm wide, pressed
@@ -485,11 +525,53 @@ pub struct Inking {
     pub aged_to: f64,
 }
 
-/// How ink goes on.
+/// How ink goes on: a card's edge dragged along the points, or a dabber's or
+/// a poupée's face dabbed at each point or (`InkTool::moved`) rubbed along
+/// them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Inker {
     Card,
     Dabber,
+    Poupee,
+}
+
+/// An inking tool: what it is, its size (the card's edge's length, the
+/// face's diameter, mm) and whether a face is rubbed along the points rather
+/// than dabbed at each.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InkTool {
+    pub by: Inker,
+    pub width_mm: f64,
+    pub moved: bool,
+}
+
+impl InkTool {
+    /// The tool `by` at its usual size, dabbed.
+    pub fn of(by: Inker) -> InkTool {
+        InkTool { by, width_mm: match by { Inker::Card => CARD_MM, Inker::Dabber => DABBER_MM, Inker::Poupee => POUPEE_MM }, moved: false }
+    }
+
+    /// The force (N) it is pressed with when none is given: the card's 10 N, the
+    /// dabber's 20 N, a poupée's the dabber's pressure over its face.
+    pub fn force(&self) -> f64 {
+        match self.by {
+            Inker::Card => CARD_N,
+            _ => DABBER_PA * self.face_m2(),
+        }
+    }
+
+    fn face_m2(&self) -> f64 {
+        std::f64::consts::PI * 0.25 * (self.width_mm * 1e-3).powi(2)
+    }
+
+    /// The pressure (Pa) under it pressed with `f` N: over the card's bead, or
+    /// over the face pressed flat.
+    pub fn pressure(&self, f: f64) -> f64 {
+        match self.by {
+            Inker::Card => f / (self.width_mm * 1e-3 * CARD_BEAD_MM * 1e-3),
+            _ => f / self.face_m2(),
+        }
+    }
 }
 
 /// What an inking did.
@@ -526,30 +608,6 @@ pub struct WipeReport {
     pub secs: f64,
     /// The plate's temperature (°C).
     pub temp_c: f64,
-}
-
-/// How a wipe's pad moves: in circles (every way across the plate in turn)
-/// or back and forth along a direction (degrees: 0 to the right, 90 down).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Pattern {
-    Circles,
-    Along(f32),
-}
-
-impl Pattern {
-    /// The ways the pad moves over a pass (unit vectors).
-    fn ways(self) -> Vec<(f64, f64)> {
-        match self {
-            Pattern::Circles => (0..8).map(|i| {
-                let a = i as f64 * std::f64::consts::TAU / 8.0;
-                (a.cos(), a.sin())
-            }).collect(),
-            Pattern::Along(deg) => {
-                let a = (deg as f64).to_radians();
-                vec![(a.cos(), a.sin()), (-a.cos(), -a.sin())]
-            }
-        }
-    }
 }
 
 /// The tracks a cloth's face draws over `cells` moving `v`: each point of
@@ -711,15 +769,16 @@ impl Plate {
         Ok(k.inks.len() - 1)
     }
 
-    /// The cells under `mask` (one value a cell, row by row; None: all) at
-    /// least half in it.
-    fn masked(&self, mask: Option<&[f32]>) -> Vec<(usize, usize, f32)> {
+    /// The cells the stretches touch, each once (the union), as (x, y).
+    fn union(&self, stretches: &[super::hand::Stretch]) -> Vec<(usize, usize)> {
+        let mut seen = vec![false; self.w * self.h];
         let mut out = Vec::new();
-        for y in 0..self.h {
-            for x in 0..self.w {
-                let m = mask.map_or(1.0, |m| m[y * self.w + x].clamp(0.0, 1.0));
-                if m > 0.0 {
-                    out.push((x, y, m));
+        for s in stretches {
+            for &(x, y, m) in &s.cells {
+                let i = y * self.w + x;
+                if m > 0.0 && !seen[i] {
+                    seen[i] = true;
+                    out.push((x, y));
                 }
             }
         }
@@ -728,34 +787,62 @@ impl Plate {
 
     // ------------------------------------------------------------ inking
 
-    /// Ink the plate under `mask` (cells at least half in it) by card or
-    /// dabber at `now` (IP §5.2): each opening fills to its share (`fill`:
-    /// the ink pushed in viscously or against its yield stress, at most
-    /// `PHI_AIR`), and the flat keeps the film the card's edge drags
-    /// (`card_film_um`) or the dabber leaves.
-    pub fn ink(&mut self, ink: &Ink, mask: Option<&[f32]>, by: Inker, now: f64) -> Result<InkReport, String> {
+    /// Ink the plate with `tool` moved along `pts` (mm; each point's force
+    /// the hand's, N, and its speed, mm/s) at `now` (IP §5.2). The ink goes
+    /// only where the tool touches: a cell the card's edge passes over, or a
+    /// dabbed face's disc covers, over half; a cell a face rubbed along slides
+    /// over.
+    /// - Each opening there fills to its share (`fill`: the ink pushed in
+    ///   viscously or against its yield stress, at most `PHI_AIR`), by the
+    ///   tool's pressure (`InkTool::pressure`) over the time the cell spends
+    ///   under it: the card's bead `CARD_RUN_MM` over its speed each time its
+    ///   edge passes, a dab `DAB_S`, a face rubbed along (`Plate::slide`) the
+    ///   length it slides over the cell over its speed. The pushes add (the depth pushed goes as
+    ///   √(p·t)).
+    /// - The flat keeps the film the card's edge drags at its speed and
+    ///   pressure (`card_film_um`) or a face leaves (`DABBER_FILM_UM`).
+    pub fn ink(&mut self, ink: &Ink, tool: InkTool, pts: &[Point], now: f64) -> Result<InkReport, String> {
         self.age_ink(now);
         let idx = self.ink_index(ink)?;
         let temp = self.temp_c(now);
         let eta = ink.eta(temp);
-        let (p, t) = match by {
-            Inker::Card => (CARD_PA, CARD_DWELL_S),
-            Inker::Dabber => (DABBER_PA, DABBER_DWELL_S),
-        };
-        let film = match by {
-            Inker::Card => card_film_um(eta),
-            Inker::Dabber => DABBER_FILM_UM,
+        let w = tool.width_mm;
+        let stretches = match tool.by {
+            Inker::Card => self.sweep(pts, &|_| w, 0.25 * w),
+            _ if tool.moved => self.slide(pts, &|_| w, 0.25 * w),
+            _ => self.dabs(pts, &|_| w),
         };
         let mut of = [0.0f32; INKS];
         of[idx] = 1.0;
         let before = self.ink_um3();
-        let cells = self.masked(mask);
-        let (mut fsum, mut fvol, mut n) = (0.0f64, 0.0f64, 0usize);
-        for &(x, y, m) in &cells {
-            if m < 0.5 {
-                continue;
+        // per cell touched: Σ p·t, the most pressure, the film
+        let mut acc: std::collections::BTreeMap<(usize, usize), (f64, f64, f64)> = std::collections::BTreeMap::new();
+        let (mut swept, mut film_max) = (0.0f64, 0.0f64);
+        for st in &stretches {
+            let f = st.pose.force as f64;
+            let speed = (st.pose.speed as f64).max(1.0);
+            let p = tool.pressure(f);
+            let film = if tool.by == Inker::Card { card_film_um(eta, speed, p) } else { DABBER_FILM_UM };
+            film_max = film_max.max(film);
+            swept += st.area_mm2(self.pitch);
+            for &(x, y, m) in &st.cells {
+                // the time under it: the card's bead each pass, a dab, a face rubbed along for the
+                // length it slides over the cell (its share of a pass, `slide`, times its width)
+                let dwell = match tool.by {
+                    Inker::Card if m >= 0.5 => CARD_RUN_MM / speed,
+                    Inker::Card => continue,
+                    _ if tool.moved => m as f64 * w / speed,
+                    _ if m >= 0.5 => DAB_S,
+                    _ => continue,
+                };
+                let e = acc.entry((y, x)).or_insert((0.0, 0.0, 0.0));
+                e.0 += p * dwell;
+                e.1 = e.1.max(p);
+                e.2 = e.2.max(film);
             }
-            n += 1;
+        }
+        let (mut fsum, mut fvol) = (0.0f64, 0.0f64);
+        for (&(y, x), &(pt, p, film)) in &acc {
             let c = self.cell(x, y);
             let mut ic = self.ink_cell(x, y);
             let had = ic.total();
@@ -764,7 +851,7 @@ impl Plate {
                     continue;
                 }
                 let (w, d) = ((c.wsum[k] / c.open[k]) as f64, (c.vol[k] / c.open[k]) as f64);
-                let phi = fill(w, d, p, t, eta, YIELD_PA);
+                let phi = fill(w, d, p, pt / p.max(1e-9), eta, YIELD_PA);
                 fsum += phi * c.vol[k] as f64;
                 fvol += c.vol[k] as f64;
                 ic.line[k] = ic.line[k].max((phi * c.vol[k] as f64) as f32);
@@ -777,12 +864,13 @@ impl Plate {
             *self.ink_cell_mut(x, y) = ic;
         }
         let after = self.ink_um3();
-        let area = n as f64 * (self.pitch * 1e-3).powi(2);
-        let secs = area / match by {
-            Inker::Card => pace::CARD_MM2_S,
-            Inker::Dabber => pace::DABBER_MM2_S,
+        let area = acc.len() as f64 * (self.pitch * 1e-3).powi(2);
+        let secs = swept / match tool.by {
+            Inker::Card => pace::CARD_PASS_MM2_S,
+            _ if tool.moved => pace::CARD_PASS_MM2_S,
+            _ => pace::DAB_MM2_S,
         };
-        Ok(InkReport { added_um3: after.0 + after.1 - before.0 - before.1, film_um: film, fill: if fvol > 0.0 { fsum / fvol } else { 0.0 }, temp_c: temp, eta, area_mm2: area, secs })
+        Ok(InkReport { added_um3: after.0 + after.1 - before.0 - before.1, film_um: film_max, fill: if fvol > 0.0 { fsum / fvol } else { 0.0 }, temp_c: temp, eta, area_mm2: area, secs })
     }
 
     /// Solvent and a rag: every bit of ink off the plate (µm³ taken).
@@ -1163,13 +1251,16 @@ impl Plate {
         }
     }
 
-    /// Wipe the plate under `mask` with tarlatan `rag` (its face, load and
-    /// creases a rag's; its stiffness `rag.cloth`) at `pressure` 0..1 for
-    /// `passes`, the pad moving by `pattern`, at `now` (IP §5.3).
+    /// Wipe the plate with tarlatan `rag` (its face, load and creases a
+    /// rag's; its stiffness `rag.cloth`) moved along `pts` (mm; each point's
+    /// force the hand's pressure, 0..1) `passes` times, at `now` (IP §5.3).
     ///
-    /// Each pass is a sweep of the pad over the area each way the pattern
-    /// moves. At each cell, the cloth takes by the rag's lift law (its face's
-    /// thirst, its creases' contact, the ink's fluidity) what it reaches:
+    /// The pad, its width across, slides along the points (`Plate::slide`,
+    /// in stretches a quarter of its width), and rubs each cell for its share
+    /// of a pass there (one under its middle on a straight stroke). The cloth
+    /// takes by the rag's lift law (its face's thirst, its creases' contact,
+    /// the ink's fluidity), compounded over the share of a pass, what it
+    /// reaches, moving the way the pad goes there:
     /// - the film on the flat, but in a burr's lee (`shields`, `lee_um`);
     /// - the ink in each opening above the level it reaches: the yarn's dip
     ///   (`yarn_dip_um`) and the cloth's sag across the opening (`sag_um`,
@@ -1178,140 +1269,161 @@ impl Plate {
     /// The face holds no more than it has room for, and smears back the
     /// share `rag::SMEAR` of the ink at its surface every quarter of its
     /// width it slides, as the rag does, of which `rag::SOAK` soaks in: what
-    /// it lays back is the plate tone.
-    #[allow(clippy::too_many_arguments)]
-    pub fn wipe(&mut self, rag: &mut Rag, mask: Option<&[f32]>, pressure: f32, passes: u32, pattern: Pattern, now: f64) -> WipeReport {
+    /// it lays back is the plate tone. Nothing is wiped where the pad
+    /// doesn't go.
+    pub fn wipe(&mut self, rag: &mut Rag, pts: &[Point], passes: u32, now: f64) -> WipeReport {
         self.age_ink(now);
         let temp = self.temp_c(now);
         let before = self.ink_um3();
         let cloth = rag.cloth.get_or_insert_with(|| Box::new(Tarlatan::new(0.7))).as_ref().clone();
         let b = cloth.bend_nm;
-        let p = PAD_PA * pressure.clamp(0.01, 1.0) as f64;
-        let ct = Contact {
-            reach: Box::new(move |w, x| yarn_dip_um(YARN_UM, w.min(2.0 * YARN_UM)) + if w > 2.0 * YARN_UM { sag_um(w, x, p, b) } else { 0.0 }),
-            lee: Box::new(move |h| lee_um(h, p, b)),
-        };
-        let cells = self.masked(mask);
+        let pad_mm = rag.width as f64;
+        let stretches = self.slide(pts, &|_| pad_mm, 0.25 * pad_mm);
         let rims = self.rims();
-        let ways = pattern.ways();
-        let kk = ways.len() as f64;
-        let area_um2 = cells.iter().map(|c| c.2 as f64).sum::<f64>() * self.pitch * self.pitch;
-        let pad_um = rag.width as f64 * 1000.0;
+        let pad_um = pad_mm * 1000.0;
         let cap = pad_um * pad_um * crate::rag::CAP_UM as f64;
-        // quarter-pad steps a sweep slides (the area over the pad's width, K ways a pass)
-        let quarters = (4.0 * area_um2 / (pad_um * pad_um * kk)).max(1e-3);
-        let (mut taken, mut laid) = (0.0f64, 0.0f64);
-        let pressure = pressure.clamp(0.0, 1.0);
+        let (mut taken, mut laid, mut swept) = (0.0f64, 0.0f64, 0.0f64);
         let unit = self.pitch * self.pitch;
-        // the face's tracks over the cells, each way (`tracks`), and what a
-        // track keeps of its pool over a µm of its slide: the share it keeps
-        // a quarter of the pad's width, `rag::SMEAR` laid back and
-        // `rag::SOAK` soaked in
-        let tracks: Vec<Vec<(i64, f64, usize)>> = ways.iter().map(|&v| tracks(&cells, v)).collect();
+        // what a track of the face (`tracks`) keeps of its pool over a µm of
+        // its slide: the share it keeps a quarter of the pad's width,
+        // `rag::SMEAR` laid back and `rag::SOAK` soaked in
         let fade_um = -((1.0 - crate::rag::SMEAR as f64) * (1.0 - crate::rag::SOAK as f64)).ln() / (pad_um / 4.0);
         let mut at = vec![u32::MAX; self.w * self.h];
-        // the ink the face comes to the plate with: its pool from before
-        let (pool0_um3, pool0_mix) = (cloth.pool_um3, cloth.pool_mix);
+        // each track's pool where the last stretch left it (its place along the way), while the
+        // pad keeps moving the same way: the face's points carry it on
+        let mut carry: (Option<(f64, f64)>, std::collections::HashMap<i64, (f64, [f64; INKS])>) = (None, std::collections::HashMap::new());
         for pass in 0..passes {
-            for (j, &v) in ways.iter().enumerate() {
-                let rate = crate::rag::LIFT as f64 * (0.7 + 0.6 * pressure as f64) * rag.thirst() as f64 / kk;
-                let cs = rag.cloth_seed(((pass as u64) << 8) | j as u64);
-                let pitch = self.pitch;
-                let frac = |x: usize, y: usize, m: f32, ic: &InkCell| {
-                    // the pad's creases, in its own frame (mm), moving `v`
-                    let (px, py) = ((x as f64 + 0.5) * pitch * 1e-3, (y as f64 + 0.5) * pitch * 1e-3);
-                    let (u, w) = (px * v.1 - py * v.0, px * v.0 + py * v.1);
-                    let c = crate::rag::cloth3(u as f32, w as f32, cs, pressure) as f64;
-                    let fl = crate::drying::fluid(ic.cure) as f64;
-                    (1.0 - (-rate * fl).exp()) * c * m as f64
+            for (j, st) in stretches.iter().enumerate() {
+                let v = st.v;
+                let pressure = st.pose.force.clamp(0.0, 1.0);
+                let p = PAD_PA * pressure.max(0.01) as f64;
+                let ct = Contact {
+                    reach: Box::new(move |w, x| yarn_dip_um(YARN_UM, w.min(2.0 * YARN_UM)) + if w > 2.0 * YARN_UM { sag_um(w, x, p, b) } else { 0.0 }),
+                    lee: Box::new(move |h| lee_um(h, p, b)),
                 };
-                let asks = self.reach_sweep(&cells, v, &ct, &rims, &frac);
-                let want: f64 = asks.iter().map(|a| a.2 + a.3.iter().sum::<f64>()).sum::<f64>() * unit;
-                let room = (1.0 - rag.load as f64).max(0.0) * cap;
-                let scale = if want > room && want > 0.0 { room / want } else { 1.0 };
-                let (got, mix, each) = self.take(&asks, scale);
-                let got_um3 = got * unit;
-                // the face's surface: laid back as it slides, soaking in
-                let cl = rag.cloth.as_mut().unwrap();
-                let n = quarters.ceil().max(1.0) as usize;
-                let (sm, so) = (1.0 - (1.0 - crate::rag::SMEAR as f64).powf(quarters / n as f64), 1.0 - (1.0 - crate::rag::SOAK as f64).powf(quarters / n as f64));
-                let got_mix: [f32; INKS] = if got > 0.0 { std::array::from_fn(|i| (mix[i] / got) as f32) } else { [0.0; INKS] };
-                let mut lay_mix = [0.0f64; INKS];
-                let mut lay_um3 = 0.0f64;
-                for _ in 0..n {
-                    let a = sm * cl.pool_um3;
-                    for i in 0..INKS {
-                        lay_mix[i] += a * cl.pool_mix[i] as f64;
-                    }
-                    lay_um3 += a;
-                    let left = (cl.pool_um3 - a) * (1.0 - so);
-                    let add = got_um3 / n as f64;
-                    let t = left + add;
-                    if t > 0.0 {
+                {
+                    let cells = &st.cells;
+                    // the area the pad passes over (a pass's share a cell) and the quarter-pad steps it slides
+                    swept += cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit;
+                    let quarters = (4.0 * st.len_mm / pad_mm).max(1e-3);
+                    let rate = crate::rag::LIFT as f64 * (0.7 + 0.6 * pressure as f64) * rag.thirst() as f64;
+                    let cs = rag.cloth_seed(((pass as u64) << 32) | j as u64);
+                    let pitch = self.pitch;
+                    let frac = |x: usize, y: usize, m: f32, ic: &InkCell| {
+                        // the pad's creases, in its own frame (mm), moving `v`
+                        let (px, py) = ((x as f64 + 0.5) * pitch * 1e-3, (y as f64 + 0.5) * pitch * 1e-3);
+                        let (u, w) = (px * v.1 - py * v.0, px * v.0 + py * v.1);
+                        let c = crate::rag::cloth3(u as f32, w as f32, cs, pressure) as f64;
+                        let fl = crate::drying::fluid(ic.cure) as f64;
+                        (1.0 - (-rate * fl * m as f64).exp()) * c
+                    };
+                    let asks = self.reach_sweep(cells, v, &ct, &rims, &frac);
+                    let want: f64 = asks.iter().map(|a| a.2 + a.3.iter().sum::<f64>()).sum::<f64>() * unit;
+                    let room = (1.0 - rag.load as f64).max(0.0) * cap;
+                    let scale = if want > room && want > 0.0 { room / want } else { 1.0 };
+                    let (got, mix, each) = self.take(&asks, scale);
+                    let got_um3 = got * unit;
+                    // the face's surface: laid back as it slides, soaking in
+                    let cl = rag.cloth.as_mut().unwrap();
+                    // (the ink the face comes to this stretch with)
+                    let (pool_in, pool_in_mix) = (cl.pool_um3, cl.pool_mix);
+                    let n = quarters.ceil().max(1.0) as usize;
+                    let (sm, so) = (1.0 - (1.0 - crate::rag::SMEAR as f64).powf(quarters / n as f64), 1.0 - (1.0 - crate::rag::SOAK as f64).powf(quarters / n as f64));
+                    let got_mix: [f32; INKS] = if got > 0.0 { std::array::from_fn(|i| (mix[i] / got) as f32) } else { [0.0; INKS] };
+                    let mut lay_mix = [0.0f64; INKS];
+                    let mut lay_um3 = 0.0f64;
+                    for _ in 0..n {
+                        let a = sm * cl.pool_um3;
                         for i in 0..INKS {
-                            cl.pool_mix[i] = ((cl.pool_mix[i] as f64 * left + got_mix[i] as f64 * add) / t) as f32;
+                            lay_mix[i] += a * cl.pool_mix[i] as f64;
+                        }
+                        lay_um3 += a;
+                        let left = (cl.pool_um3 - a) * (1.0 - so);
+                        let add = got_um3 / n as f64;
+                        let t = left + add;
+                        if t > 0.0 {
+                            for i in 0..INKS {
+                                cl.pool_mix[i] = ((cl.pool_mix[i] as f64 * left + got_mix[i] as f64 * add) / t) as f32;
+                            }
+                        }
+                        cl.pool_um3 = t;
+                    }
+                    let lay_shares: [f32; INKS] = if lay_um3 > 0.0 { std::array::from_fn(|i| (lay_mix[i] / lay_um3) as f32) } else { [0.0; INKS] };
+                    // laid where the cloth touched, out of the lee
+                    let shield = if self.contact { self.shields_tiled(v, &*ct.lee) } else { self.shields(v, &*ct.lee) };
+                    let wts: Vec<(usize, usize, f64)> = cells.iter().map(|&(x, y, m)| {
+                        let sf = shield.as_ref().map_or(0.0, |(f, _)| f[y * self.w + x] as f64);
+                        (x, y, m as f64 * (1.0 - sf))
+                    }).collect();
+                    // what it lays at a cell is what its face carries there: a
+                    // point of the face slides along its track, so the pool it
+                    // lays from is the ink it took along the track, fading by
+                    // the smear law behind it, from where the last stretch left
+                    // it if the pad goes on the same way, else from its share of
+                    // the pool the face came to the stretch with (the face
+                    // `pad_um` wide, a track a cell's). (The face's pool, kept
+                    // whole above, counts the volumes it lays.)
+                    if carry.0 != Some(v) {
+                        carry = (Some(v), std::collections::HashMap::new());
+                    }
+                    for (k, a) in asks.iter().enumerate() {
+                        at[a.1 * self.w + a.0] = k as u32;
+                    }
+                    let track_share = self.pitch / pad_um;
+                    let mut carried = vec![lay_shares; cells.len()];
+                    let mut pool = [0.0f64; INKS];
+                    let mut last: Option<(i64, f64)> = None;
+                    for &(row, s, ci) in &tracks(cells, v) {
+                        match last {
+                            Some((r, s0)) if r == row => {
+                                let keep = (-fade_um * (s - s0) * self.pitch).exp();
+                                pool.iter_mut().for_each(|q| *q *= keep);
+                            }
+                            _ => {
+                                if let Some((r, s0)) = last {
+                                    carry.1.insert(r, (s0, pool));
+                                }
+                                pool = match carry.1.get(&row) {
+                                    Some(&(s0, q)) if s >= s0 => {
+                                        let keep = (-fade_um * (s - s0) * self.pitch).exp();
+                                        q.map(|v| v * keep)
+                                    }
+                                    _ => std::array::from_fn(|i| pool_in * track_share * pool_in_mix[i] as f64),
+                                };
+                            }
+                        }
+                        last = Some((row, s));
+                        let (x, y, _) = cells[ci];
+                        if let Some(&(t, sh)) = each.get(at[y * self.w + x] as usize) {
+                            for i in 0..INKS {
+                                pool[i] += t * unit * sh[i] as f64;
+                            }
+                        }
+                        let sum: f64 = pool.iter().sum();
+                        if sum > 0.0 {
+                            carried[ci] = std::array::from_fn(|i| (pool[i] / sum) as f32);
                         }
                     }
-                    cl.pool_um3 = t;
-                }
-                let lay_shares: [f32; INKS] = if lay_um3 > 0.0 { std::array::from_fn(|i| (lay_mix[i] / lay_um3) as f32) } else { [0.0; INKS] };
-                // laid where the cloth touched, out of the lee
-                let shield = if self.contact { self.shields_tiled(v, &*ct.lee) } else { self.shields(v, &*ct.lee) };
-                let wts: Vec<(usize, usize, f64)> = cells.iter().map(|&(x, y, m)| {
-                    let sf = shield.as_ref().map_or(0.0, |(f, _)| f[y * self.w + x] as f64);
-                    (x, y, m as f64 * (1.0 - sf))
-                }).collect();
-                // what it lays at a cell is what its face carries there: a
-                // point of the face slides along its track, so the pool it
-                // lays from is the ink it took along the track, fading by
-                // the smear law behind it; on the first sweep, with its
-                // share of the pool the face came to the plate with (the face
-                // `pad_um` wide, a track a cell's). (The face's pool, kept
-                // whole above, counts the volumes it lays.)
-                let entering = if pass == 0 && j == 0 { pool0_um3 } else { 0.0 };
-                for (k, a) in asks.iter().enumerate() {
-                    at[a.1 * self.w + a.0] = k as u32;
-                }
-                let track_share = self.pitch / pad_um;
-                let mut carried = vec![lay_shares; cells.len()];
-                let mut pool = [0.0f64; INKS];
-                let mut last: Option<(i64, f64)> = None;
-                for &(row, s, ci) in &tracks[j] {
-                    match last {
-                        Some((r, s0)) if r == row => {
-                            let keep = (-fade_um * (s - s0) * self.pitch).exp();
-                            pool.iter_mut().for_each(|q| *q *= keep);
-                        }
-                        _ => pool = std::array::from_fn(|i| entering * track_share * pool0_mix[i] as f64),
+                    if let Some((r, s0)) = last {
+                        carry.1.insert(r, (s0, pool));
                     }
-                    last = Some((row, s));
-                    let (x, y, _) = cells[ci];
-                    if let Some(&(t, sh)) = each.get(at[y * self.w + x] as usize) {
-                        for i in 0..INKS {
-                            pool[i] += t * unit * sh[i] as f64;
-                        }
+                    for a in &asks {
+                        at[a.1 * self.w + a.0] = u32::MAX;
                     }
-                    let sum: f64 = pool.iter().sum();
-                    if sum > 0.0 {
-                        carried[ci] = std::array::from_fn(|i| (pool[i] / sum) as f32);
-                    }
+                    self.lay(&wts, lay_um3 / unit, |k| carried[k], 0.0);
+                    let cl = rag.cloth.as_mut().unwrap();
+                    cl.held_um3 += got_um3 - lay_um3;
+                    taken += got_um3;
+                    laid += lay_um3;
+                    let net_mm3 = (got_um3 - lay_um3) * 1e-9;
+                    rag.load = (rag.load as f64 + net_mm3 / (cap * 1e-9)).clamp(0.0, 1.0) as f32;
+                    rag.soaked = (rag.soaked as f64 + net_mm3 / (cap * 1e-9 * crate::rag::FACES as f64)).clamp(0.0, 1.0) as f32;
                 }
-                for a in &asks {
-                    at[a.1 * self.w + a.0] = u32::MAX;
-                }
-                self.lay(&wts, lay_um3 / unit, |k| carried[k], 0.0);
-                let cl = rag.cloth.as_mut().unwrap();
-                cl.held_um3 += got_um3 - lay_um3;
-                taken += got_um3;
-                laid += lay_um3;
-                let net_mm3 = (got_um3 - lay_um3) * 1e-9;
-                rag.load = (rag.load as f64 + net_mm3 / (cap * 1e-9)).clamp(0.0, 1.0) as f32;
-                rag.soaked = (rag.soaked as f64 + net_mm3 / (cap * 1e-9 * crate::rag::FACES as f64)).clamp(0.0, 1.0) as f32;
             }
         }
         let after = self.ink_um3();
-        let area_mm2 = area_um2 * 1e-6;
-        self.wipe_report(before, after, taken, laid, area_mm2, passes as f64 * area_mm2 / pace::TARLATAN_MM2_S, temp)
+        let area_mm2 = self.union(&stretches).len() as f64 * unit * 1e-6;
+        self.wipe_report(before, after, taken, laid, area_mm2, swept * 1e-6 / pace::TARLATAN_MM2_S, temp)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1331,110 +1443,121 @@ impl Plate {
         }
     }
 
-    /// The hand wipe (IP §5.4): the palm, soft, pressed at `pressure` 0..1
-    /// for `passes`. Skin bulges into each opening by `palm_dip_um` (the top
-    /// few µm of a fine line, the whole of an open bite), is held off past a
-    /// burr by `palm_lee_um` (under the contact laws, `contact`: propped up
-    /// by the gap the burr opens, `palm_gaps`, reaching only the ink above
-    /// it), and parts from the film it touches taking its
-    /// split share (`PALM_SPLIT`, or `WHITING_SPLIT` with whiting), each of
-    /// `PALM_TOUCHES` times a pass. The printer wipes the palm clean between
-    /// strokes: what it takes leaves the plate.
-    #[allow(clippy::too_many_arguments)]
-    pub fn hand_wipe(&mut self, mask: Option<&[f32]>, pressure: f32, passes: u32, whiting: bool, pattern: Pattern, now: f64) -> WipeReport {
+    /// The hand wipe (IP §5.4): the palm, soft, drawn along `pts` (mm; each
+    /// point's force the hand's pressure, 0..1) `passes` times. The palm,
+    /// `PALM_MM` across, slides along the points (`Plate::slide`) and rubs
+    /// each cell for its share of a pass there; each pass, skin bulges into
+    /// each opening by `palm_dip_um` (the top few µm of a fine line, the
+    /// whole of an open bite), is held off past a burr by `palm_lee_um`
+    /// (under the contact laws, `contact`: propped up by the gap the burr
+    /// opens, `palm_gaps`, reaching only the ink above it), and parts from
+    /// the film it touches taking its split share (`PALM_SPLIT`, or
+    /// `WHITING_SPLIT` with whiting), compounded over the share of a pass.
+    /// The printer wipes the palm clean between strokes: what it takes leaves
+    /// the plate. Nothing is wiped where the palm doesn't go.
+    pub fn hand_wipe(&mut self, pts: &[Point], passes: u32, whiting: bool, now: f64) -> WipeReport {
         self.age_ink(now);
         let temp = self.temp_c(now);
         let before = self.ink_um3();
-        let p = PALM_PA * pressure.clamp(0.01, 1.0) as f64;
-        let ct = Contact { reach: Box::new(move |w, x| palm_dip_um(w, x, p)), lee: Box::new(move |h| palm_lee_um(h, p)) };
-        let cells = self.masked(mask);
+        let stretches = self.slide(pts, &|_| PALM_MM, 0.25 * PALM_MM);
         let rims = self.rims();
-        let ways = pattern.ways();
-        let kk = ways.len() as f64;
         let q = if whiting { WHITING_SPLIT } else { PALM_SPLIT };
-        // (each way, the touches of a pass shared out: (1 − q)^(touches/K) left of what it reaches)
-        let keep = (1.0 - q).powf(PALM_TOUCHES / kk);
         let unit = self.pitch * self.pitch;
-        let mut taken = 0.0f64;
-        // (the contact laws: the gap a burr props the skin up by, the same whichever way the palm moves)
-        let gaps = self.contact.then(|| self.palm_gaps(p));
+        let (mut taken, mut swept) = (0.0f64, 0.0f64);
+        // (the contact laws: the gap a burr props the skin up by at each pressure the palm is
+        // pressed with, the same whichever way it moves)
+        let mut gaps: std::collections::HashMap<u64, std::collections::HashMap<usize, [f32; SUB * SUB]>> = std::collections::HashMap::new();
         for _ in 0..passes {
-            for &v in &ways {
-                let frac = |_: usize, _: usize, m: f32, ic: &InkCell| (1.0 - keep) * crate::drying::fluid(ic.cure) as f64 * m as f64;
-                let asks = match &gaps {
-                    Some(g) => self.reach_sweep_gap(&cells, &ct, &rims, &frac, g),
-                    None => self.reach_sweep(&cells, v, &ct, &rims, &frac),
+            for st in &stretches {
+                let p = PALM_PA * st.pose.force.clamp(0.01, 1.0) as f64;
+                let ct = Contact { reach: Box::new(move |w, x| palm_dip_um(w, x, p)), lee: Box::new(move |h| palm_lee_um(h, p)) };
+                swept += st.cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit;
+                let frac = |_: usize, _: usize, m: f32, ic: &InkCell| (1.0 - (1.0 - q).powf(m as f64)) * crate::drying::fluid(ic.cure) as f64;
+                let asks = if self.contact {
+                    let g = gaps.entry(p.to_bits()).or_insert_with(|| self.palm_gaps(p));
+                    self.reach_sweep_gap(&st.cells, &ct, &rims, &frac, g)
+                } else {
+                    self.reach_sweep(&st.cells, st.v, &ct, &rims, &frac)
                 };
                 taken += self.take(&asks, 1.0).0 * unit;
             }
         }
         let after = self.ink_um3();
-        let area_mm2 = cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit * 1e-6;
-        self.wipe_report(before, after, taken, 0.0, area_mm2, passes as f64 * area_mm2 / pace::PALM_MM2_S, temp)
+        let area_mm2 = self.union(&stretches).len() as f64 * unit * 1e-6;
+        self.wipe_report(before, after, taken, 0.0, area_mm2, swept * 1e-6 / pace::PALM_TOUCH_MM2_S, temp)
     }
 
-    /// Retroussage (IP §5.4): a soft muslin passed lightly over the wiped
-    /// plate `passes` times. Its fibre ends hang into every opening wider
-    /// than a fibre (`FIBRE_UM`) and draw up as much as capillarity lifts in
-    /// their touch (`washburn_um`: more on a warm plate, the ink thinner),
-    /// and lay it on the plate within `RETRO_BAND_MM` around, but for the
-    /// share that soaks into the cloth (`rag::SOAK`), which leaves the plate.
-    pub fn retrousse(&mut self, mask: Option<&[f32]>, passes: u32, now: f64) -> WipeReport {
+    /// Retroussage (IP §5.4): a soft muslin `width_mm` across passed lightly
+    /// along `pts` (mm) over the wiped plate `passes` times, rubbing each cell
+    /// for its share of a pass (`Plate::slide`). Its fibre ends hang into every opening wider than a
+    /// fibre (`FIBRE_UM`) and draw up as much as capillarity lifts in their
+    /// touch (`washburn_um`: more on a warm plate, the ink thinner), by the
+    /// share of a pass, and lay
+    /// it on the plate within `RETRO_BAND_MM` around, but for the share that
+    /// soaks into the cloth (`rag::SOAK`), which leaves the plate. Nothing is
+    /// drawn up where the cloth doesn't go.
+    pub fn retrousse(&mut self, pts: &[Point], width_mm: f64, passes: u32, now: f64) -> WipeReport {
         self.age_ink(now);
         let temp = self.temp_c(now);
         let before = self.ink_um3();
-        let cells = self.masked(mask);
+        let stretches = self.slide(pts, &|_| width_mm, 0.25 * width_mm);
         let unit = self.pitch * self.pitch;
         let band = ((RETRO_BAND_MM * 1000.0 / self.pitch).round() as i64).max(1);
         let inks: Vec<Ink> = self.ink.as_ref().map(|k| k.inks.clone()).unwrap_or_default();
-        let (mut taken, mut laid) = (0.0f64, 0.0f64);
+        let (mut taken, mut laid, mut swept) = (0.0f64, 0.0f64, 0.0f64);
         for _ in 0..passes {
-            let mut moves: Vec<(usize, usize, f64, [f32; INKS], f32)> = Vec::new();
-            for &(x, y, m) in &cells {
-                let ic = self.ink_cell(x, y);
-                if ic.lines() <= 0.0 {
-                    continue;
-                }
-                let c = self.cell(x, y);
-                let sh = ic.shares();
-                let eta: f64 = inks.iter().enumerate().map(|(i, k)| sh[i] as f64 * k.eta(temp)).sum::<f64>().max(1e-6);
-                let up = washburn_um(eta, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64;
-                let mut t = 0.0f64;
-                let mut cell = ic;
-                for k in 0..BINS {
-                    // a fibre hangs in and touches the ink, and draws up its capillary rise
-                    if c.open[k] <= 0.0 || ic.line[k] <= 0.0 || (c.wsum[k] / c.open[k]) as f64 <= FIBRE_UM {
-                        continue;
-                    }
-                    let a = (c.open[k] as f64 * up).min(ic.line[k] as f64) * m as f64;
-                    cell.line[k] = (cell.line[k] as f64 - a).max(0.0) as f32;
-                    t += a;
-                }
-                if t > 0.0 {
-                    *self.ink_cell_mut(x, y) = cell;
-                    moves.push((x, y, t, sh, ic.cure));
-                }
-            }
-            for (x, y, t, sh, cure) in moves {
-                taken += t * unit;
-                let lay = t * (1.0 - crate::rag::SOAK as f64);
-                laid += lay * unit;
-                let mut wts = Vec::new();
-                for dy in -band..=band {
-                    for dx in -band..=band {
-                        let (xx, yy) = (x as i64 + dx, y as i64 + dy);
-                        if xx < 0 || yy < 0 || xx >= self.w as i64 || yy >= self.h as i64 || dx * dx + dy * dy > band * band {
+            for st in &stretches {
+                {
+                    let cells = &st.cells;
+                    swept += cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit;
+                    let mut moves: Vec<(usize, usize, f64, [f32; INKS], f32)> = Vec::new();
+                    for &(x, y, m) in cells {
+                        let ic = self.ink_cell(x, y);
+                        if ic.lines() <= 0.0 {
                             continue;
                         }
-                        wts.push((xx as usize, yy as usize, 1.0));
+                        let c = self.cell(x, y);
+                        let sh = ic.shares();
+                        let eta: f64 = inks.iter().enumerate().map(|(i, k)| sh[i] as f64 * k.eta(temp)).sum::<f64>().max(1e-6);
+                        let up = washburn_um(eta, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64;
+                        let mut t = 0.0f64;
+                        let mut cell = ic;
+                        for k in 0..BINS {
+                            // a fibre hangs in and touches the ink, and draws up its capillary rise
+                            if c.open[k] <= 0.0 || ic.line[k] <= 0.0 || (c.wsum[k] / c.open[k]) as f64 <= FIBRE_UM {
+                                continue;
+                            }
+                            let a = (c.open[k] as f64 * up).min(ic.line[k] as f64) * m as f64;
+                            cell.line[k] = (cell.line[k] as f64 - a).max(0.0) as f32;
+                            t += a;
+                        }
+                        if t > 0.0 {
+                            *self.ink_cell_mut(x, y) = cell;
+                            moves.push((x, y, t, sh, ic.cure));
+                        }
+                    }
+                    for (x, y, t, sh, cure) in moves {
+                        taken += t * unit;
+                        let lay = t * (1.0 - crate::rag::SOAK as f64);
+                        laid += lay * unit;
+                        let mut wts = Vec::new();
+                        for dy in -band..=band {
+                            for dx in -band..=band {
+                                let (xx, yy) = (x as i64 + dx, y as i64 + dy);
+                                if xx < 0 || yy < 0 || xx >= self.w as i64 || yy >= self.h as i64 || dx * dx + dy * dy > band * band {
+                                    continue;
+                                }
+                                wts.push((xx as usize, yy as usize, 1.0));
+                            }
+                        }
+                        self.lay(&wts, lay, |_| sh, cure);
                     }
                 }
-                self.lay(&wts, lay, |_| sh, cure);
             }
         }
         let after = self.ink_um3();
-        let area_mm2 = cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit * 1e-6;
-        self.wipe_report(before, after, taken, laid, area_mm2, passes as f64 * area_mm2 / pace::RETRO_MM2_S, temp)
+        let area_mm2 = self.union(&stretches).len() as f64 * unit * 1e-6;
+        self.wipe_report(before, after, taken, laid, area_mm2, swept * 1e-6 / pace::RETRO_MM2_S, temp)
     }
 
     // ------------------------------------------------------------ looking

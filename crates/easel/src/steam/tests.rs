@@ -114,6 +114,31 @@ fn sift_a_stick_dry_and_steamed() {
     assert!(state(&r) == state(&s), "the log replays to the same sheet");
 }
 
+/// Under the switch `blow` weighs the water bridges: a heap sifted through a small sieve and
+/// steamed stays whole under a hard blow (12 m/s: u* 1.4 m/s against a 0.5 mm wet crumb's 2.0,
+/// paint's `a_hard_blow_clears_a_dry_heap_and_leaves_a_wet_one`), where the same heap dry goes.
+#[test]
+fn a_blow_leaves_a_steamed_heap() {
+    let px = |s: &Session| s.st.borrow().canvas.as_ref().unwrap().pixels().to_vec();
+    for steamed in [false, true] {
+        let mut s = live();
+        run(&mut s, PAPER);
+        run(&mut s, "sift(pile{{\"vermilion\", 1}}, {{500, 500}}, {amount=10, sieve=20})");
+        if steamed {
+            run(&mut s, "steam({{500, 500}}, {seconds=5})");
+        }
+        let before = px(&s);
+        let out = run(&mut s, "print(\"off=\" .. blow(500, 500))");
+        if steamed {
+            assert!(printed(&out, "off") == 0.0 && px(&s) == before, "the wet heap stays: {out}");
+        } else {
+            assert!(px(&s) != before, "the dry heap goes: {out}");
+        }
+        let r = replay(&s.program("x")).unwrap();
+        assert!(state(&r) == state(&s), "the log replays to the same sheet");
+    }
+}
+
 /// `steam` asks for its seconds and keeps the kettle where the jet has mixed; `sift` asks for
 /// its amount and won't crush a stick shorter than the fingers hold. Both take the points the
 /// hand moves along: a mask, a function or nil (the whole sheet) is refused, saying so.

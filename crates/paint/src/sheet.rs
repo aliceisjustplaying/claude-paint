@@ -203,8 +203,64 @@ fn fines_reach_paper(diff: f32, tau_p: f32, vs: f32, us: f32) -> f32 {
 /// Shao & Lu (2000): the friction velocity that sets loose grains of `d_um`
 /// and density `rho` (kg/m³) moving on a bed, m/s (A_N = 0.0123, γ = 3e-4 N/m).
 fn shao_lu(d_um: f32, rho: f32) -> f32 {
+    shao_lu_held(d_um, rho, SHAO_LU_GAMMA)
+}
+
+/// Shao & Lu's balance with the grains held by `gamma` N/m: the moments of
+/// drag and lift, ∝ ρ_a u*² d³, against the weight's (π/6) ρ_p g d⁴ and an
+/// interparticle force βd's, give u*² = A_N (σ_p g d + γ/(ρ_a d)) with
+/// γ = (6/π)(a_i/a_l) β, a_i/a_l the ratio of their moment arms (their eqs.
+/// 20–22).
+fn shao_lu_held(d_um: f32, rho: f32, gamma: f32) -> f32 {
     let d = d_um * 1e-6;
-    (0.0123 * (rho / AIR_KG_M3 * 9.81 * d + 3e-4 / (AIR_KG_M3 * d))).sqrt()
+    (0.0123 * (rho / AIR_KG_M3 * 9.81 * d + gamma / (AIR_KG_M3 * d))).sqrt()
+}
+
+/// Shao & Lu's dry cohesion, N/m (their fit to wind-tunnel thresholds).
+const SHAO_LU_GAMMA: f32 = 3e-4;
+
+/// A wet crumb's hold in Shao & Lu's balance, N/m (the steam-and-sift
+/// switch, notes/research/steam_sift.md §5): a liquid bridge to the wetted
+/// sheet holds a sphere with 4πγ_w R = 2πγ_w d (cos θ ≈ 1 on both faces;
+/// Israelachvili; Butt & Kappl 2009), whatever the water in it while the
+/// bridge is small against the crumb (its force doesn't depend on its
+/// volume): the tap's law (`steam::wet_fall_um`). It pulls at the same
+/// contact as the dry hold, so on the same arm, and adds to γ as it adds to
+/// the force: γ (1 + 2πγ_w d/F_dry), with the dry hold `ADHESION_N` at the
+/// 100 µm crumb where both are set (`HEAP_CRUMB_UM`; Shao & Lu fit 50–1800
+/// µm). With the pores' gum water (γ_w = 50 mN/m) the bridge is 31 µN, 630
+/// times the dry 50 nN: 0.19 N/m (0.06–0.9 over the dry hold's 10–150 nN).
+fn wet_hold() -> f32 {
+    let bridge_n = std::f32::consts::TAU * crate::steam::GAMMA as f32 * HEAP_CRUMB_UM * 1e-6;
+    SHAO_LU_GAMMA * (1.0 + bridge_n / ADHESION_N)
+}
+
+/// The size bins a puff weighs wet crumbs over (log-spaced, crumb to the
+/// largest): their thresholds differ a hundredfold.
+const WET_BINS: usize = 12;
+
+/// Wet crumbs from `lo` to `hi` µm, `finer(d)` the share of their mass finer
+/// than d, under a shear of friction velocity `us`: per bin, its threshold
+/// (m/s, `shao_lu_held` at `wet_hold`, the crumb full of water) and the
+/// share of all their mass it sets going (through the 0.8–1.25 ramp of the
+/// threshold that `blow_pastel_with` gives the heap).
+fn wet_set_going(us: f32, lo: f32, hi: f32, finer: impl Fn(f32) -> f32, out: &mut Vec<(f32, f32)>) {
+    out.clear();
+    if hi <= lo {
+        return;
+    }
+    let (rho, g) = (crate::steam::WET_CRUMB_KG_M3 as f32, wet_hold());
+    let k = (hi / lo).powf(1.0 / WET_BINS as f32);
+    let total = finer(hi) - finer(lo);
+    if total <= 0.0 {
+        return;
+    }
+    for b in 0..WET_BINS {
+        let (a, c) = (lo * k.powi(b as i32), lo * k.powi(b as i32 + 1));
+        let ut = shao_lu_held((a * c).sqrt(), rho, g);
+        let share = (finer(c) - finer(a)) / total * crate::smoothstep(0.8, 1.25, us / ut);
+        out.push((ut, share));
+    }
 }
 
 /// Through-thickness shear modulus of a drawing paper, MPa: 16–127 measured
@@ -763,6 +819,21 @@ impl Canvas {
     /// on the paper mask goes with it; what falls on wet paint is lost in it,
     /// on the picture).
     pub fn blow_pastel(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32) -> f32 {
+        self.blow_pastel_with(x, y, h_mm, u, d_mm, false)
+    }
+
+    /// `blow_pastel`, and with `bridges` (the steam-and-sift switch) a liquid
+    /// bridge holds the loose pastel of a cell that holds water to the sheet
+    /// (`wet_hold`): each crumb's threshold is Shao & Lu's with the bridge
+    /// beside its weight, over the crumbs' sizes (a sift's, crushed to its
+    /// sieve; a stroke's, their mass even in area up to `CRUMB_MAX_UM`).
+    /// A hard blow (12 m/s, u* at most 1.4 m/s) moves none (a 0.5 mm wet
+    /// crumb's threshold is 2.0 m/s); a bulb's 60 m/s close in only the
+    /// larger ones, on a ring a few mm across. What the shear sets going rolls out to where it
+    /// no longer keeps each moving, as the dry heap does, at its own
+    /// threshold; it doesn't hop (the hops are a dry 100 µm crumb's
+    /// entrainment). The pores' fine grains are held the same way.
+    pub fn blow_pastel_with(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32, bridges: bool) -> f32 {
         if self.drawing.is_none() || !(h_mm > 0.0 && u > 0.0 && d_mm > 0.0) {
             return 0.0;
         }
@@ -775,6 +846,10 @@ impl Canvas {
         let r_peak = 0.09 * h_mm;
         let w_um = self.paper.as_ref().map_or(30.0, |p| p.fiber_um);
         let (ut_heap, ut_fine) = (shao_lu(HEAP_CRUMB_UM, CRUMB_KG_M3), shao_lu(5.0, 2500.0));
+        // (a wet pore's fine grains: a solid grain bridged as a crumb is)
+        let ut_fine_wet = shao_lu_held(5.0, 2500.0, wet_hold());
+        let (mut wet_sift, mut wet_stroke) = (Vec::new(), Vec::new());
+        let (amin, amax) = (crate::pastel::CRUMB_MIN_UM.powi(2), CRUMB_MAX_UM * CRUMB_MAX_UM);
         let tau_at = |r: f32| -> f32 {
             if r <= r_peak { tau_max * r / r_peak.max(1e-6) } else { tau_max * (r_peak / r).powf(2.3) }
         };
@@ -871,30 +946,78 @@ impl Canvas {
                 // the heap goes past its threshold (shear fluctuates: a ramp, not a cut)
                 let heap_goes = ramp(us / ut_heap);
                 let mut heap = (v - mu).max(0.0).min(cl.loose);
+                // (water bridges hold it to the sheet: `wet_hold`)
+                let wet = bridges && cl.water > 0.0;
                 // and the pores' fine grains as deep as the flow keeps the shear
-                let z = if us > ut_fine { w_um / 2.105 * (us / ut_fine).ln() } else { 0.0 };
+                let ut_f = if wet { ut_fine_wet } else { ut_fine };
+                let z = if us > ut_f { w_um / 2.105 * (us / ut_f).ln() } else { 0.0 };
                 let mut in_pores = v.min(mu);
-                // (dry sifted crumbs lie on the tooth, `crate::steam`: they are
-                // heaped whatever the pores hold)
+                // (sifted crumbs lie on the tooth, `crate::steam`: they are
+                // heaped whatever the pores hold; dry ones only, unless the
+                // bridges are weighed)
                 let perch = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH);
-                let lp = perch.map_or(0.0, |p| crate::steam::blowable(p, cl)).min(cl.loose);
+                let (lp, top) = match perch {
+                    Some(p) if wet => crate::steam::loose_perched(p, cl),
+                    Some(p) => (crate::steam::blowable(p, cl), 0.0),
+                    None => (0.0, 0.0),
+                };
+                let lp = lp.min(cl.loose);
                 if lp > heap {
                     heap = lp;
                     in_pores = (v - lp).min(mu);
                 }
+                // what of the heap the shear sets going: wet, the sifted crumbs
+                // by their crushing's sizes to the sieve's, the rest by a
+                // stroke's (`tap_pastel`), each size at its bridged threshold
+                let (heap_take, lp_take) = if wet {
+                    let sift_part = lp.min(heap);
+                    wet_set_going(us, crate::pastel::CRUMB_MIN_UM, top, |d| crate::steam::ggs_finer(d as f64, top as f64) as f32, &mut wet_sift);
+                    wet_set_going(us, crate::pastel::CRUMB_MIN_UM, CRUMB_MAX_UM, |d| ((d * d).clamp(amin, amax) - amin) / (amax - amin), &mut wet_stroke);
+                    let ls: f32 = sift_part * wet_sift.iter().map(|e| e.1).sum::<f32>();
+                    (ls + (heap - sift_part) * wet_stroke.iter().map(|e| e.1).sum::<f32>(), ls)
+                } else {
+                    (heap * heap_goes, lp * heap_goes)
+                };
+                if wet && heap_take <= 0.0 && z <= 0.0 {
+                    // (held: nothing goes, not even a rounding's worth)
+                    continue;
+                }
                 let keep_pores = if z > 0.0 { Self::below(in_pores, mu, z) } else { in_pores };
-                let keep = keep_pores + (v - in_pores) - heap * heap_goes;
+                let keep = keep_pores + (v - in_pores) - heap_take;
                 let r = cl.r;
                 let ex = Self::take_loose(cl, &mut pxs[i], keep);
                 if lp > 0.0 {
                     if let Some(p) = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
-                        crate::steam::blown(p, (lp * heap_goes).min(ex));
+                        crate::steam::blown(p, lp_take.min(ex));
                     }
                 }
                 if ex > 0.0 {
                     let k = sector(wx, wy);
-                    let crumbs = (heap * heap_goes).min(ex);
-                    if crumbs > 0.0 {
+                    let crumbs = heap_take.min(ex);
+                    if crumbs > 0.0 && wet {
+                        ccarry[k].take(ccol[k].0, crumbs, cl);
+                        mix(&mut ccol[k], crumbs, r);
+                        // each size rolls out to where the shear falls to its
+                        // stopping ratio (0.6–0.85) of its own threshold
+                        let sift_part = lp.min(heap);
+                        let scale = crumbs / heap_take.max(1e-9);
+                        for (part, bins) in [(sift_part, &wet_sift), (heap - sift_part, &wet_stroke)] {
+                            for &(ut, share) in bins.iter() {
+                                let v = part * share * scale;
+                                if v <= 0.0 {
+                                    continue;
+                                }
+                                const NC: usize = 8;
+                                for m in 0..NC {
+                                    let c = 0.6 + (m as f32 + 0.5) / NC as f32 * 0.25;
+                                    let stop = (r_peak * (ustar_max / (c * ut)).max(1.0).powf(1.0 / 1.15)).max(rr);
+                                    if bin(stop) < nb {
+                                        dep[k][bin(stop)] += v / NC as f32;
+                                    }
+                                }
+                            }
+                        }
+                    } else if crumbs > 0.0 {
                         ccarry[k].take(ccol[k].0, crumbs, cl);
                         mix(&mut ccol[k], crumbs, r);
                         let flights = hop_at(rr);

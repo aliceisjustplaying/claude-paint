@@ -1212,8 +1212,10 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
                 return err("blow: distance 5–500 mm, speed 1–80 m/s (a hard blow 12, peaks to 64; a bulb 20–60), nozzle 1–40 mm (lips about 8)");
             }
             crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                // (under the steam-and-sift switch water bridges hold wet pastel to the sheet)
+                let bridges = s.tubes.steam_sift;
                 let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-                let v = c.blow_pastel(x, y, h, u, d);
+                let v = c.blow_pastel_with(x, y, h, u, d, bridges);
                 c.tally_mut().secs += 1.5;
                 Ok(v)
             })

@@ -122,10 +122,10 @@ const PRIMARY_UM: f64 = crate::wet_pastel::PARTICLE_D_UM as f64;
 /// A dry crumb's density, kg/m³ (pigment and chalk about 2500, the crumb
 /// about half pores: sheet.rs's `CRUMB_KG_M3`), and wet, its pores full.
 const CRUMB_KG_M3: f64 = 1250.0;
-const WET_CRUMB_KG_M3: f64 = CRUMB_KG_M3 + 0.5 * 998.2;
+pub(crate) const WET_CRUMB_KG_M3: f64 = CRUMB_KG_M3 + 0.5 * 998.2;
 /// The pores' water, its gum dissolved: surface tension N/m (the wet pastel
 /// switch's, gum arabic's 47–57 mN/m [M]).
-const GAMMA: f64 = 0.050;
+pub(crate) const GAMMA: f64 = 0.050;
 /// Dropwise condensation's self-similar coverage, the share of a surface
 /// its drops cover once they coalesce: about 0.5 (simulations 0.5 on every
 /// substrate, Int. J. Heat Mass Transfer 2011; Beysens et al.'s θ = 90°
@@ -547,6 +547,14 @@ pub(crate) fn tap(p: &mut [f32], c: &Cell, g: f32) -> (f32, f32, f32) {
 pub(crate) fn blowable(p: &mut [f32], c: &Cell) -> f32 {
     sync(p, c);
     if c.water > 0.0 { 0.0 } else { p[P_L] * (1.0 - p[P_HELD].clamp(0.0, 1.0)) }
+}
+
+/// The loose perched crumbs at cell `c`, wet or dry (as they lie, µm), and
+/// the largest of them, µm: what a puff weighs against their hold when a
+/// liquid bridge may hold them (sheet.rs `blow_pastel_with`).
+pub(crate) fn loose_perched(p: &mut [f32], c: &Cell) -> (f32, f32) {
+    sync(p, c);
+    (p[P_L] * (1.0 - p[P_HELD].clamp(0.0, 1.0)), p[P_TOP])
 }
 
 /// `taken` of a cell's loose perched crumbs (as they lie, µm) went with a puff.

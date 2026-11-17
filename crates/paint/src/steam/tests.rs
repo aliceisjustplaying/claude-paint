@@ -290,13 +290,14 @@ fn sifting_and_tapping_conserve_the_pastel() {
     }
 }
 
-/// A puff takes dry sifted crumbs as it takes the heap; wet ones it leaves.
+/// A puff takes dry sifted crumbs as it takes the heap; wet ones it leaves
+/// (the thin sift: no heap over the pores).
 #[test]
 fn a_puff_blows_dry_crumbs_off_and_leaves_wet_ones() {
     let mut dry = paper();
     dry.sift(MIDDLE, 30.0, 0.5, SIEVE, &stick(), 3).unwrap();
     let (l0, _) = dry.perched_mm3();
-    dry.blow_pastel(500.0, 500.0, 50.0, 12.0, 8.0);
+    dry.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
     let (l1, _) = dry.perched_mm3();
     assert!(l1 < 0.95 * l0, "{l1} of {l0}");
     let mut wet = paper();
@@ -305,7 +306,7 @@ fn a_puff_blows_dry_crumbs_off_and_leaves_wet_ones() {
     // over the pores)
     wet.sift(MIDDLE, 3.5, 0.5, SIEVE, &stick(), 3).unwrap();
     let w0 = wet.perched_mm3();
-    wet.blow_pastel(500.0, 500.0, 50.0, 12.0, 8.0);
+    wet.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
     assert_eq!(wet.perched_mm3(), w0);
 }
 
@@ -329,3 +330,74 @@ fn the_checkpoint_keeps_the_sifted_crumbs() {
     assert_eq!(r.perched_mm3(), c.perched_mm3());
 }
 
+
+/// A heap: 30 mm³ through a 20 mm sieve, about 95 µm of stick over the mesh's
+/// disc, far more than the tooth's pores take.
+const HEAP_SIEVE: f64 = 20.0;
+
+fn heap(steamed: bool) -> Canvas {
+    let mut c = paper();
+    c.sift(MIDDLE, 30.0, 0.5, HEAP_SIEVE, &stick(), 3).unwrap();
+    if steamed {
+        // (200 mm off for 5 s: water on every cell the sieve reached)
+        c.steam(MIDDLE, 5.0, 200.0).unwrap();
+    }
+    c
+}
+
+/// A hard blow (12 m/s from the lips, 8 mm, 50 mm off) clears a dry heap and
+/// leaves a wet one whole. Its wall shear peaks at τ = 44.6 ρU² Re^(−½)
+/// (h/d)^(−2) = 2.5 Pa, u* 1.43 m/s, past a dry 100 µm crumb's 0.2 m/s
+/// (Shao & Lu) sevenfold. A wet crumb's bridge, 2πγd with γ 50 mN/m (31 µN
+/// at 100 µm, 630 times a dry grain's 50 nN), makes Shao & Lu's cohesion
+/// 3e-4 × 630 = 0.19 N/m: the threshold √(0.0123 (ρ g d/ρ_a + 0.19/(ρ_a d)))
+/// (ρ 1750) is least for the sieve's largest, 0.5 mm, 2.0 m/s, and the ramp
+/// starts at 0.8 of it, 1.6 m/s: none moves.
+#[test]
+fn a_hard_blow_clears_a_dry_heap_and_leaves_a_wet_one() {
+    let mut dry = heap(false);
+    let (l0, _) = dry.perched_mm3();
+    dry.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
+    let (l1, _) = dry.perched_mm3();
+    assert!(l0 > 20.0 && l1 < 0.05 * l0, "the dry heap: {l1} of {l0} left");
+    let mut wet = heap(true);
+    let (w0, p0, px0) = (wet.perched_mm3(), wet.pastel_mm3(), wet.pixels().to_vec());
+    let off = wet.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
+    assert_eq!((wet.perched_mm3(), wet.pastel_mm3(), off), (w0, p0, 0.0));
+    assert_eq!(wet.pixels(), px0);
+}
+
+/// A bulb's hard puff close in (60 m/s through 4 mm, 20 mm off: u* up to
+/// 5.9 m/s on a ring 1.8 mm out, falling as r^(−1.15) past it) moves the
+/// wet heap's larger crumbs, near the ring only. A wet crumb's threshold
+/// falls with its size (the bridge grows as d, the drag as d²): 0.5 mm ones
+/// go from 1.6 m/s, 0.1 mm ones from 3.5, and under about 35 µm none can;
+/// so less leaves the wet heap than the dry one, and some does.
+#[test]
+fn a_bulb_close_in_moves_only_the_largest_wet_crumbs() {
+    let mut dry = heap(false);
+    let mut wet = heap(true);
+    let (d0, _) = dry.perched_mm3();
+    let (w0, _) = wet.perched_mm3();
+    dry.blow_pastel_with(500.0, 500.0, 20.0, 60.0, 4.0, true);
+    wet.blow_pastel_with(500.0, 500.0, 20.0, 60.0, 4.0, true);
+    let moved = |a: f64, b: f64| a - b;
+    let (dm, wm) = (moved(d0, dry.perched_mm3().0), moved(w0, wet.perched_mm3().0));
+    assert!(wm > 0.0 && wm < 0.5 * dm, "wet {wm} mm³ moved, dry {dm}");
+}
+
+/// Off the switch (`blow_pastel`, as every log without `--@ steam-sift`
+/// replays) a puff still moves wet pastel as it did; on it, dry pastel
+/// moves exactly as before.
+#[test]
+fn bridges_change_only_wet_pastel_on_the_switch() {
+    let (mut a, mut b) = (heap(false), heap(false));
+    let va = a.blow_pastel(500.0, 500.0, 50.0, 12.0, 8.0);
+    let vb = b.blow_pastel_with(500.0, 500.0, 50.0, 12.0, 8.0, true);
+    assert_eq!(va, vb);
+    assert_eq!(a.pixels(), b.pixels());
+    let mut old = heap(true);
+    let (w0, _) = old.perched_mm3();
+    old.blow_pastel(500.0, 500.0, 50.0, 12.0, 8.0);
+    assert!(old.perched_mm3().0 < 0.5 * w0, "off the switch the wet heap blows as before");
+}

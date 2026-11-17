@@ -180,6 +180,24 @@ const LIQUID_FILM_LEVELS: u64 = 1 << 40;
 const SEALED_DRAWING_GUIDE: u64 = 1 << 41;
 const DRAWING_OPTICS: u64 = 1 << 42;
 
+// Tests only: write engine 9's latents as a checkpoint from before bone
+// black's own slot (`mixer::BONE_BLACK_K`), to check such a file still reads.
+#[cfg(test)]
+thread_local! {
+    static WRITE_BEFORE_BONE_BLACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn writes_before_bone_black() -> bool {
+    #[cfg(test)]
+    {
+        WRITE_BEFORE_BONE_BLACK.with(|c| c.get())
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
 
@@ -491,7 +509,8 @@ impl Canvas {
         if material {
             put_u64(w, if backing { 21 } else if layers { 20 } else { 19 })?;
         }
-        put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else if self.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() })?;
+        let before = writes_before_bone_black();
+        put_u64(w, if self.spectral_films() { if before { crate::mixer::film_identity_before_bone_black() } else { crate::mixer::film_identity() } } else if self.engine >= crate::PIGMENT_MIXER { if before { crate::mixer::identity9_before_bone_black() } else { crate::mixer::identity9() } } else { crate::mixer::identity() })?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
         let f = self.f;
@@ -526,7 +545,7 @@ impl Canvas {
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
-        let width = if self.engine >= crate::PIGMENT_MIXER { LAT } else { crate::mixer::LEGACY_LATENT_SIZE };
+        let width = if self.engine >= crate::PIGMENT_MIXER { if writes_before_bone_black() { crate::mixer::LATENT_SIZE_BEFORE_BONE_BLACK } else { LAT } } else { crate::mixer::LEGACY_LATENT_SIZE };
         put_all(w, wt.lat.iter().flat_map(|l| l.color[..width].iter().copied()))?;
         if version >= 11 {
             // (engine 4's five properties: the pigment's packing, `Prop`'s
@@ -629,7 +648,7 @@ impl Canvas {
                 put_u64(w, pixel.layers.len() as u64)?;
                 for layer in &pixel.layers {
                     put_f32(w, layer.share)?;
-                    put_all(w, layer.lat.color.into_iter())?;
+                    put_all(w, layer.lat.color[..if writes_before_bone_black() { crate::mixer::LATENT_SIZE_BEFORE_BONE_BLACK } else { LAT }].iter().copied())?;
                     put_all(w, layer.hide.into_iter())?;
                     put_u64(w, layer.lat.parts.len() as u64)?;
                     for &(i, amount) in &layer.lat.parts {
@@ -671,6 +690,10 @@ impl Canvas {
         let spectral_backing = version == 21;
         let own_mixer = version >= 19;
         let identity = if own_mixer { get_u64(r)? } else { 0 };
+        // (written before engine 9's bone-black slot: its latents are one
+        // float narrower, and read widened with a zero, `mixer::BONE_BLACK_K`)
+        let before_bone_black = own_mixer && (identity == crate::mixer::identity9_before_bone_black() || identity == crate::mixer::film_identity_before_bone_black());
+        let identity = if !before_bone_black { identity } else if identity == crate::mixer::identity9_before_bone_black() { crate::mixer::identity9() } else { crate::mixer::film_identity() };
         if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::identity9() && identity != crate::mixer::film_identity() {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
@@ -754,7 +777,7 @@ impl Canvas {
         let mut wet = crate::wet::Wet::new(0);
         wet.floor = vec![0.0; n];
         wet.vol = get_all(r, n)?;
-        let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else { LAT };
+        let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else if before_bone_black { crate::mixer::LATENT_SIZE_BEFORE_BONE_BLACK } else { LAT };
         if own_mixer {
             // the stored latents go straight into the pixels' (no copy of them all as floats)
             let mut lat = Vec::with_capacity(n);
@@ -997,7 +1020,9 @@ impl Canvas {
                 if count > 1 << 20 { return Err(bad("checkpoint layer count is invalid")); }
                 for _ in 0..count {
                     let share = get_f32(r)?;
-                    let color: [f32; LAT] = get_all(r, LAT)?.try_into().unwrap();
+                    let mut color = [0.0f32; LAT];
+                    let stored = if before_bone_black { crate::mixer::LATENT_SIZE_BEFORE_BONE_BLACK } else { LAT };
+                    color[..stored].copy_from_slice(&get_all(r, stored)?);
                     let hide: crate::wet::Prop = get_all(r, 10)?.try_into().unwrap();
                     if !share.is_finite() || share <= 0.0 || !color.iter().chain(&hide).all(|x| x.is_finite()) { return Err(bad("checkpoint layer is invalid")); }
                     let mut lat = crate::wet::Latent::from_color(color);
@@ -1155,6 +1180,42 @@ pub struct Aside {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    /// A checkpoint written before engine 9's bone-black slot
+    /// (`mixer::BONE_BLACK_K`, latents one float narrower, the old identity)
+    /// still reads, film layers and all: its latents are widened with a zero
+    /// and its paint is as it was.
+    #[test]
+    fn a_checkpoint_from_before_the_bone_black_slot_reads() {
+        let mut c = Canvas::new(48, 1.0, [0.9; 3]).with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
+        let mut p = crate::Palette::new("old checkpoint", crate::palette::catalog());
+        p.engine = crate::PIGMENT_MIXER;
+        p.glaze_film = true;
+        let black = p.tubes.iter().position(|t| t.name == "bone black").unwrap();
+        let paint = p.pile(vec![(black, 0.2), (0, 0.8)]).laid(0.0);
+        let color = *paint.pigment_latent.as_ref().unwrap();
+        for (i, lat) in c.wet.lat.iter_mut().enumerate().take(200) {
+            lat.color = color;
+            if i % 2 == 0 {
+                lat.layers.push(crate::wet::Layer { share: 1.0, lat: crate::wet::Latent::from_color(color), hide: [0.5; 10] });
+            }
+            c.wet.vol[i] = 0.02;
+        }
+        let mut new = Vec::new();
+        c.write_state(&mut new, "").unwrap();
+        WRITE_BEFORE_BONE_BLACK.with(|f| f.set(true));
+        let mut old = Vec::new();
+        let written = c.write_state(&mut old, "");
+        WRITE_BEFORE_BONE_BLACK.with(|f| f.set(false));
+        written.unwrap();
+        assert!(old.len() < new.len());
+        let (a, b) = (load(new.clone()).unwrap(), load(old).unwrap());
+        assert!(a.wet.lat.iter().zip(&b.wet.lat).all(|(x, y)| x.color == y.color && x.layers == y.layers));
+        assert!(b.wet.lat[0].layers.len() == 1 && b.wet.lat[0].color[crate::mixer::LATENT_SIZE_BEFORE_BONE_BLACK..].iter().all(|&v| v == 0.0));
+        let mut again = Vec::new();
+        b.write_state(&mut again, "").unwrap();
+        assert!(again == new, "read back, it writes as a new checkpoint");
+    }
 
     fn set(b: &mut [u8], pos: usize, v: u64) {
         b[pos..pos + 8].copy_from_slice(&v.to_le_bytes());

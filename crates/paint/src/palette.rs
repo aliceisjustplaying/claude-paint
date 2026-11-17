@@ -826,6 +826,10 @@ pub struct Palette {
     /// is the single-cure film engine 9 was released with, and every other
     /// engine's.
     pub material: u32,
+    /// Engine 9: bone black takes its own K per volume, carbon's 1/λ-like
+    /// absorption fitted to its measured tints (`crate::mixer::BONE_BLACK_K`;
+    /// the easel's session.rs `BONE_BLACK_MARK`): new paintings.
+    pub bone_black: bool,
     lat: Vec<[f32; crate::mixer::LATENT_SIZE]>,
     lat9: Vec<[f32; crate::mixer::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
@@ -842,7 +846,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, bone_black: self.bone_black, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -863,7 +867,7 @@ impl Palette {
         }).unwrap_or_else(|| crate::mixer::encode_tube9(&t.color, t.hiding))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, lat, lat9, scat, pack, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, bone_black: false, lat, lat9, scat, pack, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -873,7 +877,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, bone_black: self.bone_black, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -975,12 +979,18 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, bone_black: self.bone_black, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
     pub fn drying_of(&self, t: &Tube) -> f32 {
         if self.engine >= 3 { t.drying_3 } else { t.drying }
+    }
+
+    /// With the bone-black switch, engine 9's tube `i` in a slot of its own
+    /// (`mixer::tube9_bone_black`), if it has one.
+    fn own_latent9(&self, i: usize) -> Option<[f32; crate::mixer::LATENT_SIZE]> {
+        if self.bone_black && self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube9_bone_black(self.tubes[i].name) } else { None }
     }
 
     /// Masstone, scattering per coat and stiffness of a mixture.
@@ -991,8 +1001,11 @@ impl Palette {
         for &(i, f) in parts {
             let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
             let w = f * strength;
+            // (the bone-black switch: the tube's own slot, `mixer::BONE_BLACK_K`)
+            let own = self.own_latent9(i);
+            let tube = own.as_ref().unwrap_or(&tubes[i]);
             for k in 0..crate::mixer::LATENT_SIZE {
-                lat[k] += tubes[i][k] * w;
+                lat[k] += tube[k] * w;
             }
             wsum += w;
             sct += self.scat[i] * f;
@@ -1040,7 +1053,7 @@ impl Palette {
     pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
         if self.engine >= crate::PIGMENT_MIXER {
             let originals = catalog();
-            let pigment = |i: usize| crate::mixer::tube(self.tubes[i].name).or_else(|| {
+            let pigment = |i: usize| self.own_latent9(i).or_else(|| crate::mixer::tube(self.tubes[i].name)).or_else(|| {
                 let t = &self.tubes[i];
                 originals.iter().find(|original| original.name == t.name)
                     .filter(|original| original.color == t.color && original.hiding == t.hiding)
@@ -1132,6 +1145,31 @@ impl Mixture {
 
 #[cfg(test)]
 mod tests {
+    /// With the bone-black switch, engine 9's bone black piles in its own
+    /// slot (`mixer::BONE_BLACK_K`), in oil and dry; without it, and in any
+    /// other engine, as before, and no other tube changes.
+    #[test]
+    fn the_bone_black_switch_gives_bone_black_its_own_slot() {
+        let mut off = super::Palette::new("bone black switch", super::catalog());
+        off.engine = crate::PIGMENT_MIXER;
+        let mut on = off.clone();
+        on.bone_black = true;
+        let black = off.tubes.iter().position(|t| t.name == "bone black").unwrap();
+        let white = off.tubes.iter().position(|t| t.name == "lead white").unwrap();
+        let slot = crate::mixer::LATENT_SIZE_BEFORE_BONE_BLACK;
+        let (a, b) = (off.pile(vec![(black, 0.1), (white, 0.9)]), on.pile(vec![(black, 0.1), (white, 0.9)]));
+        assert_eq!(a.pigment_latent[slot], 0.0);
+        assert!(b.pigment_latent[slot] > 0.0 && b.pigment_latent[3] == 0.0);
+        assert_ne!(a.color, b.color);
+        assert_ne!(off.dry_color(&[(black, 1.0)]), on.dry_color(&[(black, 1.0)]));
+        for i in (0..off.tubes.len()).filter(|&i| i != black) {
+            assert_eq!(off.pile(vec![(i, 1.0)]).pigment_latent, on.pile(vec![(i, 1.0)]).pigment_latent, "{}", off.tubes[i].name);
+        }
+        let mut old_engine = on.clone();
+        old_engine.engine = crate::ENGINE;
+        assert_eq!(old_engine.pile(vec![(black, 1.0)]).pigment_latent[slot], 0.0);
+    }
+
     #[test]
     fn customized_researched_tubes_keep_their_rgb_dry_color() {
         for name in ["yellow ochre", "raw umber", "cadmium red"] {

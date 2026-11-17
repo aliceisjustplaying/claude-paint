@@ -304,6 +304,15 @@ painting whose log's head has no `--@ touch-split` line keeps the touch it
 was painted with: a thin coat whatever the load, which on wet paint lays
 less than it lifts.)
 
+A stroke's hairs never lift back the paint the same stroke has just laid:
+the paint between the brush and the canvas parts once, where the brush
+leaves it. Over wet paint a stroke lifts some of what was there (at most
+its brush's `pickup` share), and the brush comes away dirtied with it.
+(A painting whose log's head has no `--@ stroke-split` line keeps the
+stroke it was painted with. There, the hairs behind lifted back part of
+what the hairs ahead laid, about a fifth on bare canvas, and more on wet
+paint and with more hairs.)
+
 Brushes are blunt unless given a `point` (0 blunt, 1 a full point). A
 pointed round or rigger lays a hairline at light pressure and spreads to
 its belly when pressed, so its width follows the pressure and a stroke

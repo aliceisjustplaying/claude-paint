@@ -68,6 +68,10 @@ pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
 /// lays where it starts, and a dragged touch what a stroke of its drag lays
 /// (`paint::Canvas::with_touch_split`). Every new painting has it.
 pub const TOUCH_SPLIT_MARK: &str = "--@ touch-split";
+/// A log's head line: a stroke's hairs don't lift back the paint the
+/// stroke itself laid; on wet paint it lifts only from what was there
+/// (`paint::Canvas::with_stroke_split`). Every new painting has it.
+pub const STROKE_SPLIT_MARK: &str = "--@ stroke-split";
 /// A log's head line: its rag keeps what it lifts and a mask wipe stays
 /// inside its mask (`paint::Canvas::with_rag_lift`). Every new painting has
 /// it.
@@ -754,6 +758,9 @@ impl Session {
         }
         if self.st.borrow().tubes.touch_split {
             let _ = writeln!(s, "{TOUCH_SPLIT_MARK}");
+        }
+        if self.st.borrow().tubes.stroke_split {
+            let _ = writeln!(s, "{STROKE_SPLIT_MARK}");
         }
         if self.st.borrow().tubes.blend_at_masks {
             let _ = writeln!(s, "{BLEND_MARK}");
@@ -1550,7 +1557,8 @@ fn box_list() -> String {
 /// joins limbs to the nearest limb; an existing one's as its log says
 /// (`LIMBS_MARK`), and likewise for the blender's feather
 /// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`), the
-/// touch's split (`TOUCH_SPLIT_MARK`) and blends and glazes at masks (`BLEND_MARK`).
+/// touch's split (`TOUCH_SPLIT_MARK`), the stroke's split
+/// (`STROKE_SPLIT_MARK`) and blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
@@ -1576,6 +1584,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.blend_feather = true;
         b.brush_skim = true;
         b.touch_split = true;
+        b.stroke_split = true;
         b.rag_lift = true;
         b.drain = true;
         return Ok(b);
@@ -1605,6 +1614,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let touch_split = head(TOUCH_SPLIT_MARK);
     if touch_split && !paint::engine7::active(engine) {
         return Err(format!("the log's touch split switch ({TOUCH_SPLIT_MARK}) requires engine 7, 8 or 9"));
+    }
+    let stroke_split = head(STROKE_SPLIT_MARK);
+    if stroke_split && !paint::engine7::active(engine) {
+        return Err(format!("the log's stroke split switch ({STROKE_SPLIT_MARK}) requires engine 7, 8 or 9"));
     }
     let drain = logged_drain(text);
     if drain && engine < 5 {
@@ -1649,6 +1662,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
     b.touch_split = touch_split;
+    b.stroke_split = stroke_split;
     b.rag_lift = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == RAG_LIFT_MARK);
     if b.rag_lift && !paint::engine7::active(engine) {
         return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7, 8 or 9"));
@@ -2094,6 +2108,70 @@ mod tests {
         }
         assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
     }
+
+    /// The marks of `stroke_split_log`: a knife of wet white, two filbert
+    /// strokes across it and beside it, and a dragged touch.
+    const STROKE_SPLIT_MARKS: &str = "k = knife{width=120}; k:load(pile{{\"lead white\", 1}}, 1); k:lay({{500, 300}, {500, 700}}, {pressure={0.45, 0.45}}); b = brush{kind=\"filbert\", width=40}; b:load(pile{{\"cobalt blue\", 1}}, 0.6); b:stroke({{350, 500}, {650, 500}}); b:stroke({{350, 200}, {650, 200}}, {ramps={0, 0}}); b:touch(500, 600, {pressure=0.8, drag={60, 0}})";
+
+    /// A new painting's strokes don't lift back their own paint
+    /// (`paint::Canvas::with_stroke_split`), and its log's head says so; a
+    /// replay of that log and a save of it do too. A log without the line
+    /// replays byte for byte as the engine before the switch painted it
+    /// (the canvas's saved state hashes to what the unchanged engine at
+    /// 8f9f98b9 gave for this log), and the line only counts in the head.
+    #[test]
+    fn new_paintings_record_the_stroke_split_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=200, aspect=1, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        live.run(STROKE_SPLIT_MARKS).unwrap();
+        assert!(live.canvas().unwrap().stroke_split());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{TOUCH_SPLIT_MARK}\n{STROKE_SPLIT_MARK}\n")), "{text}");
+        let old = STROKE_SPLIT_OLD_LOG.to_string();
+        assert_eq!(text.replace(&format!("{STROKE_SPLIT_MARK}\n"), ""), old, "the new head is the old one and the line");
+        let mut laid = Vec::new();
+        for (log, split) in [(text.clone(), true), (old.clone(), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let c = replay.canvas().unwrap();
+            assert_eq!(c.stroke_split(), split);
+            assert!(c.touch_split());
+            assert_eq!(replay.program("p"), log);
+            laid.push(c.wet_total());
+            let mut saved = Vec::new();
+            c.write_state(&mut saved, "").unwrap();
+            if !split {
+                // (from the base build: `easel` at 8f9f98b9, this log)
+                assert_eq!(format!("{:016x}", crate::save::fnv1a(&saved)), STROKE_SPLIT_OLD_FNV, "the old log no longer replays as painted");
+            }
+            let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+            assert_eq!(restored.stroke_split(), split);
+        }
+        let mut live_saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut live_saved, "").unwrap();
+        let mut replay_saved = Vec::new();
+        let mut replay = Session::replay_with(240, box_for(Some(&text)).unwrap()).unwrap();
+        for chunk in parse_program(&text) {
+            replay.run(&chunk).unwrap();
+        }
+        replay.canvas().unwrap().write_state(&mut replay_saved, "").unwrap();
+        assert!(live_saved == replay_saved, "a replay of the new log paints as the live session did");
+        assert!(laid[0] > laid[1], "the split keeps a stroke's own paint: {} against {} without", laid[0], laid[1]);
+        // (a line past the head is not the switch)
+        let late = old.clone() + &format!("{STROKE_SPLIT_MARK}\n");
+        assert!(!box_for(Some(&late)).unwrap().stroke_split);
+        assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
+    }
+
+    /// `new_paintings_record_the_stroke_split_and_older_logs_replay_without_it`:
+    /// the log the easel at 8f9f98b9 (before the switch) wrote for its
+    /// marks, and fnv1a of the saved canvas state after replaying it there
+    /// (`Session::replay_with`, 240 px, `write_state(.., "")`).
+    const STROKE_SPLIT_OLD_LOG: &str = "-- easel session \"p\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 9\n--@ knife-skim\n--@ palette-carried-paint\n--@ limbs-join-nearest\n--@ reload-finite\n--@ blend-feather\n--@ brush-skim\n--@ touch-split\n--@ blend-at-masks\n--@ glaze-film\n--@ liquid-film-levels\n--@ sealed-drawing-guide\n--@ drawing-optics\n--@ rag-lift\n--@ full-palette-refuses\n--@ pastel-current-heap\n--@ calls-agree\n--@ drain\n\n--@ chunk 1\ncanvas{size=200, aspect=1, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}\n\n--@ chunk 2\nk = knife{width=120}; k:load(pile{{\"lead white\", 1}}, 1); k:lay({{500, 300}, {500, 700}}, {pressure={0.45, 0.45}}); b = brush{kind=\"filbert\", width=40}; b:load(pile{{\"cobalt blue\", 1}}, 0.6); b:stroke({{350, 500}, {650, 500}}); b:stroke({{350, 200}, {650, 200}}, {ramps={0, 0}}); b:touch(500, 600, {pressure=0.8, drag={60, 0}})\n";
+    const STROKE_SPLIT_OLD_FNV: &str = "d1418f338f35be21";
 
     /// A new painting's touches lay the film a stroke starts with
     /// (`paint::Canvas::with_touch_split`), and its log's head says so; a

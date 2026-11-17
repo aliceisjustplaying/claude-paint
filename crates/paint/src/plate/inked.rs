@@ -62,9 +62,34 @@ pub const KD_PACKING: f64 = 0.64;
 /// Linseed oil's viscosity halves for every 15–20 °C of warming (IP §5.1,
 /// standard oil data): the middle.
 pub const HALVING_C: f64 = 17.5;
-/// The ink's yield stress (Pa): IP §5.1's 10²–10³ for stiff letterpress and
-/// offset inks, their geometric middle [E: none measured for etching ink].
+/// The ink's yield stress (Pa) at a pigment share `PVC_REF`: IP §5.1's
+/// 10²–10³ for stiff letterpress and offset inks, their geometric middle [E:
+/// none measured for etching ink; offset inks measure 50–620 Pa by falling rod
+/// (ASTM D4040; IP §5.8)], at the pigment share of a stiff paste ink, 0.33
+/// [E: Gamblin's etching inks are 50–60 % solids by weight, 0.27–0.44 by
+/// volume in bone or carbon black; banknote intaglio inks 0.23–0.29]. It
+/// rises with the pigment share as a flocculated suspension's does,
+/// (φ/φ_ref)^5.5 [M: zinc white in linseed oil, τ_y ∝ φ^5.5, Salvant
+/// Plisson et al. 2014] (`Ink::yield_pa`).
 pub const YIELD_PA: f64 = 300.0;
+pub const PVC_REF: f64 = 0.33;
+pub const YIELD_EXP: f64 = 5.5;
+/// A copperplate ink, as an ink maker grinds it: dry pigment worked into
+/// heavy burnt plate oil until it is a stiff, short paste, at 0.75 of the
+/// pigment's critical volume share [E: Gamblin's bone black etching ink,
+/// 50–60 % solids by weight, is 0.27–0.36 of its volume, 0.6–0.8 of bone
+/// black's critical share 0.45 (its oil absorption 43–49 g/100 g); IP §5.8].
+/// The critical share is the pigment's own packing in oil, from its oil
+/// absorption OA (g/100 g) and density ρ: 1/(1 + OA·ρ/(100·ρ_oil)), linseed
+/// oil 0.93 g/cm³ [M, the standard CPVC relation (ASTM D281)].
+pub const COPPERPLATE_CPVC: f64 = 0.75;
+/// The most pigment to the volume a copperplate ink holds against its tubes'
+/// paste: what a pile can be printed as, its paste with half its oil drawn
+/// out (`Mixture::paint`'s negative medium, at most 1.5 times the tube's
+/// pigment) [D: the print's paint must hold the ink's pigment; only bone black
+/// in its most oily tube (the impressionist box's) reaches it, by 0.6 %].
+pub const DENSE_MAX: f64 = 1.5;
+pub const OIL_G_CM3: f64 = 0.93;
 /// The share of an opening's volume the ink fills when nothing else limits
 /// it: air trapped at the bottom of the groove under the card's bead [E:
 /// plan-intaglio §5.1's 0.9 until Unknown 3 is weighed].
@@ -247,6 +272,17 @@ pub fn fill(w: f64, d: f64, p: f64, t: f64, eta: f64, tau: f64) -> f64 {
 /// `p` Pa leaves on the flat (`SLIDER_K`).
 pub fn card_film_um(eta: f64, u_mm_s: f64, p: f64) -> f64 {
     (6.0 * SLIDER_K * eta * u_mm_s * 1e-3 * CARD_EDGE_MM * 1e-3 / p.max(1.0)).sqrt() * 1e6
+}
+
+/// The viscosity (Pa·s, at `temp_c`) and yield stress (Pa) of a cell's ink of
+/// shares `sh` of `inks`, each by its share.
+fn rheology(inks: &[Ink], sh: &[f32; INKS], temp_c: f64) -> (f64, f64) {
+    let (mut eta, mut tau) = (0.0f64, 0.0f64);
+    for (i, k) in inks.iter().enumerate() {
+        eta += sh[i] as f64 * k.eta(temp_c);
+        tau += sh[i] as f64 * k.yield_pa();
+    }
+    (eta.max(1e-6), tau)
 }
 
 /// A cloth's sag (µm) at `x` µm in from the rim of a gap `w` µm wide, pressed
@@ -901,6 +937,18 @@ pub fn washburn_um(eta: f64, t: f64) -> f64 {
     (OIL_TENSION * MUSLIN_PORE_UM * 1e-6 * t / (2.0 * eta.max(1e-6))).sqrt() * 1e6
 }
 
+/// How deep (µm) a cloth's pores draw an ink of viscosity `eta` (Pa·s) and
+/// yield stress `tau` (Pa) up in `t` s: Lucas–Washburn (`washburn_um`), but
+/// no further than a plug of it can be drawn into a pore, where the
+/// capillary pressure 2γ/r over the pore's section meets the yield stress on
+/// its wall, 2πr·L·τ_y: L = γ/τ_y, whatever the pore's size [D: a Bingham
+/// liquid's capillary rise]. A stiff ink stops tens of µm in; a loose one is
+/// drawn as far as its viscosity lets it.
+pub fn capillary_um(eta: f64, tau: f64, t: f64) -> f64 {
+    let cap = if tau > 0.0 { OIL_TENSION / tau * 1e6 } else { f64::INFINITY };
+    washburn_um(eta, t).min(cap)
+}
+
 /// A plate's thermal time constant (s) cooling in air: ρ·c·t/h.
 pub fn cool_s(metal: Metal, thickness_mm: f64) -> f64 {
     let rho_c = match metal {
@@ -911,6 +959,15 @@ pub fn cool_s(metal: Metal, thickness_mm: f64) -> f64 {
 }
 
 // ---------------------------------------------------------------- the ink
+
+/// How an ink's pigment comes: as the box's tube paste, at the tubes' own
+/// pigment share, or as a copperplate ink, dry pigment ground stiff in burnt
+/// plate oil by the ink maker (`COPPERPLATE_CPVC` of its critical share).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Paste {
+    Tube,
+    Copperplate,
+}
 
 /// An etching ink: tubes from the box ground in burnt plate oil.
 #[derive(Clone, Debug, PartialEq)]
@@ -935,11 +992,24 @@ impl Ink {
     /// An ink of `tubes` (names and parts) from `pal`, with `oil` of plate oil
     /// of grade `stiff` added. Err: a tube the box hasn't.
     pub fn of_tubes(pal: &crate::palette::Palette, tubes: &[(String, f32)], oil: f32, stiff: f32, name: String) -> Result<Ink, String> {
+        Self::made(pal, tubes, oil, stiff, Paste::Tube, name)
+    }
+
+    /// An ink of the pigments of `tubes` (names and parts by volume of tube
+    /// paste) from `pal`, as `paste` comes, with `oil` of plate oil of grade
+    /// `stiff` added. A copperplate ink holds its pigments at
+    /// `COPPERPLATE_CPVC` of their critical share (`cpvc`): more pigment to
+    /// the volume than the tubes' paste, so its absorption and scattering per
+    /// coat are the tubes' times the ratio of the shares, and its viscosity
+    /// and yield stress the stiffer paste's. Err: a tube the box hasn't.
+    pub fn made(pal: &crate::palette::Palette, tubes: &[(String, f32)], oil: f32, stiff: f32, paste: Paste, name: String) -> Result<Ink, String> {
         let total: f32 = tubes.iter().map(|t| t.1.max(0.0)).sum();
         if tubes.is_empty() || total <= 0.0 {
             return Err("an ink needs a tube and its parts".into());
         }
         let (mut k, mut s, mut pvc, mut drying) = ([0.0f32; 3], [0.0f32; 3], 0.0f32, 0.0f32);
+        // (the oil each pigment's volume takes to fill its packing, OA·ρ/(100·ρ_oil), by pigment volume)
+        let (mut demand, mut pig_vol) = (0.0f64, 0.0f64);
         for (n, parts) in tubes {
             let i = pal.tubes.iter().position(|t| t.name == n.as_str()).ok_or_else(|| format!("the box {:?} has no tube {n:?}", pal.name))?;
             let t = &pal.tubes[i];
@@ -952,10 +1022,42 @@ impl Ink {
             let (_, _, oil_share) = crate::palette::tube_packing(t, pal.name);
             pvc += share * (1.0 - oil_share);
             drying += share * pal.drying_of(t);
+            let v = share as f64 * (1.0 - oil_share as f64);
+            demand += v * t.oa as f64 * t.density as f64 / (100.0 * OIL_G_CM3);
+            pig_vol += v;
         }
+        // a copperplate ink: its pigments at their share of their critical share, the tubes'
+        // optics per coat raised by the ratio of the pigment shares
+        let dense = match paste {
+            Paste::Tube => 1.0,
+            Paste::Copperplate => {
+                let cpvc = 1.0 / (1.0 + demand / pig_vol.max(1e-12));
+                (COPPERPLATE_CPVC * cpvc / pvc.max(1e-6) as f64).min(DENSE_MAX) as f32
+            }
+        };
         // the plate oil added thins the pigment: its optics per coat and its share alike
         let thin = 1.0 - oil.clamp(0.0, 0.9);
-        Ok(Ink { name, tubes: tubes.to_vec(), oil, stiff, pvc: pvc * thin, k: k.map(|v| v * thin), s: s.map(|v| v * thin), drying })
+        let f = if paste == Paste::Tube { thin } else { dense * thin };
+        Ok(Ink { name, tubes: tubes.to_vec(), oil, stiff, pvc: pvc * f, k: k.map(|v| v * f), s: s.map(|v| v * f), drying })
+    }
+
+    /// How much more pigment to the volume it holds than its tubes' paste
+    /// thinned by its plate oil (1 for an ink of the tubes' paste; a
+    /// copperplate ink's ratio, `made`), read from its pigment share against
+    /// the tubes' in `pal`.
+    pub fn dense(&self, pal: &crate::palette::Palette) -> f32 {
+        let total: f32 = self.tubes.iter().map(|t| t.1.max(0.0)).sum();
+        let tube: f32 = self.tubes.iter().filter_map(|(n, parts)| {
+            let t = pal.tubes.iter().find(|t| t.name == n.as_str())?;
+            Some(parts.max(0.0) / total * (1.0 - crate::palette::tube_packing(t, pal.name).2))
+        }).sum();
+        let thin = 1.0 - self.oil.clamp(0.0, 0.9);
+        self.pvc / (tube * thin).max(1e-9)
+    }
+
+    /// Its yield stress (Pa): `YIELD_PA` at `PVC_REF`, as (φ/φ_ref)^`YIELD_EXP`.
+    pub fn yield_pa(&self) -> f64 {
+        YIELD_PA * (self.pvc as f64 / PVC_REF).powf(YIELD_EXP)
     }
 
     /// The ink as the oil paint it prints: its tubes from `pal` mixed by
@@ -970,7 +1072,14 @@ impl Ink {
         let parts = self.tubes.iter().map(|(n, p)| {
             pal.tubes.iter().position(|t| t.name == n.as_str()).map(|i| (i, p.max(0.0) / total)).ok_or_else(|| format!("the ink {:?} is made of tubes this box hasn't", self.name))
         }).collect::<Result<Vec<_>, _>>()?;
-        Ok(pal.pile(parts).laid(self.oil))
+        // a copperplate ink is the tubes' paste with more pigment to the volume: a pile thinned
+        // by a negative medium is that (`Mixture::paint`: 1 − medium the pigment's concentration)
+        let dense = self.dense(pal);
+        if (dense - 1.0).abs() < 1e-4 {
+            return Ok(pal.pile(parts).laid(self.oil));
+        }
+        let thin = 1.0 - self.oil.clamp(0.0, 0.9);
+        Ok(pal.pile(parts).laid(1.0 - dense * thin))
     }
 
     /// Its viscosity (Pa·s) at `temp_c`: the plate oil's, raised by its
@@ -1213,6 +1322,11 @@ struct Contact {
     /// stands clear (µm of the ink in a cell, none for skin).
     touch: Box<dyn Fn(&Prop) -> (Touch, Touch)>,
     wick: Option<Box<dyn Fn(&InkCell) -> f64>>,
+    /// The cloth's loose fibre ends hanging into the openings wherever it
+    /// goes: the depth (µm) they draw a cell's ink up from below its reach in
+    /// a touch, over the share of the opening their tips touch
+    /// (`FIBRE_END_SHARE`); none for skin.
+    lines_wick: Option<Box<dyn Fn(&InkCell) -> f64>>,
 }
 
 impl Plate {
@@ -1356,7 +1470,7 @@ impl Plate {
         self.age_ink(now);
         let idx = self.ink_index(ink)?;
         let temp = self.temp_c(now);
-        let eta = ink.eta(temp);
+        let (eta, tau) = (ink.eta(temp), ink.yield_pa());
         let w = tool.width_mm;
         // (the contact laws: a face is a smooth compliant body, its contact as wide as
         // `InkTool::contact_mm` at the hand's force and pressed by Hertz's law)
@@ -1436,7 +1550,7 @@ impl Plate {
                     continue;
                 }
                 let (w, d) = ((c.wsum[k] / c.open[k]) as f64, (c.vol[k] / c.open[k]) as f64);
-                let phi = fill(w, d, p, pt / p.max(1e-9), eta, YIELD_PA);
+                let phi = fill(w, d, p, pt / p.max(1e-9), eta, tau);
                 fsum += phi * c.vol[k] as f64;
                 fvol += c.vol[k] as f64;
                 ic.line[k] = ic.line[k].max((phi * c.vol[k] as f64) as f32);
@@ -1507,13 +1621,13 @@ impl Plate {
                     }
                     let c = self.cell(x, y);
                     let sh = ic.shares();
-                    let eta: f64 = inks.iter().enumerate().map(|(i, k)| sh[i] as f64 * k.eta(temp)).sum::<f64>().max(1e-6);
+                    let (eta, tau) = rheology(&inks, &sh, temp);
                     let mut out = ic;
                     let f = ic.film as f64;
                     let seen = met.entry((x, y)).or_insert((f, 0.0));
                     let (f0, t0) = *seen;
                     seen.1 += m as f64 * secs;
-                    let draw = washburn_um(eta, t0 + m as f64 * secs) - washburn_um(eta, t0);
+                    let draw = capillary_um(eta, tau, t0 + m as f64 * secs) - capillary_um(eta, tau, t0);
                     out.film = (f * (hr / (f0 + hs)).min(1.0).powf(m as f64)) as f32;
                     for k in 0..BINS {
                         let open = c.open[k] as f64;
@@ -1980,9 +2094,9 @@ impl Plate {
     ///   lift the film under their tips, up to what capillarity lifts in a
     ///   touch (`ct.wick`: retroussage's law), over the share of it the tips
     ///   touch (`FIBRE_END_SHARE`), by the share of a pass. While the face is
-    ///   on the plate they are fibres of its face, counted in r. (Its fibre
-    ///   ends hang into the lines wherever it goes, gap or not; what it takes
-    ///   from them is its reach.)
+    ///   on the plate they are fibres of its face, counted in r. Its fibre
+    ///   ends hang into the lines wherever it goes, gap or not, and draw up
+    ///   the ink below its reach by the same rise (`fibre_draw`).
     #[allow(clippy::type_complexity)]
     fn reach_sweep_gap(&self, cells: &[(usize, usize, f32)], ct: &Contact, rims: &[Option<Vec<f32>>], law: &dyn Fn(usize, usize, &InkCell) -> (f64, f64), gaps: &Gaps) -> Vec<(usize, usize, f64, [f64; BINS])> {
         let mut out = Vec::new();
@@ -2038,11 +2152,30 @@ impl Plate {
                     (flat / n, bins.map(|b| b / n))
                 }
             };
+            let depth = ct.lines_wick.as_ref().map_or(0.0, |w| w(&ic));
+            let mut bins = bins;
+            for (k, b) in bins.iter_mut().enumerate() {
+                *b += Self::fibre_draw(&c, k, ic.line[k] as f64 - reach[k], depth, m);
+            }
             if flat + bins.iter().sum::<f64>() > 0.0 {
                 out.push((x, y, flat, bins));
             }
         }
         out
+    }
+
+    /// What a cloth's loose fibre ends hanging into bin `k`'s openings draw up
+    /// in a share `m` of a pass (µm over the cell): their tips touch
+    /// `FIBRE_END_SHARE` of the opening, each drawing up the ink's capillary
+    /// rise in a touch, `depth` µm (`capillary_um`), from the `below` µm (over
+    /// the cell) the cloth's reach leaves [D: the fibre ends of retroussage's
+    /// muslin, in the tarlatan's yarns; IP §5.8]. A loose ink is drawn up
+    /// further than a stiff one, so it wipes out of the lines.
+    fn fibre_draw(c: &Cell, k: usize, below: f64, depth: f64, m: f64) -> f64 {
+        if below <= 0.0 || depth <= 0.0 || c.open[k] <= 0.0 {
+            return 0.0;
+        }
+        FIBRE_END_SHARE * m * below.min(c.open[k] as f64 * depth)
     }
 
     /// How a cell's film (`film` µm over the cell, the polish's `hold` under
@@ -2132,9 +2265,11 @@ impl Plate {
             let c = self.cell(x, y);
             let flat = (ic.film as f64 - self.polish_hold(&c)).max(0.0) * fr * (1.0 - sf);
             let mut bins = [0.0f64; BINS];
+            let depth = ct.lines_wick.as_ref().map_or(0.0, |w| w(&ic));
             for k in 0..BINS {
                 let rim = rims[k].as_ref().and_then(|r| (c.open[k] >= 0.5).then_some(r[i]));
-                bins[k] = Self::within_reach(&c, k, ic.line[k], rim, &*ct.reach) * fr * (1.0 - so);
+                let reach = Self::within_reach(&c, k, ic.line[k], rim, &*ct.reach);
+                bins[k] = reach * fr * (1.0 - so) + Self::fibre_draw(&c, k, ic.line[k] as f64 - reach, depth, m as f64) * (1.0 - so);
             }
             out.push((x, y, flat, bins));
         }
@@ -2257,6 +2392,7 @@ impl Plate {
                 let p = PAD_PA * pressure.max(0.01) as f64;
                 let face = Face::at(p);
                 let inks = inks.clone();
+                let inks2 = inks.clone();
                 let ct = Contact {
                     reach: Box::new(move |w, x| yarn_dip_um(YARN_UM, w.min(2.0 * YARN_UM)) + if w > 2.0 * YARN_UM { sag_um(w, x, p, b) } else { 0.0 }),
                     lee: Box::new(move |h| lee_um(h, p, b)),
@@ -2294,9 +2430,13 @@ impl Plate {
                     // the fibre ends in a gap: retroussage's capillary rise in a touch, over the
                     // share of the plate their tips touch
                     wick: Some(Box::new(move |ic: &InkCell| {
-                        let sh = ic.shares();
-                        let eta: f64 = inks.iter().enumerate().map(|(i, k)| sh[i] as f64 * k.eta(temp)).sum::<f64>().max(1e-6);
-                        washburn_um(eta, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64
+                        let (eta, tau) = rheology(&inks, &ic.shares(), temp);
+                        capillary_um(eta, tau, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64
+                    })),
+                    // and in the lines, wherever it goes: the same rise, from the ink below its reach
+                    lines_wick: Some(Box::new(move |ic: &InkCell| {
+                        let (eta, tau) = rheology(&inks2, &ic.shares(), temp);
+                        capillary_um(eta, tau, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64
                     })),
                 };
                 {
@@ -2520,6 +2660,7 @@ impl Plate {
                         (if pr.top.is_finite() { top } else { open }, open)
                     }),
                     wick: None,
+                    lines_wick: None,
                 };
                 swept += st.cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit;
                 let frac = |_: usize, _: usize, m: f32, ic: &InkCell| (1.0 - (1.0 - q).powf(m as f64)) * crate::drying::fluid(ic.cure) as f64;
@@ -2568,8 +2709,8 @@ impl Plate {
                         }
                         let c = self.cell(x, y);
                         let sh = ic.shares();
-                        let eta: f64 = inks.iter().enumerate().map(|(i, k)| sh[i] as f64 * k.eta(temp)).sum::<f64>().max(1e-6);
-                        let up = washburn_um(eta, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64;
+                        let (eta, tau) = rheology(&inks, &sh, temp);
+                        let up = capillary_um(eta, tau, RETRO_TOUCH_S) * crate::drying::fluid(ic.cure) as f64;
                         let mut t = 0.0f64;
                         let mut cell = ic;
                         for k in 0..BINS {

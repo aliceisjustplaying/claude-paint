@@ -898,9 +898,12 @@ fn the_lee_is_even_along_a_slanting_line() {
         let lines = p.ink_um3().0;
         let mut t = Rag::tarlatan(40.0, 3, 0.7);
         p.wipe(&mut t, &[pt(5.0 - 50.0 * c, 5.0 - 50.0 * s, 0.5), pt(5.0 + 50.0 * c, 5.0 + 50.0 * s, 0.5)], 2, 1.0);
-        // (the burr keeps its line's ink: `the_cloths_lee_is_a_yarns_shade`)
+        // (the burr keeps its line's ink, `the_cloths_lee_is_a_yarns_shade`, but for what the
+        // cloth's fibre ends hanging into it draw up: at most their share of it a pass, the pad
+        // pressing its middle 3π/8 of a pass, `fibre_draw`)
         let kept = p.ink_um3().0 / lines;
-        assert!((kept - 1.0).abs() < 0.01, "{deg}°: the line keeps {kept} of its ink");
+        let most = 2.0 * 3.0 * std::f64::consts::PI / 8.0 * FIBRE_END_SHARE;
+        assert!(kept < 1.0 && kept > 1.0 - most, "{deg}°: the line keeps {kept} of its ink, against at least {}", 1.0 - most);
         let band = |d0: f64, d1: f64| {
             let mut v = Vec::new();
             for y in 0..240 {
@@ -993,8 +996,8 @@ fn a_poupee_inks_the_disc_it_is_dabbed_on() {
     assert_eq!(p.ink_cell(10, 10).total(), 0.0);
     let eta = black().eta(20.0);
     let line = |q: &Plate| q.ink_cell(100, 100).lines() as f64 / (0.01 * d);
-    assert!((line(&p) - fill(w, d, DABBER_PA, DAB_S, eta, YIELD_PA)).abs() < 1e-5, "{}", line(&p));
-    assert!((line(&twice) - fill(w, d, DABBER_PA, 2.0 * DAB_S, eta, YIELD_PA)).abs() < 1e-5, "{}", line(&twice));
+    assert!((line(&p) - fill(w, d, DABBER_PA, DAB_S, eta, black().yield_pa())).abs() < 1e-5, "{}", line(&p));
+    assert!((line(&twice) - fill(w, d, DABBER_PA, 2.0 * DAB_S, eta, black().yield_pa())).abs() < 1e-5, "{}", line(&twice));
     assert!(line(&twice) > line(&p));
 }
 
@@ -1025,7 +1028,7 @@ fn a_poupee_dabs_a_soft_edged_disc() {
         assert!((ic.film as f64 - film).abs() < 1e-4, "{rho} mm: film {} against {film}", ic.film);
         if pr > 0.0 {
             let line = ic.lines() as f64 / (0.01 * d);
-            assert!((line - fill(w, d, pr, DAB_S, eta, YIELD_PA)).abs() < 1e-5, "{rho} mm: fill {line}");
+            assert!((line - fill(w, d, pr, DAB_S, eta, black().yield_pa())).abs() < 1e-5, "{rho} mm: fill {line}");
         } else {
             assert_eq!(ic.total(), 0.0, "{rho} mm: past the rim");
         }
@@ -1152,7 +1155,7 @@ fn a_solvent_rag_takes_ink_where_it_goes_and_a_stiff_ink_holds_in_the_lines() {
         let got = p.ink_cell(100, 100);
         assert!((got.film as f64 - if want < crate::etch::MONOLAYER_UM { 0.0 } else { want }).abs() < 1e-4 * f.max(1.0), "film {} against {want}", got.film);
         assert_eq!(p.ink_cell(100, 40), far, "3 mm off the path's pad (2 mm radius): untouched");
-        let draw = washburn_um(ink.eta(temp), 4.0 / 20.0);
+        let draw = capillary_um(ink.eta(temp), ink.yield_pa(), 4.0 / 20.0);
         for k in 0..BINS {
             let open = p.cell(100, 100).open[k] as f64;
             if open > 0.0 {
@@ -1169,4 +1172,68 @@ fn a_solvent_rag_takes_ink_where_it_goes_and_a_stiff_ink_holds_in_the_lines() {
     };
     let (stiff, thin, warm) = (left(&black(), None), left(&loose, None), left(&black(), Some(45.0)));
     assert!(stiff > 0.3 && thin == 0.0 && warm < stiff, "stiff keeps {stiff}, loose {thin}, warm {warm}");
+}
+
+/// A copperplate ink (IP §5.8) of the impressionist box's bone black: its
+/// pigment at `COPPERPLATE_CPVC` of bone black's critical share 1/(1 +
+/// OA·ρ/(100·0.93)), more to the volume than the tube's paste, so its
+/// absorption per coat is the tube ink's times the ratio of the shares, its
+/// viscosity the paste's Krieger–Dougherty factor over the tube's, and its
+/// yield stress (φ/φ_tube)^5.5 times the tube ink's; it prints that much
+/// denser paint (a pile with oil drawn out: `Mixture::paint`'s negative
+/// medium). An ink of the tube's paste is as before, bit for bit.
+#[test]
+fn a_copperplate_ink_is_its_pigment_ground_stiff() {
+    let pal = crate::palette::Palette::named_box("impressionist").unwrap();
+    let parts = vec![("bone black".to_string(), 1.0f32)];
+    let tube = Ink::of_tubes(&pal, &parts, 0.0, 1.0, "t".into()).unwrap();
+    assert_eq!(Ink::made(&pal, &parts, 0.0, 1.0, Paste::Tube, "t".into()).unwrap(), tube);
+    let cp = Ink::made(&pal, &parts, 0.0, 1.0, Paste::Copperplate, "c".into()).unwrap();
+    let t = pal.tubes.iter().find(|t| t.name == "bone black").unwrap();
+    let (_, _, oil) = crate::palette::tube_packing(t, pal.name);
+    let cpvc = 1.0 / (1.0 + t.oa as f64 * t.density as f64 / (100.0 * 0.93));
+    assert!((tube.pvc as f64 - (1.0 - oil as f64)).abs() < 1e-6);
+    let want = (0.75 * cpvc).min(DENSE_MAX * tube.pvc as f64);
+    assert!((cp.pvc as f64 - want).abs() < 1e-5, "{} against {want} (0.75 of {cpvc}, at most 1.5 of the tube's)", cp.pvc);
+    assert!(cpvc > 0.4 && cpvc < 0.5 && cp.pvc > tube.pvc, "bone black's critical share {cpvc}; the tube's paste {}", tube.pvc);
+    let r = cp.pvc / tube.pvc;
+    assert!((cp.k[1] / tube.k[1] - r).abs() < 1e-4 && (cp.s[1] / tube.s[1] - r).abs() < 1e-4);
+    assert!((cp.dense(&pal) - r).abs() < 1e-5 && (tube.dense(&pal) - 1.0).abs() < 1e-6);
+    assert!((cp.eta(20.0) / tube.eta(20.0) - krieger(cp.pvc as f64) / krieger(tube.pvc as f64)).abs() < 1e-9);
+    assert!((cp.yield_pa() / tube.yield_pa() - (r as f64).powf(YIELD_EXP)).abs() < 1e-6);
+    assert!(cp.eta(20.0) > tube.eta(20.0) && cp.yield_pa() > 2.0 * tube.yield_pa());
+    let (pt, pc) = (tube.paint(&pal).unwrap(), cp.paint(&pal).unwrap());
+    assert!((pc.scatter / pt.scatter - r).abs() < 1e-3 * r, "printed {} against the tube's {} times {r}", pc.scatter, pt.scatter);
+    assert_eq!(pt.scatter, pal.pile(vec![(pal.tubes.iter().position(|t| t.name == "bone black").unwrap(), 1.0)]).laid(0.0).scatter);
+}
+
+/// The same lines and flat inked and wiped alike with a loose ink (light
+/// plate oil, oil added) and a stiff copperplate one: the card drags a film
+/// as √η (Reynolds' slider), so the stiff ink leaves more plate tone; and the
+/// tarlatan's fibre ends hanging into the lines draw ink up by its capillary
+/// rise, Lucas–Washburn capped at γ/τ_y (`capillary_um`), several times
+/// further for the loose ink, so it wipes out of the lines and the stiff one
+/// holds. No region: the pad goes along the points.
+#[test]
+fn a_loose_ink_wipes_out_of_the_lines_and_a_stiff_one_holds() {
+    let stiff = Ink { name: "copperplate".into(), stiff: 1.0, oil: 0.0, pvc: 0.34, ..black() };
+    let loose = Ink { name: "loose".into(), stiff: 0.0, oil: 0.3, pvc: 0.26 * 0.7, ..black() };
+    let rise = |i: &Ink| capillary_um(i.eta(20.0), i.yield_pa(), RETRO_TOUCH_S);
+    assert!(rise(&loose) > 4.0 * rise(&stiff), "{} against {}", rise(&loose), rise(&stiff));
+    let run = |ink: &Ink| {
+        let mut p = square(20.0, 100.0);
+        p.contact = true;
+        cut(&mut p, 0, 200, 60, 61, 60.0, 40.0, 0.6);
+        cut(&mut p, 0, 200, 140, 141, 60.0, 40.0, 0.6);
+        let r = p.ink(ink, InkTool::of(Inker::Card), &card(), 0.0).unwrap();
+        let lines = line_ink(&p, 0, 200, 0, 200);
+        let mut t = Rag::tarlatan(40.0, 4, 0.7);
+        p.wipe(&mut t, &along_x(), 4, 0.5);
+        (r.film_um, line_ink(&p, 0, 200, 0, 200) / lines, p.ink_cell(100, 100).film as f64)
+    };
+    let (sf, sl, st) = run(&stiff);
+    let (lf, ll, lt) = run(&loose);
+    assert!((sf / lf - (stiff.eta(20.0) / loose.eta(20.0)).sqrt()).abs() < 1e-6 * sf / lf, "the card's films {sf} and {lf}");
+    assert!(st > lt, "plate tone: the stiff ink's {st} µm against the loose one's {lt}");
+    assert!(1.0 - ll > 1.5 * (1.0 - sl), "the lines keep {sl} of the stiff ink, {ll} of the loose");
 }

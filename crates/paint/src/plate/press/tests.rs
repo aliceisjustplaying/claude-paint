@@ -185,3 +185,29 @@ fn a_damp_sheet_keeps_the_plate_mark_and_the_lines() {
         }
     }
 }
+
+/// A plate whose cells are not quite the sheet's pixels (here 20 mm in 199
+/// cells over 0.1 mm pixels) prints an even film evenly: each cell's ink is
+/// laid over the pixels its footprint covers, by area, so no row or column of
+/// pixels is left without ink where the two pitches drift apart, and the ink
+/// laid is the ink the plate gave up.
+#[test]
+fn a_cell_lays_its_ink_over_the_pixels_it_covers() {
+    let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 20.0, 20.0, 1.3, 45.0, 199, 199);
+    p.ink(&black(), None, Inker::Card, 0.0).unwrap();
+    let mut sh = sheet();
+    let fe = feel(&sh, true);
+    let v0 = sh.wet_coats();
+    let r = p.press(&mut sh, (10.0, 10.0), &PressSpec::default(), &fe, &[paint()], 1.0).unwrap();
+    // every row across the middle of the print holds within a few percent of the mean
+    let row = |y: usize| (120..280).map(|x| sh.wet.vol[y * 400 + x] as f64).sum::<f64>() / 160.0;
+    let rows: Vec<f64> = (110..290).map(row).collect();
+    let mean = rows.iter().sum::<f64>() / rows.len() as f64;
+    assert!(mean > 0.0);
+    for (j, v) in rows.iter().enumerate() {
+        assert!((v / mean - 1.0).abs() < 0.05, "row {}: {v} against {mean}", 110 + j);
+    }
+    // conserved: the coats laid are the ink taken, at the coat's thickness
+    let laid = (sh.wet_coats() - v0) * COAT_UM as f64 * 100.0 * 100.0;
+    assert!((laid / r.taken_um3 - 1.0).abs() < 1e-3, "laid {laid} µm³, taken {}", r.taken_um3);
+}

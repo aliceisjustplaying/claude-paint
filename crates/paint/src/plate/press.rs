@@ -269,8 +269,40 @@ impl Plate {
                 }
             }
         }
-        // the ink: each cell's share, laid on the pixel under it by area
+        // the ink: each cell's share, laid over the sheet pixels its footprint
+        // covers, by the area it covers of each (the plate's cells and the
+        // sheet's pixels are laid out at nearly the same pitch, but not
+        // exactly: a cell dropped whole on the pixel under its middle leaves
+        // a row or column of pixels with none where the two drift apart by a
+        // pixel, and lays two cells' ink on one where they drift back)
         let area = (self.pitch / ps).powi(2);
+        let k = self.pitch / ps;
+        let pitch = self.pitch;
+        let footprint = move |x: usize, y: usize| -> Vec<(usize, f64)> {
+            // the cell's corners on the sheet, in pixels (mirrored in x)
+            let u0 = (at_mm.0 + pw - (x as f64 + 1.0) * pitch / 1000.0) * 1000.0 / ps;
+            let v0 = (at_mm.1 + y as f64 * pitch / 1000.0) * 1000.0 / ps;
+            let (u1, v1) = (u0 + k, v0 + k);
+            let mut out = Vec::with_capacity(4);
+            let mut sy = v0.floor();
+            while sy < v1 {
+                let oy = (v1.min(sy + 1.0) - v0.max(sy)).max(0.0);
+                let mut sx = u0.floor();
+                while sx < u1 {
+                    let ox = (u1.min(sx + 1.0) - u0.max(sx)).max(0.0);
+                    let w = ox * oy / (k * k);
+                    if w > 0.0 && sx >= 0.0 && sy >= 0.0 {
+                        let (px, py) = (sx as usize, sy as usize);
+                        if px >= f.x0 && py >= f.y0 && px < f.x0 + f.w && py < f.y0 + f.h {
+                            out.push(((py - f.y0) * f.w + (px - f.x0), w));
+                        }
+                    }
+                    sx += 1.0;
+                }
+                sy += 1.0;
+            }
+            out
+        };
         let mut lays: Vec<(usize, [f32; INKS], f32, f32)> = Vec::new();
         let mut dirty: Option<(usize, usize, usize, usize)> = None;
         for y in 0..self.h {
@@ -305,12 +337,15 @@ impl Plate {
                     cell = super::inked::InkCell::default();
                 }
                 *self.ink_cell_mut(x, y) = cell;
-                lays.push((i, ic.shares(), (t * area / COAT_UM as f64) as f32, ic.cure));
-                let (ux, uy) = (i % f.w, i / f.w);
-                dirty = Some(match dirty {
-                    None => (ux, uy, ux + 1, uy + 1),
-                    Some(d) => (d.0.min(ux), d.1.min(uy), d.2.max(ux + 1), d.3.max(uy + 1)),
-                });
+                let coats = t * area / COAT_UM as f64;
+                for (j, w) in footprint(x, y) {
+                    lays.push((j, ic.shares(), (coats * w) as f32, ic.cure));
+                    let (ux, uy) = (j % f.w, j / f.w);
+                    dirty = Some(match dirty {
+                        None => (ux, uy, ux + 1, uy + 1),
+                        Some(d) => (d.0.min(ux), d.1.min(uy), d.2.max(ux + 1), d.3.max(uy + 1)),
+                    });
+                }
             }
         }
         for (i, sh, coats, cure) in lays {

@@ -625,7 +625,9 @@ impl Canvas {
                 continue;
             }
             let before = (c.a, c.reflectance());
-            let pores = POROSITY * (c.loose + c.bound);
+            // (sifted crumbs' pores as they were crushed, as they drank: `crate::steam`)
+            let crumbs = d.perched.get(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH).map_or(0.0, |p| crate::steam::crumb_pore_extra(p, c));
+            let pores = POROSITY * (c.loose + c.bound + crumbs);
             if c.gum == 0 && pores > 0.0 {
                 // (dry pastel over a damp sheet: it draws the water up)
                 c.gum = to_gum(1.0 - c.carbon_share());
@@ -660,7 +662,8 @@ impl Canvas {
         let Some(d) = self.drawing.as_ref().filter(|d| d.damp) else { return 0.0 };
         let (e, a) = (evaporation_um_min(), falling());
         let t = d.cells.iter().enumerate().map(|(i, c)| {
-            let pores = POROSITY * (c.loose + c.bound);
+            let crumbs = d.perched.get(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH).map_or(0.0, |p| crate::steam::crumb_pore_extra(p, c));
+            let pores = POROSITY * (c.loose + c.bound + crumbs);
             settle_minutes(c.water, d.sheet.get(i).copied().unwrap_or(0.0), pores, e, a)
         }).fold(0.0, f32::max);
         // (rounding: a little past the last)

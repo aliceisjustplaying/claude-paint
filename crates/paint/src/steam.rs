@@ -557,6 +557,17 @@ pub(crate) fn loose_perched(p: &mut [f32], c: &Cell) -> (f32, f32) {
     (p[P_L] * (1.0 - p[P_HELD].clamp(0.0, 1.0)), p[P_TOP])
 }
 
+/// The pores the perched crumbs `p` at cell `c` hold beyond what the cell
+/// counts for them, as stick volume, µm: a crumb drinks its pores as
+/// crushed (`Canvas::sift`), while the cell counts it as it lies
+/// (`Grains::lies`). Read through a synced copy: the record isn't changed.
+pub(crate) fn crumb_pore_extra(p: &[f32], c: &Cell) -> f32 {
+    let mut q = [0.0f32; PERCH];
+    q.copy_from_slice(&p[..PERCH]);
+    sync(&mut q, c);
+    (q[P_V] - q[P_L]).max(0.0)
+}
+
 /// `taken` of a cell's loose perched crumbs (as they lie, µm) went with a puff.
 pub(crate) fn blown(p: &mut [f32], taken: f32) {
     let lo = p[P_L] * (1.0 - p[P_HELD]);
@@ -870,7 +881,9 @@ impl Canvas {
                 continue;
             }
             let c = &d.cells[i];
-            let pores = POROSITY as f64 * (c.loose + c.bound).max(0.0) as f64;
+            // (crumbs sifted before hold their pores as crushed: `crumb_pore_extra`)
+            let crumbs = crumb_pore_extra(&d.perched[i * PERCH..(i + 1) * PERCH], c);
+            let pores = POROSITY as f64 * ((c.loose + c.bound).max(0.0) + crumbs) as f64;
             let standing = (c.water as f64 - pores).max(0.0);
             let sheet_u = d.sheet.get(i).copied().unwrap_or(0.0) as f64;
             let avail_sheet = sheet_u + global_free;

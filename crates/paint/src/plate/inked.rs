@@ -304,6 +304,12 @@ pub const FACE_T0_UM: f64 = 250.0;
 pub const FACE_EMC: f64 = 0.3;
 /// KES-FB3's reference and top loads (Pa): 0.5 and 50 gf/cm² [M].
 pub const KES_PA: (f64, f64) = (50.0, 5000.0);
+/// Cotton's density, 1.52 g/cm³ [M, cellulose fibre], so 45 g/m² is 29.6 µm
+/// of solid; and the share of a yarn's section its fibres fill, 0.6 (the
+/// yarn packing `FACE_T0_UM` was sized by) [M: ring-spun cotton yarns
+/// 0.5–0.65].
+pub const COTTON_DENSITY: f64 = 1.52;
+pub const FIBRE_PACKING: f64 = 0.6;
 
 /// A cloth's face pressed at `p` Pa (under the contact laws): its yarns'
 /// crimp and fibres are a compressible skin between the cloth and the
@@ -342,6 +348,33 @@ impl Face {
             return 0.0;
         }
         self.p * (self.s / (self.s + u - hb).max(1e-9)).powi(3)
+    }
+
+    /// The share of its fibres at p that lie in a film on the plate with the
+    /// cloth lifted `u` µm off its place (below zero: pressed `−u` harder, as
+    /// over a burr's top), while the face still bears: s/(s + u) = r^⅓, r the
+    /// share of p it bears. The compressible layer keeps its fibres as it
+    /// swells or is squeezed (van Wyk's homogeneous mass), so their density,
+    /// and the number in any slab of it at the plate, goes as 1/(T − T_c).
+    /// Squeezed, no denser than fibres pack (`FIBRE_PACKING` over the face's
+    /// own density at p) [D]. Past its squeeze δ it stands clear: none.
+    pub fn fibres(&self, u: f64) -> f64 {
+        if u >= self.delta {
+            return 0.0;
+        }
+        (self.s / (self.s + u).max(1e-9)).min(self.packed())
+    }
+
+    /// How many times denser its fibres can be squeezed than at p: the
+    /// packing of fibres in a yarn over the cloth's own fibre share at p,
+    /// its cotton's solid thickness (`TARLATAN_GSM` at `COTTON_DENSITY`)
+    /// over the thickness it is pressed to, T_c + s [D].
+    pub fn packed(&self) -> f64 {
+        let ratio = (KES_PA.1 / KES_PA.0).cbrt();
+        let sm = FACE_EMC * FACE_T0_UM / (ratio - 1.0);
+        let core = FACE_T0_UM - sm * ratio;
+        let solid = TARLATAN_GSM / COTTON_DENSITY;
+        FIBRE_PACKING / (solid / (core + self.s))
     }
 
     /// The share of p it bears and the true gap (µm) under the cloth lifted
@@ -507,6 +540,34 @@ pub fn cloth_lift(h: f64, c: f64, p: f64, b: f64) -> Lift {
     Lift { dx, u: u[..last].iter().map(|&v| v as f32).collect() }
 }
 
+/// How far (µm) a tarlatan yarn stands off the plate `d` µm from the middle
+/// of a burr `h` µm high whose top bears `c` µm either side (under the contact
+/// laws) [D, E]: a yarn is a bundle of fibres packed to some 0.6 of its
+/// section, all but as full as fibres pack, so below its own radius it keeps
+/// its round shape; the face's give is its crimp and hairs, which flex over
+/// the weave's pitch. That is how the engine already reaches into a line, by
+/// a yarn's chord (`yarn_dip_um`), and the same yarn resting on the fin's top
+/// falls away beside it as its circle, h − (R − √(R² − (d − c)²)), R the
+/// yarn's radius (`YARN_UM` [E]): over the fin's top and the line under it,
+/// h; none past √(2Rh) or so. In that shade only the ink standing above the
+/// yarn, and its loose fibre ends, are reached: the ink against the burr, a
+/// drypoint line's velvet. The yarn is taken lying along the fin, its round
+/// section across it, which shades least [E: a yarn crossing the fin is
+/// straight along its length and is held off further, by its bending].
+pub fn yarn_shade_um(h: f64, c: f64, d: f64) -> f64 {
+    if h <= 0.0 {
+        return 0.0;
+    }
+    if d <= c {
+        return h;
+    }
+    let x = d - c;
+    if x >= YARN_UM {
+        return (h - YARN_UM).max(0.0);
+    }
+    (h - (YARN_UM - (YARN_UM * YARN_UM - x * x).sqrt())).max(0.0)
+}
+
 /// The plate's polish under the contact laws (IP §5.4, "Plate tone"): a
 /// copper plate sold "mirror polished" yields little or no tone and one of
 /// mill finish a significant tone [P, Tuckamore Press], because the ink in
@@ -588,24 +649,150 @@ pub fn palm_gap_um(h: f64, c: f64, p: f64, a: f64, x: f64) -> f64 {
     (2.0 * p * a / es * ((a / x).acosh() - (1.0 - (x / a).powi(2)).sqrt())).clamp(0.0, h)
 }
 
+/// The palm's papillary ridges (under the contact laws): 59 ± 19 µm high and
+/// 485 ± 71 µm apart [M: laser profilometry of silicone prints of fingertips,
+/// Stücker et al., J. Forensic Sci. 46 (2001) 857–861; the palm is friction
+/// ridge skin of the same kind, taken alike: E]. A ridge's crest is then
+/// λ²/(4π²Δ) = 0.20 mm round, against the 0.3 mm measured on fingertips
+/// (Hamilton et al., PNAS 117 (2020)): the same order, a check.
+pub const RIDGE_UM: f64 = 59.0;
+pub const RIDGE_PITCH_UM: f64 = 485.0;
+
+/// The palm's ridges pressed on the flat plate at `p` Pa (under the contact
+/// laws) [D]: a wavy elastic surface, z = Δ(1 − cos 2πx/λ) with Δ half the
+/// ridges' height, on a rigid flat, Westergaard's contact (Johnson, Contact
+/// Mechanics §13.2). It is flattened all over at p* = π·E*·Δ/λ (76 kPa,
+/// far above a hand's); below that each ridge touches over |x| < a,
+/// sin²(πa/λ) = p/p*, under p(x) = (2p/sin²(πa/λ))·cos(πx/λ)·√(sin²(πa/λ) −
+/// sin²(πx/λ)), and the furrow stands open between: its gap is the wave less
+/// what that pressure presses the surface in, by the periodic line load's
+/// displacement −(2/πE*)·ln|2 sin(πx/λ)| summed over the contact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ridges {
+    pub lambda: f64,
+    /// Each ridge's contact half-width (µm).
+    pub a: f64,
+    /// The gap from a ridge's middle (0) to the furrow's (λ/2), at `dx` µm.
+    pub gap: Vec<f32>,
+    pub dx: f64,
+}
+
+impl Ridges {
+    pub fn at(p: f64) -> Ridges {
+        use std::f64::consts::PI;
+        let es = SKIN_PA / (1.0 - SKIN_NU * SKIN_NU);
+        let (lam, del) = (RIDGE_PITCH_UM, 0.5 * RIDGE_UM);
+        let n = 240;
+        let dx = 0.5 * lam / n as f64;
+        let pstar = PI * es * del / lam;
+        if p >= pstar {
+            return Ridges { lambda: lam, a: 0.5 * lam, gap: vec![0.0; n + 1], dx };
+        }
+        let s2 = (p / pstar).max(0.0);
+        let a = lam / PI * s2.sqrt().asin();
+        let m = 2000;
+        let w = 2.0 * a / m as f64;
+        let ts: Vec<(f64, f64)> = (0..m).map(|i| {
+            let t = -a + (i as f64 + 0.5) * w;
+            let q = 2.0 * p / s2 * (PI * t / lam).cos() * (s2 - (PI * t / lam).sin().powi(2)).max(0.0).sqrt();
+            (t, q * w)
+        }).collect();
+        let pressed = |x: f64| 2.0 / (PI * es) * ts.iter().map(|&(t, f)| -f * (2.0 * (PI * (x - t) / lam).sin()).abs().max(1e-12).ln()).sum::<f64>();
+        let z = |x: f64| del * (1.0 - (2.0 * PI * x / lam).cos());
+        let (z0, d0) = (z(a), pressed(a));
+        let gap = (0..=n).map(|i| {
+            let x = i as f64 * dx;
+            if x <= a { 0.0 } else { (z(x) - z0 + pressed(x) - d0).max(0.0) as f32 }
+        }).collect();
+        Ridges { lambda: lam, a, gap, dx }
+    }
+
+    /// The furrow's gap at its middle (µm): a burr no taller fits under it.
+    pub fn clearance(&self) -> f64 {
+        *self.gap.last().unwrap_or(&0.0) as f64
+    }
+
+    /// How far (µm) from a ridge's middle the free skin stands `h` µm off
+    /// the plate (half the pitch if the furrow is lower): a burr nearer the
+    /// ridge's middle than this props it up.
+    pub fn reach(&self, h: f64) -> f64 {
+        if h <= 0.0 {
+            return self.a;
+        }
+        for i in 1..self.gap.len() {
+            let (g0, g1) = (self.gap[i - 1] as f64, self.gap[i] as f64);
+            if g1 >= h {
+                let t = if g1 > g0 { (h - g0) / (g1 - g0) } else { 1.0 };
+                return ((i as f64 - 1.0 + t.clamp(0.0, 1.0)) * self.dx).max(self.a);
+            }
+        }
+        0.5 * self.lambda
+    }
+
+    /// The share of its touches a point `d` µm from a burr `h` µm high loses
+    /// to a ridge riding the burr [D, E]: a ridge whose middle lies within
+    /// `reach(h)` of the burr rests on it and stands off over its own contact,
+    /// so the point is held off while the ridge touching it is one so
+    /// propped: over the ridge's place (uniform over a pitch as the palm
+    /// slides), the overlap of |ξ| < reach(h) with |ξ − d| < a, over λ. The
+    /// ridges are taken parallel to the line, where they shield the most [E:
+    /// the palm's ridges run every way over it; a ridge crossing the line
+    /// rests on it over a shorter stretch].
+    pub fn shield(&self, h: f64, d: f64) -> f64 {
+        let ah = self.reach(h);
+        let (lo, hi) = ((d - self.a).max(-ah), (d + self.a).min(ah));
+        ((hi - lo).max(0.0) / self.lambda).min(1.0)
+    }
+}
 
 /// Points a cell is sampled at across (and down) for a burr's gap and lee
 /// (`Plate::contact`): its sub-cell detail, so that a line's lee is as smooth
 /// across cells as the line.
 const SUB: usize = 4;
 
-/// Gaps over cells near a burr (`Plate::gaps_of`): a slot of `SUB`² points
+/// What a burr does to a contact at one point (`Plate::gaps_of`): for the
+/// cloth, its lift `v` (µm) and, over a burr's top, the face's lift off that
+/// raised base `top` (µm, below zero: squeezed harder); for the palm, the
+/// share of its touches a ridge riding a burr holds off `v`, the gap then
+/// `aux` (µm), and `top` 0 over a burr's top. `top` is infinite elsewhere.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Prop {
+    v: f32,
+    aux: f32,
+    top: f32,
+}
+
+const NO_PROP: Prop = Prop { v: 0.0, aux: 0.0, top: f32::INFINITY };
+
+/// Props over cells near a burr (`Plate::gaps_of`): a slot of `SUB`² points
 /// for each cell that has one.
 struct Gaps {
     idx: Vec<u32>,
-    slots: Vec<[f32; SUB * SUB]>,
+    slots: Vec<[Prop; SUB * SUB]>,
 }
 
 impl Gaps {
-    fn get(&self, i: usize) -> Option<&[f32; SUB * SUB]> {
+    fn get(&self, i: usize) -> Option<&[Prop; SUB * SUB]> {
         self.idx.get(i).and_then(|&k| (k != u32::MAX).then(|| &self.slots[k as usize]))
     }
 }
+
+/// How a contact meets the ink at a point near a burr (`Contact::touch`), for
+/// the film on the flat or the ink in the openings: it touches it for `r` of
+/// a full touch (the cloth: the share of its fibres in the film; the palm: the
+/// share of its touches in contact), and for `off` more of a touch it stands
+/// `g` µm off, reaching only the ink above that; `hair` is the share of a
+/// touch its loose fibre ends hang where the face stands clear (the cloth in a
+/// true gap).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Touch {
+    r: f64,
+    off: f64,
+    g: f64,
+    hair: f64,
+}
+
+const FULL_TOUCH: Touch = Touch { r: 1.0, off: 0.0, g: 0.0, hair: 0.0 };
 
 /// A piece of a burr standing in one cell (`Plate::contact`): its middle (µm
 /// on the plate), its line's way, its half-length (the cell's share of the
@@ -947,16 +1134,12 @@ struct Contact {
     reach: Box<dyn Fn(f64, f64) -> f64>,
     /// How far (µm) it is held off past a burr `h` high.
     lee: Box<dyn Fn(f64) -> f64>,
-    /// Under the contact laws: a point's (true gap µm, share of the pressure
-    /// borne) from what its `Gaps` keep, and what the cloth's loose fibre
-    /// ends draw up in a touch where it stands off (µm of the ink in a cell,
-    /// none for skin).
-    state: Box<dyn Fn(f32) -> (f64, f64)>,
+    /// Under the contact laws: how it meets the film on the flat and the ink
+    /// in the openings at a point (`Touch`) from what its `Gaps` keep there,
+    /// and what the cloth's loose fibre ends draw up in a touch where it
+    /// stands clear (µm of the ink in a cell, none for skin).
+    touch: Box<dyn Fn(&Prop) -> (Touch, Touch)>,
     wick: Option<Box<dyn Fn(&InkCell) -> f64>>,
-    /// The share of the pressure it bears where it comes down on ink standing
-    /// above a gap: what it bears at the gap's edge (the cloth's face all but
-    /// free, `Face::state` at δ; skin, which touches whole, 1).
-    edge: f64,
 }
 
 impl Plate {
@@ -1354,7 +1537,10 @@ impl Plate {
                         // [E: the gap's span goes as 1/ln(2a/c), so a factor 2 here moves it some 15 %]
                         let area = c.burr_area as f64 * p * p;
                         let base = if ring { (area / std::f64::consts::PI).sqrt() } else { area / (2.0 * half) };
-                        out.push(Fence { x: (x as f64 + 0.5) * p, y: (y as f64 + 0.5) * p, t, half, h: hb, c: (0.5 * base).clamp(1.0, 0.5 * p), ring });
+                        let (mx, my) = ((x as f64 + 0.5) * p, (y as f64 + 0.5) * p);
+                        // on the line's own centreline across it, not the cell's middle
+                        let o = if ring { 0.0 } else { self.centreline(x, y, c.dir, t) };
+                        out.push(Fence { x: mx - o * t.1, y: my + o * t.0, t, half, h: hb, c: (0.5 * base).clamp(1.0, 0.5 * p), ring });
                     }
                 }
             }
@@ -1362,12 +1548,47 @@ impl Plate {
         out
     }
 
-    /// Each cell within `reach(piece)` of a piece of burr, the most any piece
-    /// props a contact up to over each of its `SUB`² points, `gap(piece,
-    /// distance)`. Within `fine` µm of a piece every point is measured; past
-    /// it the cell's middle stands for its points (the gap changes little
-    /// across a cell there).
-    fn gaps_of(&self, fences: &[Fence], reach: &dyn Fn(usize) -> f64, gap: &dyn Fn(usize, f64) -> f64, fine: f64) -> Gaps {
+    /// How far (µm) the centreline of the line through cell (x, y), of
+    /// direction `dir` (way `t`), lies from the cell's middle across it (along
+    /// (−t.1, t.0)): the centroid of the groove's volume in the cells of the
+    /// same line within a cell along it and three across. The groove is laid
+    /// across its width at a quarter of a cell (`Plate::deposit`), so its
+    /// centroid finds the line to a few µm; a piece of burr placed at its
+    /// cell's middle instead followed a staircase of ±p/2 along a slanting
+    /// line, and so did the film beside it.
+    fn centreline(&self, x: usize, y: usize, dir: u8, t: (f64, f64)) -> f64 {
+        let p = self.pitch;
+        let (mut sv, mut so) = (0.0f64, 0.0f64);
+        for dy in -3i64..=3 {
+            for dx in -3i64..=3 {
+                let (xx, yy) = (x as i64 + dx, y as i64 + dy);
+                if xx < 0 || yy < 0 || xx >= self.w as i64 || yy >= self.h as i64 {
+                    continue;
+                }
+                let (ox, oy) = (dx as f64 * p, dy as f64 * p);
+                if (ox * t.0 + oy * t.1).abs() > p {
+                    continue;
+                }
+                let o = self.cell(xx as usize, yy as usize);
+                let turn = (o.dir as i64 - dir as i64).rem_euclid(180);
+                if o.dir == 255 || turn.min(180 - turn) > 3 {
+                    continue;
+                }
+                let v = o.groove_vol() as f64;
+                sv += v;
+                so += v * (oy * t.0 - ox * t.1);
+            }
+        }
+        if sv > 0.0 { (so / sv).clamp(-3.0 * p, 3.0 * p) } else { 0.0 }
+    }
+
+    /// Each cell within `reach(piece)` of a piece of burr, with what the
+    /// pieces do to a contact at each of its `SUB`² points: `prop(piece,
+    /// distance)`, joined over the pieces by `join` (the cloth's largest lift,
+    /// the palm's largest shield). Within `fine` µm of a piece every point is
+    /// measured; past it the cell's middle stands for its points (the prop
+    /// changes little across a cell there).
+    fn gaps_of(&self, fences: &[Fence], reach: &dyn Fn(usize) -> f64, prop: &dyn Fn(usize, f64) -> Option<Prop>, join: &dyn Fn(&mut Prop, Prop), fine: f64) -> Gaps {
         let p = self.pitch;
         let mut out = Gaps { idx: vec![u32::MAX; self.w * self.h], slots: Vec::new() };
         for (k, f) in fences.iter().enumerate() {
@@ -1378,27 +1599,25 @@ impl Plate {
                 for x in x0..x1 {
                     let i = y * self.w + x;
                     let mid = f.dist((x as f64 + 0.5) * p, (y as f64 + 0.5) * p);
-                    let mut put = |j: Option<usize>, g: f64| {
-                        if g <= 0.0 {
-                            return;
-                        }
+                    let mut put = |j: Option<usize>, g: Option<Prop>| {
+                        let Some(g) = g else { return };
                         if out.idx[i] == u32::MAX {
                             out.idx[i] = out.slots.len() as u32;
-                            out.slots.push([0.0; SUB * SUB]);
+                            out.slots.push([NO_PROP; SUB * SUB]);
                         }
                         let e = &mut out.slots[out.idx[i] as usize];
                         match j {
-                            Some(j) => e[j] = e[j].max(g as f32),
-                            None => e.iter_mut().for_each(|v| *v = v.max(g as f32)),
+                            Some(j) => join(&mut e[j], g),
+                            None => e.iter_mut().for_each(|v| join(v, g)),
                         }
                     };
                     if mid > fine + p {
-                        put(None, gap(k, mid));
+                        put(None, prop(k, mid));
                         continue;
                     }
                     for j in 0..SUB * SUB {
                         let (sx, sy) = ((x as f64 + ((j % SUB) as f64 + 0.5) / SUB as f64) * p, (y as f64 + ((j / SUB) as f64 + 0.5) / SUB as f64) * p);
-                        put(Some(j), gap(k, f.dist(sx, sy)));
+                        put(Some(j), prop(k, f.dist(sx, sy)));
                     }
                 }
             }
@@ -1406,27 +1625,50 @@ impl Plate {
         out
     }
 
-    /// The palm's gap over each cell near a burr (`contact`): the skin's
-    /// height over the plate at each of its `SUB`² points, the most any piece
-    /// of burr props it to (`palm_gap_um`), pressed at `p` Pa. Skin wets
-    /// what it touches: it conforms at 10 kPa to undulations ten µm long and
-    /// more (Johnson's p* = π·E*·A/λ for a waviness A over λ), so where it
-    /// comes down on the plate it touches it whole, and only its gap is held
-    /// off. It has no loose fibres to hang into the gap.
+    /// What burrs do to the palm over each cell near one (`contact`), pressed
+    /// at `p` Pa, at each of its `SUB`² points: the share of its touches a
+    /// ridge riding a burr holds off there and how far (`Ridges::shield`;
+    /// where a burr stands taller than the furrows, the whole skin's gap,
+    /// `palm_gap_um`), and whether it lies on a burr's top, which the ridge
+    /// riding it touches. Overlapping burrs: the larger shield, then the
+    /// larger gap.
     fn palm_gaps(&self, p: f64) -> Gaps {
         let fences = self.fences();
-        let spans: Vec<f64> = fences.iter().map(|f| palm_span_um(f.h, f.c, p)).collect();
-        self.gaps_of(&fences, &|k| spans[k], &|k, d| palm_gap_um(fences[k].h, fences[k].c, p, spans[k], d), f64::INFINITY)
+        let ridges = Ridges::at(p);
+        let tall: Vec<Option<(f64, f64)>> = fences.iter().map(|f| {
+            let over = f.h - ridges.clearance();
+            (over > 0.0).then(|| (over, palm_span_um(over, f.c, p)))
+        }).collect();
+        let reach = |k: usize| ridges.reach(fences[k].h) + ridges.a + tall[k].map_or(0.0, |t| t.1);
+        let prop = |k: usize, d: f64| {
+            let f = &fences[k];
+            let top = if d <= f.c { 0.0 } else { f32::INFINITY };
+            if let Some((over, span)) = tall[k]
+                && d < span
+            {
+                return Some(Prop { v: 1.0, aux: palm_gap_um(over, f.c, p, span, d) as f32, top });
+            }
+            let s = ridges.shield(f.h, d);
+            (s > 0.0 || top == 0.0).then_some(Prop { v: s as f32, aux: f.h as f32, top })
+        };
+        let join = |e: &mut Prop, g: Prop| {
+            if g.v > e.v || (g.v == e.v && g.aux > e.aux) {
+                (e.v, e.aux) = (g.v, g.aux);
+            }
+            e.top = e.top.min(g.top);
+        };
+        self.gaps_of(&fences, &reach, &prop, &join, f64::INFINITY)
     }
 
     /// The tarlatan's lift over each cell near a burr under the contact laws
     /// (`cloth_lift`): the cloth's lift off its place on the flat at each of
-    /// its `SUB`² points, the most any piece of burr lifts it, pressed at `p`
-    /// Pa with bending rigidity `b` (`Face::state` reads it). It is a static
-    /// contact, the same whichever way the pad moves. Pieces of like height
-    /// and top share a solution (to 0.25 µm and 0.5 µm). Points are measured
-    /// within 0.3 mm of the burr, where it bends most; past that a cell's
-    /// middle stands for them.
+    /// its `SUB`² points, the most any piece of burr lifts it, and over a
+    /// burr's top the face's lift off that raised base (the least over the
+    /// pieces), pressed at `p` Pa with bending rigidity `b` (`Face` reads
+    /// them). It is a static contact, the same whichever way the pad moves.
+    /// Pieces of like height and top share a solution (to 0.25 µm and 0.5
+    /// µm). Points are measured within 0.3 mm of the burr, where it bends
+    /// most; past that a cell's middle stands for them.
     fn cloth_gaps(&self, p: f64, b: f64) -> Gaps {
         let fences = self.fences();
         let mut lifts: std::collections::HashMap<(i64, i64), Lift> = std::collections::HashMap::new();
@@ -1436,7 +1678,19 @@ impl Plate {
         todo.dedup();
         use rayon::prelude::*;
         lifts.extend(todo.par_iter().map(|&(h, c)| ((h, c), cloth_lift(h as f64 / 4.0, c as f64 / 2.0, p, b))).collect::<Vec<_>>());
-        self.gaps_of(&fences, &|k| lifts[&keys[k]].reach(), &|k, d| lifts[&keys[k]].at(d), 300.0)
+        let prop = |k: usize, d: f64| {
+            let (h, c) = (keys[k].0 as f64 / 4.0, keys[k].1 as f64 / 2.0);
+            let u = lifts[&keys[k]].at(d);
+            let top = if d <= c && h > 0.0 { (u - h) as f32 } else { f32::INFINITY };
+            let shade = yarn_shade_um(h, c, d);
+            (u > 0.0 || top.is_finite() || shade > 0.0).then_some(Prop { v: u as f32, aux: shade as f32, top })
+        };
+        let join = |e: &mut Prop, g: Prop| {
+            e.v = e.v.max(g.v);
+            e.aux = e.aux.max(g.aux);
+            e.top = e.top.min(g.top);
+        };
+        self.gaps_of(&fences, &|k| lifts[&keys[k]].reach(), &prop, &join, 300.0)
     }
 
     /// The film (µm over cell `c`) out of any wipe's reach: the polish's
@@ -1446,24 +1700,26 @@ impl Plate {
     }
 
     /// `reach_sweep` under the contact laws, point by point over each cell
-    /// near a burr (`Gaps`, read by `ct.state`):
-    /// - where the contact still bears on the plate, at a share r of its
-    ///   pressure, it takes what it reaches at the rate of a touch r times as
-    ///   long: the real contact of a fibrous or ridged face grows in
-    ///   proportion to its load (Greenwood–Williamson), so it touches r of
-    ///   the ink a full touch would (`frac` of the share of a pass times r);
-    /// - where it stands g off the plate (a true gap), it reaches only the ink
-    ///   standing above g on the flat, and g less far into the openings,
-    ///   touching it with the pressure it bears at the gap's edge (`ct.edge`);
-    /// - and the cloth's loose fibre ends, which hang below its face
-    ///   everywhere, draw on the film it leaves as far as the face has lifted
-    ///   off (by 1 − r; all of it in a gap): the rag's lift law at full
-    ///   contact already counts them, so they add nothing on the open plate,
-    ///   and the take falls continuously to theirs at a gap's edge. They
+    /// near a burr (`Gaps`, read by `ct.touch` for the film on the flat and
+    /// for the ink in the openings, `Touch`):
+    /// - for a share r of a full touch it meets all it reaches, at the rate of
+    ///   a touch r times as long (`law` over the share of a pass times r).
+    ///   For the cloth r is the share of its fibres that dip into the film
+    ///   beside the burr, its face's fibre density there (`Face::fibres`):
+    ///   the film is a liquid as deep as a fibre is thick, which a fibre takes
+    ///   from by dipping into it, not by pressing on the metal through it.
+    ///   For the palm, the share of its touches that come down on the plate;
+    /// - for `off` more of a touch it stands g off the plate (a true gap; a
+    ///   ridge riding a burr), and meets only the ink standing above g on the
+    ///   flat, and g less far into the openings;
+    /// - and where the cloth's face stands clear of the plate (a true gap) its
+    ///   loose fibre ends hang in the gap and draw on the film below it: they
     ///   lift the film under their tips, up to what capillarity lifts in a
     ///   touch (`ct.wick`: retroussage's law), over the share of it the tips
-    ///   touch (`FIBRE_END_SHARE`), by the share of a pass. (Its fibre ends hang into the lines
-    ///   wherever it goes, gap or not; what it takes from them is its reach.)
+    ///   touch (`FIBRE_END_SHARE`), by the share of a pass. While the face is
+    ///   on the plate they are fibres of its face, counted in r. (Its fibre
+    ///   ends hang into the lines wherever it goes, gap or not; what it takes
+    ///   from them is its reach.)
     #[allow(clippy::type_complexity)]
     fn reach_sweep_gap(&self, cells: &[(usize, usize, f32)], ct: &Contact, rims: &[Option<Vec<f32>>], law: &dyn Fn(usize, usize, &InkCell) -> (f64, f64), gaps: &Gaps) -> Vec<(usize, usize, f64, [f64; BINS])> {
         let mut out = Vec::new();
@@ -1492,34 +1748,28 @@ impl Plate {
                 }
                 Some(g) => {
                     let n = (SUB * SUB) as f64;
-                    // the fibre ends' draw over a share `m` of a pass where the face has lifted by
-                    // 1 − r: their tips touch `FIBRE_END_SHARE` of the film and lift up to the
-                    // capillary depth of a touch from under them
+                    // the fibre ends' draw over a share `m` of a pass where the face stands clear:
+                    // their tips touch `FIBRE_END_SHARE` of the film and lift up to the capillary
+                    // depth of a touch from under them
                     let depth = ct.wick.as_ref().map_or(0.0, |w| w(&ic));
-                    let hairs = |rest: f64, off: f64| FIBRE_END_SHARE * m * off * rest.min(depth);
-                    let (mut touched, mut flat, mut bins) = (0.0f64, 0.0f64, [0.0f64; BINS]);
-                    for &v in g.iter() {
-                        let (gap, r) = (ct.state)(v);
-                        if gap <= 0.0 {
-                            // the face takes by the share it bears; the fibre ends hanging below
-                            // it draw on what it leaves, as far as the face has lifted off
-                            let f = fr(m * r);
-                            touched += f;
-                            flat += hairs(avail * (1.0 - f), 1.0 - r);
-                            continue;
-                        }
-                        // stood off: the ink above the gap (touched as at the gap's edge), and the
-                        // fibre ends' draw on the film
-                        let f = fr(m * ct.edge);
-                        let above = (ic.film as f64 - gap.max(hold)).max(0.0);
-                        flat += above * f + hairs(avail - above, 1.0);
+                    let (mut flat, mut bins) = (0.0f64, [0.0f64; BINS]);
+                    for pr in g.iter() {
+                        let (tf, to) = (ct.touch)(pr);
+                        // the film: above the gap it is met for r + off of a touch, below it for r
+                        let above = if tf.g > 0.0 { (ic.film as f64 - tf.g.max(hold)).max(0.0).min(avail) } else { avail };
+                        flat += above * fr(m * (tf.r + tf.off)) + (avail - above) * fr(m * tf.r);
+                        flat += FIBRE_END_SHARE * m * tf.hair * (avail - above).min(depth);
+                        // the openings: the ink within g less reach for r + off, the rest of its reach for r
+                        let (whole, part) = (fr(m * (to.r + to.off)), fr(m * to.r));
                         for (k, b) in bins.iter_mut().enumerate() {
-                            if c.open[k] > 0.0 && ic.line[k] > 0.0 {
-                                *b += Self::within_reach(&c, k, ic.line[k], rim(k), &|w, x| (ct.reach)(w, x) - gap) * f;
+                            if reach[k] <= 0.0 {
+                                continue;
                             }
+                            let short = if to.g > 0.0 { Self::within_reach(&c, k, ic.line[k], rim(k), &|w, x| (ct.reach)(w, x) - to.g) } else { reach[k] };
+                            *b += short * whole + (reach[k] - short) * part;
                         }
                     }
-                    (flat / n + avail * touched / n, std::array::from_fn(|k| (bins[k] + reach[k] * touched) / n))
+                    (flat / n, bins.map(|b| b / n))
                 }
             };
             if flat + bins.iter().sum::<f64>() > 0.0 {
@@ -1529,11 +1779,11 @@ impl Plate {
         out
     }
 
-    /// Each cell's share of full contact under the contact laws: the mean
-    /// over its points of the share of the pressure the contact bears there
-    /// (none where it stands off), 1 for a cell no burr reaches.
-    fn touch_of(&self, gaps: &Gaps, state: &dyn Fn(f32) -> (f64, f64), x: usize, y: usize) -> f64 {
-        gaps.get(y * self.w + x).map_or(1.0, |g| g.iter().map(|&v| state(v).1).sum::<f64>() / (SUB * SUB) as f64)
+    /// Each cell's share of a full touch on its film under the contact laws:
+    /// the mean over its points of the share it meets the film for there
+    /// (`Touch::r`; none where it stands off), 1 for a cell no burr reaches.
+    fn touch_of(&self, gaps: &Gaps, touch: &dyn Fn(&Prop) -> (Touch, Touch), x: usize, y: usize) -> f64 {
+        gaps.get(y * self.w + x).map_or(1.0, |g| g.iter().map(|pr| touch(pr).0.r).sum::<f64>() / (SUB * SUB) as f64)
     }
 
     /// The ink in bin `k` of cell `c` (`line` µm over the cell) above the
@@ -1657,8 +1907,9 @@ impl Plate {
     /// the ink's fluidity), compounded over the share of a pass, what it
     /// reaches, moving the way the pad goes there:
     /// - the film on the flat, but in a burr's lee (`shields`, `lee_um`;
-    ///   under the contact laws, `contact`, only the ink standing above the
-    ///   cloth's drape over the burr at the stretch's pressure, `cloth_gaps`,
+    ///   under the contact laws, `contact`, by the fibres of its face in the
+    ///   film where the burr lifts it, and only the ink above a yarn resting
+    ///   on the fin in its shade, at the stretch's pressure, `cloth_gaps`,
     ///   whichever way it moves, and never below the polish's hold,
     ///   `POLISH_HOLD_UM`);
     /// - the ink in each opening above the level it reaches: the yarn's dip
@@ -1706,11 +1957,21 @@ impl Plate {
                 let ct = Contact {
                     reach: Box::new(move |w, x| yarn_dip_um(YARN_UM, w.min(2.0 * YARN_UM)) + if w > 2.0 * YARN_UM { sag_um(w, x, p, b) } else { 0.0 }),
                     lee: Box::new(move |h| lee_um(h, p, b)),
-                    state: Box::new(move |v| {
-                        let (r, g) = face.state(v as f64);
-                        (g, r)
+                    // beside a burr its face meets the film by the fibres that dip into it
+                    // (`Face::fibres`), harder over the burr's top; past its squeeze a true
+                    // gap, where its loose fibre ends hang
+                    touch: Box::new(move |pr: &Prop| {
+                        let (u, shade) = (pr.v as f64, pr.aux as f64);
+                        let open = if u >= face.delta || shade > 0.0 {
+                            // a true gap: past the face's squeeze, or in a yarn's shade by the fin
+                            // (`yarn_shade_um`), where it meets only the ink above the gap
+                            Touch { r: 0.0, off: face.fibres(u.min(face.delta - 1e-9)), g: (u - face.delta).max(shade), hair: 1.0 }
+                        } else {
+                            Touch { r: face.fibres(u), ..FULL_TOUCH }
+                        };
+                        let flat = if pr.top.is_finite() { Touch { r: face.fibres(pr.top as f64), ..FULL_TOUCH } } else { open };
+                        (flat, open)
                     }),
-                    edge: face.state(face.delta - 1e-9).0,
                     // the fibre ends in a gap: retroussage's capillary rise in a touch, over the
                     // share of the plate their tips touch
                     wick: Some(Box::new(move |ic: &InkCell| {
@@ -1780,7 +2041,7 @@ impl Plate {
                     // laws: by its share of full contact there, and by what the face
                     // carries there, below)
                     let mut wts: Vec<(usize, usize, f64)> = match gaps {
-                        Some(g) => cells.iter().map(|&(x, y, m)| (x, y, m as f64 * self.touch_of(g, &*ct.state, x, y))).collect(),
+                        Some(g) => cells.iter().map(|&(x, y, m)| (x, y, m as f64 * self.touch_of(g, &*ct.touch, x, y))).collect(),
                         None => {
                             let shield = self.shields(v, &*ct.lee);
                             cells.iter().map(|&(x, y, m)| {
@@ -1894,8 +2155,9 @@ impl Plate {
     /// each cell for its share of a pass there; each pass, skin bulges into
     /// each opening by `palm_dip_um` (the top few µm of a fine line, the
     /// whole of an open bite), is held off past a burr by `palm_lee_um`
-    /// (under the contact laws, `contact`: propped up by the gap the burr
-    /// opens, `palm_gaps`, reaching only the ink above it), and parts from
+    /// (under the contact laws, `contact`: it bears by its ridges, and a burr
+    /// lower than their furrows props only a ridge riding it, `palm_gaps`,
+    /// `Ridges`; there it reaches only the ink above the burr), and parts from
     /// the film it touches taking its split share (`PALM_SPLIT`, or
     /// `WHITING_SPLIT` with whiting), compounded over the share of a pass.
     /// The printer wipes the palm clean between strokes: what it takes leaves
@@ -1918,10 +2180,14 @@ impl Plate {
                 let ct = Contact {
                     reach: Box::new(move |w, x| palm_dip_um(w, x, p)),
                     lee: Box::new(move |h| palm_lee_um(h, p)),
-                    // (`palm_gaps`: the skin's gap; it touches whole wherever it comes down)
-                    state: Box::new(|v| (v as f64, 0.0)),
+                    // (`palm_gaps`: the share of its touches a ridge riding a burr holds off, and
+                    // the gap then; it touches whole wherever it comes down, and a burr's top
+                    // under the ridge riding it)
+                    touch: Box::new(|pr: &Prop| {
+                        let open = Touch { r: 1.0 - pr.v as f64, off: pr.v as f64, g: pr.aux as f64, hair: 0.0 };
+                        (if pr.top == 0.0 { FULL_TOUCH } else { open }, open)
+                    }),
                     wick: None,
-                    edge: 1.0,
                 };
                 swept += st.cells.iter().map(|c| c.2 as f64).sum::<f64>() * unit;
                 let frac = |_: usize, _: usize, m: f32, ic: &InkCell| (1.0 - (1.0 - q).powf(m as f64)) * crate::drying::fluid(ic.cure) as f64;

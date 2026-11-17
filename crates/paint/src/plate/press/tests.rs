@@ -273,3 +273,71 @@ fn a_damp_sheet_prints_the_plate_smaller_and_drying_moves_the_register() {
     // without the laws the sheet's size isn't read
     assert_eq!(centres((e, e), false), flat);
 }
+
+/// A level 2 N drypoint line on a 6 mm plate at 25 µm cells under the contact
+/// laws, carded, wiped round twice with a tarlatan refolded between, palmed
+/// once along it, and pulled on a damp sheet at the plate's pitch. Returns the
+/// optical density across it (log₁₀ of the open plate's luminance over each
+/// row's, rows averaged along the line's middle 3 mm), its row 0 at the line,
+/// and the pitch (µm).
+fn printed_2n_line() -> (Vec<f64>, f64) {
+    let mut p = Plate::new(Metal::Copper, Temper::HalfHard, 6.0, 6.0, 1.3, 45.0, 240, 240);
+    p.contact = true;
+    let line = vec![
+        crate::plate::Point { x: 0.5, y: 3.0, force: 2.0, alt: 90.0, az: 0.0, speed: 25.0 },
+        crate::plate::Point { x: 5.5, y: 3.0, force: 2.0, alt: 90.0, az: 0.0, speed: 25.0 },
+    ];
+    p.apply(crate::plate::Op::Drypoint { tip_um: 25.0, cone_deg: 30.0, pts: line });
+    p.ink(&black(), InkTool::of(Inker::Card), &[pt(-25.0, 1.0, 10.0), pt(30.0, 1.0, 10.0), pt(-25.0, 5.0, 10.0), pt(30.0, 5.0, 10.0)], 0.0).unwrap();
+    let ring: Vec<crate::plate::Point> = (0..=72).map(|i| {
+        let a = i as f32 / 24.0 * std::f32::consts::TAU;
+        pt(3.0 + 6.0 * a.cos(), 3.0 + 6.0 * a.sin(), 0.5)
+    }).collect();
+    let mut t = Rag::tarlatan(40.0, 3, 0.7);
+    p.wipe(&mut t, &ring, 1, 1.0);
+    t.refold(&mut crate::tally::Tally::default());
+    p.wipe(&mut t, &ring, 1, 1.0);
+    p.hand_wipe(&[pt(-40.0, 3.0, 0.5), pt(46.0, 3.0, 0.5)], 1, false, 1.5);
+    let mut sh = Canvas::new_window(480, 1.0, [0.9; 3], None).with_engine(9).with_size_mm(12.0).with_paper(crate::paper::Paper::drawing(4));
+    let fe = feel(&sh, true);
+    p.press(&mut sh, (3.0, 3.0), &PressSpec::default(), &fe, &[paint()], 2.0).unwrap();
+    let w = 480;
+    let seen = sh.seen();
+    let lum = |x: usize, y: usize| {
+        let c = seen[y * w + x];
+        0.2126 * c[0] as f64 + 0.7152 * c[1] as f64 + 0.0722 * c[2] as f64
+    };
+    let row = |y: usize| (180..300).map(|x| lum(x, y)).sum::<f64>() / 120.0;
+    let rows: Vec<f64> = (120..360).map(row).collect();
+    // (the line near the middle, away from the plate's inked edges)
+    let (i0, _) = rows.iter().enumerate().skip(100).take(40).fold((0, f64::MAX), |b, (i, &v)| if v < b.1 { (i, v) } else { b });
+    // the open plate 1.0–1.5 mm off, both sides, as the scans' paper between lines
+    let open: Vec<f64> = (40..60).flat_map(|k| [rows[i0 - k], rows[i0 + k]]).collect();
+    let refl = open.iter().sum::<f64>() / open.len() as f64;
+    let od: Vec<f64> = (0..80).map(|k| (refl / rows[i0 + k].min(rows[i0 - k]).max(1e-6)).log10()).collect();
+    (od, 25.0)
+}
+
+/// A printed drypoint line against real ones (notes/research/intaglio_physics.md
+/// §5.7: The Met's open-access scans, linearised): Rembrandt's pure drypoint
+/// *Clump of Trees with a Vista* (1652) has half-peak widths of 0.17–0.34 mm and
+/// OD above 0.3 over 0.17–0.57 mm; Whistler's *Weary* (1863) 0.21 mm and OD above
+/// 0.1 over 0.32 mm. Peaked, no plateau: hatching 0.1–0.3 mm apart stays open.
+/// The engine's 2 N line, wiped as a printer wipes it, is peaked too: its
+/// half-peak width no more than 0.35 mm and its OD no more than 0.15 at 0.3 mm
+/// off (it printed a plateau of OD 0.7–0.8 out there before the lee took the
+/// film by its fibres in it). It is a line: dark at its core, with velvet by
+/// the burr.
+#[test]
+fn a_printed_drypoint_line_is_peaked_like_real_ones() {
+    let (od, um) = printed_2n_line();
+    let peak = od[0];
+    assert!(peak > 1.0, "the line prints dark: OD {peak}");
+    let half = od.iter().position(|&v| v < 0.5 * peak).unwrap() as f64;
+    // (rows at `um` µm; the width counts both sides and the middle row)
+    let width = (2.0 * half - 1.0) * um * 1e-3;
+    assert!(width <= 0.35, "half-peak width {width} mm: {od:?}");
+    let k = (300.0 / um).round() as usize;
+    assert!(od[k] <= 0.15, "OD {} at 0.3 mm off: {od:?}", od[k]);
+    assert!(od[(50.0 / um) as usize] > 0.1, "the velvet by the burr: {od:?}");
+}

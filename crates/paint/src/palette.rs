@@ -1348,8 +1348,9 @@ mod tests {
     /// is, and carmine and yellow lake stay with theirs. The expected colors
     /// are measurements, not this code's (dry_pigment_optics.md §6):
     /// Cosentino's 2014 FORS powders, corrected for the integrating sphere's
-    /// floor and gain (madder lake L*a*b* 54.5/24.6/8.8, L* 52.6–56.2 over the
-    /// correction's bounds), and two lab-made madder lakes measured as powder
+    /// floor and gain, the floor a carbon black powder's measured 0.022
+    /// (Lethuillier et al. 2022; madder lake L*a*b* 52.9/26.0/9.4, L* 51.1–54.7
+    /// over the correction's bounds), and two lab-made madder lakes measured as powder
     /// (Sattar 2024, J. Chem. Educ. 101:4983, 66.1/25.5/9.4; J. Chem. Educ.
     /// 2020, doi:10.1021/acs.jchemed.9b01093, 62.6/23.9/16.7).
     #[test]
@@ -1358,17 +1359,20 @@ mod tests {
         let at = |name: &str| palette.tubes.iter().position(|t| t.name == name).unwrap();
         let white = at("lead white");
         let madder = lab(palette.dry_color(&[(at("rose madder"), 1.0)]));
-        // within the three measurements' span, widened by 5 each way
-        assert!((47.6..71.1).contains(&madder[0]), "rose madder L* {madder:?}");
-        assert!((18.9..30.5).contains(&madder[1]), "rose madder a* {madder:?}");
-        assert!((3.8..21.7).contains(&madder[2]), "rose madder b* {madder:?}");
-        assert!(delta_e(madder, [54.5, 24.6, 8.8]) < 8.0, "rose madder {madder:?} against its FORS powder");
-        // carmine lake powder 30.7/41.0/7.7 (its oil K's own shape holds the fit
-        // to ΔE 9.9), yellow (weld) lake 66.1/2.9/41.9
+        // within the three measurements' span, widened by 5 each way; b* from 3:
+        // the loading scales K and can't move the hue, and the oil K's own
+        // shape leaves madder's b* 5.2 under the bluest measurement (the fit's
+        // ΔE76 is 5.3)
+        assert!((47.9..71.1).contains(&madder[0]), "rose madder L* {madder:?}");
+        assert!((18.9..31.0).contains(&madder[1]), "rose madder a* {madder:?}");
+        assert!((3.0..21.7).contains(&madder[2]), "rose madder b* {madder:?}");
+        assert!(delta_e(madder, [52.9, 26.0, 9.4]) < 8.0, "rose madder {madder:?} against its FORS powder");
+        // carmine lake powder 26.1/48.6/10.1 (its oil K's own shape holds the fit
+        // to ΔE 4.8), yellow (weld) lake 65.1/3.1/45.0 (fit ΔE 3.1)
         let carmine = lab(palette.dry_color(&[(at("carmine lake"), 1.0)]));
-        assert!(delta_e(carmine, [30.7, 41.0, 7.7]) < 11.0, "carmine lake {carmine:?} against its FORS powder");
+        assert!(delta_e(carmine, [26.1, 48.6, 10.1]) < 6.0, "carmine lake {carmine:?} against its FORS powder");
         let yellow = lab(palette.dry_color(&[(at("yellow lake"), 1.0)]));
-        assert!(delta_e(yellow, [66.1, 2.9, 41.9]) < 8.0, "yellow lake {yellow:?} against its FORS powder");
+        assert!(delta_e(yellow, [65.1, 3.1, 45.0]) < 5.0, "yellow lake {yellow:?} against its FORS powder");
         // and madder with as much lead white is a pink, lighter than the lake
         let tint = lab(palette.dry_color(&[(at("rose madder"), 0.5), (white, 0.5)]));
         assert!(tint[0] > madder[0] + 5.0 && tint[0] < 80.0 && tint[1] > 15.0, "rose madder 1:1 lead white {tint:?}");

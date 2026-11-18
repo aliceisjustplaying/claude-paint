@@ -122,6 +122,26 @@ pub fn powder_k(name: &str) -> Option<f32> {
     }
 }
 
+/// A black's grains in air, with the dry-earths switch (`Palette::dry_earths`):
+/// the S/K their bed has, from Mie of their complex index (dry_pigment_optics.md
+/// §8.1, dry_colours_fit.py). Carbon absorbs within a tenth of a micrometre, so a
+/// carbon-bearing grain is opaque and all it scatters is what its facets reflect:
+/// its bed's K/S is the grain's, whatever its size, not the oil table's S times
+/// `carbon_ratio` (which left bone black's dry stick at R∞ 10⁻⁴, its calibrated oil
+/// S being near nothing, and vine black's at 0.20 from a masstone). Vine black:
+/// charred wood (Jäger, Mutschke & Henning 1998, the mean of their cellulose chars
+/// at 400 and 600 °C), 3 µm grains: R∞ 0.021. Bone black: hydroxyapatite with 10
+/// wt % carbon spread through it (an effective medium, Bruggeman), 7 µm grains
+/// (3–15 µm): R∞ 0.013. Dry, the black keeps its K (so its tints keep their
+/// strength) and takes S = K × this. None for any other tube.
+pub fn carbon_bed(name: &str) -> Option<f32> {
+    match name {
+        "vine black" => Some(0.04412),
+        "bone black" => Some(0.02758),
+        _ => None,
+    }
+}
+
 /// The dry rule's scattering per coat of a particle of index `n` (1 µm),
 /// spectrally: lead white's oil S `white` times its Mie air/oil ratio (its
 /// dry S), times the Mie σ′(n)/σ′(2.0) (`mie_air`). It is what the rule

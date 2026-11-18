@@ -823,8 +823,10 @@ pub struct Palette {
     /// Engine 9: an earth (burnt sienna, red earth, raw sienna, yellow
     /// ochre, raw umber) or viridian looks dry as its measured powder does:
     /// its K per volume at the factor the powder shows over its oil table's,
-    /// over the Mie scattering of its particles in air (`dry::powder_k`; the
-    /// easel's session.rs `DRY_EARTHS_MARK`): new paintings.
+    /// over the Mie scattering of its particles in air (`dry::powder_k`); and
+    /// a black (bone, vine) as its opaque grains' facets make it
+    /// (`dry::carbon_bed`; the easel's session.rs `DRY_EARTHS_MARK`): new
+    /// paintings.
     pub dry_earths: bool,
     /// Engine 9's material revision (`Canvas::with_material`; an easel log's
     /// `--@ material`): 1 only where a log's head names it, whose baked
@@ -1066,13 +1068,19 @@ impl Palette {
                 // K per volume as its measured powder shows it, over its
                 // particles' Mie scattering in air (`dry::powder_k`; the
                 // negative index takes that S as it is)
-                match crate::dry::powder_k(name).filter(|_| self.dry_earths && self.is_catalog_tube(i)) {
-                    Some(a) => {
-                        let p = pigment(i);
-                        (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: crate::dry::rule_scatter(n, &white) }, -1.0, f)
-                    }
-                    None => (pigment(i), n, f),
+                let switched = self.dry_earths && self.is_catalog_tube(i);
+                if let Some(a) = crate::dry::powder_k(name).filter(|_| switched) {
+                    let p = pigment(i);
+                    return (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: crate::dry::rule_scatter(n, &white) }, -1.0, f);
                 }
+                // a black, with the switch: its grains are opaque, so its bed's
+                // K/S is what their facets give (`dry::carbon_bed`): its K kept,
+                // S = K × that bed's S/K
+                if let Some(r) = crate::dry::carbon_bed(name).filter(|_| switched) {
+                    let p = pigment(i);
+                    return (crate::spectral::SpectralPigment { k: p.k, s: p.k.map(|k| k * r) }, -1.0, f);
+                }
+                (pigment(i), n, f)
             }).collect();
             return crate::dry::spectral_color(&list, &white);
         }
@@ -1371,7 +1379,7 @@ mod tests {
     }
 
     /// Without the switch every dry color is as engine 9 gave it before: the
-    /// earths' bits are those main's code gave at 4bbbbec3 (the same as the
+    /// earths' and the blacks' bits are those main's code gave at 4bbbbec3 (the same as the
     /// 2026-11-18 integration build's sticks), and only the tubes the switch
     /// names change with it, and only where the box has the catalog's paint.
     #[test]
@@ -1380,6 +1388,8 @@ mod tests {
         let at = |name: &str| off.tubes.iter().position(|t| t.name == name).unwrap();
         let bits = |c: crate::Rgb| c.map(f32::to_bits);
         for (name, expected) in [
+            ("bone black", [0x38abdcc5, 0x3788a3ef, 0x378690f3]),
+            ("vine black", [0x3e4f82c1, 0x3e4daa1e, 0x3e4de0b4]),
             ("burnt sienna", [0x3f11d4c9, 0x3e6d286e, 0x3e2460af]),
             ("red earth", [0x3f272f3e, 0x3e61d15d, 0x3e1a94b0]),
             ("raw sienna", [0x3f2cd8e8, 0x3ebf3ebf, 0x3e23d4af]),
@@ -1391,7 +1401,7 @@ mod tests {
         }
         let white = at("lead white");
         for (i, t) in off.tubes.iter().enumerate() {
-            let changed = crate::dry::powder_k(t.name).is_some();
+            let changed = crate::dry::powder_k(t.name).is_some() || crate::dry::carbon_bed(t.name).is_some();
             for parts in [vec![(i, 1.0)], vec![(i, 0.5), (white, 0.5)]] {
                 assert_eq!(off.dry_color(&parts) == on.dry_color(&parts), !changed, "{}", t.name);
             }
@@ -1410,6 +1420,39 @@ mod tests {
         let mut plain = custom.clone();
         plain.dry_earths = false;
         assert_eq!(custom.dry_color(&[(at("burnt sienna"), 1.0)]), plain.dry_color(&[(at("burnt sienna"), 1.0)]));
+    }
+
+    /// With the switch a pure black stick is as dark as its grains make it: a
+    /// carbon-bearing grain is opaque, so its bed's K/S is Mie's for its facets
+    /// (`dry::carbon_bed`), R∞ 0.0211 for vine black and 0.0134 for bone black,
+    /// flat, where the stick had been R∞ 10⁻⁴ (bone black, sRGB 0 0 0) and 0.20
+    /// (vine black, L* 52). The physics is checked against measurements
+    /// (dry_pigment_optics.md §8.1–8.2): charcoal powder reflects 3.0 % at 550 nm
+    /// (Lethuillier et al. 2022, a measurement independent of CHSOS), and CHSOS's
+    /// corrected powders, with the black floor that measurement gives (0.022), are
+    /// vine black 20.3/−0.8/0.8 and bone black 13.6/0.0/0.5 (ΔE76 4.4 and 2.1; with
+    /// the repo's floor of 0.04, an estimate, both are 10.1 off). A tint with lead
+    /// white stays a neutral grey, lighter than the black.
+    #[test]
+    fn dry_blacks_are_as_dark_as_their_grains() {
+        let palette = earths_palette(true);
+        let at = |name: &str| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        for (name, r_inf, powder, tolerance) in [("vine black", 0.0211f32, [20.3, -0.8, 0.8], 5.9), ("bone black", 0.0134, [13.6, 0.0, 0.5], 3.6)] {
+            let got = palette.dry_color(&[(at(name), 1.0)]);
+            let y = 0.2126 * got[0] + 0.7152 * got[1] + 0.0722 * got[2];
+            assert!((y - r_inf).abs() < 0.001, "{name} Y {y} against its grains' R-inf {r_inf}");
+            assert!(got.iter().all(|&c| (c - y).abs() < 0.002), "{name} is neutral: {got:?}");
+            assert!(delta_e(lab(got), powder) < tolerance, "{name} {:?} against its powder {powder:?}", lab(got));
+            let tint = lab(palette.dry_color(&[(at(name), 0.2), (at("lead white"), 0.8)]));
+            assert!(tint[0] > lab(got)[0] + 15.0 && tint[1].abs() < 3.0 && tint[2].abs() < 6.0, "{name} 1:4 lead white {tint:?}");
+        }
+        // the S the switch gives is the black's K times its grains' S/K
+        let i = at("bone black");
+        let p = crate::mixer::pigment9(&crate::mixer::tube9("bone black").unwrap()).scaled(crate::COAT_UM / 100.0);
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+        let r = crate::dry::carbon_bed("bone black").unwrap();
+        let list = (crate::spectral::SpectralPigment { k: p.k, s: p.k.map(|k| k * r) }, -1.0, 1.0);
+        assert_eq!(palette.dry_color(&[(i, 1.0)]), crate::dry::spectral_color(&[list], &white));
     }
 
     /// The switch's K per volume against the iron oxide's own absorption

@@ -468,8 +468,15 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   it lying on the canvas, so it goes down again within a few mm (that
   length grows with the pressure), over dry paint as over wet: drawn across
   a wet edge, the hairs carry each side into the other. The next wipe takes
-  what they still hold at the stroke's end. A badger (`brush("badger", w)`) is soft and
-  presses lightly. Any brush can be used.
+  what they still hold at the stroke's end; what the wipe leaves stays in
+  the tuft and doesn't go down where the next stroke starts. The hairs leave
+  the canvas as they slide, taking up no more where the hand lifts. The bed
+  rides on the paint and pushes aside only the paint thicker than the film
+  it leaves, which follows from the paint and the hand as a stroke's does
+  (below). A badger (`brush("badger", w)`) is soft and presses lightly: at
+  0.4 a 5 mm badger rides on about 140 µm of tube paint, so it furrows none
+  of a dense coat. A 5 mm hog filbert at 0.4 leaves about 50 µm and furrows
+  thicker paint. Any brush can be used.
 - **The film one stroke leaves** (every brush stroke in a new painting:
   `b:stroke`, `b:gesture`, `b:blend`) follows from the paint and the hand.
   No mode picks it. The bristle bed is a slider riding on the paint. Each

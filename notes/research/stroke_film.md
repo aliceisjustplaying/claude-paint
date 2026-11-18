@@ -494,10 +494,11 @@ model assumes, not a dry tuft. Dry hairs dragged into wet paint wet in it
 (the paint wicks between them in a contact) and carry it on. So a blender
 stroke has no press film to relax: its hairs pick up and lay back as the
 slide has it from their first step (the slider's or meniscus film, §3),
-laying what they carry over their contact. They still lift as a press
-does where the hand leaves the canvas. A clean hair's gap holds no paint
-of its own, so the lift takes up half the wet film there, as a clean
-brush's touch does (§4).
+laying what they carry over their contact. Nor do they lift as a press:
+the lift's split is of the film the bed brought down, and a wiped bed
+brought none. Lifting as a press, a clean hair's empty gap took up half
+the wet film under the bed at each stroke's end, a pale patch, and its
+haul went down at the next stroke's start (blender.md, "The ladder").
 
 **One law.** As the stroke's length goes to 0 the slid strip, no longer
 than the stroke, goes to nothing, and the stroke is the lift's split over

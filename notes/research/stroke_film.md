@@ -299,6 +299,24 @@ whole stroke. A stroke pressed hard into thick wet paint (h₀ < W) still
 works it up. A light loaded stroke over a thinner wet film lays on top,
 and a stroke no longer lifts back its own fresh paint.
 
+**A clean blender.** The gap law is a loaded bed's: its press film is the
+brush's own paint, squeezed out toward h₀. A blender (`b:blend`) is wiped
+on the rag before each stroke, so its press film is next to nothing. Under
+the law that gap stays shut for the whole stroke (in z = 1/h² a gap of
+zero is a fixed point: the lift and the squeeze both grow without bound
+as h → 0, and from a small h the gap opens only as e^(Bs/2)). The hairs
+then laid nothing (the outlet film 0.69 h ≈ 0) and took up everything
+they passed (the share (W − h)/W ≈ 1), so the blender moved no paint and
+the rag took half of it. That is the smooth, sealed plate the squeeze
+model assumes, not a dry tuft. Dry hairs dragged into wet paint wet in it
+(the paint wicks between them in a contact) and carry it on. So a blender
+stroke has no press film to relax: its hairs pick up and lay back as the
+slide has it from their first step (the slider's or meniscus film, §3),
+laying what they carry over their contact. They still lift as a press
+does where the hand leaves the canvas. A clean hair's gap holds no paint
+of its own, so the lift takes up half the wet film there, as a clean
+brush's touch does (§4).
+
 **One law.** As the stroke's length goes to 0 the slid strip, no longer
 than the stroke, goes to nothing, and the stroke is the lift's split over
 the bed: on bare ground a stroke of no length lays 22 µm where a touch

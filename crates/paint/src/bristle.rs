@@ -870,7 +870,8 @@ pub(crate) struct Surf {
     /// The gap under the stroke's bed where the hair being laid meets the
     /// canvas (`drag_on`, with the stroke film): at a stroke's start it still
     /// holds the press film, relaxing toward the slider's. None: the
-    /// slider's.
+    /// slider's (and always on a clean-blender stroke, whose bed brings no
+    /// film of its own down).
     pub(crate) gap: Option<crate::stroke_film::Gap>,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
@@ -1688,19 +1689,35 @@ pub(crate) unsafe fn drag_on(
                     }
                     continue;
                 }
-                let pad = sf.pad.expect("the stroke film sets the bed");
-                let mmu = sf.stroke_film.unwrap_or(1.0);
-                // the gap as the bed's rear leaves where this hair is
-                let h = crate::stroke_film::relax_m(gap[bi], (along - rear).max(0.0) / s * mmu * 1e-3, rheo[bi], &pad);
-                // the paint the squeeze drives out of the gap past the
-                // slider's film leaves by the outlet too: on the strip this
-                // hair stands for (spacing wide) along its step
-                let h0 = crate::stroke_film::slider_m(rheo[bi], &pad).unwrap_or(h);
-                let spacing_u = half / s * (root_area(tool.kind) / held_n as f32).sqrt();
-                let prev = b.prev[0].unwrap_or(cur);
-                let seg_u = ((cur.0 - prev.0).powi(2) + (cur.1 - prev.1).powi(2)).sqrt() / s;
-                let squeeze = crate::stroke_film::OUTLET * (h - h0).max(0.0) / (COAT_UM * 1e-6) * spacing_u * seg_u;
-                sf.gap = Some(crate::stroke_film::Gap { h, squeeze });
+                // A clean blender's bed has no film of its own to squeeze
+                // out: the gap law is a loaded bed's (its press film, the
+                // brush's own paint, thinning toward the slider's film),
+                // and a wiped brush's press film is next to nothing, which
+                // would leave its gap shut for the whole stroke, its hairs
+                // laying nothing and taking up everything they pass. Dry
+                // hairs dragged into wet paint wet in it and carry it on, so
+                // a blender's hairs pick up and lay back as the slide has
+                // it from their first step (the slider's film, `Surf::gap`
+                // None; what they lay goes down over their contact,
+                // `Surf::lay_run`). They still lift as a press does where
+                // the hand leaves the canvas, above.
+                if sf.blend {
+                    sf.gap = None;
+                } else {
+                    let pad = sf.pad.expect("the stroke film sets the bed");
+                    let mmu = sf.stroke_film.unwrap_or(1.0);
+                    // the gap as the bed's rear leaves where this hair is
+                    let h = crate::stroke_film::relax_m(gap[bi], (along - rear).max(0.0) / s * mmu * 1e-3, rheo[bi], &pad);
+                    // the paint the squeeze drives out of the gap past the
+                    // slider's film leaves by the outlet too: on the strip this
+                    // hair stands for (spacing wide) along its step
+                    let h0 = crate::stroke_film::slider_m(rheo[bi], &pad).unwrap_or(h);
+                    let spacing_u = half / s * (root_area(tool.kind) / held_n as f32).sqrt();
+                    let prev = b.prev[0].unwrap_or(cur);
+                    let seg_u = ((cur.0 - prev.0).powi(2) + (cur.1 - prev.1).powi(2)).sqrt() / s;
+                    let squeeze = crate::stroke_film::OUTLET * (h - h0).max(0.0) / (COAT_UM * 1e-6) * spacing_u * seg_u;
+                    sf.gap = Some(crate::stroke_film::Gap { h, squeeze });
+                }
             }
             // a pointed tool's hair that has just come down lays its share
             // of the step it came down in (its neighbors' tracks tile with it)

@@ -859,6 +859,14 @@ pub(crate) struct Surf {
     /// between each hair and the canvas splits on the lift, half each way,
     /// over the wet film already there (`engine7::exchange::press_lift`).
     pub(crate) press: bool,
+    /// A clean-blender stroke (`Canvas::blend_stroke`): `drag_on` sets
+    /// `lay_run` each step to the length of hair lying on the canvas
+    /// (`blend_contact`).
+    pub(crate) blend: bool,
+    /// The run (units) over which a hair lays what it carries, in place of
+    /// its tool's (`Tool::run`, how far a full load lasts): on a blender
+    /// stroke, the contact `blend_contact` gives. None: the tool's.
+    pub(crate) lay_run: Option<f32>,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1137,6 +1145,8 @@ impl Canvas {
             stroke_film: self.stroke_film.then_some(self.mm_per_unit),
             pad: None,
             press: false,
+            blend: false,
+            lay_run: None,
         }
     }
 
@@ -1197,7 +1207,13 @@ impl Canvas {
     /// what it holds, as a blender pass wipes it, `Handling::blender`), then
     /// drawn through the wet paint along `g`. It lays only what it picks up,
     /// worked into the wet film it lays it in (the blender pass's `skim` of
-    /// 0: none of it stays on top as a brushload would).
+    /// 0: none of it stays on top as a brushload would). What a clean hair
+    /// picks up sits on the part of it lying on the canvas, not in a
+    /// reservoir up the tuft, so it goes back down over that contact
+    /// (`blend_contact`, a few mm) rather than over the run a full load lasts
+    /// (`Tool::run`, centimeters): the hairs carry the paint on and lay it
+    /// again, and the next wipe takes only what they hold at the stroke's
+    /// end.
     pub fn blend_stroke(&mut self, held: &mut Held, g: &Gesture) {
         held.wipe(0.9);
         self.tally.wipe();
@@ -1207,7 +1223,7 @@ impl Canvas {
         }
         self.tally_stroke(&held.tool, g);
         let id = self.next_stroke_ids(1);
-        let surf = Surf { skim: 0.0, ..self.surf() };
+        let surf = Surf { skim: 0.0, blend: true, ..self.surf() };
         let mut scratch = Vec::new();
         // SAFETY: exclusive &mut self, single brush.
         let b = unsafe { drag_on(surf, held, g, None, id, &mut scratch) };
@@ -1527,6 +1543,9 @@ pub(crate) unsafe fn drag_on(
         if let (Some(mmu), Some(v)) = (sf.stroke_film, film_speed) {
             sf.pad = Some(crate::stroke_film::pad(&tool, p, mmu, v));
         }
+        if sf.blend {
+            sf.lay_run = Some(blend_contact(&tool, p));
+        }
         let half = tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(&tool, p, coh);
         // bend relaxes toward its target: a rate in 0..1 keeps it a blend of
         // targets, within the reach `footprint` allows for
@@ -1721,6 +1740,17 @@ pub(crate) fn wander(t: f32, seed: u64) -> f32 {
     (a + (b - a) * f) * 2.0 - 1.0
 }
 
+/// The length (units) of a clean blender's hair lying on the canvas at
+/// pressure `p`, over which it lays back what it picked up
+/// (`Canvas::blend_stroke`): the bent part from where the hair touches to its
+/// tip, which trails the root by the tool's `length` at full pressure, as
+/// `drag_on` bends it (the tips trail by `length · p`). An estimate: an
+/// elastica pressed against the canvas would give it from the hair's
+/// stiffness and the force; the trail is the geometry the strokes already use.
+pub(crate) fn blend_contact(tool: &Tool, p: f32) -> f32 {
+    (tool.length * p.clamp(0.0, 1.0)).max(0.05 * tool.width).max(1e-3)
+}
+
 fn pickup_fraction(rate: f32, passes: f32) -> f32 {
     let rate = rate.clamp(0.0, 1.0);
     if passes <= 1.0 { rate } else { 1.0 - (1.0 - rate).powf(passes) }
@@ -1781,7 +1811,7 @@ pub(crate) unsafe fn exchange(
                 // (the exchange experiment: a thinned hair lets go more slowly)
                 let travel = if crate::thinner::exchange() && !sf.laid.is_null() { travel * (1.0 - br.solvent / l).powf(crate::thinner::exchange_kj().0) } else { travel };
                 let left = match dep {
-                    None => l * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                    None => l * (1.0 - (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * GHOST_TOUCH),
                     Some(v) => (l - v.min(l * 0.5) * GHOST_TOUCH).max(0.0),
                 };
                 let f = if l > 0.0 { left / l } else { 0.0 };
@@ -1790,7 +1820,7 @@ pub(crate) unsafe fn exchange(
                 return;
             }
             br.vol = match dep {
-                None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                None => br.vol * (1.0 - (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
             return;
@@ -1926,14 +1956,14 @@ pub(crate) unsafe fn exchange(
         // bristle skimming the weave peaks keeps most of its load
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
         let dep_total = match dep {
-            None => liquid * (1.0 - (-travel / tool.run).exp()) * touch,
+            None => liquid * (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * touch,
             Some(v) => v.min(liquid * 0.5) * touch,
         };
         let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (sum_k / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
-                None => liquid * (1.0 - (-travel * g / tool.run).exp()) * touch,
+                None => liquid * (1.0 - (-travel * g / sf.lay_run.unwrap_or(tool.run)).exp()) * touch,
                 Some(_) => dep_total * g,
             };
             d.min(liquid * 0.9)
@@ -3698,6 +3728,73 @@ mod one_stroke_tests {
         let mut h = Held::new(tool, 3).with_engine(crate::PIGMENT_MIXER);
         h.load(Paint::body(hex(color)), 1.0);
         h
+    }
+
+    /// Fresh wet strokes lying on dry paint, as a new painting lays them
+    /// (the stroke film on), on linen at 0.375 mm a pixel: a dark band
+    /// four filbert strokes deep over a dried light underlayer.
+    fn band_on_dry_paint() -> Canvas {
+        use crate::surface::Linen;
+        let mut c = Canvas::new(400, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(150.0).with_linen(Linen::fine(5)).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true).with_drain(true);
+        c.prime(hex("#ece6da"), 1.0, 90.0, 0.6, 0.2, 3);
+        let mut light = Held::new(Tool::hog_flat(80.0), 1).with_engine(crate::PIGMENT_MIXER);
+        for r in 0..13 {
+            light.load(Paint::body(hex("#e8dcc0")), 0.9);
+            c.drag(&mut light, &Gesture::new(vec![(150.0, 250.0 + r as f32 * 40.0), (850.0, 250.0 + r as f32 * 40.0)]).pressure(0.8, 0.8).speed(150.0), None);
+        }
+        c.wait(60.0 * 24.0 * 60.0);
+        let mut dark = Held::new(Tool::filbert(60.0), 2).with_engine(crate::PIGMENT_MIXER);
+        for r in 0..4 {
+            dark.load(Paint::body(hex("#203070")), 0.9);
+            c.drag(&mut dark, &Gesture::new(vec![(250.0, 500.0 + r as f32 * 30.0), (750.0, 500.0 + r as f32 * 30.0)]).pressure(0.8, 0.8).speed(150.0), None);
+        }
+        c
+    }
+
+    /// The width (mm) of the band's top edge in its wet paint: from a tenth
+    /// to nine tenths of the band's own film, the paint averaged along it.
+    fn top_edge_mm(c: &Canvas) -> f32 {
+        let row = |y: f32| (350..650).step_by(2).map(|x| c.wet.vol[c.f.index(x as f32, y)]).sum::<f32>() / 150.0;
+        let band = (560..600).step_by(2).map(|y| row(y as f32)).sum::<f32>() / 20.0;
+        let ys: Vec<f32> = (400..600).map(|y| y as f32).collect();
+        let first = |k: f32| ys.iter().copied().find(|&y| row(y) > k * band).unwrap_or(600.0);
+        (first(0.9) - first(0.1)) * c.mm_per_unit
+    }
+
+    /// A clean blender drawn lightly across fresh wet strokes on dry paint
+    /// softens their edge within a pass or two (it widens more than
+    /// twofold: 4.8 mm to 10–18 mm) and moves the paint rather than taking
+    /// it away: no paint is made (what the canvas loses is what the rag and
+    /// the brush hold, to float rounding), and the canvas keeps more than
+    /// 55% of it (61–70%). What it does lose is what the hairs hold at each
+    /// stroke's end, which the next wipe takes. Before the hairs laid back
+    /// what they picked up over their contact they laid it over the run of a
+    /// full load (66 mm for this filbert, 4.5 mm for the badger), so the
+    /// wipe took most of it: the canvas kept 38% (filbert) and 46% (badger),
+    /// and the filbert's edge hardened again (4.8, 6.8, 0.8 mm).
+    #[test]
+    fn a_blender_softens_wet_strokes_on_dry_paint_and_keeps_their_paint() {
+        for (name, tool) in [("filbert", Tool::filbert(60.0)), ("badger", Tool::badger(60.0))] {
+            let mut c = band_on_dry_paint();
+            let (w0, e0) = (c.wet_total(), top_edge_mm(&c));
+            let mut bl = Held::new(tool, 9).with_engine(crate::PIGMENT_MIXER);
+            let mut rag = 0.0f64;
+            let mut edges = Vec::new();
+            for _pass in 0..2 {
+                for x in (300..=700).step_by(20) {
+                    rag += 0.9 * bl.carried().0;
+                    c.blend_stroke(&mut bl, &Gesture::new(vec![(x as f32, 420.0), (x as f32, 640.0)]).pressure(0.4, 0.4).speed(200.0));
+                }
+                edges.push(top_edge_mm(&c));
+            }
+            let w1 = c.wet_total();
+            let held = bl.carried().0;
+            eprintln!("{name}: edge {e0:.1} mm -> {:.1}, {:.1} mm; the canvas keeps {:.0}% of its wet paint, the rag took {:.0}%, the brush holds {:.1}%", edges[0], edges[1], 100.0 * w1 / w0, 100.0 * rag / w0, 100.0 * held / w0);
+            assert!((w0 - (w1 + rag + held)).abs() < 1e-3 * w0, "{name}: paint made or lost: {w0} -> {w1} + rag {rag} + brush {held}");
+            assert!(w1 <= w0 * 1.0001, "{name}: the blender laid paint of its own: {w0} -> {w1}");
+            assert!(edges[0] > 2.0 * e0 && edges[1] > 2.0 * e0, "{name}: the edge didn't soften: {e0} mm -> {edges:?}");
+            assert!(w1 > 0.55 * w0, "{name}: the blender took the paint away ({w0} -> {w1}) instead of moving it");
+        }
     }
 
     /// A clean-blender stroke across a wet edge between two colors carries

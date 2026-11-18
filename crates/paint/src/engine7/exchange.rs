@@ -219,7 +219,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let l = br.vol + br.solvent;
                 let travel = if crate::thinner::exchange() && !sf.laid.is_null() { travel * (1.0 - br.solvent / l).powf(crate::thinner::exchange_kj().0) } else { travel };
                 let left = match dep {
-                    None => l * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                    None => l * (1.0 - (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * GHOST_TOUCH),
                     Some(v) => (l - v.min(l * 0.5) * GHOST_TOUCH).max(0.0),
                 };
                 let f = if l > 0.0 { left / l } else { 0.0 };
@@ -227,7 +227,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 br.solvent *= f;
             } else {
                 br.vol = match dep {
-                    None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                    None => br.vol * (1.0 - (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * GHOST_TOUCH),
                     Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
                 };
             }
@@ -375,14 +375,14 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let travel = if exch { travel * (1.0 - phi).powf(crate::thinner::exchange_kj().0) } else { travel };
         let touch = (sum_w / ct.coverage.max(1e-6)).min(1.0);
         let dep_total = match dep {
-            None => liquid * (1.0 - (-travel / tool.run).exp()) * touch,
+            None => liquid * (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * touch,
             Some(v) => v.min(liquid * 0.5) * touch,
         };
         let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (ct.fence / sum_w).min(1.0) } else { dep_total };
         let dep_total = if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
-                None => liquid * (1.0 - (-travel * g / tool.run).exp()) * touch,
+                None => liquid * (1.0 - (-travel * g / sf.lay_run.unwrap_or(tool.run)).exp()) * touch,
                 Some(_) => dep_total * g,
             };
             d.min(liquid * 0.9)

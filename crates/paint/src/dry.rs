@@ -103,23 +103,64 @@ pub fn carbon_ratio(name: &str) -> Option<f32> {
 /// an assumed 100 µm oil film, and its S from an estimated hiding
 /// (scripts/pigment_data/researched-tubes.json), so a dry stick of them
 /// came out as pale as a tint (pure burnt sienna sRGB 198 132 111, L* 61,
-/// where the powder is 115 62 50, L* 33). Dry, each takes its K times this
-/// factor over the Mie scattering of its particles in air at its index
-/// (`rule_scatter`), and the factor is fitted so the pure stick matches the
-/// same pigment's powder (Cosentino 2014 FORS powders, corrected for the
-/// integrating sphere's floor and gain as for the lakes:
-/// notes/research/dry_pigment_optics.md §7, dry_earth_fit.py). The factors
-/// agree with the iron oxides' absorption (§7.3). None for any other tube.
+/// where the powder is 110 49 31, L* 28). Dry, each takes its K times this
+/// factor over what its grains scatter in air (`earth_scatter`), and the
+/// factor is fitted so the pure stick matches the same pigment's powder
+/// (Cosentino 2014 FORS powders, corrected for the integrating sphere's floor
+/// and gain, the floor the measured 0.022: notes/research/dry_pigment_optics.md
+/// §7, §9, dry_earth_fit.py). With the measured S the factors take the earths
+/// to 19–51 % of a hematite bed's absorption (§9.4). None for any other tube.
 pub fn powder_k(name: &str) -> Option<f32> {
     match name {
-        "burnt sienna" => Some(31.71),
-        "red earth" => Some(7.718),
-        "raw sienna" => Some(10.08),
-        "yellow ochre" => Some(2.087),
-        "raw umber" => Some(16.49),
-        "viridian" => Some(3.910),
+        "burnt sienna" => Some(16.79),
+        "red earth" => Some(3.600),
+        "raw sienna" => Some(15.19),
+        "yellow ochre" => Some(3.137),
+        "raw umber" => Some(5.620),
+        "viridian" => Some(4.298),
         _ => None,
     }
+}
+
+/// An earth's grains, with the dry-earths and oil-earths switches: what they
+/// scatter per pigment volume in a binder of fresh oil's index, measured
+/// (µm⁻¹, the K–M S of LBNL's acrylic films, n 1.49, of burnt sienna, raw
+/// sienna and raw umber, natural PBr 7, at 550–700 nm; Levinson, Berdahl &
+/// Akbari 2005; notes/research/earth_scatter_lbnl.py), and Mie's air/oil ratio
+/// of S at their measured size (Kremer's burnt umber 40710 by laser
+/// diffraction, 6.4 µm, 0.2–42 µm; yellow ochre's own 116421, 10.5 µm, 0.2–76
+/// µm: Reichert et al. 2025, Anal. Bioanal. Chem. 417:4351). Red earth takes
+/// burnt sienna's S and yellow ochre raw sienna's: no film of either was
+/// measured (dry_pigment_optics.md §9). These replace #351's Mie S of grains
+/// an estimated 1 µm across, which scatter 2–4× what the measured burnt
+/// sienna and raw umber do, so their tints with white came out too dark.
+fn earth_grains(name: &str) -> Option<(f32, f32)> {
+    match name {
+        "burnt sienna" => Some((0.1845, 1.669)),
+        "red earth" => Some((0.1845, 1.551)),
+        "raw sienna" => Some((0.3817, 2.349)),
+        "yellow ochre" => Some((0.3817, 2.139)),
+        "raw umber" => Some((0.0993, 1.936)),
+        _ => None,
+    }
+}
+
+/// What tube `name`'s grains scatter, with the dry-earths and oil-earths
+/// switches, as multiples of lead white's oil S: (in oil, dry). An earth's is
+/// its measured S per volume (`earth_grains`) over lead white's on the dry
+/// rule's scale (¾ σ′ in oil at 1 µm, `mie_air`); dry, times Mie's air/oil
+/// ratio at the grains' size. Viridian, with nothing measured, keeps the
+/// rule's: Mie at 1 µm at its index. None for a tube without `powder_k`.
+pub fn earth_scatter(name: &str) -> Option<(f32, f32)> {
+    powder_k(name)?;
+    let (sigma_white, r_white) = mie_air(2.0);
+    let white = 0.75 * sigma_white / r_white;
+    if let Some((s, ratio)) = earth_grains(name) {
+        return Some((s / white, s / white * ratio));
+    }
+    let (sigma, ratio) = mie_air(refractive_index(name));
+    let dry = r_white * sigma / sigma_white;
+    Some((dry / ratio, dry))
 }
 
 /// A black's grains in air, with the dry-earths switch (`Palette::dry_earths`):
@@ -140,26 +181,6 @@ pub fn carbon_bed(name: &str) -> Option<f32> {
         "bone black" => Some(0.02758),
         _ => None,
     }
-}
-
-/// The dry rule's scattering per coat of a particle of index `n` (1 µm),
-/// spectrally: lead white's oil S `white` times its Mie air/oil ratio (its
-/// dry S), times the Mie σ′(n)/σ′(2.0) (`mie_air`). It is what the rule
-/// gives any pigment under n 1.9; with the dry-earths switch it is also an
-/// earth's (`powder_k`).
-pub fn rule_scatter(n: f32, white: &crate::spectral::Spectrum) -> crate::spectral::Spectrum {
-    let (sigma_white, r_white) = mie_air(2.0);
-    let (sigma, _) = mie_air(n);
-    std::array::from_fn(|w| r_white * white[w] * sigma / sigma_white)
-}
-
-/// What a pigment's grains of index `n` (1 µm) scatter in fresh oil, as a
-/// multiple of lead white's oil S: the dry rule's Mie S (`rule_scatter`) over
-/// Mie's air/oil ratio at `n`. The oil-earths slots' S (`crate::mixer::OIL_EARTHS`).
-pub fn oil_scatter(n: f32) -> f32 {
-    let (sigma_white, r_white) = mie_air(2.0);
-    let (sigma, ratio) = mie_air(n);
-    r_white * sigma / sigma_white / ratio
 }
 
 /// How pigments look dry, in a pastel stick or a sheet's pulp:

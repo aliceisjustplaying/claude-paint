@@ -823,7 +823,8 @@ pub struct Palette {
     /// Engine 9: an earth (burnt sienna, red earth, raw sienna, yellow
     /// ochre, raw umber) or viridian looks dry as its measured powder does:
     /// its K per volume at the factor the powder shows over its oil table's,
-    /// over the Mie scattering of its particles in air (`dry::powder_k`); and
+    /// over what its grains scatter in air, measured (`dry::powder_k`,
+    /// `dry::earth_scatter`); and
     /// a black (bone, vine) as its opaque grains' facets make it
     /// (`dry::carbon_bed`; the easel's session.rs `DRY_EARTHS_MARK`): new
     /// paintings.
@@ -1078,13 +1079,14 @@ impl Palette {
                 let name = self.tubes[i].name;
                 let n = crate::dry::carbon_ratio(name).map_or_else(|| crate::dry::refractive_index(name), |r| -r);
                 // an earth or viridian as the box has it, with the switch: its
-                // K per volume as its measured powder shows it, over its
-                // particles' Mie scattering in air (`dry::powder_k`; the
-                // negative index takes that S as it is)
+                // K per volume as its measured powder shows it, over what its
+                // grains scatter in air (`dry::powder_k`, `dry::earth_scatter`;
+                // the negative index takes that S as it is)
                 let switched = self.dry_earths && self.is_catalog_tube(i);
                 if let Some(a) = crate::dry::powder_k(name).filter(|_| switched) {
                     let p = pigment(i);
-                    return (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: crate::dry::rule_scatter(n, &white) }, -1.0, f);
+                    let (_, dry) = crate::dry::earth_scatter(name).expect("an earth with powder_k scatters");
+                    return (crate::spectral::SpectralPigment { k: p.k.map(|k| k * a), s: white.map(|s| s * dry) }, -1.0, f);
                 }
                 // a black, with the switch: its grains are opaque, so its bed's
                 // K/S is what their facets give (`dry::carbon_bed`): its K kept,
@@ -1372,27 +1374,34 @@ mod tests {
 
     /// With the switch a pure earth stick, and viridian, is as deep as its
     /// pigment's dry powder. The expected colors are measurements, not this
-    /// code's (dry_pigment_optics.md §7): Cosentino's 2014 FORS powders
+    /// code's (dry_pigment_optics.md §7, §9): Cosentino's 2014 FORS powders
     /// (Kremer pigments), corrected for the integrating sphere's floor and
-    /// gain as for the lakes (dry_earth_fit.py). Burnt sienna 32.6/21.7/17.6
-    /// (L* 30.0–35.0 over the correction's bounds), raw umber 34.8/9.4/16.1
-    /// (32.3–37.1), viridian 46.3/−36.9/−3.0 (44.3–48.2), red ochre
-    /// 42.4/22.8/17.8. Before the switch burnt sienna came out L* 61, a pale
-    /// salmon. The tolerances are the fit's leftover ΔE76 (2.6, 2.6, 5.7,
-    /// 8.1: one factor on K cannot fix the oil table's K shape) plus 1.5.
+    /// gain, the floor the measured 0.022 (dry_earth_fit.py): burnt sienna
+    /// 28.4/25.7/24.0 (L* 25.5–31.0 over the correction's bounds), red ochre
+    /// 39.8/25.1/20.7, raw sienna 55.9/15.9/42.6, yellow ochre 68.0/12.7/45.7,
+    /// raw umber 31.1/11.1/20.6, viridian 44.1/−41.3/−3.3. Before the switch
+    /// burnt sienna came out L* 61, a pale salmon. The tolerances are the fit's
+    /// leftover ΔE76 (11.0, 5.0, 10.5, 10.3, 6.4, 10.4: one factor on K cannot
+    /// fix the oil table's K shape, and the deeper floor makes the powders more
+    /// saturated than that shape reaches) plus 1.5.
     #[test]
     fn dry_earths_look_as_their_powders_do() {
         let palette = earths_palette(true);
         let at = |name: &str| palette.tubes.iter().position(|t| t.name == name).unwrap();
         for (name, powder, l_range, tolerance) in [
-            ("burnt sienna", [32.6, 21.7, 17.6], 30.0..35.0, 4.1),
-            ("raw umber", [34.8, 9.4, 16.1], 32.3..37.1, 4.1),
-            ("viridian", [46.3, -36.9, -3.0], 44.3..48.2, 7.2),
-            ("red earth", [42.4, 22.8, 17.8], 40.3..44.4, 9.6),
+            ("burnt sienna", [28.4, 25.7, 24.0], 25.5..31.0, 12.5),
+            ("red earth", [39.8, 25.1, 20.7], 37.6..41.8, 6.5),
+            ("raw sienna", [55.9, 15.9, 42.6], 54.1..57.6, 12.0),
+            ("yellow ochre", [68.0, 12.7, 45.7], 66.3..69.7, 11.8),
+            ("raw umber", [31.1, 11.1, 20.6], 28.4..33.5, 7.9),
+            ("viridian", [44.1, -41.3, -3.3], 42.1..46.0, 11.9),
         ] {
             let got = lab(palette.dry_color(&[(at(name), 1.0)]));
             assert!(delta_e(got, powder) < tolerance, "{name} {got:?} against its FORS powder {powder:?}");
-            assert!((l_range.start - 1.5..l_range.end + 1.5).contains(&got[0]), "{name} L* {got:?}");
+            // (yellow ochre's L* is the oil table's K shape: its red end, §8.5)
+            if name != "yellow ochre" {
+                assert!((l_range.start - 1.5..l_range.end + 1.5).contains(&got[0]), "{name} L* {got:?}");
+            }
         }
         // a tint with lead white stays lighter than the earth and keeps its hue
         let sienna = lab(palette.dry_color(&[(at("burnt sienna"), 1.0)]));
@@ -1452,14 +1461,14 @@ mod tests {
     /// (dry_pigment_optics.md §8.1–8.2): charcoal powder reflects 3.0 % at 550 nm
     /// (Lethuillier et al. 2022, a measurement independent of CHSOS), and CHSOS's
     /// corrected powders, with the black floor that measurement gives (0.022), are
-    /// vine black 20.3/−0.8/0.8 and bone black 13.6/0.0/0.5 (ΔE76 4.4 and 2.1; with
-    /// the repo's floor of 0.04, an estimate, both are 10.1 off). A tint with lead
+    /// vine black 20.1/−0.8/0.8 and bone black 13.3/0.0/0.5 (ΔE76 4.2 and 1.8; with
+    /// #351's floor of 0.04, an estimate, both are 10.1 off). A tint with lead
     /// white stays a neutral grey, lighter than the black.
     #[test]
     fn dry_blacks_are_as_dark_as_their_grains() {
         let palette = earths_palette(true);
         let at = |name: &str| palette.tubes.iter().position(|t| t.name == name).unwrap();
-        for (name, r_inf, powder, tolerance) in [("vine black", 0.0211f32, [20.3, -0.8, 0.8], 5.9), ("bone black", 0.0134, [13.6, 0.0, 0.5], 3.6)] {
+        for (name, r_inf, powder, tolerance) in [("vine black", 0.0211f32, [20.1, -0.8, 0.8], 5.7), ("bone black", 0.0134, [13.3, 0.0, 0.5], 3.3)] {
             let got = palette.dry_color(&[(at(name), 1.0)]);
             let y = 0.2126 * got[0] + 0.7152 * got[1] + 0.0722 * got[2];
             assert!((y - r_inf).abs() < 0.001, "{name} Y {y} against its grains' R-inf {r_inf}");
@@ -1484,12 +1493,15 @@ mod tests {
     /// §8.6, dry_colours_fit.py): CHSOS's linseed-oil swatches of the same Kremer
     /// pigments, corrected as the powders, less the glossy film's 4 % specular
     /// (the engine shows a pile with its gloss excluded, `mixer::outside`).
-    /// Before the switch the masstones were 8–43 ΔE76 off (burnt sienna L* 43,
-    /// raw umber 45, where the swatches are 15 and 17.5); the tolerances are
-    /// what's left (the K shape, as dry: yellow ochre's red end, burnt sienna's
+    /// The swatches' blacks are glossy films, so their floor stays 0.04 (their
+    /// surface's reflection), not the powders' 0.022. Before the switch the
+    /// masstones were 8–43 ΔE76 off (burnt sienna L* 43, raw umber 45, where the
+    /// swatches are 15 and 17.5); the tolerances are what's left (17.0, 5.0, 9.9,
+    /// 21.3, 9.6, 7.1: the K shape, as dry: yellow ochre's red end, burnt sienna's
     /// hue) plus 2. A tint with lead white stays lighter than the masstone (how
-    /// much lighter rests on the grains' estimated 1 µm, §8.6). Other tubes, the
-    /// dry colors, a box's own earth and engine 8 are as before, bit for bit.
+    /// much lighter rests on the grains' measured S, §9;
+    /// `earth_tints_follow_from_their_measured_scattering`). Other tubes, the dry
+    /// colors, a box's own earth and engine 8 are as before, bit for bit.
     #[test]
     fn oil_earths_are_as_deep_as_their_oil_paints() {
         let (off, mut on) = (earths_palette(false), earths_palette(false));
@@ -1497,12 +1509,12 @@ mod tests {
         let at = |name: &str| on.tubes.iter().position(|t| t.name == name).unwrap();
         let oil = |p: &Palette, parts: Vec<(usize, f32)>| lab(p.pile(parts).color);
         for (name, measured, before, tolerance) in [
-            ("burnt sienna", [15.0, 2.9, -0.8], 43.3, 20.0),
-            ("red earth", [25.2, 24.7, 11.8], 25.7, 7.6),
-            ("raw sienna", [37.4, 17.2, 24.8], 18.6, 10.4),
-            ("yellow ochre", [49.2, 17.0, 37.7], 29.1, 24.5),
-            ("raw umber", [17.5, 6.5, 2.2], 34.4, 12.2),
-            ("viridian", [21.2, -24.0, -5.7], 8.3, 8.8),
+            ("burnt sienna", [15.0, 2.9, -0.8], 43.3, 19.0),
+            ("red earth", [25.2, 24.7, 11.8], 25.7, 7.0),
+            ("raw sienna", [37.4, 17.2, 24.8], 18.6, 11.9),
+            ("yellow ochre", [49.2, 17.0, 37.7], 29.1, 23.3),
+            ("raw umber", [17.5, 6.5, 2.2], 34.4, 11.6),
+            ("viridian", [21.2, -24.0, -5.7], 8.3, 9.1),
         ] {
             let i = at(name);
             let (was, now) = (oil(&off, vec![(i, 1.0)]), oil(&on, vec![(i, 1.0)]));
@@ -1532,25 +1544,97 @@ mod tests {
         assert_eq!(old_on.pile(vec![(at("raw umber"), 1.0)]).color, old_off.pile(vec![(at("raw umber"), 1.0)]).color);
     }
 
-    /// The switch's K per volume against the iron oxide's own absorption
-    /// (dry_pigment_optics.md §7.3): burnt sienna's K at 550 nm, on lead
-    /// white's absolute scattering scale (S = ¾ σ′, σ′ 0.89 µm⁻¹ at n 2.3 and
-    /// 1 µm), is at most a pure hematite bed's, K = 2α with α = 4πk/λ and
-    /// k 0.0925 (Longtin et al. 1988, as tabled by Zhang et al., ACP 15:12159,
-    /// 2015): about 4.2 µm⁻¹. A burnt sienna, hematite with clay, can absorb
-    /// no more per volume than hematite does.
+    /// Without the oil-earths switch an earth's oil pile, pure and 1:1 with lead
+    /// white, is bit for bit what main's code gave at 4bbbbec3 (printed by that
+    /// build), whatever its K factor and S now are.
     #[test]
-    fn dry_burnt_sienna_absorbs_no_more_than_hematite() {
+    fn oil_earths_switch_off_keeps_the_oil_colors() {
+        let off = earths_palette(false);
+        let at = |name: &str| off.tubes.iter().position(|t| t.name == name).unwrap();
+        let w = at("lead white");
+        for (name, pure, tint) in [
+            ("burnt sienna", [0x3ea00a6c, 0x3db7afa5, 0x3d676c1a], [0x3f07353a, 0x3e7c6a52, 0x3e54727f]),
+            ("red earth", [0x3ec4a359, 0x3db9e2e4, 0x3d6861ad], [0x3efc3c77, 0x3e24e8f7, 0x3dfba688]),
+            ("raw sienna", [0x3ec24e50, 0x3e21c8d2, 0x3d35eb56], [0x3f161269, 0x3eaba680, 0x3e3420e5]),
+            ("yellow ochre", [0x3f516e40, 0x3ecf2cd5, 0x3db6278f], [0x3f5c4c3e, 0x3eee5f68, 0x3e12f2ab]),
+            ("raw umber", [0x3e7c139d, 0x3dfb4bf6, 0x3d74f230], [0x3ec1653e, 0x3e7357ef, 0x3e1ff81b]),
+            ("viridian", [0x00000000, 0x3d0b0bc7, 0x3ce9a57b], [0x3b80ecdf, 0x3e5255ff, 0x3e2f7721]),
+        ] {
+            let i = at(name);
+            assert_eq!(off.pile(vec![(i, 1.0)]).color.map(f32::to_bits), pure, "{name}");
+            assert_eq!(off.pile(vec![(i, 0.5), (w, 0.5)]).color.map(f32::to_bits), tint, "{name} 1:1 lead white");
+        }
+    }
+
+    /// The earths' tints with white follow from their grains' measured
+    /// scattering (`dry::earth_scatter`, dry_pigment_optics.md §9,
+    /// earth_scatter_lbnl.py). LBNL measured films of burnt sienna, raw sienna
+    /// and raw umber (natural PBr 7, in acrylic, n 1.49 as fresh linseed's 1.48)
+    /// as masstones and as 1:4 and 1:9 tints by volume with titanium white, and
+    /// inverted each to K and S (Levinson, Berdahl & Akbari 2005). Below: each
+    /// masstone's measured K/S and pigment volume concentration, the white's
+    /// measured K and S (1/mm), and each tint's measured R∞, at 550, 600 and 650
+    /// nm. The S per pigment volume the engine gives an earth (its multiple of
+    /// lead white's oil S times lead white's 0.34737 µm⁻¹ on the dry rule's
+    /// scale), with the masstone's K/S kept, mixed by K–M with the white, gives
+    /// each measured tint's R∞ within 0.06. #351's Mie S at an estimated 1 µm
+    /// (0.417, 0.347, 0.383 µm⁻¹) missed burnt sienna's and raw umber's by up
+    /// to 0.13 and 0.14, too dark, and by more over all six.
+    #[test]
+    fn earth_tints_follow_from_their_measured_scattering() {
+        let white_scale = 0.75 * 0.88 / 1.9;
+        // (λ, masstone K/S, white K, white S, measured R∞ 1:4, 1:9)
+        type Row = (u32, f32, f32, f32, f32, f32);
+        let films: [(&str, f32, f32, [Row; 3]); 3] = [
+            ("burnt sienna", 0.134, 0.4172, [(550, 9.676, 0.3623, 629.0, 0.6312, 0.7259), (600, 1.638, 0.3881, 534.6, 0.7675, 0.8280), (650, 0.9747, 0.4085, 460.3, 0.8159, 0.8619)]),
+            ("raw sienna", 0.201, 0.3474, [(550, 1.4275, 0.3623, 629.0, 0.7591, 0.8224), (600, 0.4444, 0.3881, 534.6, 0.8469, 0.8853), (650, 0.3821, 0.4085, 460.3, 0.8555, 0.8912)]),
+            ("raw umber", 0.109, 0.3826, [(550, 8.2155, 0.3623, 629.0, 0.7346, 0.8126), (600, 5.0278, 0.3881, 534.6, 0.7577, 0.8288), (650, 4.0286, 0.4085, 460.3, 0.7711, 0.8385)]),
+        ];
+        let r_inf = |q: f32| 1.0 + q - (q * (q + 2.0)).sqrt();
+        let tint = |s_vol: f32, pvc: f32, ks: f32, kw: f32, sw: f32, parts: f32| {
+            let s = s_vol * pvc * 1000.0;
+            r_inf((ks * s + parts * kw) / (s + parts * sw))
+        };
+        for (name, pvc, old_s, rows) in films {
+            let s_vol = crate::dry::earth_scatter(name).unwrap().0 * white_scale;
+            let (mut now, mut before) = (0.0f32, 0.0f32);
+            for (nm, ks, kw, sw, four, nine) in rows {
+                for (parts, measured) in [(4.0, four), (9.0, nine)] {
+                    let got = tint(s_vol, pvc, ks, kw, sw, parts);
+                    assert!((got - measured).abs() < 0.06, "{name} 1:{parts} at {nm} nm: {got} against the measured {measured}");
+                    now += (got - measured).abs();
+                    before += (tint(old_s, pvc, ks, kw, sw, parts) - measured).abs();
+                }
+            }
+            // (raw sienna's measured S is close to the 1 µm Mie S, and both fit)
+            if name != "raw sienna" {
+                assert!(now < before, "{name}: the measured S misses the tints by {now}, #351's 1 µm by {before}");
+            }
+        }
+    }
+
+    /// The switch's K per volume against the iron oxide's own absorption
+    /// (dry_pigment_optics.md §7.3, §9.4): burnt sienna's K at 550 nm, its K/S
+    /// dry times its grains' measured S per volume dry (`dry::earth_scatter`:
+    /// 0.1845 µm⁻¹ in oil, LBNL's film, × Mie's air/oil ratio 1.669), against a
+    /// pure hematite bed's, K = 2α with α = 4πk/λ and k 0.0925 (Longtin et al.
+    /// 1988, as tabled by Zhang et al., ACP 15:12159, 2015): 4.2 µm⁻¹. A burnt
+    /// sienna, hematite with clay, absorbs as a bed about half hematite by
+    /// volume (2.1 µm⁻¹); with #351's 1 µm grains it had needed all of it.
+    #[test]
+    fn dry_burnt_sienna_absorbs_as_hematite_in_clay() {
         let on = earths_palette(true);
         let i = on.tubes.iter().position(|t| t.name == "burnt sienna").unwrap();
-        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+        // (lead white's S per coat as the palette's dry path scales it)
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).scaled(crate::COAT_UM / 100.0).s;
         let p = crate::mixer::tube("burnt sienna").or_else(|| crate::mixer::tube9("burnt sienna")).map(|lat| crate::mixer::pigment9(&lat).scaled(crate::COAT_UM / 100.0)).unwrap();
-        let s = crate::dry::rule_scatter(crate::dry::refractive_index("burnt sienna"), &white);
+        let (_, dry) = crate::dry::earth_scatter("burnt sienna").unwrap();
+        let s = white.map(|s| s * dry);
         let at550 = 17;
         let ks = p.k[at550] * crate::dry::powder_k("burnt sienna").unwrap() / s[at550];
-        let k_um = ks * 0.75 * 0.89;
+        let k_um = ks * 0.1845 * 1.669;
         let hematite = 2.0 * 4.0 * std::f32::consts::PI * 0.0925 / 0.55;
-        assert!(k_um > 0.5 * hematite && k_um < hematite * 1.02, "burnt sienna K {k_um} um^-1 against hematite's {hematite}");
+        assert!(k_um > 0.4 * hematite && k_um < 0.6 * hematite, "burnt sienna K {k_um} um^-1 against hematite's {hematite}");
         // and the palette's dry path is this list
         let list = (crate::spectral::SpectralPigment { k: p.k.map(|k| k * crate::dry::powder_k("burnt sienna").unwrap()), s }, -1.0, 1.0);
         assert_eq!(on.dry_color(&[(i, 1.0)]), crate::dry::spectral_color(&[list], &white));

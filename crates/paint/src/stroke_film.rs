@@ -10,13 +10,15 @@
 //! - **The paint's rheology** (`rheology`). Tube oil paint is a
 //!   suspension of pigment in oil with a yield stress. Its viscosity at
 //!   brushing shear follows its vehicle's (linseed oil, or oil and solvent
-//!   mixed, by Arrhenius's log rule) raised by the pigment's crowding toward
-//!   its packing limit (Krieger–Dougherty). Its yield stress grows steeply
-//!   with the pigment's share (the YODEL form of Flatt and Bowen),
-//!   normalised to a measured tube paint's. The pigment's share and its
-//!   packing limit come from what the paint already carries: its tubes' oil
-//!   by volume and packed oil (`palette::tube_packing`), the medium knifed in
-//!   (`Paint::oil`) and solvent (turps, thinner).
+//!   mixed, by Arrhenius's log rule) raised exponentially with the pigment's
+//!   share, to a measured lead white oil paint's at the tube's share (a
+//!   flocculated paint is far more viscous than hard spheres would make it).
+//!   Its yield stress grows steeply with the pigment's share (the YODEL form
+//!   of Flatt and Bowen), normalised to the same measured paint's. The
+//!   pigment's share and its packing limit come from what the paint already
+//!   carries: its tubes' oil by volume and packed oil
+//!   (`palette::tube_packing`), the medium knifed in (`Paint::oil`) and
+//!   solvent (turps, thinner).
 //! - **The bristle bed** (`pad`). Each hair is a keratin cantilever bent
 //!   against the canvas; the tuft's force is the sum of the hairs' and it
 //!   presses on the tuft's footprint. How far the hairs bend is the gesture's
@@ -33,8 +35,12 @@
 //!   the slider's outlet onto the canvas is `OUTLET` of h₀.
 //! - **The trailing meniscus.** Behind each hair the paint is drawn out of
 //!   a meniscus of the hair's radius R: Landau–Levich–Bretherton's
-//!   h = 1.34 R Ca^(2/3), Ca = (ηU + τh)/σ, never more than R. A brush
-//!   barely pressed leaves no more than its hairs drag out.
+//!   h = 1.34 R Ca^(2/3), Ca = (ηU + τh)/σ, never more than R for a fluid
+//!   paint: a brush barely pressed leaves no more than its hairs drag out.
+//!   Surface tension shapes the paint only where its capillary pressure σ/R
+//!   beats the yield stress: a paste with τR/σ ≥ 1 (measured tube lead
+//!   white on a hog hair) is not held to its hairs' meniscus, and its film
+//!   is the bed's. A bed pressing nothing leaves at most R.
 //!
 //! The film one stroke adds to a pixel is the thinner of the two
 //! (`film_um`); what the brush carries beyond it stays on the hairs. A
@@ -50,13 +56,19 @@ pub const LINSEED_PA_S: f32 = 0.048;
 pub const TURPENTINE_PA_S: f32 = 0.001_375;
 /// Linseed oil's surface tension, N/m (33–36 mN/m at 20 °C, [6]).
 pub const SIGMA_N_M: f32 = 0.033;
-/// The intrinsic viscosity of hard spheres (Einstein's 5/2), used in
-/// Krieger–Dougherty's exponent [η]φm.
-pub const INTRINSIC: f32 = 2.5;
-/// A tube paint's yield stress, Pa: lead-oil paints measure 40–200 Pa
-/// (notes/research/pigment_oil.md), tube paints 10–1000 Pa; the middle of
-/// the lead-oil range.
-pub const TUBE_YIELD_PA: f32 = 100.0;
+/// A tube paint's yield stress, Pa: lead white ground in linseed oil at
+/// 42 vol% pigment (16 % oil by weight, a hand-ground paint of tube
+/// consistency) measures σy ≈ 440 Pa (vane-and-cup creep, Ranquet 2023;
+/// notes/research/stroke_film.md §1). (The 40–200 Pa this once took were
+/// de Viguerie's oil media cooked with litharge, with no pigment in them.)
+pub const TUBE_YIELD_PA: f32 = 440.0;
+/// A tube paint's plastic viscosity at brushing shear, Pa·s: the slope of
+/// the same paint's measured flow curve at its highest rates before the
+/// paint spilled from the rheometer, 250–400 s⁻¹ (Ranquet 2023, Fig. 3.11;
+/// stroke_film.md §1). Hard spheres at a tube's share (Krieger–Dougherty)
+/// would give it 0.6 Pa·s; the measured lead white paints are 3–15 times
+/// that at every share measured.
+pub const TUBE_PA_S: f32 = 4.0;
 /// The pigment share below which no network spans the paint and it has no
 /// yield stress (YODEL's percolation threshold φ₀). ESTIMATE: flocculated
 /// suspensions fit 0.1–0.2; no fit for oil paint was found.
@@ -164,7 +176,10 @@ pub fn rheology(hide: &Prop, thinner: f32) -> Rheology {
     let oil = (1.0 - phi_paint) * (1.0 - s);
     let x = if s + oil > 0.0 { s / (s + oil) } else { 0.0 };
     let vehicle = (x * TURPENTINE_PA_S.ln() + (1.0 - x) * LINSEED_PA_S.ln()).exp();
-    let crowd = (1.0 - (phi / max).min(0.98)).powf(-INTRINSIC * max);
+    // the pigment raises it exponentially with its share, as the measured
+    // lead white paints at 18, 32 and 42 vol% (stroke_film.md §1): the
+    // vehicle's with no pigment, the tube paint's at the tube's share
+    let crowd = (TUBE_PA_S / LINSEED_PA_S).powf(phi.min(0.98 * max) / tube);
     let tau = if yodel(tube, max) > 0.0 { TUBE_YIELD_PA * yodel(phi, max) / yodel(tube, max) } else { 0.0 };
     Rheology { eta: vehicle * crowd, tau }
 }
@@ -222,14 +237,32 @@ pub fn round_hair_mm(tool: &Tool, mm_per_unit: f32) -> f32 {
 
 /// The trailing meniscus film (m), Landau–Levich–Bretherton with the yield
 /// stress's share of the drag (a fixed point: the film sets the shear).
+/// Surface tension holds the film to the hair's scale only where it can
+/// shape the paint at all: its capillary pressure σ/R against the yield
+/// stress, J = τR/σ. A fluid paint (J ≪ 1) keeps no more than R; a paste
+/// whose yield stress beats its capillary pressure (J ≥ 1) is not drawn
+/// into a meniscus, and its coat is set by its yield stress, not by
+/// capillarity (Maillard, Boujlel and Coussot's withdrawal coating): no
+/// bound. Between the two the bound is R/(1 − J) (the interpolation is an
+/// ESTIMATE; stroke_film.md §3).
 fn meniscus_m(r: Rheology, pad: &Pad) -> f32 {
     let (eta, tau, u) = (r.eta.max(1e-6), r.tau.max(0.0), pad.speed);
-    let cap = pad.hair_r;
+    let j = tau * pad.hair_r / SIGMA_N_M;
+    if j >= 1.0 {
+        return f32::INFINITY;
+    }
+    let cap = pad.hair_r / (1.0 - j);
     let mut ll = (1.34 * pad.hair_r * (eta * u / SIGMA_N_M).powf(2.0 / 3.0)).min(cap);
     for _ in 0..12 {
         ll = (1.34 * pad.hair_r * ((eta * u + tau * ll) / SIGMA_N_M).powf(2.0 / 3.0)).min(cap);
     }
     ll
+}
+
+/// The film (m) a bed pressing nothing leaves: its hairs' meniscus film,
+/// never more than their radius (no slider carries more paint past them).
+fn free_m(r: Rheology, pad: &Pad) -> f32 {
+    meniscus_m(r, pad).min(pad.hair_r)
 }
 
 /// The bed's mean pressure (Pa), or None for a bed pressing nothing.
@@ -250,10 +283,9 @@ pub fn slider_m(r: Rheology, pad: &Pad) -> Option<f32> {
 /// the slider's outlet film or the hairs' meniscus film, whichever is
 /// thinner (module notes).
 pub fn film_um(r: Rheology, pad: &Pad) -> f32 {
-    let ll = meniscus_m(r, pad);
     match slider_m(r, pad) {
-        None => ll * 1e6,
-        Some(h0) => (OUTLET * h0).min(ll) * 1e6,
+        None => free_m(r, pad) * 1e6,
+        Some(h0) => (OUTLET * h0).min(meniscus_m(r, pad)) * 1e6,
     }
 }
 
@@ -261,11 +293,10 @@ pub fn film_um(r: Rheology, pad: &Pad) -> f32 {
 /// outlet: the slider's share of the gap, or the hairs' meniscus film,
 /// whichever is thinner (`film_um` with the gap in place of h₀).
 pub fn outlet_um(r: Rheology, pad: &Pad, gap_m: f32) -> f32 {
-    let ll = meniscus_m(r, pad);
     if pressure(pad).is_none() {
-        return ll * 1e6;
+        return free_m(r, pad) * 1e6;
     }
-    (OUTLET * gap_m).min(ll) * 1e6
+    (OUTLET * gap_m).min(meniscus_m(r, pad)) * 1e6
 }
 
 /// The gap film (m) under a moving bed that held `h` a distance `ds` (m)
@@ -370,15 +401,26 @@ mod tests {
         [1.0, 1.0, 1.0, turps, oil, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]
     }
 
-    /// Tube paint is a thick suspension with its measured yield stress;
-    /// medium thins it toward its oil and loses the yield stress; blotting
-    /// stiffens it; turps thins the vehicle toward the solvent's.
+    /// Tube paint is a thick suspension with the measured paint's yield
+    /// stress and plastic viscosity; medium thins it toward its oil and
+    /// loses the yield stress; blotting stiffens it; turps thins the vehicle
+    /// toward the solvent's.
     #[test]
     fn rheology_follows_the_medium() {
         let tube = rheology(&hide(0.0, 0.0), 0.0);
-        assert!((tube.tau - TUBE_YIELD_PA).abs() < 1e-3 && tube.eta > 5.0 * LINSEED_PA_S && tube.eta < 50.0 * LINSEED_PA_S, "{tube:?}");
+        assert!((tube.tau - TUBE_YIELD_PA).abs() < 1e-3 && (tube.eta - TUBE_PA_S).abs() < 1e-3 * TUBE_PA_S, "{tube:?}");
         let glaze = rheology(&hide(0.6, 0.0), 0.0);
-        assert!(glaze.eta < 0.3 * tube.eta && glaze.eta > LINSEED_PA_S && glaze.tau < 1.0, "{glaze:?}");
+        assert!(glaze.eta < 0.3 * tube.eta && glaze.eta > LINSEED_PA_S && glaze.tau < 0.01 * tube.tau, "{glaze:?}");
+        // the measured lead white paints at 18 and 32 vol% (0.38 and 2.4
+        // Pa·s at 1000 Pa, Ranquet 2023 Fig. 3.12) against the law's at those
+        // shares of a tube paint at 46 vol%: within a factor 2.5
+        let at = |phi: f32| rheology(&hide(1.0 - phi / (1.0 - OIL_VOLUME), 0.0), 0.0);
+        for (phi, measured) in [(0.18f32, 0.38f32), (0.32, 2.4)] {
+            let eta = at(phi).eta;
+            assert!(eta > measured / 2.5 && eta < measured * 2.5, "{phi}: {eta} Pa·s, measured {measured}");
+        }
+        // no pigment: the vehicle's
+        assert!((rheology(&hide(0.95, 0.0), 0.0).eta / LINSEED_PA_S) < 1.5);
         let lean = rheology(&hide(-0.3, 0.0), 0.0);
         assert!(lean.tau > 3.0 * tube.tau && lean.eta > tube.eta, "{lean:?}");
         let turps = rheology(&hide(0.0, 0.4), 0.0);
@@ -458,6 +500,27 @@ mod tests {
         }
     }
 
+    /// The hairs' meniscus holds a fluid paint's film to their radius, but
+    /// not a paste whose yield stress beats their capillary pressure
+    /// (τR/σ ≥ 1): stiff tube paint pressed lightly under a broad hog
+    /// filbert lays its slider's film, several times the hair's radius,
+    /// while a glaze under the same bed keeps no more than the radius.
+    #[test]
+    fn a_paste_is_not_held_to_its_hairs_meniscus() {
+        let tool = Tool::filbert(130.0);
+        let pd = pad(&tool, 0.3, 0.2, 200.0);
+        let stiff = rheology(&hide(-0.3, 0.0), 0.0);
+        assert!(stiff.tau * pd.hair_r / SIGMA_N_M > 1.0, "{stiff:?}");
+        let h = film_um(stiff, &pd);
+        let outlet = OUTLET * slider_m(stiff, &pd).unwrap() * 1e6;
+        assert!((h - outlet).abs() < 1e-3 * outlet && h > 3.0 * pd.hair_r * 1e6, "{h} µm, the slider's {outlet} µm, the hair's radius {} µm", pd.hair_r * 1e6);
+        let glaze = Rheology { eta: 0.3, tau: 0.0 };
+        assert!(film_um(glaze, &pd) <= pd.hair_r * 1e6 * 1.0001);
+        // a bed pressing nothing keeps the hair's own film, whatever the paint
+        let free = Pad { force: 0.0, ..pd };
+        assert!(film_um(stiff, &free) <= pd.hair_r * 1e6 * 1.0001);
+    }
+
     /// A round's hair is as long as its maker's series makes it: a soft
     /// round's the sable line's, a hog round's the bristle line's, each within
     /// a few mm of every size measured; a hog round is stubbier.
@@ -477,3 +540,4 @@ mod tests {
         }
     }
 }
+

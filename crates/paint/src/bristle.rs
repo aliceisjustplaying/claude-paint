@@ -4285,8 +4285,10 @@ mod stroke_film_tests {
         let glaze = paint("#b02818", 0.05, 0.7);
         c.drag(&mut held(soft.clone(), glaze.clone(), 4), &steady(500.0, 0.6, 150.0), None);
         let h = law(&glaze, &soft, 0.6, 150.0);
-        // the law's film for this glaze and brush: a few tens of µm or less
-        assert!((5.0..60.0).contains(&h), "law: {h} µm");
+        // the law's film for this glaze and brush: a few tens of µm, no more
+        // than the hairs' meniscus holds (their radius)
+        let r_um = pad(&soft, 0.6, 0.2, 150.0).hair_r * 1e6;
+        assert!(h > 5.0 && h <= r_um * 1.0001, "law: {h} µm, the hairs' radius {r_um} µm");
         let um = |x: f32| c.wet.vol[c.f.index(x, 500.0)] * COAT_UM;
         assert!(um(300.0) <= h * 1.0001 && um(300.0) > 0.3 * h, "laid {} µm of {h}", um(300.0));
         let seen = c.seen();
@@ -4548,10 +4550,7 @@ mod stroke_film_tests {
             let i = c.f.index(at.0, at.1);
             match wet {
                 // a stroke of green thinned with medium: a thin film
-                Some(Wet::Thin) => {
-                    let mut gb = held(Tool::hog_flat(150.0), paint("#2a5a48", 0.9, 0.5), 4);
-                    c.drag(&mut gb, &steady(500.0, 0.8, 100.0), None);
-                }
+                Some(Wet::Thin) => thin_green(&mut c),
                 // green knifed thick, three times over
                 Some(Wet::Thick) => {
                     for _ in 0..3 {
@@ -4592,7 +4591,7 @@ mod stroke_film_tests {
     /// Green thinned with medium, one stroke of a broad hog flat: a thin wet
     /// film (as `a_touch_splits_its_paint_over_the_wet_film` lays it).
     fn thin_green(c: &mut Canvas) {
-        let mut gb = held(Tool::hog_flat(150.0), paint("#2a5a48", 0.9, 0.5), 4);
+        let mut gb = held(Tool::hog_flat(150.0), paint("#2a5a48", 0.9, 0.8), 4);
         c.drag(&mut gb, &steady(500.0, 0.8, 100.0), None);
     }
 
@@ -4640,15 +4639,16 @@ mod stroke_film_tests {
 
     /// One law from a touch to a long stroke. A stroke of no length is a
     /// press and lift: it lays where it comes down what a touch lays (within
-    /// 15 %). A long one starts with its press film in the gap, thicker than
-    /// the slider's, and lays more there than the slider's film; past nine
+    /// 15 %). A long one of a brush loaded for impasto (`lay` 3) starts with
+    /// its press film in the gap, thicker than the slider's, and lays more
+    /// there than the slider's film; past nine
     /// of the bed's relaxation lengths (`stroke_film::relax_m`: L/0.32, L the
     /// bed's depth) it lays the slider's film, no more and at least 0.8 of
     /// it. The film along a stroke falls from its start to its middle.
     #[test]
     fn a_stroke_runs_from_a_touch_to_the_slider_film() {
         let p = paint("#c02818", 0.9, 0.0);
-        let tool = Tool::hog_flat(36.0);
+        let tool = Tool { lay: 3.0, ..Tool::hog_flat(36.0) };
         let (pressure, speed) = (0.8, 200.0);
         let um = |c: &Canvas, x: f32| c.wet.vol[c.f.index(x, 500.0)] * COAT_UM;
         let mut c = canvas();

@@ -482,30 +482,37 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   a bed of length L moving at U is h₀ = 0.4√(ηUL/p) (Reynolds's slider). A
   yield stress τ adds to it, h₀² = 0.16L(ηU + τh₀)/p, so a paint with one
   keeps a film about 0.16τL/p however slowly it is drawn. About 0.69 h₀
-  leaves the outlet onto the canvas. The film is never more than the
-  meniscus behind each hair drags out (Landau–Levich, 1.34 R Ca^(2/3)) nor
-  more than the hair's radius. A stroke adds no more than that film to any
+  leaves the outlet onto the canvas. For a fluid paint the film is never
+  more than the meniscus behind each hair drags out (Landau–Levich,
+  1.34 R Ca^(2/3)) nor more than the hair's radius. A paste whose yield
+  stress beats the hairs' capillary pressure (τR/σ ≥ 1: tube lead white on
+  a hog brush) is not held to its hairs' meniscus, and lays the bed's film,
+  as thick as the brush can give. A stroke adds no more than that film to any
   spot, and the hairs keep what it can't lay. With less paint on the brush
   a stroke lays less. Paint the hairs push aside lands beside the bed, no
   thicker than the film there, and the bed lays again what was pushed out
   from under it: a stroke lies about as thick across its width, with at
   most a slight bead at its edges.
   - The paint's viscosity is its vehicle's, linseed oil at 0.048 Pa·s, or
-    oil and turpentine (0.0014 Pa·s) mixed by Arrhenius's log rule. The
-    pigment's crowding toward its packing limit raises it
-    (Krieger–Dougherty). Its yield stress grows with the pigment's share
-    (Flatt and Bowen's YODEL) and is 100 Pa for paint as from the tube. The
-    pigment's share and packing limit come from the pile: its tubes' oil,
-    the `medium=` knifed in or `blot=` drawn out, and `turps=`/`thinner=`.
-    Tube paint is about 0.6 Pa·s at brushing; with `medium=0.6` about
-    0.08 Pa·s with almost no yield stress; blotted, stiff with a high one.
+    oil and turpentine (0.0014 Pa·s) mixed by Arrhenius's log rule, raised
+    exponentially by the pigment's share to a measured paint's at the
+    tube's: lead white ground in oil at 42 vol%, 4 Pa·s at brushing with a
+    yield stress of 440 Pa. Its yield stress grows with the pigment's share
+    (Flatt and Bowen's YODEL). The pigment's share and packing limit come
+    from the pile: its tubes' oil, the `medium=` knifed in or `blot=` drawn
+    out, and `turps=`/`thinner=`. With `medium=0.6` paint is about
+    0.3 Pa·s with almost no yield stress; with `medium=0.25` about 1.3 Pa·s
+    and 70 Pa; blotted 0.3, about 8 Pa·s and several kPa.
   - So, other things equal: pressing harder leaves a thinner film, and
     drawing faster a thicker one (h ∝ √(U/p)). Paint with more medium
     leaves a thinner film. Paint with a yield stress keeps a thicker film
     drawn slowly. A wider, deeper tuft (a longer bed) leaves more. A hog
     flat 7 mm wide with tube paint at 0.7 pressure and 200 mm/s leaves
-    about 12 µm, one 25 mm wide about 80 µm. A sable with paint knifed
-    with much medium leaves more than a hog does, since it presses less.
+    about 30 µm, one 25 mm wide about 200 µm if it carries that much. A
+    6 mm filbert's stroke of tube lead white at pressure 0.5 lays about
+    60 µm and hides a set black to a contrast ratio of about 0.8; blotted
+    stiff, about 100 µm and 0.92. A sable with paint knifed with much
+    medium leaves more than a hog does, since it presses less.
   - `speed=` is the hand's speed in mm/s. Without it the hand moves at the
     pace the hand-time ledger gives: through a tunnel four mark-widths wide
     by the steering law, at most 400 mm/s. It also sets the stroke's hand

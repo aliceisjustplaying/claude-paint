@@ -1790,9 +1790,11 @@ mod tests {
 
     /// With the oil-K switch (`mixer::OIL_K`) the three tubes have one K per
     /// volume in oil and dry. Dry, madder is as the dry-lakes loading makes it
-    /// (the same K: `OIL_K` reads `dry::ROSE_MADDER_LOADING`), green earth is its FORS powder (56.1/−1.9/11.3, corrected
-    /// as for the lakes) and copper green nears its powder (33.6/−27.2/−13.6:
-    /// the oil table's K shape holds the fit to ΔE 10). In oil, madder's
+    /// (the same K: `OIL_K` reads `dry::ROSE_MADDER_LOADING`), green earth is
+    /// its FORS powder (54.7/−2.0/12.1, corrected as for the lakes, the floor
+    /// the measured 0.022) and copper green nears its powder (29.7/−34.4/−15.8:
+    /// the oil table's K shape holds the fit to ΔE 15.0, 16.6 here through
+    /// 8-bit sRGB, which can't hold the powder's red). In oil, madder's
     /// masstone is a deep crimson (the R∞ of §6.5, sRGB 76 26 28, L* 17.3) and
     /// green earth's as dark as CHSOS's linseed-oil swatch (L* 37.4, a film
     /// of it over oiled paper); both had been near-whites. Other tubes, and
@@ -1805,9 +1807,9 @@ mod tests {
         let madder = at("rose madder");
         assert!(delta_e(lab(on.dry_color(&[(madder, 1.0)])), lab(off.dry_color(&[(madder, 1.0)]))) < 0.05);
         let ge = lab(on.dry_color(&[(at("green earth"), 1.0)]));
-        assert!(delta_e(ge, [56.1, -1.9, 11.3]) < 1.5, "green earth dry {ge:?}");
-        let cg = |p: &Palette| delta_e(lab(p.dry_color(&[(at("copper green"), 1.0)])), [33.6, -27.2, -13.6]);
-        assert!(cg(&on) < 11.0 && cg(&on) < cg(&off) - 40.0, "copper green dry {} (was {})", cg(&on), cg(&off));
+        assert!(delta_e(ge, [54.7, -2.0, 12.1]) < 1.5, "green earth dry {ge:?}");
+        let cg = |p: &Palette| delta_e(lab(p.dry_color(&[(at("copper green"), 1.0)])), [29.7, -34.4, -15.8]);
+        assert!(cg(&on) < 17.5 && cg(&on) < cg(&off) - 40.0, "copper green dry {} (was {})", cg(&on), cg(&off));
         let oil = |p: &Palette, parts: Vec<(usize, f32)>| lab(p.pile(parts).color);
         let (m_off, m_on) = (oil(&off, vec![(madder, 1.0)]), oil(&on, vec![(madder, 1.0)]));
         assert!(m_off[0] > 55.0, "madder in oil was pale: {m_off:?}");

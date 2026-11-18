@@ -26,27 +26,28 @@ pub const LATENT_SIZE: usize = LATENT_SIZE_BEFORE_OIL_K + OIL_K.len();
 /// (dry_pigment_optics.md §6.5–6.6, notes/research/oil_k_fit.py). Each is a
 /// latent slot of its own, after the researched tubes: its K is the table's
 /// times a factor fitted to its measured dry powder (Cosentino 2014, corrected
-/// as for the lakes) with its scattering from its grain size, the same K in oil
-/// and dry, as absorption per volume is the pigment's in any medium; its oil S
-/// is the table's, or that dry S over Mie's air/oil ratio at its index and
-/// size, as a multiple of lead white's oil S spectrum (the dry rule's shape);
-/// and its dry S is the dry rule's times the Mie size factor σ′(d)/σ′(1 µm).
+/// as for the lakes, with the measured black floor 0.022) with its scattering
+/// from its grain size, the same K in oil and dry, as absorption per volume is
+/// the pigment's in any medium; its oil S is the table's, or that dry S over
+/// Mie's air/oil ratio at its index and size, as a multiple of lead white's
+/// oil S spectrum (the dry rule's shape); and its dry S is the dry rule's
+/// times the Mie size factor σ′(d)/σ′(1 µm).
 /// - rose madder: K × the dry-lakes loading, `dry::ROSE_MADDER_LOADING`
 ///   (its dye's, checked against dye chemistry: §6.3), read from there so the
 ///   two stay one number; its alumina is fine, and the table's oil S is Mie's
 ///   to 1.5×, so S stays.
 /// - green earth: grains of about 10 µm (Natural Pigments' 10–12 µm means), n
-///   1.62: σ′ 0.0521 of 1 µm's, air/oil 5.57; K ×1.638 (1.45–1.86 over the
-///   powder's correction; 0.77–3.6 over 5–20 µm).
+///   1.62: σ′ 0.0521 of 1 µm's, air/oil 5.57; K ×1.816 (1.61–2.06 over the
+///   powder's correction; 0.85–3.98 over 5–20 µm).
 /// - copper green (verdigris): grains of about 100 µm (Kremer 44450's main
 ///   peak, 102.5 µm, Reichert et al. 2025), n 1.545: σ′ 0.00433, air/oil 17.9;
-///   K ×0.8175 (0.74–0.90): its K was about right, its S 270× too high.
+///   K ×0.8666 (0.81–0.91): its K was about right, its S 270× too high.
 /// Tuple: (tube, K factor, oil S as a multiple of lead white's oil S, or None
 /// for the table's, dry S size factor).
 pub const OIL_K: [(&str, f32, Option<f32>, f32); 3] = [
     ("rose madder", crate::dry::ROSE_MADDER_LOADING, None, 1.0),
-    ("green earth", 1.638, Some(0.01463), 0.05215),
-    ("copper green", 0.8175, Some(0.0003667), 0.004325),
+    ("green earth", 1.816, Some(0.01463), 0.05215),
+    ("copper green", 0.8666, Some(0.0003667), 0.004325),
 ];
 const PRIMARIES: usize = 5;
 const PIGMENTS: usize = 18;

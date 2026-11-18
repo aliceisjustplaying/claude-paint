@@ -4237,6 +4237,135 @@ mod one_stroke_tests {
         }
     }
 
+    /// A wet edge on linen at 0.375 mm a pixel (as `band_on_dry_paint`), the
+    /// stroke film on: a light tube paint laid in vertical strokes of a 9 mm
+    /// hog filbert on the left, a lavender on the right, the two meeting at
+    /// x = 500, both dense (no medium).
+    fn wet_two_color_edge() -> Canvas {
+        use crate::surface::Linen;
+        let mut c = Canvas::new(400, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(150.0).with_linen(Linen::fine(5)).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true).with_drain(true);
+        c.prime(hex("#ece6da"), 1.0, 90.0, 0.6, 0.2, 3);
+        let mut b = Held::new(Tool::filbert(60.0), 4).with_engine(crate::PIGMENT_MIXER);
+        for (x0, color) in [(320, "#f2ead0"), (500, "#9a92c4")] {
+            b.wipe(1.0);
+            for k in 0..7 {
+                b.load(Paint::body(hex(color)), 0.9);
+                let x = (x0 + 30 * k) as f32;
+                c.drag(&mut b, &Gesture::new(vec![(x, 150.0), (x, 850.0)]).pressure(0.8, 0.8).speed(150.0), None);
+            }
+        }
+        c
+    }
+
+    /// Luminance and wet film (µm) down the column x, sampled every `per`/8
+    /// over whole periods `per` from y = 330: the amplitude of their
+    /// component at that period, and their mean.
+    fn at_period(c: &Canvas, seen: &[crate::color::Rgb], x: f32, per: f32) -> ((f32, f32), (f32, f32)) {
+        let n = (8.0 * (340.0 / per).floor()) as usize;
+        let ys: Vec<f32> = (0..n).map(|k| 330.0 + k as f32 * per / 8.0).collect();
+        let comp = |v: Vec<f32>| {
+            let m = v.iter().sum::<f32>() / v.len() as f32;
+            let w = std::f32::consts::TAU / 8.0;
+            let (re, im) = v.iter().enumerate().fold((0.0f32, 0.0f32), |(re, im), (k, x)| (re + (x - m) * (w * k as f32).cos(), im + (x - m) * (w * k as f32).sin()));
+            (2.0 * (re * re + im * im).sqrt() / v.len() as f32, m)
+        };
+        (comp(ys.iter().map(|&y| crate::color::luminance(seen[c.f.index(x, y)])).collect()), comp(ys.iter().map(|&y| c.wet.vol[c.f.index(x, y)] * crate::surface::COAT_UM).collect()))
+    }
+
+    /// The width (units) of the edge's luminance step, from a quarter to three
+    /// quarters of the way, averaged over y 330..670.
+    fn edge_width(c: &Canvas, seen: &[crate::color::Rgb]) -> f32 {
+        let col = |x: f32| (330..670).step_by(2).map(|y| crate::color::luminance(seen[c.f.index(x, y as f32)])).sum::<f32>() / 170.0;
+        let (l, r) = (col(400.0), col(600.0));
+        let xs: Vec<f32> = (400..=600).map(|x| x as f32).collect();
+        let cross = |k: f32| xs.iter().copied().find(|&x| (col(x) - l) / (r - l) > k).unwrap_or(600.0);
+        cross(0.75) - cross(0.25)
+    }
+
+    /// Short clean-blender strokes drawn across a wet edge, a row of them
+    /// down it, `apart` of a mark's width apart (at a half, each overlaps
+    /// half the last, so every spot down the edge is worked twice): `tool`
+    /// at `pressure`. Returns the canvas before and after, what the rag and
+    /// the brush took, and the strokes' spacing.
+    fn blend_down_edge(tool: Tool, pressure: f32, apart: f32) -> (Canvas, Canvas, f64, f64, f32) {
+        let before = wet_two_color_edge();
+        let mut c = before.clone();
+        // the mark's width at this pressure (`drag_on`'s footprint), and the
+        // strokes `apart` of it apart
+        let mark = tool.width * (0.45 + 0.55 * pressure) * (1.0 + tool.splay * (pressure - 0.5));
+        let per = apart * mark;
+        let mut bl = Held::new(tool, 9).with_engine(crate::PIGMENT_MIXER);
+        let mut rag = 0.0f64;
+        let mut y = 250.0f32;
+        while y < 750.0 {
+            rag += 0.9 * bl.carried().0;
+            c.blend_stroke(&mut bl, &Gesture::new(vec![(420.0, y), (580.0, y + 15.0)]).pressure(pressure, pressure));
+            y += per;
+        }
+        (before, c, rag, bl.carried().0, per)
+    }
+
+    /// Short strokes of a soft blender drawn lightly across a wet edge between
+    /// two dense colors, a row of them down it, soften it evenly: no ladder
+    /// of dashes at the strokes' spacing, in color or in the film's
+    /// thickness, and the step is wider. The paint is moved, not made: what
+    /// the canvas loses the rag and the brush hold. The badger's bed rides
+    /// on a film thicker than the paint (`stroke_film::blend_plough`), so it
+    /// pushes none of it up into ridges at the strokes' sides; its hairs
+    /// leave the canvas as they slide rather than splitting the wet film
+    /// under the bed as a loaded brush's lift does; and what the rag left in
+    /// it stays in the tuft rather than going down where each stroke starts.
+    /// Before, the strokes ploughed rims along their sides and lifted pale
+    /// patches at their ends, and the last stroke's lavender went down in a
+    /// spot at the next one's start, a ladder at the strokes' spacing (the
+    /// far child's back in cassatt8).
+    #[test]
+    fn short_blender_strokes_soften_a_wet_edge_without_a_ladder() {
+        let (before, after, rag, held, per) = blend_down_edge(Tool::badger(40.0), 0.4, 0.5);
+        let (s0, s1) = (before.seen(), after.seen());
+        let contrast = (crate::color::luminance(s0[before.f.index(420.0, 500.0)]) - crate::color::luminance(s0[before.f.index(580.0, 500.0)])).abs();
+        for x in [426.0f32, 440.0, 470.0, 500.0, 530.0, 560.0, 576.0] {
+            let ((l0, _), (h0, m0)) = at_period(&before, &s0, x, per);
+            let ((l1, _), (h1, m1)) = at_period(&after, &s1, x, per);
+            eprintln!("x {x}: at the strokes' spacing ({per:.1} units) luminance {l0:.4} -> {l1:.4} (edge contrast {contrast:.3}), film {h0:.1} -> {h1:.1} µm (mean {m0:.0} -> {m1:.0} µm)");
+        }
+        let (e0, e1) = (edge_width(&before, &s0), edge_width(&after, &s1));
+        let (w0, w1) = (before.wet_total(), after.wet_total());
+        eprintln!("edge {e0:.0} -> {e1:.0} units; wet {w0:.0} -> {w1:.0}, rag {rag:.0}, brush {held:.0}");
+        // (across the edge, x 440..560: before the fix the component at the
+        // strokes' spacing was up to 0.031 in luminance and 21 µm of film,
+        // ridges along the strokes' sides; after it, 0.007 and 6.5 µm, what
+        // the strokes' own overlap leaves)
+        for x in [440.0f32, 470.0, 500.0, 530.0, 560.0] {
+            let ((l1, _), (h1, m1)) = at_period(&after, &s1, x, per);
+            assert!(l1 < 0.03 * contrast, "x {x}: a ladder in color at the strokes' spacing: {l1} against the edge's {contrast}");
+            assert!(h1 < 0.1 * m1, "x {x}: a ladder in the film at the strokes' spacing: {h1} µm on {m1} µm");
+        }
+        assert!(e1 > 1.5 * e0, "the edge didn't soften: {e0} -> {e1} units");
+        assert!((w0 - (w1 + rag + held)).abs() < 1e-3 * w0, "paint made or lost: {w0} -> {w1} + rag {rag} + brush {held}");
+        assert!(w1 <= w0 * 1.0001, "the blender laid paint of its own: {w0} -> {w1}");
+    }
+
+    /// A clean hog filbert pressed hard into the same dense paint furrows it,
+    /// a ridge along each stroke: its bed (5 mm, pressure 0.8) leaves a film
+    /// thinner than the paint, about 40 µm, and pushes the rest aside
+    /// (`stroke_film::blend_plough`): a row of strokes a third overlapping
+    /// leaves a ridged row. Marks show where the paint is thick and the
+    /// hairs stiff.
+    #[test]
+    fn a_stiff_blender_pressed_into_dense_paint_furrows_it() {
+        let (before, after, _, _, per) = blend_down_edge(Tool::filbert(35.0), 0.8, 0.7);
+        let (s0, s1) = (before.seen(), after.seen());
+        for x in [440.0f32, 470.0, 500.0, 530.0, 560.0] {
+            let ((l0, _), (h0, m0)) = at_period(&before, &s0, x, per);
+            let ((l1, _), (h1, m1)) = at_period(&after, &s1, x, per);
+            eprintln!("hog x {x}: per {per:.1}: luminance {l0:.4} -> {l1:.4}, film {h0:.1} -> {h1:.1} µm (mean {m0:.0} -> {m1:.0} µm)");
+            if (470.0..=530.0).contains(&x) {
+                assert!(h1 > 0.2 * m1, "x {x}: the hog's strokes left no furrows in dense paint: {h1} µm on {m1} µm");
+            }
+        }
+    }
+
     /// A clean-blender stroke across a wet edge between two colors carries
     /// each into the other and lays no new paint: the wet paint's volume
     /// stays (less what the hairs keep), and the colors meet in between.

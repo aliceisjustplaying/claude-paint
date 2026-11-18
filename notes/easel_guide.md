@@ -464,7 +464,11 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   of what it holds), then draws it through the wet paint along the points.
   The hairs pick up wet paint and lay it down again further on, worked into
   the wet film there rather than lying on top of it as a brushload does. It
-  lays no paint of its own. A badger (`brush("badger", w)`) is soft and
+  lays no paint of its own. What a clean hair picks up sits on the part of
+  it lying on the canvas, so it goes down again within a few mm (that
+  length grows with the pressure), over dry paint as over wet: drawn across
+  a wet edge, the hairs carry each side into the other. The next wipe takes
+  what they still hold at the stroke's end. A badger (`brush("badger", w)`) is soft and
   presses lightly. Any brush can be used.
 - **The film one stroke leaves** (every brush stroke in a new painting:
   `b:stroke`, `b:gesture`, `b:blend`) follows from the paint and the hand.

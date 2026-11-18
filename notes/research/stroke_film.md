@@ -60,6 +60,25 @@ stress τ.
   `length` (as `drag_on` bends them). That is taken as half the hair's free
   length (`BEND` = 0.5): a flat's hair is out about 1.3–1.5 widths and
   trails about half of that.
+- **[M] A round's free length.** Rounds are not made in a flat's
+  proportions. Rosemary & Co's Series 33 kolinsky rounds (the maker's size
+  chart; the same figures on its pocket-brush pages and at retailers):
+  size 0 1.5 mm across the belly, 9.8 mm of hair out; size 2 2.0/14.1;
+  size 4 3.4/15.7; size 6 3.9/20.0; size 8 5.2/24.2 mm
+  (rosemaryandco.com, "R2 pocket pure kolinsky sable pointed size 8" and
+  "size 4"; hobbyheaven.org and artsavingsclub.co.za Series 33 charts). The
+  least-squares line is ℓ = 5.2 mm + 3.61 d (within 1.7 mm of every size),
+  `ROUND_HAIR_MM`, `ROUND_HAIR_PER_D`. A round's hair is out 4.6 (size 8)
+  to 7 (size 2) diameters, where the flat's proportion (`length / BEND`,
+  1.4 widths with the default `length`) gives 1.4. With the flat's free
+  length (2.8 mm) a 2 mm sable round's ~130 hairs, bent 0.7 mm at pressure
+  0.5, pressed 0.49 N on its 2 mm disc (122 kPa) and the film fell to 7 µm;
+  a 1.5 mm round's to 4 µm, and a dark line read as a faint trace. With the
+  measured 12.4 mm the same tuft presses 6 mN (1.4 kPa): the outlet film is
+  over the hair's radius, so the meniscus holds it (61 µm), and the line
+  lays as much as the brush gives, about 35 µm on bare ground, as it did
+  before the switch. A round given a `length=` longer than the maker's hair
+  keeps it (the hair is as long as asked).
 - **[S] Each hair** is a cantilever: F = 3EIδ/ℓ³, I = πd⁴/64.
 - **[E] Tuft shape**: a flat's ferrule is about a quarter as deep as it is
   wide, a filbert's a third. Rounds, riggers and blenders are round, and a

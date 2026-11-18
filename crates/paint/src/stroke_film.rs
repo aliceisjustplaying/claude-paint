@@ -21,7 +21,7 @@
 //!   against the canvas; the tuft's force is the sum of the hairs' and it
 //!   presses on the tuft's footprint. How far the hairs bend is the gesture's
 //!   pressure: at full pressure the tips trail by the tool's `length`, half
-//!   their free length.
+//!   their free length (a round's free length is its maker's: `ROUND_HAIR_MM`).
 //! - **The squeeze film** (`film_um`). A slider of length L pressed at mean
 //!   pressure p over a film of viscosity η moving at U lifts on a film
 //!   h₀ = 0.4 √(ηUL/p) (Reynolds's fixed-incline slider at its greatest
@@ -78,6 +78,16 @@ pub const PACKING: f32 = 0.5;
 /// free length is `length / BEND`. ESTIMATE (brush proportions: a flat's
 /// hair is out about 1.3–1.5 widths, its trail about half that).
 pub const BEND: f32 = 0.5;
+/// A round's hair out of the ferrule, ℓ = `ROUND_HAIR_MM` + `ROUND_HAIR_PER_D`
+/// × its diameter (mm): the least-squares line through Rosemary & Co's
+/// Series 33 sable rounds, sizes 0–8 (diameter/length 1.5/9.8, 2/14.1,
+/// 3.4/15.7, 3.9/20, 5.2/24.2 mm; notes/research/stroke_film.md §2). A small
+/// round's hair is out 6–7 of its diameters, a large one's 4.6: the free
+/// length `BEND` gives a flat (1.4 widths) would make a 2 mm round's hairs a
+/// fifth as long as they are, and so stiff that the tuft presses a film of
+/// a few µm.
+pub const ROUND_HAIR_MM: f32 = 5.2;
+pub const ROUND_HAIR_PER_D: f32 = 3.61;
 /// The share of the slider's film h₀ that leaves its outlet on the canvas:
 /// at Reynolds's optimum (inlet/outlet 2.2) the flux is U·h*/2 with
 /// h* = 1.375 h₀ at the pressure peak, all of it carried off by the moving
@@ -162,7 +172,12 @@ pub fn pad(tool: &Tool, pressure: f32, mm_per_unit: f32, speed_mm_s: f32) -> Pad
     let hairs = PACKING * area / (std::f32::consts::FRAC_PI_4 * d * d);
     // each hair a cantilever of free length ℓ bent δ: F = 3EIδ/ℓ³
     let trail = (tool.length * mm_per_unit * 1e-3).max(1e-5);
-    let free = trail / BEND;
+    // (a round's hair is as long as its maker's series makes it, unless the
+    // tool's `length` asks for longer)
+    let free = match tool.kind {
+        Kind::Round => (trail / BEND).max((ROUND_HAIR_MM + ROUND_HAIR_PER_D * tool.width * mm_per_unit) * 1e-3),
+        _ => trail / BEND,
+    };
     let i = std::f32::consts::PI * d.powi(4) / 64.0;
     let per_hair = 3.0 * HAIR_E_PA * i * pressure.clamp(0.0, 1.0) * trail / free.powi(3);
     Pad { length: depth, width: w, force: hairs * per_hair, speed: speed_mm_s.max(1e-3) * 1e-3, hair_r: 0.5 * d }

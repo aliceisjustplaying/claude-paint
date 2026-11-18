@@ -1098,6 +1098,71 @@ R. S. Berns et al., "Rejuvenating the color palette of Georges Seurat's *A Sunda
 Grande Jatte—1884*: a simulation", *Color Res. Appl.* (2006); Zhang et al. 2015 and Longtin
 et al. 1988 (hematite k, as §7.3).
 
+## 11. The earths' tints with lead white: the tube's own pigment (`--@ earth-tints`)
+
+A painter's oil (cassatt8) found yellow ochre and burnt sienna far too strong with lead white:
+7 % by volume of ochre a peach, L\* 81.2/10.3/36.4, and of burnt sienna 67.8/13.9/10.5 (a
+knifed tiny scene on that day's integration build; lead_white_film.md §1 has the ladders).
+
+**The cause [C].** An oil-earths slot (§8.6, §10.5) holds the earth's K and S per pigment
+volume times `mixer::oil_earths_scale`: lead white's calibrated S over its S per pigment volume
+(Mie at 1 µm, 0.347 µm⁻¹). That makes the slot the earth's pigment at the volume share lead
+white's paint holds. But a part of a tube is the box's tube paint, and the earths are ground
+in far more oil than lead white (pigment_oil.md §4–5):
+
+| impressionist tube | oil by weight | density | pigment share by volume | weight |
+|---|---|---|---|---|
+| lead white | 0.13 | 6.81 | 0.478 | (lead white's own) |
+| yellow ochre | 0.43 | 2.8 | 0.306 | 0.494 |
+| red earth | 0.45 | 4.0 | 0.221 | 0.358 |
+| viridian | 0.50 | 3.2 | 0.225 | 0.364 |
+| raw sienna | 0.68 | 3.27 | 0.118 | 0.191 |
+| burnt sienna | 0.63 | 3.95 | 0.122 | 0.196 |
+
+And the scale's estimate isn't needed. The Revigo films behind engine 9's units were 32 µm
+(lead_white_film.md §4, from Bruce's gauged lead white films), so one engine unit is 32 µm of
+paint, and lead white's S per pigment volume there is 0.44 µm⁻¹, not 0.347.
+
+**The rule.** With `--@ earth-tints` (and `--@ oil-earths`), an earth enters a mixture at the
+weight (its tube's pigment share) × `REVIGO_FILM_UM` / `oil_earths_scale`
+(`Palette::earth_tints_weight`), so a micrometre of its tube paint holds its measured K and S
+per pigment volume times its pigment share. Its masstone doesn't change (K and S scale
+together); its tints and its films' hiding do. Without the switch nothing moves; without
+`--@ oil-earths` it does nothing (the earths' older tables aren't per pigment volume).
+
+**Tints by volume with lead white** (the same scene, `--@ earth-tints` with and without
+`--@ tube-volume`): yellow ochre 3 % 86.1/7.3/27.9 → 89.0/4.9/22.0, 7 % 81.2/10.3/36.4 →
+85.2/7.7/30.3, 15 % 76.3/12.4/43.8 → 80.6/10.8/37.7; burnt sienna 3 % 74.7/11.4/8.8 →
+85.9/7.1/5.4, 7 % 67.8/13.9/10.5 → 81.8/9.2/6.8, 15 % 56.2/17.5/14.1 → 73.1/12.6/9.3.
+
+**A check against a measured ochre ladder [M/C].** No measured tint of a natural ochre with
+lead white was found. Okumura (RIT, 2005) measured Golden's acrylic Yellow Ochre (PY 43), Burnt
+Sienna and Raw Sienna, each 20/40/60/80/100 % by weight with Golden's titanium white
+(GretagMacbeth Color-Eye XTH, specular included). Fitting each ladder by two-constant K–M
+(Saunderson k1 0.04, k2 0.6) against the same white, per gram of paint at 450 nm, the ochre
+absorbs 0.49 of the white's S, burnt sienna 0.51, raw sienna 0.37. Golden's burnt sienna is
+LBNL's (§10.2: its masstone within ΔE 0.3), so it reads as a burnt sienna paint of about 16 %
+pigment by volume (LBNL's own film was 13.4 %). If Golden's ochre is ground to that loading
+too, its K per pigment volume at 450 nm is about 1.9 µm⁻¹, the engine's 2.29 [E: Golden's
+loadings aren't published]. Along the ladder (specular taken out) the ochre's tints run 82.6/
+5.2/27.4, 76.8/7.9/35.2, 71.5/10.5/41.5; the engine's with lead white run about 7 b\* more
+saturated at the same L\*, about 4 of it lead white's own yellow (b\* 4.6 against titanium
+white's 1.4). So the ochre's K is left as §9 has it.
+
+### 11.1 Estimates left
+
+- The ochre's K per pigment volume against Golden's, which rests on Golden's unpublished
+  loadings (above). A measured ladder of a natural ochre with lead white in oil would settle it.
+- That Revigo's lead white scatters per pigment volume as Bruce's white lead did (the 32 µm).
+- The box's tubes' oil (pigment_oil.md: Church's British analyses, the French figures a third
+  oilier) and the catalog's pigment densities.
+
+Sources for this section: Y. Okumura, *Developing a Spectral and Colorimetric Database of
+Artist Paint Materials*, M.S. thesis, RIT Munsell Color Science Laboratory (2005), and its
+data (http://www.rit-mcsl.org/StudentResearch/paint_research.zip: GOLDEN_fluid_matte_all_sci.txt,
+Paint_Recipe.xls "Tint Lader"); E. Bruce, *Technologic Papers of the Bureau of Standards* 306
+(1926); lead_white_film.md; pigment_oil.md.
+
 ---
 
 ## Sources

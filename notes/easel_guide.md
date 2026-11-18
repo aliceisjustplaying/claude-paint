@@ -161,7 +161,13 @@ much per micrometre as measured films of that paint do: tube lead white
 about 84% (contrast ratio) at 32 µm, 98% at 130 µm. (A painting whose
 log's head has no `--@ tube-volume` line mixes its tubes as measured
 paints of a fixed richness, and its films hide about a third as much per
-micrometre. Sources: notes/research/lead_white_film.md.)
+micrometre. Sources: notes/research/lead_white_film.md.) The earths in
+oil hold their own tube's pigment too: an earth ground in much oil (burnt
+sienna and raw sienna hold about an eighth of their volume in pigment,
+yellow ochre about a third, lead white about half) tints more weakly per
+part than its pigment alone would. (A painting whose log's head has no
+`--@ earth-tints` line tints each earth as if its tube held as much pigment
+as lead white's. Sources: notes/research/dry_pigment_optics.md §11.)
 
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and

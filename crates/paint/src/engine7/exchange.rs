@@ -363,9 +363,23 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         // crowns, so where it splits on the lift the canvas keeps its share
         // whether the hair itself reaches the hollow or not. How much the
         // hair gives is still its contact's (`touch`, below). Only a hair
-        // nearly run dry (`wet`) has too little paint to fill the gap, and
-        // lays on the crowns its hairs touch, as a dragged one does.
+        // with too little paint to fill its share of the patch lays on the
+        // crowns it touches, as a dragged one does: the press squeezes its
+        // paint into the patch, so it fills it while it holds what it lays
+        // there and the paint the relief under its share holds (the
+        // contact's whole range, 2·`TOOTH_UM`, as deep as the hollows can
+        // be), its share the bed's area over its hairs. (The exchange's
+        // load ramp `wet`, an estimate, calls a hair holding a third of a
+        // full load mostly dry, though a 12 mm brush's hair then holds some
+        // twenty times what its share of the patch takes.)
         let flood = press;
+        let fills = if flood {
+            let share_u2 = (0.5 * tool.width).powi(2) * crate::bristle::root_area(tool.kind) / tool.bristles.max(1) as f32;
+            let need = dep.unwrap_or(0.0) + 2.0 * crate::bristle::TOOTH_UM / COAT_UM * share_u2;
+            (liquid / need.max(1e-9)).min(1.0)
+        } else {
+            wet
+        };
         let mut sum_lay = 0.0f32;
         for y in y0..y1 {
             let py = y as f32 + 0.5;
@@ -402,7 +416,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 };
                 ct.weight += wt;
                 let lw = if flood {
-                    let t = |e0: f32| wet + (1.0 - wet) * ramp(e0, s_inv, surf);
+                    let t = |e0: f32| fills + (1.0 - fills) * ramp(e0, s_inv, surf);
                     match clip {
                         None => cov * t(s_e0),
                         Some(Clip::Mask(m)) => cov * t(s_e0) * m.data[y * w + x],

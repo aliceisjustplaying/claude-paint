@@ -313,10 +313,19 @@ the track of the sliding hairs' last step, which no hair laid.
 fills the hollows under the bed as it covers the crowns, so a press lays
 over its hair's whole contact (`exchange`'s `Window::lay`), not only
 where the hair itself reaches into the relief. The weight there is
-w + (1 − w)·c, with c the hair's contact on that spot and w how wet the
-hair is (the exchange's 0.1–0.8 load ramp); how much the hair gives stays
-its contact's. Only a hair nearly run dry has too little paint to fill
-the gap and lays on the crowns its tip touches. The hollows should hold
+f + (1 − f)·c, with c the hair's contact on that spot and f how far the
+hair's paint fills its share of the patch; how much the hair gives stays
+its contact's. The press squeezes the hair's paint into the patch, so f
+is what it holds over what its share takes: what it lays there and the
+paint the relief under its share holds, the contact's whole range
+(2·`TOOTH_UM`, 120 µm, as deep as a hollow can be) over the bed's area
+divided among its hairs, f at most 1. A 12 mm filbert's hair holds about
+1.2 mm³ full and its share of the patch takes about 0.03 mm³, so f stays 1
+until the hair is all but empty; only then does the press lay on the
+crowns its tip touches. (The exchange's load ramp, an estimate that is 0
+at a tenth of a full load and 1 at eight tenths, called a hair holding a
+third of its load mostly dry, and the lift of a long stroke broke on the
+crowns.) The hollows should hold
 more than the crowns, the local gap being deeper by the hollow's depth;
 that is not modeled (the film is laid evenly over the contact: an
 estimate, the simplest that doesn't break the film).
@@ -382,7 +391,16 @@ bare ground a long stroke lays the slider's film where before its hairs
 lifted back some of their own paint (a 9 mm filbert's 15 µm of a
 23 µm ceiling is now 22 µm).
 
-**Open.** The press film at touch-down is a touch's (`TOUCH_FILM`·`lay`,
+**Open.** A slide's tooth reach is still the film it leaves times the
+exchange's load ramp (§3), so where a long stroke has spent two thirds of
+its load the slide through the hand's release breaks on the crowns,
+though its hairs hold far more than the gap takes. The physical law would
+ask whether the bed floods the relief: whether its paint fills the gap
+and, against its yield stress, flows into the hollows under the bed's
+pressure (a stiff paint pressed lightly shouldn't, the scumble). Not done
+here.
+
+The press film at touch-down is a touch's (`TOUCH_FILM`·`lay`,
 an estimate), not the squeeze's. A press squeezes the bed's paint for the
 attack's time (Stefan's squeeze) and no thinner than the plug its yield
 stress holds (a Bingham strip's τL/2p). Where it is thinner than h₀ the

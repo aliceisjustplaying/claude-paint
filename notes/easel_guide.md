@@ -470,7 +470,9 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   `b:stroke`, `b:gesture`, `b:blend`) follows from the paint and the hand.
   No mode picks it. The bristle bed is a slider riding on the paint. Each
   hair is a keratin cantilever (3.5 GPa; 90 µm across for soft hair, 250 µm
-  for hog, by the brush's stiffness) bent by the pressure. The tuft's force
+  for hog, by the brush's stiffness) bent by the pressure; a round's hair
+  is as long as a maker's rounds are (5.2 mm + 3.6 times its width; a flat's
+  and a filbert's about 1.4 widths). The tuft's force
   over its footprint gives the bed's pressure p. The film that passes under
   a bed of length L moving at U is h₀ = 0.4√(ηUL/p) (Reynolds's slider). A
   yield stress τ adds to it, h₀² = 0.16L(ηU + τh₀)/p, so a paint with one
@@ -479,7 +481,10 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   meniscus behind each hair drags out (Landau–Levich, 1.34 R Ca^(2/3)) nor
   more than the hair's radius. A stroke adds no more than that film to any
   spot, and the hairs keep what it can't lay. With less paint on the brush
-  a stroke lays less.
+  a stroke lays less. Paint the hairs push aside lands beside the bed, no
+  thicker than the film there, and the bed lays again what was pushed out
+  from under it: a stroke lies about as thick across its width, with at
+  most a slight bead at its edges.
   - The paint's viscosity is its vehicle's, linseed oil at 0.048 Pa·s, or
     oil and turpentine (0.0014 Pa·s) mixed by Arrhenius's log rule. The
     pigment's crowding toward its packing limit raises it
@@ -503,6 +508,14 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   - The paint a loaded hair carries reaches into the ground's tooth only as
     deep as that film. Where the hairs touch only the weave's high points
     (light pressure, little paint, a coarse weave), the film breaks.
+  - A touch (`b:touch`) is a press, not a slide: no bed draws a film out
+    under it. The paint between each hair and the canvas splits as the
+    tip lifts, half to each side, over the wet paint already there. Where
+    the brush's paint is the thicker, the wet paint stays and the brush's
+    paint lies on it, half of the excess over the wet film; the brush comes
+    away clean. Where the wet film is the thicker, the brush lays none of
+    its own and lifts half the difference. On dry paint or bare ground a
+    touch lays as without the switch.
   - Sources and estimates: notes/research/stroke_film.md.
 - Hatching an area is the lines a pencil draws (`h:line`), one by one.
 

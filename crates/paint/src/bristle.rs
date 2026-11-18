@@ -2347,7 +2347,7 @@ pub(crate) unsafe fn touch_on(mut sf: Surf, held: &mut Held, t: &Touch, clip: Op
     // With the stroke film a press is not a slide: no bed draws a film out
     // under it, so a touch takes no stroke-film ceiling. The paint between
     // each hair and the canvas splits on the lift (`Surf::press`,
-    // notes/research/touch_film_split.md, "A press over wet paint").
+    // notes/research/stroke_film.md §4).
     sf.press = sf.e7 && sf.stroke_film.is_some();
     let s = sf.scale;
     let tool = held.tool.clone();

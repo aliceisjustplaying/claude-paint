@@ -486,10 +486,11 @@ manganese oxide or by the powder's own lot, which is not resolved here.
   the set.
 - Bone black's dry stick is R∞ ≈ 10⁻⁴ (sRGB 0 0 0), where its powder is L\* 21.7: too
   dark. It is `carbon_ratio` × an oil K/S of near zero, and the facet reflection that
-  charcoal's beds have (`CarbonBed`) is missing.
+  charcoal's beds have (`CarbonBed`) is missing. (Done in §8.1.)
 - Ultramarine dry is L\* 53 (powder 54) but over-saturated (b\* −52 against −28).
+  (The powder is natural ultramarine, the tube synthetic: §8.3.)
 - The earths' oil masstones rest on the same thin-swatch K/S. They may be as pale in
-  oil, but this switch doesn't touch oil.
+  oil, but this switch doesn't touch oil. (They are: §8.6, `--@ oil-earths`.)
 
 Sources for this section: Cosentino 2014 (as §6); Golden Artist Colors, Fluid Acrylic
 Burnt Sienna and Raw Umber product pages (goldenartistcolors.com, CIE L\*a\*b\* listed);
@@ -499,6 +500,207 @@ dust aerosols?", *Atmos. Chem. Phys.* 15 (2015) 12159–12177, table 2 (hematite
 Constants*, US Army contractor report; Meland et al., *JQSRT* 112 (2011), hematite and
 goethite scattering at 470, 550, 660 nm; Kremer Pigmente 40430 Dark Burnt Sienna
 (PR101/102, calcined Italian earth). Computation: `dry_earth_fit.py` (this folder).
+
+---
+
+## 8. The blacks dry, ultramarine, the earths' shapes, and the earths in oil
+
+Computation: `dry_colours_fit.py` (this folder), with the same inputs as §7. Its output
+is quoted below. "Powder" means CHSOS's FORS powder (Kremer pigments, Cosentino 2014),
+corrected from the instrument as in §6.1 and §7.1 unless stated otherwise.
+
+### 8.1 The blacks: opaque grains, so the facets set the bed (in `--@ dry-earths`)
+
+**Cause [C].** The dry rule gives a black S = `carbon_ratio` × its oil S. Bone black's
+calibrated oil S is near nothing (K/S in oil ~10⁵), so its stick came out at R∞ 10⁻⁴,
+sRGB 0 0 0. Vine black has no oil table and falls back to its masstone's K/S at an
+estimated hiding, so its stick came out at R∞ 0.20 (L\* 52), too *light*. Neither
+number has a physical basis. Carbon absorbs within about 0.07 µm (λ/4πk, k 0.6), so a
+carbon-bearing grain of a micrometre or more is opaque. All it scatters is what its facets
+reflect, and that reflection is set by its complex index, not by an oil S. This is
+charcoal's physics (charcoal.md §2, `charcoal_optics.py`), the same Mie code as §2.
+
+**The rule.** Dry, a black keeps its K (so its tints keep their strength) and takes
+S = K × the S/K its grains have in air (Mie, size-averaged, KM S = ¾σs(1−g), K = 2σa;
+`dry::carbon_bed`):
+
+| Black | Grain | m at 550 nm | S/K | R∞ (L\*) | Sensitivity |
+|---|---|---|---|---|---|
+| vine black | charred wood, the mean of Jäger, Mutschke & Henning's 1998 cellulose chars at 400 and 600 °C (charcoal.md §2); 3 µm splinters [E: charcoal.md] | 1.35 + 0.63i | 0.0441 | 0.0211 (16.1) | 1 / 10 µm: 0.0220 / 0.0217; fired at 400 / 600 °C: 0.018 / 0.029 |
+| bone black | hydroxyapatite (n 1.64) with 10 wt % carbon [M: CAMEO, after Gettens & Stout; 10–20 % from makers] spread through the grain, Bruggeman; carbon density 1.8 [E: a coke, 1.5–2.0]; 7 µm grains [M: Rublev's bone black, 3–15 µm] | 1.60 + 0.11i | 0.0276 | 0.0134 (11.6) | 3 / 15 µm: 0.0137 / 0.0135; 20 wt % carbon: 0.0133; char at 400 / 600 °C: 0.014 / 0.013 |
+
+R∞ hardly depends on the grain size, the char or the carbon content. The facets decide it.
+No other tube changes. Bone brown (a partly charred bone, brown) is not a black and keeps
+its rule. The catalog has no lamp, ivory or Mars black.
+
+### 8.2 The measurements, and the powders' black floor
+
+CHSOS can't say how dark a black powder is. Its sphere reads all four carbon blacks at
+0.156–0.173 (a floor of stray light), and the correction (§6.1) *assumes* their mean is
+0.04 (0.03–0.05). That number came from §3's veil estimate (a flat 2–4 % over a powder),
+which #329/#321 later showed double-counts the facets. What CHSOS does measure are the
+*differences* between the blacks (true units, gain 0.788): vine +0.0076, lamp +0.0020,
+ivory −0.0040, bone −0.0056 against their mean.
+
+**An absolute measurement [M].** Lethuillier et al. (2022, *MNRAS*,
+doi:10.1093/mnras/stac1734, arXiv:2110.05832) measured sieved juniper charcoal powder for
+cometary-dust analogues: albedo 3.00 % at 550 nm (their table 4; MoHIS hyperspectral
+imager, normal illumination; Hapke single-scattering albedo 5.6 %). If vine black reflects
+as that charcoal does, CHSOS's black floor is **0.022**, not 0.04. Then the corrected
+powders are vine black 20.3/−0.8/0.8, bone black 13.6/0.0/0.5 and burnt sienna
+28.5/25.6/23.7 (32.6/21.7/17.6 at 0.04).
+
+| Black | engine dry, before | with the switch (physics) | powder, floor 0.04 (L\* bounds) | ΔE76 | powder, floor 0.022 | ΔE76 |
+|---|---|---|---|---|---|---|
+| vine black | 124 124 124 (52.0/0.2/0.0) | 40 40 40 (16.1/0/0) | 26.2/−0.6/0.6 (22.9–29.0) | 10.1 | 20.3/−0.8/0.8 | 4.4 |
+| bone black | 0 0 0 (0.0/0.1/0.0) | 31 31 31 (11.6/0/0) | 21.7/0.0/0.3 (17.4–25.1) | 10.1 | 13.6/0.0/0.5 | 2.1 |
+
+The physics, the charcoal measurement and CHSOS's measured differences agree with each
+other. They don't agree with the 0.04 floor. **Open:** the floor sets every corrected
+powder, the earths' and the lakes' (§6, §7) as well as the blacks'. At 0.022 the dark
+earths' targets are about 4 L\* deeper (burnt sienna 28.5), so `powder_k` and
+`dye_loading` would be refitted. That is left to the lead (it moves #318's merged
+fits too). The blacks' rule has no fitted number in it, so it doesn't depend on the floor.
+
+On a sheet, with `--@ pastel-veil` (#329) no veil goes over a pastel bed, so the stick's
+R∞ is what's seen. Without it, the canvas's 4 % first-surface veil
+(`canvas::SURFACE_REFLECTANCE`) puts a full bone black patch at Y 0.04 whatever its R∞.
+
+### 8.3 Ultramarine: the powder is natural, the tube synthetic
+
+The over-saturation §7 noted (engine b\* −57 against the powder's −28) compares two
+different pigments. CHSOS's "ultramarine" is **natural ultramarine, Kremer 10510**
+(Cosentino 2015, *Int. J. Conserv. Sci.* 6:287, table 1, which lists the database's 54
+pigments with their Kremer numbers). Natural ultramarine is lazurite ground from lapis
+lazuli with its gangue (calcite, diopside, pyrite), which greys it. The engine's
+"ultramarine blue" is synthetic ultramarine. Their K/S shapes differ as the two pigments
+should (relative to 450 nm):
+
+| | 450 | 500 | 550 | 600 | 650 | 700 nm |
+|---|---|---|---|---|---|---|
+| natural, powder (CHSOS) | 1 | 1.9 | 4.3 | 5.4 | 4.5 | 2.3 |
+| natural, gum swatch (CHSOS 45/45 probe, a separate measurement) | 1 | 2.0 | 4.6 | 5.4 | 4.8 | 3.2 |
+| synthetic, engine K (calibrated on oil tints) | 1 | 7.7 | 62 | 50 | 44 | 16.5 |
+
+The powder's and the probe-measured swatch's shapes agree, so the shape is the pigment's,
+not the powder's scattering or a missing surface term. A first-surface term would also
+double-count (§8.2). So the synthetic tube's dry colour is not tested by this powder, and
+it is **not changed**. Pourliaka et al. (PoS(BPU11)142) measured seven Kremer
+synthetic ultramarine powders with a BaSO₄ sphere. Their spectra are given only as a
+figure, so no number from them is used here. The engine's "ultramarine ash" (natural, a
+pale last extraction) dries to 206 218 233 (86.6/−0.9/−8.9). It is meant to be paler than
+a medium grade like 10510, and no ash powder was measured.
+
+### 8.4 The other blues, the cobalts and the cadmiums: checked, not changed
+
+The engine's dry colour without any switch against the powders (floor 0.04), ΔE76:
+
+| Tube | engine dry | powder (Kremer) | ΔE |
+|---|---|---|---|
+| Prussian blue | 0 61 120 (25.3/5.9/−39.4) | 41 44 84 (19.7/11.6/−25.2), 45202 | 16.4 |
+| cobalt blue | 30 133 230 (54.9/7.3/−57.0) | 41 123 186 (49.8/−2.5/−39.8), 45730 | 20.5 |
+| smalt | 179 204 236 (81.1/−1.5/−18.5) | 73 75 155 (35.7/22.3/−44.2), 10000 | 57.3 |
+| cobalt violet | 193 186 230 (77.3/11.3/−21.2) | 125 75 158 (40.8/37.0/−37.4), 45800 | 47.5 |
+| cadmium yellow | 255 229 85 (91.9/−1.1/72.2) | 239 229 67 (89.2/−14.0/75.0), 21010 | 13.5 |
+| cadmium red | 200 93 108 (53.0/44.0/12.1) | 175 41 55 (39.6/53.9/25.2), 21120 | 21.3 |
+| vermilion | 214 81 66 (52.5/51.6/36.0) | 180 91 90 (49.4/36.1/17.4), 10610 | 24.4 |
+| Naples yellow | 255 228 140 (91.2/−1.4/46.3) | 219 179 93 (75.0/4.4/48.9), 10130 | 17.4 |
+| red lead | 255 118 27 (66.6/51.2/69.4) | 235 99 54 (58.9/50.2/50.3), 42500 | 20.6 |
+
+What the numbers show, and why nothing here changes:
+- **Smalt and cobalt violet are coarse.** The rule gives every pigment under n 1.9 the
+  Mie S of 1 µm grains. Smalt's at 20 µm brings it to ΔE 5.1, and cobalt violet's at
+  10 µm to 8.4 (with the oil table's K). But Kremer's smalt 10000 is sold as 0–120 µm,
+  and SEM measured 60–120 µm (Studies in Conservation 2021, doi:10.1080/00393630.2021.1940721).
+  At those sizes Mie with the grain's absorption (the package effect) makes it far too dark
+  (L\* 13–18 against 35.7), so the oil table's K isn't the Kremer smalt's. No size for
+  cobalt violet 45800 was found. Neither is changed. A size would be a number chosen to
+  fit.
+- **Cobalt blue's** error is K's shape (its red end, R 0.85 against 0.36 at 700 nm). No
+  grain size helps (3 µm: ΔE 34).
+- **Cadmium red, Prussian blue and burnt sienna's blue end** all absorb so strongly that
+  their grains are opaque in those bands. The powders there sit at the blacks' level
+  (0.025–0.045 at floor 0.04), which is facet reflection, as in §8.1. The rule's K/S comes
+  from the oil tables and gives cadmium red 0.13 at 500 nm (powder 0.04) and Prussian blue
+  0.005 at 700 nm (powder 0.025). The general fix is the dry K and S from Mie of each
+  grain's complex index (its absorption from its K per volume) at its grain size. §8.5
+  tries it on the earths. Most tubes have no measured grain size, so it is left for a
+  later change.
+
+### 8.5 The earths' shape errors: the causes tried
+
+With §7's switch, red earth's a\* is 30.4 (powder 22.8) and yellow ochre is 9.5 L\* light.
+The causes tried, each with no new free number:
+- **A first-surface term** (a flat 4 % over the bed): red earth ΔE 8.1 → 5.5, yellow
+  ochre 11.2 → 10.7, burnt sienna 2.6 → 12.0. It also double-counts the facets (§8.2,
+  #329). Rejected.
+- **Grain size per pigment** moves S at every wavelength alike, so the one factor takes it
+  up and the shape doesn't change.
+- **Mie with the grain's absorption** (complex index from K per volume, 1 µm, the factor
+  refitted): red earth 8.1 → 4.3 (a\* 26.7), raw sienna 6.7 → 5.5, yellow ochre
+  11.2 → 10.7, viridian 5.7 → 5.5, but burnt sienna 2.6 → 4.9 and raw umber 2.6 → 3.0.
+  Its facet floor for n 2.3–2.7 grains (R 0.09–0.13 in the blue) is above the powders'
+  (0.035–0.08). Real earth grains are hematite or goethite in clay, with a lower effective
+  index. No net gain, so not taken.
+- **K's shape.** Yellow ochre's error is its red end: 0.72–0.76 at 600–700 nm against the
+  powder's 0.54–0.57. Its K there is the thin swatch's, near nothing. Goethite does absorb
+  weakly in the red (its Fe³⁺ crystal-field bands near 650 and 900 nm), which a thin gum
+  swatch can't resolve. A measured goethite k(λ) would fix it. The published ones disagree
+  (Bedidi & Cervelle 1993 give k 0.07–0.13, flat, held too high by later work: Zhang et al.
+  2015, Formenti et al. 2014), so none is used. Red earth's a\* is the same kind of error.
+  **Left open.**
+
+### 8.6 The earths in oil (`--@ oil-earths`)
+
+**Cause [C].** The earths' oil tables have the thin-swatch K/S (§7), so their oil
+masstones are as pale as their old dry sticks were. A thick drawdown of burnt sienna
+comes out at L\* 55 and raw umber at 57.5. A burnt sienna or raw umber in oil is
+near-black in masstone (Golden's acrylics: burnt sienna 33.96/17.64/14.17, raw umber
+28.2/1.45/3.33; CHSOS's linseed-oil swatches below).
+
+**The rule.** A pigment absorbs per volume the same in any medium (§2.4). So in oil each
+earth (and viridian) takes the K per volume its dry powder shows (the table's K ×
+`dry::powder_k`, §7). Its S is what those same grains scatter in oil: the dry rule's Mie S
+at its index (`dry::rule_scatter`) over Mie's air/oil ratio there, a multiple of lead
+white's oil S (`mixer::OIL_EARTHS`). Nothing is fitted to the oil data. That data is the
+check.
+
+R∞ in oil (the engine's internal masstone) against CHSOS's linseed-oil swatches
+(Kremer, the same pigments as the powders), corrected as the powders with the oil
+blacks' floor and inverted for the glossy film's surface (Saunderson, k1 0.04, k2 0.6,
+§3), ΔE76:
+
+| Tube | oil before | oil with the switch | CHSOS oil (internal) | ΔE | as a sphere sees it: switch / CHSOS |
+|---|---|---|---|---|---|
+| burnt sienna | 184 114 94 (55.2/25.4/23.1) | 96 52 43 (27.1/19.0/14.2) | 67 60 64 (26.2/3.8/−1.1) | 43.4 → 21.5 | 29.5/7.5/4.5 / 29.2/1.4/−0.4 |
+| red earth | 201 115 94 (57.6/31.8/26.4) | 137 65 55 (36.6/29.7/20.1) | 142 70 70 (38.9/30.2/14.2) | 22.4 → 6.4 | 33.8/16.0/8.8 / 35.0/17.1/7.0 |
+| raw sienna | 198 142 86 (63.4/14.7/38.2) | 146 104 57 (47.5/11.4/32.9) | 173 114 78 (53.4/19.3/29.0) | 14.4 → 10.5 | 39.9/7.0/17.0 / 43.8/13.9/17.8 |
+| yellow ochre | 251 200 120 (83.5/9.1/46.5) | 234 168 77 (73.5/15.7/55.1) | 207 147 87 (65.6/16.4/40.5) | 20.2 → 16.6 | 62.3/16.2/45.1 / 53.8/15.0/29.9 |
+| raw umber | 172 130 96 (57.5/11.7/24.5) | 81 61 42 (27.3/6.1/15.0) | 84 65 65 (29.5/8.5/2.9) | 35.6 → 12.6 | 29.6/2.3/4.8 / 30.4/3.5/1.1 |
+| viridian | 0 72 67 (23.5/−52.5/−8.1) | 0 85 75 (31.5/−27.3/−1.0) | 0 92 91 (33.9/−30.4/−7.8) | 24.4 → 7.8 | 31.3/−10.5/−0.4 / 32.5/−12.9/−3.5 |
+
+Every tube moves toward its measured oil paint, and the lightness of each lands within a
+few L\* of it. What is left is the same K shape as dry (§8.5): yellow ochre's red end, and
+burnt sienna's hue. CHSOS's burnt sienna oil swatch reads near-neutral (a\* 3.8), where
+Golden's burnt sienna has a\* 17.6, so the swatch itself is doubtful. Caveats: CHSOS's
+swatches were brushed on paper with no control of thickness and aged two months in sun
+(Cosentino 2015). Golden's are acrylics, with no method stated.
+
+**Estimates left:** the earths' 1 µm grains (as §7); the oil S takes the dry Mie S over
+the 1 µm air/oil ratio; the CHSOS floor (§8.2).
+
+Sources for this section: Cosentino 2014 and 2015 (*Int. J. Conserv. Sci.* 6:287–298,
+table 1, the Kremer numbers); Lethuillier et al. 2022, "Cometary dust analogues for
+physics experiments", *MNRAS*, doi:10.1093/mnras/stac1734 (arXiv:2110.05832), table 4;
+Jäger, Mutschke & Henning 1998, *A&A* 332:291 (cellulose chars, Jena OCDB; as charcoal.md);
+MFA CAMEO, "Bone black" (10 % carbon, 84 % hydroxyapatite; n 1.65–1.70); Natural
+Pigments and Rublev, bone black (10–20 % carbon; particles 3–15 µm); Pourliaka et al.,
+"Discriminating natural and synthetic ultramarine", PoS(BPU11)142; "Treating
+smalt: a preliminary SEM-EDX study", *Stud. Conserv.* (2021),
+doi:10.1080/00393630.2021.1940721 (Kremer smalt 60–120 µm); Kremer Pigmente, 10000 Smalt
+(0–120 µm), 45800 Cobalt Violet dark; Formenti et al. 2014, *JGR Atmospheres*,
+doi:10.1002/2014JD021668 (goethite and hematite k after Bedidi & Cervelle 1993, *JGR*
+98:11941); Zhang et al. 2015 (as §7); Golden Artist Colors (as §7).
 
 ---
 

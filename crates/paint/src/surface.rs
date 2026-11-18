@@ -38,7 +38,9 @@ pub struct Linen {
     /// Threads per cm of the vertical (warp) and horizontal (weft) threads.
     pub warp_per_cm: f32,
     pub weft_per_cm: f32,
-    /// Height of the thread crowns above the interstices, µm.
+    /// Height of the thread crowns above the interstices, µm. Under
+    /// `--@ relief-prefilter` the threads' sizes and crimp set the relief
+    /// instead (`weave`), and this is not read.
     pub crown_um: f32,
     /// Irregularity of hand-spun thread (0 = even, 1 = strong slubs).
     pub slubs: f32,
@@ -268,14 +270,20 @@ impl Canvas {
         let px = self.px_mm();
         let pitch = (10.0 / l.warp_per_cm).min(10.0 / l.weft_per_cm);
         if self.relief_prefilter {
-            // pixels as wide as the coarser thread see only the weave's
-            // mean, read four times a thread (its thicknesses vary from
-            // thread to thread)
+            // the threads' tops on their crimped paths (`weave`); pixels as
+            // wide as the coarser thread see only the weave's mean, read
+            // four times a thread (its thicknesses vary from thread to
+            // thread)
+            let weave = crate::weave::Weave::new(&l);
             let coarse = (10.0 / l.warp_per_cm).max(10.0 / l.weft_per_cm);
             self.height = if px >= coarse {
-                footprint_average(ox, oy, w, h, px, pitch / 4.0, |xm, ym| linen_mean_um(xm, ym, &l))
+                let mean = crate::weave::WeaveMean::new(&weave);
+                footprint_average(ox, oy, w, h, px, pitch / 4.0, |xm, ym| mean.height_um(xm, ym))
             } else {
-                footprint_average(ox, oy, w, h, px, pitch / SAMPLES_PER_THREAD, |xm, ym| linen_um(xm, ym, &l))
+                // the crossings every sample of the window's footprints can need
+                let r = FOOTPRINT_REACH.ceil() + 1.0;
+                let table = crate::weave::CrossTable::new(&weave, ((ox as f32 - r) * px, (oy as f32 - r) * px), (((ox + w) as f32 + r) * px, ((oy + h) as f32 + r) * px));
+                footprint_average(ox, oy, w, h, px, pitch / SAMPLES_PER_THREAD, |xm, ym| weave.height_um(xm, ym, Some(&table)))
             };
             self.surf_gen += 1;
             return;
@@ -706,14 +714,15 @@ pub(crate) const FOOTPRINT_REACH: f32 = 6.0;
 pub(crate) const FOOTPRINT_BETA: f32 = 6.0;
 
 /// How finely the weave is read for its footprint average, samples a
-/// thread. Where a weft thread passes from under one warp to over the next
-/// its height steps (`linen_um`), so the relief has harmonics far past the
-/// thread's own frequency, and a regular grid of samples folds them back
-/// as a faint pattern beating with the weave; one point at random in each
-/// cell of the grid (stratified) turns that into noise. At 8 a thread the
-/// footprint averages come within 1.5 µm rms of the weave read 48 times a
-/// thread (on a weave whose averaged relief varies by 6.4 µm rms, at 16 × 15
-/// threads/cm and 0.38 mm a pixel), 0.8 µm at 12, 0.6 at 16.
+/// thread. The threads' tops (`weave`) are continuous along each thread,
+/// but the relief drops at a thread's edge where it lies over a lower
+/// thread or a hole, so it has harmonics far past the thread's own
+/// frequency, and a regular grid of samples folds them back as a faint
+/// pattern beating with the weave; one point at random in each cell of the
+/// grid (stratified) turns that into noise. At 8 a thread the footprint
+/// averages come within 2.5 µm rms of the weave read 48 times a thread (on
+/// a weave whose averaged relief varies by 23 µm rms, at 16 × 15 threads/cm
+/// and 0.38 mm a pixel), 1.1 µm at 12, 5.9 at 4.
 pub(crate) const SAMPLES_PER_THREAD: f32 = 8.0;
 
 /// Most samples a pixel takes each way for its footprint average. Coarser
@@ -820,61 +829,6 @@ pub(crate) fn footprint_average_over(x0: usize, y0: usize, w: usize, h: usize, p
         });
     }
     out
-}
-
-/// The mean height of plain weave over a period of its over and under (two
-/// threads each way), in crowns, for warp threads 1 thick and weft threads
-/// `rho` thick: `linen_um`'s threads averaged over a crossing where the
-/// warp is on top and one where the weft is, by the midpoint rule on a
-/// grid whose cells end where the threads' heights step. Tabulated once
-/// for `rho` from 0.25 to 4 (a weft four times thinner or thicker than the
-/// warp: `linen_um`'s threads run 0.6 to 2 times).
-fn weave_mean(rho: f32) -> f32 {
-    use std::f32::consts::PI;
-    const N: usize = 96;
-    const STEPS: usize = 75;
-    static TABLE: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
-    let rho_at = |k: usize| 0.25 + 3.75 * k as f32 / STEPS as f32;
-    let table = TABLE.get_or_init(|| {
-        let s: Vec<f32> = (0..N).map(|i| (PI * (i as f32 + 0.5) / N as f32).sin()).collect();
-        (0..=STEPS)
-            .map(|k| {
-                let rho = rho_at(k);
-                let mut acc = 0.0f64;
-                for &sv in &s {
-                    for &su in &s {
-                        let (warp, weft) = (su.powf(0.7), sv.powf(0.7) * rho);
-                        let over = (warp * sv.sqrt()).max(weft * 0.55);
-                        let under = (warp * 0.55).max(weft * su.sqrt());
-                        acc += 0.5 * (over + under) as f64;
-                    }
-                }
-                (acc / (N * N) as f64) as f32
-            })
-            .collect()
-    });
-    let t = ((rho - 0.25) / 3.75 * STEPS as f32).clamp(0.0, STEPS as f32);
-    let k = (t as usize).min(STEPS - 1);
-    table[k] + (table[k + 1] - table[k]) * (t - k as f32)
-}
-
-/// Bare linen's height at a point (mm), µm, where the pixels are at least a
-/// thread wide: the weave's mean over its over and under (`weave_mean`) for
-/// the warp and weft threads there, as thick as `linen_um` makes them, the
-/// weft's slubs with them. A pixel this wide resolves neither the threads
-/// nor their over and under (twice their pitch, past the footprint's band),
-/// only the weave's mean and how it varies from thread to thread and slub
-/// to slub; this is that, without the threads. The thicknesses `linen_um`
-/// gives each whole thread (by its index) vary smoothly here, matching each
-/// thread at its middle, and the threads' wandering (a fraction of a thread)
-/// is left out.
-pub(crate) fn linen_mean_um(xm: f32, ym: f32, l: &Linen) -> f32 {
-    let seed = l.seed;
-    let (x0, y0) = (xm * l.warp_per_cm / 10.0, ym * l.weft_per_cm / 10.0);
-    let tw = 0.85 + 0.3 * vnoise((x0 - 0.5) * 0.93, y0 * 0.3, seed + 11);
-    let slub = vnoise(x0 * 0.25, (y0 - 0.5) * 0.93, seed + 13);
-    let th = 0.8 + 0.3 * vnoise(x0 * 0.4, (y0 - 0.5) * 0.93, seed + 17) + l.slubs * 1.2 * (slub - 0.6).max(0.0);
-    l.crown_um * tw * weave_mean(th / tw)
 }
 
 /// Bare plain-weave linen height at a point (mm), µm.
@@ -1037,6 +991,13 @@ mod relief_prefilter_tests {
         Canvas::new(n, 1.0, [0.8; 3]).with_relief_prefilter(prefilter).with_size_mm(n as f32 * px).with_linen(l)
     }
 
+    /// Bare linen as the canvas lays it under the switch: the threads' tops
+    /// on their crimped paths (`weave`).
+    fn bare(l: &Linen) -> impl Fn(f32, f32) -> f32 + Sync + use<> {
+        let w = crate::weave::Weave::new(l);
+        move |x, y| w.height_um(x, y, None)
+    }
+
     /// The power of a line of samples at `f` cycles a sample (its mean taken out).
     fn power(v: &[f64], f: f64) -> f64 {
         let m = v.iter().sum::<f64>() / v.len() as f64;
@@ -1056,11 +1017,12 @@ mod relief_prefilter_tests {
     /// by `gain` (the footprint's gain at a frequency).
     fn powers(l: &Linen, n: usize, px: f32, f: f64, coarse: &dyn Fn(f32) -> Vec<f64>, gain: &dyn Fn(f64) -> f64) -> (f64, f64, f64) {
         let k = 16usize;
+        let weave = bare(l);
         let (mut pc, mut pt, mut pg) = (0.0, 0.0, 0.0);
         for line in 0..32 {
             let yl = 3.1 + line as f32 * 1.7;
             let c = coarse(yl);
-            let fine: Vec<f64> = (0..n * k).map(|i| linen_um((i as f32 + 0.5) * px / k as f32, yl, l) as f64).collect();
+            let fine: Vec<f64> = (0..n * k).map(|i| weave((i as f32 + 0.5) * px / k as f32, yl) as f64).collect();
             for dk in [-1.0f64, 0.0, 1.0] {
                 let ff = f + dk / n as f64;
                 let t = power(&fine, ff / k as f64) / k as f64;
@@ -1098,8 +1060,9 @@ mod relief_prefilter_tests {
             let fold = 1.0 - f;
             let pitch = 10.0 / per_cm;
             let ss = ((px / (pitch / SAMPLES_PER_THREAD)).ceil() as usize).clamp(1, 64);
-            let points = |yl: f32| (0..n).map(|x| 0.5 * (linen_um((x as f32 + 0.25) * px, yl, &l) + linen_um((x as f32 + 0.75) * px, yl, &l)) as f64).collect::<Vec<f64>>();
-            let footprint = |yl: f32| footprint_average(0, 0, n, 1, px, pitch / SAMPLES_PER_THREAD, |x, _| linen_um(x, yl, &l)).iter().map(|&v| v as f64).collect::<Vec<f64>>();
+            let weave = bare(&l);
+            let points = |yl: f32| (0..n).map(|x| 0.5 * (weave((x as f32 + 0.25) * px, yl) + weave((x as f32 + 0.75) * px, yl)) as f64).collect::<Vec<f64>>();
+            let footprint = |yl: f32| footprint_average(0, 0, n, 1, px, pitch / SAMPLES_PER_THREAD, |x, _| weave(x, yl)).iter().map(|&v| v as f64).collect::<Vec<f64>>();
             let (po, pt, pb) = powers(&l, n, px, fold, &points, &|f| (std::f64::consts::PI * f / 2.0).cos().abs());
             let (pn, _, pg) = powers(&l, n, px, fold, &footprint, &|f| footprint_gain(ss, f));
             let (old, new) = ((po - pb) / pt, (pn - pg) / pt);
@@ -1121,7 +1084,8 @@ mod relief_prefilter_tests {
         let l = marly();
         let pitch = 10.0 / l.warp_per_cm;
         let ss = ((px / (pitch / SAMPLES_PER_THREAD)).ceil() as usize).clamp(1, 64);
-        let footprint = |yl: f32| footprint_average(0, 0, n, 1, px, pitch / SAMPLES_PER_THREAD, |x, _| linen_um(x, yl, &l)).iter().map(|&v| v as f64).collect::<Vec<f64>>();
+        let weave = bare(&l);
+        let footprint = |yl: f32| footprint_average(0, 0, n, 1, px, pitch / SAMPLES_PER_THREAD, |x, _| weave(x, yl)).iter().map(|&v| v as f64).collect::<Vec<f64>>();
         for f in [0.03f64, 0.06, 0.1, 0.15, 0.2, 0.25] {
             let g = footprint_gain(ss, f);
             let (pc, pt, pg) = powers(&l, n, px, f, &footprint, &|f| footprint_gain(ss, f));
@@ -1141,14 +1105,15 @@ mod relief_prefilter_tests {
         let new = canvas(n, px, l, true);
         let (k, e) = (16usize, 8usize);
         let d = px / k as f32;
-        let fine = (e * k..(n - e) * k).into_par_iter().map(|j| (e * k..(n - e) * k).map(|i| linen_um((i as f32 + 0.5) * d, (j as f32 + 0.5) * d, &l) as f64).sum::<f64>()).sum::<f64>() / (((n - 2 * e) * k) as f64).powi(2);
+        let weave = bare(&l);
+        let fine = (e * k..(n - e) * k).into_par_iter().map(|j| (e * k..(n - e) * k).map(|i| weave((i as f32 + 0.5) * d, (j as f32 + 0.5) * d) as f64).sum::<f64>()).sum::<f64>() / (((n - 2 * e) * k) as f64).powi(2);
         let m = (e..n - e).flat_map(|y| (e..n - e).map(move |x| (y, x))).map(|(y, x)| new.height[y * n + x] as f64).sum::<f64>() / ((n - 2 * e) as f64).powi(2);
         eprintln!("mean relief: footprint {m:.3} µm, box average of the fine weave {fine:.3} µm");
         assert!((m / fine - 1.0).abs() < 2e-3, "footprint mean {m} vs box average {fine}");
     }
 
     /// Where a pixel is wider than a thread (1 mm a pixel on 16 × 15
-    /// threads/cm), the canvas holds the weave's mean (`linen_mean_um`)
+    /// threads/cm), the canvas holds the weave's mean (`weave::WeaveMean`)
     /// averaged over each footprint: it has the mean of the weave itself
     /// (within 1%) and follows the weave averaged over the footprint from
     /// samples 32 times a pixel (within a third of how much that varies:
@@ -1160,7 +1125,7 @@ mod relief_prefilter_tests {
         let l = marly();
         let c = canvas(n, px, l, true);
         let r = FOOTPRINT_REACH.ceil() as usize;
-        let full = footprint_average_over(0, 0, n, n, px, 32, (r, &footprint_weight), |x, y| linen_um(x, y, &l));
+        let full = footprint_average_over(0, 0, n, n, px, 32, (r, &footprint_weight), bare(&l));
         let e = 8usize;
         let inner = |v: &[f32]| -> Vec<f64> { (e..n - e).flat_map(|y| (e..n - e).map(move |x| (y, x))).map(|(y, x)| v[y * n + x] as f64).collect() };
         let (a, b) = (inner(&c.height), inner(&full));

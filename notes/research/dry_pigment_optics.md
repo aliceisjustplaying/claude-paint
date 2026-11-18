@@ -686,8 +686,17 @@ Golden's burnt sienna has a\* 17.6, so the swatch itself is doubtful. Caveats: C
 swatches were brushed on paper with no control of thickness and aged two months in sun
 (Cosentino 2015). Golden's are acrylics, with no method stated.
 
-**Estimates left:** the earths' 1 µm grains (as §7); the oil S takes the dry Mie S over
-the 1 µm air/oil ratio; the CHSOS floor (§8.2).
+**Tints are not pinned.** No measured tint of an earth with white was found (CHSOS has
+none, and Revigo's ladders have no earths). Tints rest on the grains' size, as the dry tints
+do (§7.3). At 1 µm the K is the most iron oxide could give, and a 1:1 by volume with lead
+white is dark: R∞ in oil burnt sienna 120 69 59 (35.1/20.9/15.6), raw umber 36.1, red earth
+43.7. A thick pile in the engine is darker still, burnt sienna L\* 25 over a masstone of 18.
+With 3 µm grains the masstones stay where they are (the factor follows S) and the tints come
+out at 46.2, 49.4 and 54.5 (`dry_colours_fit.py`). Kremer gives no size for 40430 or 40610.
+A measured tint, or a measured size, would settle it.
+
+**Estimates left:** the earths' 1 µm grains (as §7), which set their tints in oil and dry;
+the oil S takes the dry Mie S over the 1 µm air/oil ratio; the CHSOS floor (§8.2).
 
 Sources for this section: Cosentino 2014 and 2015 (*Int. J. Conserv. Sci.* 6:287–298,
 table 1, the Kremer numbers); Lethuillier et al. 2022, "Cometary dust analogues for

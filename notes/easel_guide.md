@@ -511,17 +511,21 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
     by the steering law, at most 400 mm/s. It also sets the stroke's hand
     time.
   - The paint a loaded hair carries reaches into the ground's tooth only as
-    deep as that film. Where the hairs touch only the weave's high points
-    (light pressure, little paint, a coarse weave), the film breaks.
+    deep as that film (at a stroke's start, as deep as the stroke's
+    middle). Where the hairs touch only the weave's high points (light
+    pressure, little paint, a coarse weave), the film breaks.
   - A stroke starts and ends with a press. The brush comes down loaded,
     so at first the paint between the hairs and the canvas is the film a
     touch would press out. As the bed moves the squeeze drives that paint
     out toward the slider's film, over about three times the bed's depth
     along the stroke (less for paint with a yield stress), whatever the
     hand's speed. The spots the bed leaves behind take the film the gap
-    held as it left them. A stroke's first few bed lengths lie thicker,
-    and a long stroke lays the slider's film after them. The spots still
-    under the bed when the hand lifts split its paint as a touch does. So a
+    held as it left them. A stroke's first few bed lengths lie thicker or
+    thinner than the rest, as that press film is thicker or thinner than
+    the slider's film, and a long stroke lays the slider's film after them.
+    The spots still under the bed when the hand lifts split its paint as a
+    touch does, over all the canvas the bed covers as it lifts. The hairs
+    straighten as the hand lifts, so the tip draws on to the stroke's end. So a
     short dab lays about what a touch there lays, and on wet paint its own
     paint lies on top while the brush comes away clean. The hairs lift wet
     paint only where the gap's film is thinner than the wet film under it.
@@ -535,6 +539,10 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
     away clean. Where the wet film is the thicker, the brush lays none of
     its own and lifts half the difference. On dry paint or bare ground a
     touch lays as without the switch.
+  - A press, a touch or a stroke's lift, is one film of paint between the
+    hairs and the canvas, so it splits over the whole patch: it fills the
+    weave's hollows under it as it covers the high points. Only a brush
+    nearly run dry leaves the hollows bare.
   - Sources and estimates: notes/research/stroke_film.md.
 - Hatching an area is the lines a pencil draws (`h:line`), one by one.
 

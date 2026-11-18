@@ -287,7 +287,61 @@ presses its share of the gap's film where it leaves the canvas, as firmly
 as it was down while it waited: a touch's split (§4), the canvas keeping
 half of the gap's film over the wet film and the brush lifting half the
 difference where the wet film is the thicker. So the last bed length of a
-stroke does lay a lift split. A stroke shorter than `TOUCH_STEPS` sweep
+stroke does lay a lift split.
+
+**The lift's patch [D].** The paint between the bed's hairs and the canvas
+is one film over the bed's footprint, and a film pulled apart splits over
+the whole contact, as it does in probe-tack and at a forward-roll nip
+(§4), not hair by hair. So each spot under the bed when it lifts keeps
+half of the gap's film there, whichever hair is over it. A waiting hair
+slides on over such spots until it lifts, and as the hand lifts at the
+path's end every hair straightens as it leaves (`reach_end`). So each
+hair presses along the whole track since it last laid the slider's film
+(its last step, for a hair that didn't wait) to where it lifts: half its
+gap's film over the strip it stands for, spacing wide. The canvas keeps
+half the gap's film there, this stroke's paint already on it included (so
+a press over the slider's own film adds nothing), and what can't land
+stays on the hair. A lifting hair is leaving the canvas, so it doesn't
+plough. Before this each hair pressed one disc where it lifted, and three
+faults showed at a painting's pitch: a disc per hair with bare canvas
+between them where the hairs lift one by one in the hand's release; a
+lone disc past the mark's end where a long hair's straightened tip
+pressed; and a thin band across the end (some 15 µm in a 50 µm stroke),
+the track of the sliding hairs' last step, which no hair laid.
+
+**A press on tooth [D].** Where the patch's film lies over a weave, it
+fills the hollows under the bed as it covers the crowns, so a press lays
+over its hair's whole contact (`exchange`'s `Window::lay`), not only
+where the hair itself reaches into the relief. The weight there is
+w + (1 − w)·c, with c the hair's contact on that spot and w how wet the
+hair is (the exchange's 0.1–0.8 load ramp); how much the hair gives stays
+its contact's. Only a hair nearly run dry has too little paint to fill
+the gap and lays on the crowns its tip touches. The hollows should hold
+more than the crowns, the local gap being deeper by the hollow's depth;
+that is not modeled (the film is laid evenly over the contact: an
+estimate, the simplest that doesn't break the film).
+
+**The start on tooth [D].** At touch-down the gap holds the press film F,
+which may be thinner than h₀. For a 12 mm filbert of tube paint at the
+steering law's 400 mm/s, F ≈ 39 µm against h₀ ≈ 105 µm at pressure 0.7
+and 325 µm at the attack's 0.08. The start then lays the outlet of a thin
+gap (15–27 µm). §3's tooth reach (the paint reaches as deep into the
+relief as the film it leaves) left a lightly pressed attack on the
+weave's crowns alone: a grid of dots at the thread pitch, 0.67 mm on a
+15 threads/cm linen. The moving bed's inlet floods the relief as the
+slider's does once the gap has relaxed, so at the start the paint reaches
+as deep as the deeper of the gap's outlet film and the slider's.
+
+**At a painting's pitch.** Engine 7 runs a contact larger than its window
+(`window::CAPACITY`, 1024 pixels with the plough's margin) through engine
+5's kernel, which has neither the press's split nor the gap. A 12 mm
+brush's hairs at 12 px/mm (2400 px across a 200 mm canvas) are some 5 to 8
+pixels in radius, so at a painting's pitch every slide and press of the
+stroke film ran that kernel. A stroke laid about a third of its law's film
+(20 µm of 72 µm for a 12 mm filbert of tube paint; at 1 to 6 px/mm it laid
+the law's), and a touch ran without its split: no debt over the wet
+film, its hairs taking up wet paint as a slide's do. A contact of the press or the gap now runs engine 7 at any
+size, its window's scratch growing to fit. A stroke shorter than `TOUCH_STEPS` sweep
 steps is sampled in that many, so its attack and release press and lift it
 (sampled only at its two ends, a dab's ramps left it barely pressed).
 
@@ -328,7 +382,14 @@ bare ground a long stroke lays the slider's film where before its hairs
 lifted back some of their own paint (a 9 mm filbert's 15 µm of a
 23 µm ceiling is now 22 µm).
 
-**Open.** Spots the slide leaves take the slider's outlet film on top of
+**Open.** The press film at touch-down is a touch's (`TOUCH_FILM`·`lay`,
+an estimate), not the squeeze's. A press squeezes the bed's paint for the
+attack's time (Stefan's squeeze) and no thinner than the plug its yield
+stress holds (a Bingham strip's τL/2p). Where it is thinner than h₀ the
+start lays thinner than the middle; with the squeeze it would set that
+physically.
+
+Spots the slide leaves take the slider's outlet film on top of
 the wet film they had (the ceiling counts what the stroke adds, as in §3),
 while the lift's split keeps (h + W)/2 in all. By mass balance the outlet
 carries the wet film in with it, so it should keep `OUTLET`·h in all. Over

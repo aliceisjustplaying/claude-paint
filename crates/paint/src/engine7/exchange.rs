@@ -516,6 +516,19 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 out_m += mm;
             }
             if out_m > 0.0 {
+                // With the stroke film the ceiling is the film the bed
+                // leaves on a pixel, not what has passed through it: paint
+                // the hairs plough out of a pixel under the bed (the stroke's
+                // share of it, the pixel's paint moving in its proportions)
+                // is no longer there, and the bed lays it again up to its
+                // film. Without this, the share ploughed out of the middle of
+                // a stroke was gone and still counted, while the pixels it
+                // landed on at the edges filled to the film: hollow strokes
+                // with rims (notes/research/stroke_film.md §3, "Squeeze-out").
+                if law.is_some() && *sf.laid_id.add(i) == id {
+                    let laid = &mut *sf.laid.add(i);
+                    *laid = (*laid - out_m * (*laid / v.max(1e-9)).min(1.0)).max(0.0);
+                }
                 if sol_um > 0.0 {
                     let left = (sol_um - src_solv * out_m).max(0.0);
                     *sf.solv.add(i) = left;

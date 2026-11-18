@@ -136,6 +136,20 @@ pressure and 200 mm/s: about 12 µm. With `medium=0.5`: about 5 µm. A 25 mm
 flat leaves about 80 µm. Ordinary brushing leaves about 50 µm wet films
 (Whittingstall) [M].
 
+**Squeeze-out [D].** A slider of finite width leaks paint at its sides as
+well as through its outlet (Hamrock, Schmid & Jacobson ch. 8, side
+leakage). The engine's hairs plough the share `push` of the paint in their
+track outward and ahead, and that paint lands beside the bed, at most the
+stroke's film there. The film is what the bed leaves: paint ploughed out of
+a pixel under the bed is no longer there, so the bed lays it again up to
+the film (the stroke's share of what left the pixel is taken off what it
+has laid there). Before this, the share ploughed out of a stroke's middle
+was still counted as laid, so the middle stayed below the film while the
+pixels beside the bed filled to it: a 9 mm filbert's white stroke lay
+16 µm in its middle and 30 µm at its edges, hollow with bright rims over
+dark paint. Now it lies ~30 µm across, its edges up to 1.25 times that
+(the side leakage's bead), never past the film.
+
 **Into the tooth.** A loaded hair's paint reaches below the points the hair
 itself touches only as far as the film it leaves. In the exchange's contact
 units (±60 µm of relief, `bristle::TOOTH_UM`, scaled by its 1.6) that is

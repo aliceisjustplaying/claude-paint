@@ -188,8 +188,9 @@ def engine_dry(name):
     return km(k / (ratio * s if n >= 1.9 else rule_s(n)))
 
 
-POWDER_K = {"burnt sienna": 16.79, "red earth": 3.600, "raw sienna": 15.19, "yellow ochre": 3.137,
-            "raw umber": 5.620, "viridian": 4.298}
+# (since §10 burnt sienna, raw sienna and raw umber take LBNL's measured films, dry.rs
+# `lbnl_film`, earth_lbnl_ks.py; the factors are the other earths' and viridian's)
+POWDER_K = {"red earth": 3.600, "yellow ochre": 3.137, "viridian": 4.298}
 # dry.rs `earth_grains`: S per pigment volume in oil (um^-1, LBNL's films) and the Mie air/oil
 # ratio at the measured grain size (earth_scatter_lbnl.py); viridian keeps Mie at 1 um
 EARTH_SCATTER = {"burnt sienna": (0.1845, 1.669), "red earth": (0.1845, 1.551), "raw sienna": (0.3817, 2.349),
@@ -328,7 +329,7 @@ for name, ds in (("smalt", (10.0, 20.0, 40.0)), ("cobalt violet", (3.0, 10.0, 20
 
 # ------------------------------------------------------- 5. the earths' shapes
 print("\n5. the earths' shapes (with dry-earths): what one more physical term does")
-for name in ("red earth", "yellow ochre", "burnt sienna"):
+for name in ("red earth", "yellow ochre"):
     r = switched_dry(name)
     p = powder(CHSOS[name])
     flat = 0.04 + 0.96 * r

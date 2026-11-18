@@ -819,6 +819,8 @@ in the blue (0.042 at 450 nm), which the flat mean misses (b\* 12.6 against 5.9 
 
 ### 9.4 The rule now (`--@ dry-earths`, `--@ oil-earths`)
 
+(Burnt sienna, raw sienna and raw umber have since taken their films' K and S, §10.)
+
 An earth's S per pigment volume in oil is the measured 550–700 nm mean (`dry::earth_scatter`).
 It enters as a multiple of lead white's oil S, whose S per volume is the dry rule's scale
 (¾σ′ in oil at 1 µm, 0.347 µm⁻¹; that scale is the estimate left, §9.5). Dry, it is that
@@ -869,7 +871,7 @@ measured tint's R∞ within 0.06 at 550, 600 and 650 nm.
 ### 9.5 Estimates left
 
 - Lead white's S per volume, the scale all of these are multiples of: Mie at 1 µm (0.347
-  µm⁻¹ in oil). Kremer's Cremnitz white measures 3 µm (0.1–10), and Mie at that size gives
+  µm⁻¹ in oil; a measurement-anchored bracket, 0.25–0.38, holds it: §10.4). Kremer's Cremnitz white measures 3 µm (0.1–10), and Mie at that size gives
   0.50, or less depending on the tail. No absolute measured S of lead white in oil was
   found. If it is larger, every earth's tint with lead white is lighter in proportion.
 - The LBNL earths are Liquitex's, not CHSOS's Kremer lots. Their S stands in for Kremer's.
@@ -903,6 +905,198 @@ doi:10.1007/s00216-025-05948-3, table 3; D. Hradil, T. Grygar, J. Hradilová & P
 223–236 (iron oxide crystallites 30–100 nm in natural ochres); Zhang et al. 2015 and Longtin
 et al. 1988 (hematite k, as §7.3); Natural Pigments, Italian Burnt Sienna (particle size
 "medium", oil absorption 45–55 g/100 g for its Ardennes burnt sienna).
+
+## 10. The earths' absorption and scattering measured together (LBNL films)
+
+Computation: `earth_lbnl_ks.py` (this folder). This section supersedes §7–§9 for burnt
+sienna, raw sienna and raw umber, and adds the Mars colours.
+
+**The problem [C].** §9 took the earths' S from LBNL's films, but kept their K: the thin
+gum swatch's shape times one fitted factor (`powder_k`), over lead white's spectral shape of
+S. One factor can't fix a shape. LBNL measured K and S *together*, spectrally, of each film
+(Levinson, Berdahl & Akbari 2005: each film over a void, a white and a black ground,
+inverted with its measured thickness). So every tube whose pigment LBNL measured takes both.
+
+### 10.1 Which tubes LBNL covers
+
+| Tube | LBNL | Pigment | PVC |
+|---|---|---|---|
+| burnt sienna | B13 | calcined natural iron oxide, PBr 7 (Liquitex) | 13.4 % |
+| raw sienna | B14 | natural iron oxide, PBr 7 | 20.1 % |
+| raw umber | B15 | natural iron oxide, PBr 7 | 10.9 % |
+| Mars red | R04 | synthetic red iron oxide, PR 101 (Liquitex "Red Oxide") | 13 % |
+| Mars yellow | Y01 | synthetic hydrated iron oxide, PY 42 (Liquitex "Yellow Oxide") | 16 % |
+
+Not taken, and why:
+- **red earth, yellow ochre:** natural ochres. LBNL measured only synthetic iron oxides
+  (R01–R04, Y01). They keep §9's method (their table K × `powder_k`, burnt sienna's and raw
+  sienna's measured S). On B13's K and S red earth would be 21.9 ΔE76 off its Kremer powder
+  dry (5.0 now), on R04's 38.7. Yellow ochre on Y01's (synthetic goethite) would be 15.6 off
+  (10.3 now). On raw sienna's film B14, a natural goethite earth, it would be 6.4 off dry and
+  9.7 off CHSOS's swatch in oil (18.7 now). That is better on both, but raw sienna is not
+  yellow ochre, so it is left as an open question.
+- **Indian red, transparent oxide yellow:** other grades of PR 101 and PY 42 than R04's and Y01's.
+- **The cadmiums:** LBNL's are PY 35 (cadmium zinc sulfide) and PO 20 (a sulfoselenide
+  orange). The engine's are cadmium sulfide (PY 37) grades and a sulfoselenide red.
+- **Cobalt blue (U05), chrome yellow (Y03), ultramarine (U11), Prussian blue (U10), bone
+  black (B02):** the engine's tables for these are measured oil tables already (calibrated
+  on oil tints), not thin swatches. U11's, U10's and B02's masstone S lies below the
+  charts' axis, so it can't be read.
+- **Viridian:** LBNL's chromium greens are anhydrous PG 17, not hydrated PG 18. Viridian
+  keeps §9's method.
+
+### 10.2 The read, checked
+
+Each masstone's K and S, read back from the vector chart as in §9.2, refit to its own
+film's reflectance over the white and the black ground (Kubelka's layer, Saunderson's
+surface; the thickness and the grounds fitted) [M/C]:
+
+| Film | fitted thickness | rms, largest | R∞ inside the paint |
+|---|---|---|---|
+| burnt sienna | 15 µm | 0.002, 0.006 | 143 61 22 (36.4/32.5/38.8) |
+| raw sienna | 25 µm | 0.006, 0.012 | 188 122 61 (57.0/20.1/43.1) |
+| raw umber | 11 µm | 0.002, 0.005 | 93 60 17 (28.5/10.2/31.2) |
+| Mars red | 16 µm | 0.003, 0.011 | 192 74 21 (47.2/45.4/51.7) |
+| Mars yellow | 18 µm | 0.002, 0.006 | 223 173 70 (73.6/7.9/58.0) |
+
+Raw sienna's chart starts at 445 nm, and its values below are held there [E].
+
+Per pigment volume (µm⁻¹), 450 / 550 / 650 nm:
+
+| | K | S |
+|---|---|---|
+| burnt sienna | 1.883 / 1.137 / 0.181 | 0.064 / 0.118 / 0.186 |
+| raw sienna | 1.583 / 0.563 / 0.139 | 0.248 / 0.395 / 0.364 |
+| raw umber | 1.766 / 0.789 / 0.391 | 0.042 / 0.096 / 0.097 |
+| Mars red | 3.410 / 2.885 / 0.266 | 0.160 / 0.395 / 0.971 |
+| Mars yellow | 1.522 / 0.145 / 0.059 | 0.438 / 0.548 / 0.390 |
+
+**An independent check [M].** Golden Artist Colors publish CIE L\*a\*b\* for their Burnt
+Sienna (PBr 7) acrylic: 33.96/17.64/14.17. LBNL's burnt sienna film seen through its surface
+(Saunderson, k1 0.04, k2 0.6) is 33.8/17.6/13.9, **ΔE76 0.3**. #351's burnt sienna seen so was
+28.7/6.7/4.0 (ΔE 15.8). Golden's Raw Umber (28.2/1.45/3.33) is a cooler umber than
+Liquitex's: the film is 6.1 off it, #351's 0.7.
+
+**Tints [M/C].** The masstone K and S per volume, mixed by K–M with the measured white W03,
+against the measured tints, ΔE76 at 1:4 / 1:9: burnt sienna 5.8 / 4.4, raw sienna 3.1 / 3.5,
+raw umber 2.6 / 1.8, Mars yellow 6.5 / 6.3, Mars red 3.7 / 10.9. Mars red's 1:4 chart reads
+badly (its S curve is flat across 450–550 nm, and its read misses its own film by 0.098), so
+its tints aren't used as a check. What is left is §9.5's dispersion: an earth's K in a tint
+runs 1.6–2× its masstone's per volume.
+
+### 10.3 Against the Kremer powders and swatches: other lots
+
+| Tube | engine #351, oil R∞ | the film, oil R∞ | CHSOS linseed swatch ΔE, #351 → film | #351 dry | the film dry | CHSOS powder ΔE, #351 → film |
+|---|---|---|---|---|---|---|
+| burnt sienna | 90 47 39 (24.8/18.3/13.7) | 143 61 22 (36.4/32.5/38.8) | 20.7 → 50.1 | 109 61 51 (31.4/20.1/15.0) | 164 77 33 (43.1/33.2/41.2) | 11.0 → 23.8 |
+| raw sienna | 133 94 48 (43.0/11.1/32.1) | 188 122 61 (57.0/20.1/43.1) | 13.6 → 14.6 | 168 123 75 (55.1/11.7/33.0) | 212 153 93 (67.6/15.9/40.1) | 10.5 → 12.0 |
+| raw umber | 72 53 36 (24.0/5.7/14.1) | 93 60 17 (28.5/10.2/31.2) | 12.8 → 28.4 | 95 72 51 (32.5/6.7/16.2) | 119 80 28 (37.5/10.9/36.0) | 6.4 → 16.6 |
+| Mars red | 156 92 92 (46.3/26.4/11.4) | 192 74 21 (47.2/45.4/51.7) | — | 170 106 106 (51.7/25.8/10.9) | 205 86 32 (51.4/44.6/51.9) | — |
+| Mars yellow | 237 175 100 (75.9/14.8/46.7) | 223 173 70 (73.6/7.9/58.0) | — | 244 189 123 (80.2/11.9/40.9) | 232 187 93 (78.3/5.4/53.0) | — |
+
+(Without the switches Mars red and Mars yellow are the "#351" columns; the earths' "#351"
+is §9's switch. Dry: the film's S times Mie's air/oil ratio, the earths' at their measured
+size (1.669, 2.349, 1.936, §9.4), the Mars colours' at the rule's 1 µm (1.454, 1.666) [E].)
+
+The films are further from CHSOS than #351 was. That was expected for the powders, because
+#351's factors were *fitted* to them. The swatches weren't fitted, but CHSOS's burnt sienna
+swatch is doubtful (a\* 3.8: §8.6). The plain cause is that these are different lots of
+natural earth. Kremer's 40430 is sold as a *dark* burnt sienna. Liquitex's and Golden's
+burnt siennas agree with each other (above), and both are lighter and more orange. The
+catalog's own burnt sienna (#7c3f24, 33.9/24.1/28.0) has their lightness seen through a
+surface, with a chroma between theirs and Kremer's. The engine's tube was never Kremer's
+lot in oil: its K was Kremer's thin swatch, read as a film it isn't. Raw umber's lots vary
+most (manganese): Golden's is near-neutral, Liquitex's yellower, Kremer's between.
+
+What the films change for the painter: burnt sienna in oil is a deep orange-brown, not the
+dull brown §9 gave it. Dry, the pure stick is L\* 43, against §9's 31, the original 61 and
+Kremer's dark powder 28. Mars red is an oxide red at last; it had been a pink (its thin
+swatch).
+
+### 10.4 Lead white's S per volume
+
+Every earth's measured K and S enter the engine as multiples of lead white's calibrated S,
+so lead white's S per volume in oil sets how strongly they tint with it. §9 took it from Mie
+at an estimated 1 µm: 0.347 µm⁻¹.
+
+**Searched for and not found open [—].** Measured K–M S of lead white films: Mitton &
+Vejnoska, "Hiding power of white pigments: theory and measurement" (Official Digest, 1961),
+measured white lead's S in acrylic at seven concentrations and three wavelengths. It is not
+accessible here. Berns et al.'s Seurat and Van Gogh studies characterised lead white in
+linseed oil with single-constant K–M (K/S only). Conservation work on lead white
+transparency (Rees Jones; de Viguerie et al. 2018, *C. R. Physique* 19:543) reports
+relative reflectance, not S.
+
+**A measurement-anchored bracket [M/C].** White lead's tinting strength is 1/18.5 of rutile
+titanium's by weight (rutile 1850, anatase 1350, zinc oxide 200, white lead 100,
+"comparative tinting strengths of white pigments in a standard blue"; the classic table in
+Shreve's *Chemical Process Industries*). Tinting strength is S per weight, so
+S_lead = S_rutile × (ρ_lead/ρ_rutile)/18.5, with ρ 6.8 (hydrocerussite) and 4.1 (pigment
+rutile). LBNL measured rutile's S per volume at four concentrations:
+
+| Rutile | PVC | S at 550 nm (µm⁻¹) | lead white so |
+|---|---|---|---|
+| W04 | 2 % | 4.12 | 0.369 |
+| W02 | 9 % | 4.29 | 0.384 |
+| W01 (Tipaque CR-90, 0.25 µm) | 15 % | 3.60 | 0.323 |
+| W03 | 22.8 % | 2.76 | 0.247 |
+
+The tinting pastes' crowding isn't stated. A rutile paste at its oil absorption is more
+crowded than W03, which would push the figure lower still. Mie at Kremer's Cremnitz white's
+measured 3 µm gives 0.50 or less (§9.5). **The bracket, 0.25–0.38, holds the rule's 0.347, so it
+stays.** No tint moves for decision 2. Lead white's own tube doesn't change either way: only
+the scale the earths enter on (`dry::lead_white_scatter`). Engine 9's lead white S is
+calibrated per coat and bumpy across the spectrum (2.51 at 550 nm, 1.68 at 600), so the
+scale takes its luminance-weighted mean (1.720 per coat in the dry path's units), as a
+tinting strength is judged by eye.
+
+### 10.5 The rule now (`--@ dry-earths`, `--@ oil-earths`)
+
+- **Burnt sienna, raw sienna, raw umber, Mars red, Mars yellow** (`dry::lbnl_film`): in
+  oil, an `OIL_EARTHS` slot each, with K and S = the film's per volume × lead white's
+  luminance-weighted S per coat / 0.347 (`mixer::lbnl_pigment9`). Dry, the same K and that
+  S × the air/oil ratio. `powder_k` is gone for the three earths.
+- **Red earth, yellow ochre, viridian:** as §9 (`powder_k` 3.600, 3.137, 4.298, unchanged:
+  `dry_earth_fit.py` reproduces them).
+- The Mars colours are new to both switches. `OIL_EARTHS` is two slots wider (eight), and
+  the checkpoint identity changes again. A checkpoint from before the slots still reads
+  (`mixer::identity9_before_oil_earths`). #351 was unmerged, so no checkpoint has its six
+  slots.
+
+**K against hematite [C].** The films' K per volume at 550 nm against a pure hematite bed's
+4.23 µm⁻¹ (k 0.0925): burnt sienna 1.14 (27 %), raw umber 0.79 (19 %), raw sienna 0.56 (13 %),
+Mars red 2.89 (68 %), Mars yellow 0.15 (3 %, goethite). Both iron reds lie under it.
+
+**Tints 1:1 by volume with lead white**, R∞, §9's switch → now (in oil; dry):
+- burnt sienna: 131 77 67 (38.9/21.6/16.0) → 172 107 88 (51.9/23.5/21.4); dry 155 97 86 → 192 130 112 (60.2/21.5/19.4)
+- raw sienna: 160 116 68 (52.2) → 203 146 102 (65.1/16.6/31.9); dry 187 142 95 → 222 171 130
+- raw umber: 128 100 76 (44.5) → 140 117 89 (50.6/4.9/18.7); dry 154 123 99 → 164 140 113
+- Mars red (no switch before): 187 131 138 (60.4/22.5/4.7) → 198 94 71 (52.4/40.0/32.5)
+- Mars yellow (no switch before): 243 189 127 (80.0) → 232 187 104 (78.3/6.5/47.4)
+
+The earths' tints are lighter than §9's. Their K per volume is the film's, not a factor
+fitted to Kremer's dark lot, and burnt sienna's is 2× less.
+
+### 10.6 Estimates left
+
+- Lead white's S per volume: Mie at 1 µm (0.347), inside the bracket 0.25–0.38 (§10.4).
+- The Mars colours' air/oil ratio: the rule's at 1 µm. Synthetic oxides are finer (LBNL's R02
+  and R03, 0.27–0.30 µm), where the ratio is larger, so their dry sticks may be paler than
+  shown.
+- Raw sienna below 445 nm (held flat).
+- The films are Liquitex's lots. The natural earths vary by lot (§10.3).
+
+Sources for this section: Levinson, Berdahl & Akbari 2005 and the LBNL Pigment Database
+spectral charts B13, B14, B15, R04, Y01, W01, W02, W03 and W04 (SHA-256 in
+`earth_lbnl_ks.py`); Golden Artist Colors, Burnt Sienna and Raw Umber (as §7); Mitton &
+Vejnoska, "Hiding power of white pigments: theory and measurement", *Official Digest* (1961)
+(not read); R. N. Shreve, *Chemical Process Industries* (the white pigments' comparative
+tinting strengths, as reproduced in KFUPM CHEM 456 lecture notes, ch. 7, table 7.2);
+L. de Viguerie et al., "Re-interpretation of the Old Masters' practices through optical and
+rheological investigation: the presence of calcite", *C. R. Physique* 19 (2018) 543–552;
+R. S. Berns et al., "Rejuvenating the color palette of Georges Seurat's *A Sunday on La
+Grande Jatte—1884*: a simulation", *Color Res. Appl.* (2006); Zhang et al. 2015 and Longtin
+et al. 1988 (hematite k, as §7.3).
 
 ---
 

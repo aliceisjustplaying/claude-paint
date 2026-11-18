@@ -6,6 +6,11 @@
 """The factors behind paint's `dry::powder_k` (the `--@ dry-earths` switch) and the
 checks in dry_pigment_optics.md §7.
 
+Since §10 burnt sienna, raw sienna and raw umber take the K and S LBNL measured in films
+of them (dry.rs `lbnl_film`, earth_lbnl_ks.py) and have no factor. This script fits the
+tubes LBNL didn't measure: red earth, yellow ochre (natural ochres; LBNL has only
+synthetic iron oxides) and viridian.
+
 A pure earth pastel stick (burnt sienna, red earth, raw sienna, yellow ochre, raw umber)
 and viridian came out of engine 9's dry rule as pale as a tint. Their oil tables fix K/S
 in oil, not K per volume: K from a Kremer gum-arabic chart swatch read as an assumed
@@ -56,8 +61,7 @@ SHA256 = {"powder.csv": "86bb05f002d64ad5aa0a1f66c7226f18b62824e77d3aa3e4e2a2aee
 BLACK_TRUE = (0.013, 0.022, 0.031)
 TITANIUM_TRUE = (0.90, 0.945, 0.99)
 # tube -> CHSOS powder (Kremer pigments)
-EARTHS = {"burnt sienna": "burntsienna", "red earth": "redochre", "raw sienna": "rawsienna",
-          "yellow ochre": "yellowochre", "raw umber": "rawumber", "viridian": "viridian"}
+EARTHS = {"red earth": "redochre", "yellow ochre": "yellowochre", "viridian": "viridian"}
 # for context: the darks the switch leaves as they are
 CONTEXT = {"ultramarine blue": "ultramarine", "Prussian blue": "prussianblue", "vine black": "vineblack",
            "bone black": "boneblack", "green earth": "greenearth", "cobalt blue": "cobaltblue"}
@@ -223,25 +227,17 @@ for tube, powder in EARTHS.items():
 print("\n   tints 1:1 by volume with lead white, before -> after (not measured; for the guide):")
 for tube in EARTHS:
     print(f"  {tube:16s} {fmt(dry([(tube, .5), ('lead white', .5)]))} -> {fmt(dry([(tube, .5), ('lead white', .5)], FACTORS))}")
-print("   the painting's sticks (paintings/cassatt6), before -> after:")
-for label, parts in {"hair: burnt sienna 2, red earth 1, lead white 0.3": [("burnt sienna", 2), ("red earth", 1), ("lead white", 0.3)],
-                     "flesh_sh: lead white 2, red earth 1, viridian 0.3": [("lead white", 2), ("red earth", 1), ("viridian", 0.3)],
-                     "brown: vine black 1, burnt sienna 1": [("vine black", 1), ("burnt sienna", 1)]}.items():
-    tot = sum(c for _, c in parts)
-    p = [(n, c / tot) for n, c in parts]
-    print(f"  {label:52s} {fmt(dry(p))} -> {fmt(dry(p, FACTORS))}")
-
 print("\n4. the check against the iron oxides' absorption: K per volume (um^-1) = K/S x S, S dry per volume")
 print("   the measured oil S x the air/oil ratio; hematite (k 0.0925 at 550 nm) has K = 2 x 4 pi k / lambda = 4.23")
 # hematite: its absorption coefficient alpha = 4 pi k / lambda; K = 2 alpha (diffuse) per volume of oxide
 K_HEMATITE = 2 * 4 * np.pi * 0.0925 / 0.55
-for tube in ("burnt sienna", "red earth", "raw umber", "yellow ochre", "raw sienna"):
+for tube in ("red earth", "yellow ochre"):
     s_vol, ratio = EARTH_SCATTER[tube]
     k, s = part_ks(tube, FACTORS[tube])
     kv = k / s * s_vol * ratio
     print(f"  {tube:16s} K/S at 500/550/600/650 nm {np.round((k / s)[[12, 17, 22, 27]], 2)}   "
           f"K um^-1 {np.round(kv[[12, 17, 22, 27]], 2)}   at 550 nm as hematite by volume {kv[17] / K_HEMATITE:.0%}")
-for tube in ("burnt sienna", "red earth"):
+for tube in ("red earth",):
     k0, s0 = part_ks(tube)
     print(f"  {tube:16s} K/S now at 500/550/600/650 nm {np.round((k0 / s0)[[12, 17, 22, 27]], 3)}")
 print("\nfor dry.rs powder_k:")

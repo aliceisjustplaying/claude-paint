@@ -3165,11 +3165,12 @@ mod tube_volume_tests {
 
     const HEAD: &str = "--@ box impressionist\n--@ engine 9\n--@ glaze-film\n";
 
-    /// The mean luminance of the middle of a canvas whose ground is `under`, then 50 µm of
-    /// lead white knifed over it.
+    /// The mean luminance of the middle of a canvas whose ground is `under`, then a film of
+    /// lead white as thick as the Revigo films were (`paint::mixer::REVIGO_FILM_UM`) knifed
+    /// over it.
     fn lead_white_over(tubes: paint::Palette, under: &str) -> f32 {
         let mut s = Session::with_box(64, tubes).unwrap();
-        s.run(&format!(r#"canvas{{size=100, aspect=1, linen=15, seed=1, ground={{{{pile={{{{"{under}", 1}}}}, um=300, apply="knife"}}, {{pile={{{{"lead white", 1}}}}, um=50, apply="knife"}}}}}}"#)).unwrap();
+        s.run(&format!(r#"canvas{{size=100, aspect=1, linen=15, seed=1, ground={{{{pile={{{{"{under}", 1}}}}, um=300, apply="knife"}}, {{pile={{{{"lead white", 1}}}}, um={}, apply="knife"}}}}}}"#, paint::mixer::REVIGO_FILM_UM)).unwrap();
         let c = s.canvas().unwrap();
         let (f, seen) = (c.window(), c.seen());
         let px: Vec<f32> = (0..f.w * f.h).filter(|i| (300.0..700.0).contains(&((i % f.w) as f32 / f.scale)) && (300.0..700.0).contains(&((i / f.w) as f32 / f.scale))).map(|i| 0.2126 * seen[i][0] + 0.7152 * seen[i][1] + 0.0722 * seen[i][2]).collect();
@@ -3177,9 +3178,10 @@ mod tube_volume_tests {
     }
 
     /// A new painting writes the switch, and its lead white hides as Revigo's measured film
-    /// did at that film's own thickness: 50 µm over black against over white, contrast ratio
-    /// 0.850 (08A, Y, specular excluded; Geldof et al. 2018), where an older log's film
-    /// hides as a 50 µm share of the applicator's 100 µm gap. A log without the line, and
+    /// did at that film's own thickness (32 µm, from Bruce's gauged films: paint's
+    /// `tube_volume_lead_white_hides_as_bruces_measured_films`): over black against over
+    /// white, contrast ratio 0.850 (08A, Y, specular excluded; Geldof et al. 2018), where an
+    /// older log's film hides as 32 µm of a 100 µm one. A log without the line, and
     /// any log below engine 9, mixes as before; a save keeps the switch.
     #[test]
     fn a_new_paintings_lead_white_hides_as_its_measured_film() {
@@ -3208,6 +3210,6 @@ mod tube_volume_tests {
             std::fs::remove_file(path).unwrap();
             assert_eq!(restored.st.borrow().tubes.tube_volume, enabled);
         }
-        assert!((cr[1] - 0.850).abs() < 0.04 && cr[0] < 0.75, "lead white 50 um over black: contrast ratio {} with the switch, {} without", cr[1], cr[0]);
+        assert!((cr[1] - 0.850).abs() < 0.04 && cr[0] < 0.7, "lead white 32 um over black: contrast ratio {} with the switch, {} without", cr[1], cr[0]);
     }
 }

@@ -90,11 +90,19 @@ pub fn revigo_oil(name: &str) -> Option<f32> {
     })
 }
 
-/// The dry film the Revigo paints were measured as, µm: each was drawn down
-/// with a block applicator of 100 µm gap (Geldof et al. 2018), which lays a
-/// wet film of about half its gap (BYK-Gardner), so engine 9's coefficients,
-/// fitted per 100 µm, are per this film (notes/research/lead_white_film.md).
-pub const REVIGO_FILM_UM: f32 = 50.0;
+/// The film the Revigo paints were measured as, µm: each was drawn down with
+/// a block applicator, "a relatively uniform layer of 100 µm thickness"
+/// (Geldof et al. 2018), the applicator's gap; such an applicator lays a wet
+/// film of about half its gap (BYK-Gardner) or less. Engine 9's
+/// coefficients, fitted per that nominal 100 µm, are per this film. Its
+/// thickness is set by lead white's hiding at measured dry film thickness:
+/// Bruce's white lead paint 5B (NBS Technologic Paper 306, 1926: 68.3%
+/// white lead, 30.6% oil by weight, a pigment volume of 0.243 dry; contrast
+/// ratio 0.494–0.986 over 14–153 µm, gauged) is engine 9's lead white at its
+/// own pigment volume as a film of 32 µm per nominal 100 (rms 0.044 in
+/// contrast ratio; 30.5–33.5 over the oil's dry volume and the surface),
+/// notes/research/lead_white_film.md.
+pub const REVIGO_FILM_UM: f32 = 32.0;
 
 /// With the tube-volume switch: engine 9's optical thickness per coat over
 /// the coefficients' nominal 100 µm (`REVIGO_FILM_UM`): a micrometre of

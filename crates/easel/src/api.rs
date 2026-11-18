@@ -3615,3 +3615,74 @@ print(#i:paths(), #f:paths(), select('#', fix()))"#,
         assert_eq!(live.st.borrow().out, replay.st.borrow().out);
     }
 }
+
+// one loaded stroke of stiff lead white over set black, at a painting's pitch
+// (notes/research/stroke_film.md §7)
+#[cfg(test)]
+mod stroke_film_hiding_tests {
+    use crate::session::{Session, box_for};
+
+    /// 150 mm across in 590 px: the pitch of a 610 mm canvas painted 2400 px wide.
+    const W: usize = 590;
+
+    fn wet_um(s: &Session) -> Vec<f32> {
+        s.canvas().unwrap().state_fields().into_iter().find_map(|f| match f.values {
+            paint::state_dump::Values::F32(v) if f.name == "wet.vol" => Some(v.iter().map(|c| c * paint::COAT_UM).collect()),
+            _ => None,
+        }).unwrap()
+    }
+
+    fn median(mut v: Vec<f32>) -> f32 {
+        v.sort_by(|a, b| a.total_cmp(b));
+        v[v.len() / 2]
+    }
+
+    /// A stroke of lead white blotted stiff (a paste whose yield stress beats
+    /// its hairs' capillary pressure) with a loaded 16 mm hog filbert, the
+    /// width a painter lays a cloth or a light with, lays at least 100 µm:
+    /// a single stroke's film as measured (an automated 15 mm flat's stroke
+    /// of a paste with a 3 kPa yield stress stands 100–450 µm, of a fluid
+    /// oil paint about 100 µm; Van Gogh's paint layers average about 100 µm).
+    /// Over set black it hides at least as lead white in oil measures at
+    /// 100 µm over a black-and-white chart (contrast ratio 0.86, Revigo 08A);
+    /// a 6 mm filbert's stroke too. Before, the hairs' radius capped every
+    /// stroke at 93 µm.
+    #[test]
+    fn a_loaded_stroke_of_stiff_lead_white_hides_set_black() {
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap();
+        s.run(r#"canvas{size=150, aspect=1.5, linen={18, 17}, seed=1883,
+            ground={{pile={{"lead white", 6}, {"yellow ochre", 0.05}, {"bone black", 0.02}}, um=90, apply="knife", texture=0.25}}}"#).unwrap();
+        s.run(r#"blk = pile{{"bone black", 1}, {"raw umber", 0.2}}
+            kc = knife{width=40}
+            for y = 40, 280, 30 do
+              local x = 0
+              while x < 1000 do kc:load(blk, 1.0); kc:lay({{x, y}, {x + 110, y}}, {pressure={0.4, 0.35}}); x = x + 100 end
+            end
+            wait(30 * 24 * 60)"#).unwrap();
+        let before = wet_um(&s);
+        s.run(r#"stiff = pile{{"lead white", 1}, blot=0.3}
+            for _, row in ipairs({{107, 110}, {41, 210}, {107, 420}, {41, 540}}) do
+              local b = brush("filbert", row[1])
+              b:load(stiff, 0.85)
+              b:stroke({{150, row[2]}, {650, row[2]}}, {pressure=0.5})
+            end"#).unwrap();
+        let after = wet_um(&s);
+        let (w, seen) = (W, s.canvas().unwrap().seen());
+        let scale = w as f32 / 1000.0;
+        // the stroke's middle, a fifth of its width either side of its line
+        let band = |y: f32, width: f32| -> Vec<usize> {
+            let (y0, y1) = (((y - 0.2 * width) * scale) as usize, ((y + 0.2 * width) * scale) as usize);
+            (y0..=y1).flat_map(|py| ((350.0 * scale) as usize..(500.0 * scale) as usize).map(move |px| py * w + px)).collect()
+        };
+        let film = |y: f32, width: f32| median(band(y, width).iter().map(|&i| after[i] - before[i]).collect());
+        let lum = |y: f32, width: f32| median(band(y, width).iter().map(|&i| paint::color::luminance(seen[i])).collect());
+        for (width, black, ground) in [(107.0f32, 110.0f32, 420.0f32), (41.0, 210.0, 540.0)] {
+            let (h, cr) = (film(black, width), lum(black, width) / lum(ground, width));
+            eprintln!("{:.0} mm filbert: {h:.0} µm over set black, contrast ratio {cr:.3}", width * 0.15);
+            assert!(cr > 0.86, "a {:.0} mm filbert's stroke of stiff lead white over set black: contrast ratio {cr} ({h} µm)", width * 0.15);
+            if width > 100.0 {
+                assert!(h >= 100.0, "a 16 mm filbert's stroke of stiff lead white lays {h} µm");
+            }
+        }
+    }
+}

@@ -14,7 +14,9 @@ relief, and the picture shows it as a regular checker of about 2.5 pixels:
 
 Measured on the weave alone (`prefiltered_weave_has_no_aliased_peak`), the
 pixels read that way hold about 100–230 times the power the weave itself has
-at the folded frequency, for 14, 16 and 20 threads/cm.
+at the folded frequency, for 14, 16 and 20 threads/cm. On the crimped weave
+that replaced it (notes/research/weave_geometry.md) they hold 113, 132 and
+24 times, and the footprint leaves 0.009–0.013.
 
 ## The footprint
 
@@ -42,38 +44,47 @@ anti-aliasing a grid, estimates, checked by the tests.
 
 ## Reading the weave finely enough
 
-The footprint needs the weave read at points finer than the pixels. Where a
-weft thread passes from under one warp to over the next, `linen_um`'s height
-steps (0.55 of the weft's height to nothing across a cell edge), so the
-relief has harmonics that decay only as 1/f. A regular grid of samples folds
-those back as a faint pattern that beats with the weave. One point at random
-in each cell of the grid (stratified sampling) turns that into noise.
-Measured on 160 × 160 pixels of the Marly weave, against the footprint of
-the weave read 48 times a thread (the averaged relief varies by 6.4 µm rms):
+The footprint needs the weave read at points finer than the pixels. The
+weave is the threads' tops on their crimped paths (`weave.rs`,
+notes/research/weave_geometry.md): continuous along each thread, but
+dropping at a thread's edge where it lies over a lower thread or a hole.
+So the relief has harmonics that decay slowly, and a regular grid of
+samples folds them back as a faint pattern that beats with the weave. One
+point at random in each cell of the grid (stratified sampling) turns that
+into noise. Measured on 160 × 160 pixels of the Marly weave, against the
+footprint of the weave read 48 times a thread (the averaged relief varies
+by 23 µm rms):
 
-| samples a thread | regular grid, rms error | stratified, rms error |
-|---|---|---|
-| 4  | 3.5 µm | 3.5 µm |
-| 8  | 2.1 µm | 1.5 µm |
-| 12 | —      | 0.8 µm |
-| 16 | 1.0 µm | 0.6 µm |
+| samples a thread | stratified, rms error |
+|---|---|
+| 4  | 5.9 µm |
+| 8  | 2.5 µm |
+| 12 | 1.1 µm |
+| 16 | 0.8 µm |
 
-The easel reads 8 a thread, stratified, at most 8 a pixel each way. On the
-full Marly canvas that is about 12 CPU-seconds for the linen (2.5 before) and
-about 2 for each knifed ground layer; it is paid once, when the canvas is
-laid.
+(The first weave, `linen_um`, stepped where a weft passed from under one
+warp to over the next. Its averaged relief varied by 6.4 µm, read with
+1.5 µm of error at 8 a thread.)
+
+The easel reads 8 a thread, stratified, at most 8 a pixel each way. Each
+point needs the thicknesses of the four crossings round it, read once for
+the window into a table (`weave::CrossTable`). A point then costs about
+1.2 times what `linen_um` did, so the linen of the full Marly canvas costs
+about 1.2 times its earlier 12 CPU-seconds (scaled from the per-point
+times, not timed on the canvas), about 2 for each knifed ground layer.
+It is paid once, when the canvas is laid.
 
 ## Pixels wider than a thread
 
 Where a pixel is at least as wide as the coarser thread, neither the
-threads nor their over and under (a period of two threads) fall inside the
-footprint's band. The pixel can hold only the weave's mean and how it
+threads nor their over and under (a period of two threads) fall inside
+the footprint's band. The pixel can hold only the weave's mean and how it
 varies from thread to thread and slub to slub. The easel then lays
-`surface::linen_mean_um`: the mean of `linen_um`'s threads over a period of
-over and under, tabulated against the weft's thickness relative to the
-warp's (`weave_mean`, midpoint rule on cells that end where the heights
-step), for the thicknesses `linen_um` gives the threads there. At 1 mm a
-pixel this has the weave's mean within 0.1% and its variation within 2%, and follows the weave averaged pixel by pixel within 0.9 µm rms
+`weave::WeaveMean`: the weave's mean over a period of over and under
+(read 48 × 48 points a thread), tabulated against the warp's and the
+weft's thickness for the thicknesses the threads have there. At 1 mm a
+pixel this has the weave's mean within 0.2% and its variation within 4%.
+It follows the weave averaged pixel by pixel within 1.6 µm rms
 (`coarse_pixels_hold_the_weaves_mean`), at a cost set by the pixels rather
 than the canvas's area.
 
@@ -81,10 +92,10 @@ than the canvas's area.
 
 The plain weave's over and under at 16 × 15 threads/cm is a diagonal
 pattern of two threads, 1.25 × 1.33 mm, about 3.3 pixels at 0.383 mm. The
-pixels resolve it, so it stays, as a fine diagonal grain: its spectral peak
-at (0.306, 0.288) cycles a pixel is the weave's own. Thicker threads and
-slubs (millimeters to centimeters) stay at their scale
-(`prefiltered_weave_keeps_what_the_pixels_resolve`).
+pixels resolve it, so it stays, as a fine diagonal grain of the warp's
+knuckles: its spectral peak at (0.306, 0.288) cycles a pixel is the
+weave's own. Thicker threads and slubs (millimeters to centimeters) stay
+at their scale (`prefiltered_weave_keeps_what_the_pixels_resolve`).
 
 ## Other surfaces
 

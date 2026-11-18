@@ -71,7 +71,10 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   one by one: each pixel holds the weave's relief averaged over the patch
   of canvas it covers, so the weave shows only as far as the pixels can
   resolve it, its slubs and thicker threads included. A paper's felt and a
-  knifed ground's texture are averaged the same way. (A painting whose
+  knifed ground's texture are averaged the same way. The weave is the
+  threads as they lie: each warp bends over and under the wefts it crosses
+  (the weft lies nearly straight), with the sizes and crimp measured on
+  artists' linen, so the warp's knuckles stand highest. (A painting whose
   log's head has no `--@ relief-prefilter` line keeps its weave as it was
   laid, read at a few points a pixel, which can show as a regular checker
   where thin paint lets the ground through.)

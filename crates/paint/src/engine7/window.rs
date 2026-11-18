@@ -62,6 +62,10 @@ pub struct Window {
     pub weights: Vec<f32>,
     /// The touched pixels, in raster order, parallel to `weights`.
     pub(crate) hits: Vec<Hit>,
+    /// Where a press lays its paint (a press's contact under the stroke
+    /// film, `exchange::contact`): per pixel, parallel to `weights`; empty
+    /// for any other contact, which lays by `weights`.
+    pub lay: Vec<f32>,
     /// The interior's plough cells, row-major, and the generation each was
     /// last started in.
     cells: Vec<Acc>,
@@ -78,6 +82,7 @@ impl Window {
         self.generation += 1;
         self.hits.clear();
         self.weights.clear();
+        self.lay.clear();
         self.used.clear();
         let n = interior.2.saturating_sub(interior.0) * interior.3.saturating_sub(interior.1);
         if self.cells.len() < n {

@@ -1540,6 +1540,8 @@ pub(crate) unsafe fn drag_on(
     let mut rheo = vec![crate::stroke_film::Rheology { eta: 0.0, tau: 0.0 }; nb];
     // (where a waiting hair last met the canvas)
     let mut pend: Vec<Option<(f32, f32)>> = vec![None; nb];
+    // (where a waiting hair stopped laying the slider's film)
+    let mut pend_from = vec![(0.0f32, 0.0f32); nb];
     let mut lift_w = vec![0.0f32; nb];
     let mut d_prev = 0.0f32;
     let lag_end = if sf.reach_end { 0.0 } else { 0.6 };
@@ -1637,7 +1639,9 @@ pub(crate) unsafe fn drag_on(
             lift_rear += total - d;
         }
         d_prev = d;
-        let mut presses: Vec<(usize, (f32, f32), f32)> = Vec::new();
+        // (each lifting hair: where its press runs from and to, and how
+        // firmly it was down)
+        let mut presses: Vec<(usize, (f32, f32), (f32, f32), f32)> = Vec::new();
         // the track each hair of a pointed tuft lays (see `exchange`): the
         // touching hairs lie over and beside each other, so each covers its
         // own share of the contact's width, from halfway to its neighbor on
@@ -1670,8 +1674,9 @@ pub(crate) unsafe fn drag_on(
         for (bi, b) in held.bristles.iter_mut().enumerate() {
             let Some((cur, reach)) = contact[bi] else {
                 if let Some(at) = pend.get_mut(bi).and_then(Option::take) {
-                    // a waiting hair lifted: it presses where it was
-                    presses.push((bi, at, lift_w[bi]));
+                    // a waiting hair lifted: it presses over the track it
+                    // waited on (below)
+                    presses.push((bi, pend_from[bi], at, lift_w[bi]));
                 }
                 continue;
             };
@@ -1682,10 +1687,30 @@ pub(crate) unsafe fn drag_on(
                     // firmly down as it was while it waited, though the
                     // hand's release lifts it before the paint parts)
                     lift_w[bi] = if pend[bi].is_some() { lift_w[bi].max(reach) } else { reach };
+                    // A waiting hair slides on over canvas that stays under
+                    // the bed until it lifts, with the gap's paint under it,
+                    // and at the path's end the hand lifts and every hair
+                    // straightens as it leaves (`reach_end`): its press runs
+                    // along the whole track since it last laid the slider's
+                    // film (its last step, for a hair that didn't wait), to
+                    // where it lifts. Pressed only where it lifted, each hair
+                    // lifting in the hand's release laid a disc of its own
+                    // with bare canvas between, a long hair's straightened
+                    // tip a lone disc past the mark's end, and the hairs
+                    // still sliding left the track of their last step bare,
+                    // a thin band across the end. (The canvas keeps half the
+                    // gap's film there, this stroke's paint included, so a
+                    // press over the slider's film adds none. A stroke of no
+                    // length is a touch: the hand doesn't move, so no hair
+                    // trails it and each presses where it is.)
+                    if pend[bi].is_none() {
+                        pend_from[bi] = b.prev[0].unwrap_or(cur);
+                    }
+                    let from = if total > 0.0 { pend_from[bi] } else { cur };
                     pend[bi] = (k < nsteps).then_some(cur);
                     b.prev[0] = Some(cur);
                     if k == nsteps {
-                        presses.push((bi, cur, reach));
+                        presses.push((bi, from, cur, reach));
                     }
                     continue;
                 }
@@ -1740,10 +1765,15 @@ pub(crate) unsafe fn drag_on(
             let spacing_u = half / s * (root_area(tool.kind) / held.bristles.len().max(1) as f32).sqrt();
             let rbp = (tool.hair_radius() * s).max(1.4 * spacing_u * s).max(0.75);
             let sp = Surf { press: true, pad: None, gap: None, ..sf };
-            for &(bi, at, reach) in &presses {
-                let v = 0.5 * gap[bi] / (COAT_UM * 1e-6) * spacing_u * spacing_u;
+            for &(bi, from, at, reach) in &presses {
+                // (half the gap's film over its share of the patch, spacing
+                // wide along the track it pressed)
+                let track_u = ((at.0 - from.0).powi(2) + (at.1 - from.1).powi(2)).sqrt() / s;
+                let v = 0.5 * gap[bi] / (COAT_UM * 1e-6) * spacing_u * (spacing_u + track_u);
                 let b = &mut held.bristles[bi];
-                unsafe { crate::engine7::exchange::exchange(sp, b, &tool, at, at, rbp, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+                // (its gap: the canvas keeps half its film where it lifts)
+                let sp = Surf { gap: Some(crate::stroke_film::Gap { h: gap[bi], squeeze: 0.0 }), ..sp };
+                unsafe { crate::engine7::exchange::exchange(sp, b, &tool, from, at, rbp, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             }
         }
         sf.gap = None;
@@ -4404,6 +4434,180 @@ mod stroke_film_tests {
     /// 200 mm canvas).
     fn pitch_canvas(mm: f32, px_mm: f32) -> Canvas {
         Canvas::new((mm * px_mm).round() as usize, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(mm).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true)
+    }
+
+    /// The film (µm) over the rectangle `r` (units) of `c`, row-major, and
+    /// its width in pixels.
+    fn um_grid(c: &Canvas, r: (f32, f32, f32, f32)) -> (Vec<f32>, usize) {
+        let s = c.f.scale;
+        let (x0, y0, x1, y1) = ((r.0 * s) as usize, (r.1 * s) as usize, (r.2 * s) as usize, (r.3 * s) as usize);
+        let g = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).map(|(x, y)| c.wet.vol[y * c.f.w + x] * COAT_UM).collect();
+        (g, x1 - x0)
+    }
+
+    /// The pixels of a grid `w` wide more than `margin` pixels inside the
+    /// convex hull of those painted (over 0.5 µm).
+    fn hull_interior(g: &[f32], w: usize, margin: f32) -> Vec<bool> {
+        let mut pts: Vec<(f32, f32)> = (0..g.len()).filter(|&i| g[i] > 0.5).map(|i| ((i % w) as f32, (i / w) as f32)).collect();
+        pts.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        let cross = |o: (f32, f32), a: (f32, f32), b: (f32, f32)| (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0);
+        let half = |it: &mut dyn Iterator<Item = &(f32, f32)>| {
+            let mut h: Vec<(f32, f32)> = Vec::new();
+            for &p in it {
+                while h.len() >= 2 && cross(h[h.len() - 2], h[h.len() - 1], p) <= 0.0 {
+                    h.pop();
+                }
+                h.push(p);
+            }
+            h.pop();
+            h
+        };
+        let mut hull = half(&mut pts.iter());
+        hull.extend(half(&mut pts.iter().rev()));
+        (0..g.len())
+            .map(|i| {
+                let (x, y) = ((i % w) as f32, (i / w) as f32);
+                hull.len() >= 3
+                    && (0..hull.len()).all(|k| {
+                        let (a, b) = (hull[k], hull[(k + 1) % hull.len()]);
+                        ((b.0 - a.0) * (y - a.1) - (b.1 - a.1) * (x - a.0)) / ((b.0 - a.0).hypot(b.1 - a.1)).max(1e-6) >= margin
+                    })
+            })
+            .collect()
+    }
+
+    /// How strongly the film along the rows and columns of a grid `w` wide
+    /// repeats with a period of about `lam` pixels (within 15 %), where it
+    /// is `inside`: the mean over runs at least three periods long of the
+    /// share of the run's variance in that period (a pure ripple gives 1/2,
+    /// noise next to nothing).
+    fn ripple(g: &[f32], w: usize, inside: &[bool], lam: f32) -> f32 {
+        let h = g.len() / w;
+        let power = |run: &[f32]| {
+            let n = run.len() as f32;
+            let m = run.iter().sum::<f32>() / n;
+            let var: f32 = run.iter().map(|v| (v - m).powi(2)).sum();
+            if var <= 0.0 {
+                return 0.0;
+            }
+            (0..7)
+                .map(|j| {
+                    let l = lam * (0.85 + 0.05 * j as f32);
+                    let (re, im) = run.iter().enumerate().fold((0.0f32, 0.0f32), |(re, im), (x, v)| {
+                        let t = 2.0 * std::f32::consts::PI * x as f32 / l;
+                        (re + (v - m) * t.cos(), im - (v - m) * t.sin())
+                    });
+                    (re * re + im * im) / (n * var)
+                })
+                .fold(0.0f32, f32::max)
+        };
+        let mut shares = Vec::new();
+        for (len, n, at) in [(w, h, &(|r: usize, k: usize| r * w + k) as &dyn Fn(usize, usize) -> usize), (h, w, &|r: usize, k: usize| k * w + r)] {
+            for r in 0..n {
+                let idx: Vec<usize> = (0..len).filter(|&k| inside[at(r, k)]).collect();
+                if let (Some(&lo), Some(&hi)) = (idx.first(), idx.last())
+                    && (hi - lo + 1) as f32 >= 3.0 * lam
+                {
+                    shares.push(power(&(lo..=hi).map(|k| g[at(r, k)]).collect::<Vec<_>>()));
+                }
+            }
+        }
+        if shares.is_empty() { 0.0 } else { shares.iter().sum::<f32>() / shares.len() as f32 }
+    }
+
+    /// The painted pixels (over 0.5 µm) of a grid `w` wide that are not
+    /// joined (by a side or a corner) to its largest painted patch.
+    fn apart(g: &[f32], w: usize) -> usize {
+        let h = g.len() / w;
+        let mut label = vec![0usize; g.len()];
+        let mut sizes = vec![0usize];
+        for s0 in 0..g.len() {
+            if g[s0] <= 0.5 || label[s0] != 0 {
+                continue;
+            }
+            let id = sizes.len();
+            sizes.push(0);
+            let mut stack = vec![s0];
+            label[s0] = id;
+            while let Some(i) = stack.pop() {
+                sizes[id] += 1;
+                let (x, y) = ((i % w) as isize, (i / w) as isize);
+                for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h {
+                        let j = ny as usize * w + nx as usize;
+                        if g[j] > 0.5 && label[j] == 0 {
+                            label[j] = id;
+                            stack.push(j);
+                        }
+                    }
+                }
+            }
+        }
+        let total: usize = sizes.iter().sum();
+        total - sizes.iter().max().copied().unwrap_or(0)
+    }
+
+    /// A press lays one film over its contact, not a dot per hair or per
+    /// crown of the weave. The paint pressed between the bed's hairs and
+    /// the canvas is continuous over the patch, so where it splits the
+    /// canvas keeps its share all over it, the hollows of the weave under
+    /// it too. On primed linen (15 threads/cm, 0.67 mm apart, as a
+    /// painting's) at a painting's pitch (12 px/mm), with a loaded 12 mm
+    /// filbert of dark paint: a stroke's start (its attack, lightly
+    /// pressed, the gap still the press's) and a touch, pressed lightly or
+    /// firmly, leave no bare pixel more than 1 mm inside their footprint's
+    /// convex hull, and their film there doesn't repeat at the weave's
+    /// pitch or the hairs' spacing (under 0.08 of its variance, where a
+    /// grid of dots on the crowns put 0.1 to 0.2 at the weave's); the ends
+    /// of a stroke and of a dab lay nothing apart from the mark (a hair's
+    /// lift pressed as one disc past the end left one there).
+    #[test]
+    fn a_press_lays_one_film_over_its_contact() {
+        let mut c = pitch_canvas(100.0, 12.0);
+        c = c.with_linen(Linen { warp_per_cm: 15.0, weft_per_cm: 15.0, ..Linen::fine(1) });
+        c.prime(hex("#e8d8b0"), 0.9, 80.0, 0.6, 0.0, 3);
+        let tool = Tool::filbert(120.0);
+        let dark = Paint::new(hex("#1a2a5a"), 0.9, 1.0);
+        let brush = || {
+            let mut h = Held::new(tool.clone(), 3).with_engine(crate::PIGMENT_MIXER);
+            h.load(dark.clone(), 0.8);
+            h
+        };
+        // (a painter's stroke: the gesture's own attack and release)
+        c.drag(&mut brush(), &Gesture::new(vec![(150.0, 250.0), (550.0, 250.0)]).pressure(0.7, 0.7), None);
+        c.drag(&mut brush(), &Gesture::new(vec![(690.0, 250.0), (710.0, 250.0)]).pressure(0.7, 0.7), None);
+        for (x, p) in [(300.0, 0.3), (700.0, 0.7)] {
+            c.touch(&mut brush(), &Touch::at(x, 700.0).pressure(p), None);
+        }
+        let s = c.f.scale;
+        // the weave's pitch, and the hairs' spacing in a pressed tip
+        // (`touch_rb`), in pixels
+        let weave = 10.0 / 15.0 * c.f.w as f32 / 100.0;
+        let hairs = |p: f32| touch_half(&tool, p, s) * (root_area(tool.kind) / tool.bristles as f32).sqrt();
+        let mm = c.f.w as f32 / 100.0;
+        for (what, r, p) in [("the stroke's start", (100.0, 180.0, 190.0, 320.0), 0.7), ("a light touch", (200.0, 640.0, 400.0, 760.0), 0.3), ("a firm touch", (560.0, 600.0, 840.0, 800.0), 0.7)] {
+            let (g, w) = um_grid(&c, r);
+            let mut inside = hull_interior(&g, w, mm);
+            if what == "the stroke's start" {
+                // (the window cuts the stroke: its body is past it)
+                let cut = ((r.2 - r.0 - 10.0) * s) as usize;
+                inside.iter_mut().enumerate().for_each(|(i, v)| *v &= i % w < cut);
+            }
+            let n = inside.iter().filter(|&&v| v).count();
+            assert!(n > 200, "{what}: {n} pixels inside");
+            let bare = (0..g.len()).filter(|&i| inside[i] && g[i] < 1.0).count();
+            assert!(bare == 0, "{what}: {bare} of {n} pixels inside its footprint bare");
+            for (lam, of) in [(weave, "the weave's pitch"), (hairs(p), "the hairs' spacing")] {
+                let rp = ripple(&g, w, &inside, lam);
+                assert!(rp < 0.08, "{what}: its film repeats at {of} ({lam} px): {rp} of its variance");
+            }
+        }
+        for (what, r) in [("the stroke's end", (500.0, 190.0, 620.0, 310.0)), ("the dab's end", (700.0, 190.0, 780.0, 310.0))] {
+            let (g, w) = um_grid(&c, r);
+            let off = apart(&g, w);
+            assert!(off == 0, "{what}: {off} painted pixels apart from the mark");
+        }
     }
 
     /// The stroke film's laws hold at a painting's pitch as at a coarse

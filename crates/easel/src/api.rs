@@ -3156,3 +3156,58 @@ mod reload_finite_tests {
         old.run("assert(b:fullness() ~= b:fullness(), 'an older log no longer reloads a NaN')").unwrap();
     }
 }
+
+// a new painting's tubes are their box's tube paint (session.rs TUBE_VOLUME_MARK); an
+// older log's as they were
+#[cfg(test)]
+mod tube_volume_tests {
+    use crate::session::{Session, TUBE_VOLUME_MARK, box_for};
+
+    const HEAD: &str = "--@ box impressionist\n--@ engine 9\n--@ glaze-film\n";
+
+    /// The mean luminance of the middle of a canvas whose ground is `under`, then 50 µm of
+    /// lead white knifed over it.
+    fn lead_white_over(tubes: paint::Palette, under: &str) -> f32 {
+        let mut s = Session::with_box(64, tubes).unwrap();
+        s.run(&format!(r#"canvas{{size=100, aspect=1, linen=15, seed=1, ground={{{{pile={{{{"{under}", 1}}}}, um=300, apply="knife"}}, {{pile={{{{"lead white", 1}}}}, um=50, apply="knife"}}}}}}"#)).unwrap();
+        let c = s.canvas().unwrap();
+        let (f, seen) = (c.window(), c.seen());
+        let px: Vec<f32> = (0..f.w * f.h).filter(|i| (300.0..700.0).contains(&((i % f.w) as f32 / f.scale)) && (300.0..700.0).contains(&((i / f.w) as f32 / f.scale))).map(|i| 0.2126 * seen[i][0] + 0.7152 * seen[i][1] + 0.0722 * seen[i][2]).collect();
+        px.iter().sum::<f32>() / px.len() as f32
+    }
+
+    /// A new painting writes the switch, and its lead white hides as Revigo's measured film
+    /// did at that film's own thickness: 50 µm over black against over white, contrast ratio
+    /// 0.850 (08A, Y, specular excluded; Geldof et al. 2018), where an older log's film
+    /// hides as a 50 µm share of the applicator's 100 µm gap. A log without the line, and
+    /// any log below engine 9, mixes as before; a save keeps the switch.
+    #[test]
+    fn a_new_paintings_lead_white_hides_as_its_measured_film() {
+        assert!(box_for(None).unwrap().tube_volume);
+        let cobalt = |b: paint::Palette| {
+            let (w, c) = (b.tubes.iter().position(|t| t.name == "lead white").unwrap(), b.tubes.iter().position(|t| t.name == "cobalt blue").unwrap());
+            let m = b.pile(vec![(w, 0.93), (c, 0.07)]);
+            (m.color, m.scatter)
+        };
+        let engine8 = "--@ box impressionist\n--@ engine 8\n";
+        assert_eq!(cobalt(box_for(Some(&format!("{engine8}{TUBE_VOLUME_MARK}\n"))).unwrap()), cobalt(box_for(Some(engine8)).unwrap()));
+        let mut cr = [0.0f32; 2];
+        for enabled in [false, true] {
+            let head = format!("{HEAD}{}", if enabled { format!("{TUBE_VOLUME_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.tube_volume, enabled);
+            cr[enabled as usize] = lead_white_over(tubes.clone(), "bone black") / lead_white_over(tubes.clone(), "zinc white");
+            let mut s = Session::with_box(16, tubes).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();
+            let program = s.program("tints");
+            assert_eq!(program.lines().any(|l| l == TUBE_VOLUME_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().tube_volume, enabled);
+            let path = std::env::temp_dir().join(format!("easel-tube-volume-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.tube_volume, enabled);
+        }
+        assert!((cr[1] - 0.850).abs() < 0.04 && cr[0] < 0.75, "lead white 50 um over black: contrast ratio {} with the switch, {} without", cr[1], cr[0]);
+    }
+}

@@ -79,6 +79,12 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// pass's `behind=` does, and a rag wipes a faint mask as it wipes a full one, lifting by
 /// the mask's value: every new painting. A log without it replays as it was painted.
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
+/// Marks a painting whose tubes are their box's tube paint (`paint::Palette::tube_volume`):
+/// a tube whose engine-9 table is a measured Revigo paint tints with the pigment its own
+/// tube holds, and every film hides as much per micrometre as the Revigo films measured,
+/// which were half their applicator's 100 µm gap: every new painting. Only engine 9 has it
+/// (below, the line changes nothing). A log without it replays as it was painted.
+pub const TUBE_VOLUME_MARK: &str = "--@ tube-volume";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -774,6 +780,9 @@ impl Session {
         }
         if self.st.borrow().tubes.calls_agree {
             let _ = writeln!(s, "{CALLS_AGREE_MARK}");
+        }
+        if self.st.borrow().tubes.tube_volume {
+            let _ = writeln!(s, "{TUBE_VOLUME_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1546,7 +1555,8 @@ fn box_list() -> String {
 /// blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
-/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
+/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise their tubes as tube paint
+/// (`TUBE_VOLUME_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
@@ -1565,6 +1575,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
         b.calls_agree = true;
+        b.tube_volume = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1633,6 +1644,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.calls_agree = head(CALLS_AGREE_MARK);
+    b.tube_volume = head(TUBE_VOLUME_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

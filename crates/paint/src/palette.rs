@@ -1178,6 +1178,49 @@ mod tests {
 
     use super::*;
 
+    /// With the tube-volume switch a measured tube enters a mixture with the pigment
+    /// its box's tube holds: the impressionist box's lead white and cobalt blue,
+    /// knifed at the tube volumes that hold the pigment of Revigo's weighed 08F
+    /// (89.9 g lead white paint, 10.4 g cobalt blue paint; Geldof et al. 2018), make
+    /// Revigo's mixture, and it is the measured tint over Revigo's white field
+    /// (55.2/3.5/−46.7, D65, specular excluded) to the engine-9 fit's own residual
+    /// there (ΔE76 7.7 with Revigo's densities). The box's cobalt tube is oilier than
+    /// Revigo's paint (0.55 of its weight, the French figure, against 0.51), so the
+    /// same tube volume carries less cobalt. Off, every weight is 1.
+    #[test]
+    fn tube_volume_box_tubes_mix_as_revigos_weighed_paints() {
+        let mut p = Palette::named_box("impressionist").unwrap();
+        p.engine = crate::PIGMENT_MIXER;
+        p.glaze_film = true;
+        assert!((0..p.tubes.len()).all(|i| p.tube_volume_weight(i) == 1.0));
+        p.tube_volume = true;
+        let at = |n: &str| p.tubes.iter().position(|t| t.name == n).unwrap();
+        let (lw, co) = (at("lead white"), at("cobalt blue"));
+        let pigment = |i: usize, grams: f32| grams * (1.0 - crate::mixer::revigo_oil(p.tubes[i].name).unwrap()) / p.tubes[i].density;
+        let tube = |i: usize, grams: f32| pigment(i, grams) / (1.0 - p.pack[i].2);
+        let revigo = |i: usize, grams: f32| {
+            let w = crate::mixer::revigo_oil(p.tubes[i].name).unwrap();
+            pigment(i, grams) * (1.0 + w / (1.0 - w) * p.tubes[i].density / 0.93)
+        };
+        let (a, b) = (tube(lw, 89.9), tube(co, 10.4));
+        let m = p.pile(vec![(lw, a / (a + b)), (co, b / (a + b))]);
+        let lat = m.pigment_latent;
+        let (white, cobalt) = (crate::mixer::tube(p.tubes[lw].name).unwrap(), crate::mixer::tube(p.tubes[co].name).unwrap());
+        let (kw, kc) = (white.iter().position(|&v| v == 1.0).unwrap(), cobalt.iter().position(|&v| v == 1.0).unwrap());
+        let ratio = (lat[kc] / lat[kw]) / (revigo(co, 10.4) / revigo(lw, 89.9));
+        assert!((ratio - 1.0).abs() < 1e-5, "cobalt to lead white in the latent against Revigo's: {ratio}");
+        assert!(p.tube_volume_weight(co) < 0.9, "{}", p.tube_volume_weight(co));
+        let lab = |c: crate::Rgb| {
+            let xyz = [0.4124 * c[0] + 0.3576 * c[1] + 0.1805 * c[2], 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], 0.0193 * c[0] + 0.1192 * c[1] + 0.9505 * c[2]];
+            let f = |t: f32| if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 };
+            let (x, y, z) = (f(xyz[0] / 0.9505), f(xyz[1]), f(xyz[2] / 1.089));
+            [116.0 * y - 16.0, 500.0 * (x - y), 200.0 * (y - z)]
+        };
+        let (got, measured) = (lab(m.color), [55.2f32, 3.5, -46.7]);
+        let de = (0..3).map(|k| (got[k] - measured[k]).powi(2)).sum::<f32>().sqrt();
+        assert!(de < 9.0, "08F: {got:?} against measured {measured:?}, dE76 {de}");
+    }
+
     /// Each box's tubes hold their own oil: the default box's lead white is
     /// bladder paint (0.14 oil: packed at 10·0.86/14 of it, drained to 0.6
     /// of that), Hopper's cobalt blue is Winsor & Newton's (22·0.53/47),

@@ -1679,6 +1679,54 @@ mod tests {
     /// white stays lighter than the masstone. Other tubes, the dry colors, a box's
     /// own earth and engine 8 are as before, bit for bit. (The earths LBNL
     /// measured take their films: `oil_lbnl_earths_are_their_films`.)
+    /// With the earth-tints switch (and the oil-earths switch) an earth tube enters a
+    /// mixture with the pigment its box's tube holds. A tint of the impressionist box's
+    /// burnt sienna with its lead white is, per micrometre of paint, LBNL's measured film of
+    /// burnt sienna (K and S per pigment volume) at the tube's pigment share (1 − its oil
+    /// share by volume, 0.12: Church's French figure, 0.63 of its weight, pigment_oil.md)
+    /// plus lead white as measured, its coefficients per the Revigo film's 32 µm. Before, the
+    /// earth's slot held its pigment at lead white's paint's share (on Mie's estimate of
+    /// lead white's S per pigment volume), so 7% of burnt sienna now tints as 1.5% did. Nothing but an earth moves, and without the oil-earths
+    /// switch, or below engine 9, the switch does nothing.
+    #[test]
+    fn earth_tints_tubes_carry_their_own_pigment() {
+        let mut p = Palette::named_box("impressionist").unwrap();
+        p.engine = crate::PIGMENT_MIXER;
+        p.glaze_film = true;
+        p.oil_earths = true;
+        let at = |name: &str| p.tubes.iter().position(|t| t.name == name).unwrap();
+        let (lw, bs) = (at("lead white"), at("burnt sienna"));
+        assert!((0..p.tubes.len()).all(|i| p.earth_tints_weight(i) == 1.0));
+        let off = p.clone();
+        p.earth_tints = true;
+        let share = 1.0 - p.pack[bs].2;
+        assert!((0.10..0.14).contains(&share), "burnt sienna's pigment share {share}");
+        let m = p.pile(vec![(lw, 0.93), (bs, 0.07)]);
+        let got = crate::mixer::pigment9(&m.pigment_latent);
+        let (k, s, _) = crate::dry::lbnl_film("burnt sienna").unwrap();
+        let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap());
+        let um = crate::mixer::REVIGO_FILM_UM;
+        for w in 0..crate::spectral::N {
+            let (ek, es) = (0.07 * share * k[w] + 0.93 * white.k[w] / um, 0.07 * share * s[w] + 0.93 * white.s[w] / um);
+            assert!((got.k[w] / um - ek).abs() < 1e-4 * ek && (got.s[w] / um - es).abs() < 1e-4 * es, "{w}: K {} S {} per um against {ek} {es}", got.k[w] / um, got.s[w] / um);
+        }
+        let l = |q: &Palette, parts: Vec<(usize, f32)>| lab(q.pile(parts).color);
+        let (was, now) = (l(&off, vec![(lw, 0.93), (bs, 0.07)]), l(&p, vec![(lw, 0.93), (bs, 0.07)]));
+        assert!(now[0] > was[0] + 8.0, "7% burnt sienna in lead white: {was:?} before, {now:?} now");
+        let w = p.earth_tints_weight(bs);
+        let before = 0.07 * w / (0.93 + 0.07 * w);
+        assert!((0.012..0.018).contains(&before) && delta_e(l(&off, vec![(lw, 1.0 - before), (bs, before)]), now) < 1e-3, "7% now against {before} before: {now:?}");
+        for name in ["vermilion", "cobalt blue", "lead white", "bone black", "ultramarine blue", "cadmium yellow"] {
+            let i = at(name);
+            assert_eq!(p.pile(vec![(i, 0.1), (lw, 0.9)]).color, off.pile(vec![(i, 0.1), (lw, 0.9)]).color, "{name}");
+        }
+        for (oil_earths, engine) in [(false, crate::PIGMENT_MIXER), (true, 8)] {
+            let (mut a, mut b) = (off.clone(), p.clone());
+            (a.oil_earths, b.oil_earths, a.engine, b.engine) = (oil_earths, oil_earths, engine, engine);
+            assert_eq!(a.pile(vec![(lw, 0.93), (bs, 0.07)]).color, b.pile(vec![(lw, 0.93), (bs, 0.07)]).color, "oil earths {oil_earths}, engine {engine}");
+        }
+    }
+
     #[test]
     fn oil_earths_are_as_deep_as_their_oil_paints() {
         let (off, mut on) = (earths_palette(false), earths_palette(false));

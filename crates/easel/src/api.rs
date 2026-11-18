@@ -3212,4 +3212,41 @@ mod tube_volume_tests {
         }
         assert!((cr[1] - 0.850).abs() < 0.04 && cr[0] < 0.7, "lead white 32 um over black: contrast ratio {} with the switch, {} without", cr[1], cr[0]);
     }
+
+    /// A new painting writes `--@ earth-tints`, and with its oil earths a tint of burnt
+    /// sienna in lead white carries the pigment the tube holds (paint's
+    /// `earth_tints_tubes_carry_their_own_pigment`): 7% by volume is lighter than an older
+    /// log's by more than 8 L*. A log without the line, or without `--@ oil-earths`, or below
+    /// engine 9, mixes as before; a save keeps the switch.
+    #[test]
+    fn a_new_paintings_earths_tint_with_their_tubes_pigment() {
+        use crate::session::{EARTH_TINTS_MARK, OIL_EARTHS_MARK};
+        assert!(box_for(None).unwrap().earth_tints);
+        let tint = |b: paint::Palette| {
+            let (w, e) = (b.tubes.iter().position(|t| t.name == "lead white").unwrap(), b.tubes.iter().position(|t| t.name == "burnt sienna").unwrap());
+            b.pile(vec![(w, 0.93), (e, 0.07)]).color
+        };
+        for head in ["--@ box impressionist\n--@ engine 8\n--@ oil-earths\n", "--@ box impressionist\n--@ engine 9\n"] {
+            assert_eq!(tint(box_for(Some(&format!("{head}{EARTH_TINTS_MARK}\n"))).unwrap()), tint(box_for(Some(head)).unwrap()), "{head}");
+        }
+        let mut l = [0.0f32; 2];
+        for enabled in [false, true] {
+            let head = format!("{HEAD}{OIL_EARTHS_MARK}\n{}", if enabled { format!("{EARTH_TINTS_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.earth_tints, enabled);
+            let c = tint(tubes.clone());
+            l[enabled as usize] = 116.0 * (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]).cbrt() - 16.0;
+            let mut s = Session::with_box(16, tubes).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();
+            let program = s.program("earths");
+            assert_eq!(program.lines().any(|l| l == EARTH_TINTS_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().earth_tints, enabled);
+            let path = std::env::temp_dir().join(format!("easel-earth-tints-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.earth_tints, enabled);
+        }
+        assert!(l[1] > l[0] + 8.0, "7% burnt sienna in lead white: L* {} with the switch, {} without", l[1], l[0]);
+    }
 }

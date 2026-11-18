@@ -25,7 +25,8 @@ The steps:
    (§6.5), so it keeps it.
 2. **Then K.** A factor on the oil table's K per volume is fitted so that the pure dry colour
    (the engine's dry rule, with the size-aware S) matches the corrected CHSOS powder.
-   Madder's is the dry-lakes loading, 35.7. K per volume is the pigment's in any medium
+   Madder's is the dry-lakes loading, read from dry.rs's ROSE_MADDER_LOADING (40.5, fitted by
+   dry_lake_fit.py), so the two can't drift apart. K per volume is the pigment's in any medium
    (§2.4), so oil takes the same K.
 3. **Oil S** is the dry S over Mie's air/oil ratio at the tube's index and size.
 4. **The check against oil.** The CHSOS linseed-oil swatches are paint-outs on paper.
@@ -64,6 +65,8 @@ spec.loader.exec_module(mie_mod)
 import ast, re  # noqa: E402
 
 src = (root / "crates/paint/src/spectral.rs").read_text()
+# madder's K factor is the dry-lakes loading, the one constant in dry.rs (mixer::OIL_K reads it too)
+MADDER = float(re.search(r"pub const ROSE_MADDER_LOADING: f32 = ([0-9.]+);", (root / "crates/paint/src/dry.rs").read_text())[1])
 
 
 def table(name):
@@ -107,14 +110,19 @@ def bands(data, col):
     return np.array([data[(nm >= c - 5) & (nm < c + 5), col].mean() for c in NM]) / 100
 
 
-# --- the powders, corrected as dry_lake_fit.py corrects them (black 0.04, titanium white 0.945)
+# --- the powders, corrected as dry_lake_fit.py corrects them: the floor a carbon black powder's
+# measured total reflectance, 0.022 (charcoal powder reflects 3.00 % at 550 nm, Lethuillier et al.
+# 2022; bounds 0.013-0.031, dry_pigment_optics.md §9.1), and rutile titanium white 0.945 (0.90-0.99).
+# (The fit was first made at the 0.04 (0.03-0.05) floor of §3's retired veil estimate.)
+BLACK_TRUE = (0.013, 0.022, 0.031)
+TITANIUM_TRUE = (0.90, 0.945, 0.99)
 p_head, powder = load("powder.csv")
 pm = lambda n: bands(powder, p_head.index(n))
 P_BLACK = np.mean([pm(n) for n in ("ivoryblack", "vineblack", "boneblack", "lampblack")], axis=0)
 P_LEAD, P_TI = pm("leadwhite"), pm("titaniumwhite")
 
 
-def powder_corrected(name, black=0.04, ti=0.945):
+def powder_corrected(name, black=BLACK_TRUE[1], ti=TITANIUM_TRUE[1]):
     lead = black + (ti - black) * (P_LEAD - P_BLACK)[FLAT].mean() / (P_TI - P_BLACK)[FLAT].mean()
     return black + (pm(name) - P_BLACK) * (lead - black) / (P_LEAD - P_BLACK)
 
@@ -191,8 +199,9 @@ for tube, (name, n, ds, _) in TUBES.items():
         a, de = fit_k(tube, n, SIZE[(tube, d)][0], target)
         FIT[(tube, d)] = a
         print(f"    at {d:5.0f} um: K x{a:.4g}, dE {de:.1f}")
-    # the powder's own bounds (black 0.03-0.05, titanium 0.90-0.99) at the middle size
-    span = [fit_k(tube, n, SIZE[(tube, ds[1])][0], lab(powder_corrected(name, b, t)))[0] for b in (0.03, 0.05) for t in (0.90, 0.99)]
+    # the powder's own bounds (black 0.013-0.031, titanium 0.90-0.99) at the middle size
+    span = [fit_k(tube, n, SIZE[(tube, ds[1])][0], lab(powder_corrected(name, b, t)))[0]
+            for b in (BLACK_TRUE[0], BLACK_TRUE[2]) for t in (TITANIUM_TRUE[0], TITANIUM_TRUE[2])]
     print(f"    over the powder correction's bounds at {ds[1]:.0f} um: x{min(span):.3g}-{max(span):.3g}")
 
 
@@ -200,7 +209,7 @@ for tube, (name, n, ds, _) in TUBES.items():
 def oil(tube):
     k, s = np.array(tubes[tube]["k"]), np.array(tubes[tube]["s"])
     if tube == "rose madder":
-        return k * 35.7, s
+        return k * MADDER, s
     _, n, ds, _ = TUBES[tube]
     d = ds[1]
     f, ratio = SIZE[(tube, d)]
@@ -312,7 +321,7 @@ for tube in ("green earth", "copper green"):
 # --- the engine's constants (paint's mixer::OIL_K): K factor on the table's oil K; oil S as
 # a multiple of lead white's oil S spectrum (None: the table's); the dry S's size factor
 print("\n== The constants for mixer::OIL_K")
-print('  ("rose madder", 35.7, None, 1.0)')
+print(f'  ("rose madder", crate::dry::ROSE_MADDER_LOADING, None, 1.0)  # {MADDER:g}, the dry-lakes loading')
 for tube in ("green earth", "copper green"):
     _, n, ds, _ = TUBES[tube]
     d = ds[1]

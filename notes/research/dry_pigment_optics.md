@@ -691,7 +691,9 @@ class C) proposes, for that PR:
   `dry_lake_fit.py`'s `fit()`, to the corrected CHSOS powders already in this set:
   green earth 56.1/−1.9/11.3, verdigris 33.6/−27.2/−13.6.
   - The script prints what that would give (not applied): green earth ×31.4, ΔE 0.5;
-    verdigris ×189, ΔE 10.0.
+    verdigris ×189, ΔE 10.0. (These are at #318's first black floor, 0.04. At the
+    measured 0.022 the powders are 54.7/−2.0/12.1 and 29.7/−34.4/−15.8, and at 1 µm the
+    factors ×34.8 and ×200, ΔE 0.4 and 15.0: `oil_k_fit.py` §2, and §6.7.)
   - Verdigris's very large factor, and its leftover ΔE, say its S is too high as well as
     its K too low.
 - **Grain size is the other half.** Both run 1–30 µm, and σ′ at 3 µm is a quarter of its
@@ -722,15 +724,27 @@ notes/research/oil_k_fit.py <repo> <CHSOS CSV dir> <tubes.json>`.
 | rose madder | its alumina is a fine lake substrate; the table's oil S is already Mie's to 1.5× (§6.5) | 1.57 | 1 | (S kept) |
 
 **K, fitted to the corrected powders [C].** These are the same powders and the same
-correction as the lakes (§6.1), with the size-aware dry S:
-- **green earth: ×1.638**, ΔE 0.5. Over the correction's bounds it is 1.45–1.86. Over
-  5–20 µm grains it is 3.6–0.77, because the dry fit pins only K/S.
-- **copper green: ×0.8175**, ΔE 10.0 (0.74–0.90). Verdigris's K per volume was about right
-  all along. Its S was what was wrong, 270× too high. At 1 µm the fit had to make up for
-  that with ×189. Its ΔE of 10 is the oil table's K *shape*, which no single factor
-  fixes.
-- **rose madder: ×35.7**, the dry-lakes loading (§6.2), which dye chemistry supports
-  (§6.3).
+correction as the lakes (§6.1): the black floor the measured 0.022 (bounds 0.013–0.031),
+titanium white 0.945 (0.90–0.99). The dry S is the size-aware one. Corrected, green earth
+is 54.7/−2.0/12.1 and verdigris 29.7/−34.4/−15.8.
+- **green earth: ×1.816**, ΔE 0.4. Over the correction's bounds it is 1.61–2.06. Over
+  5–20 µm grains it is 3.98–0.850, because the dry fit pins only K/S.
+- **copper green: ×0.8666**, ΔE 15.0 (0.806–0.911 over the bounds; 3.03–0.429 over
+  30–200 µm grains). Verdigris's K per volume was about right all along. Its S was what
+  was wrong, 270× too high. At 1 µm the fit had to make up for that with ×200. Its ΔE of
+  15 is the oil table's K *shape*, which no single factor fixes. The engine's own dry
+  colour, through 8-bit sRGB, is 16.6 off: the powder's red is below sRGB's gamut and
+  clips.
+- **rose madder: ×40.5**, the dry-lakes loading (§6.2), which dye chemistry supports
+  (§6.3). `mixer::OIL_K` reads it from `dry::ROSE_MADDER_LOADING`, the constant
+  `dry::dye_loading` gives, so the two can't drift apart. `oil_k_fit.py` reads the same
+  constant from dry.rs.
+
+The fit was first made at #318's first floor, 0.04 (0.03–0.05), from the veil estimate
+#329 retired: green earth ×1.638 (1.45–1.86), copper green ×0.8175 (0.74–0.90, ΔE 10.0),
+madder a copy of the old loading, ×35.7. The measured floor darkens both powders. Green
+earth needs 11 % more K. Verdigris's corrected powder is darker and more saturated than
+the K shape can follow, so its fit worsens.
 
 **Oil S.** For green earth and verdigris, the oil S is the dry S over the Mie air/oil
 ratio. Written as a multiple of lead white's oil S spectrum (the dry rule's shape), it is
@@ -741,9 +755,9 @@ ratio. Written as a multiple of lead white's oil S spectrum (the dry rule's shap
 
 | Tube | masstone before | masstone after | 1:1 lead white before | 1:1 lead white after |
 |---|---|---|---|---|
-| rose madder | 205 141 142 (65.0/24.5/9.6) | **80 29 30** (18.6/24.2/11.1) | 240 212 217 (87.3/10.4/1.1) | **163 100 110** (49.5/26.9/5.2) |
-| green earth | 195 184 158 (74.9/−0.3/14.6) | **76 74 56** (31.2/−2.8/10.9) | 225 222 212 | 213 209 198 |
-| copper green | 151 209 195 (79.7/−21.4/0.7) | **0 21 19** (5.0/−7.6/−1.2) | 195 232 227 | 192 231 227 |
+| rose madder | 205 141 142 (65.0/24.5/9.6) | **76 26 28** (17.3/23.5/10.8) | 240 212 217 (87.3/10.4/1.1) | **158 95 105** (47.6/27.0/5.3) |
+| green earth | 195 184 158 (74.9/−0.3/14.6) | **72 71 54** (29.8/−2.7/10.7) | 225 222 212 | 211 207 196 |
+| copper green | 151 209 195 (79.7/−21.4/0.7) | **0 20 18** (4.7/−7.2/−1.2) | 195 232 227 | 190 231 226 |
 
 The engine's own decode (a 100 µm film over its reference backing, the colour a pile
 shows) is in §6.8.
@@ -765,14 +779,17 @@ The best ΔE76 to each swatch (`oil_k_fit.py` §5):
 
 | Tube | swatch (corrected) | before: best ΔE (at film) | after: best ΔE (at film) |
 |---|---|---|---|
-| rose madder | 211 127 109 (61.7/30.9/23.6) | 10.1 (111 µm) | **5.0** (2.4 µm) |
-| green earth | 90 89 74 (37.4/−2.6/8.8) | 28.9 (no thickness is dark enough; 3.5 mm) | **4.6** (262 µm; 4.2–5.0 over 5–20 µm grains) |
-| copper green | 57 123 123 (47.7/−20.9/−6.4) | 24.7 (5.5 mm) | **17.6** (609 µm) |
+| rose madder | 211 127 109 (61.7/30.9/23.6) | 10.1 (111 µm) | **5.0** (2.1 µm) |
+| green earth | 90 89 74 (37.4/−2.6/8.8) | 28.9 (no thickness is dark enough; 3.5 mm) | **5.0** (231 µm; 4.7–5.4 over 5–20 µm grains) |
+| copper green | 57 123 123 (47.7/−20.9/−6.4) | 24.7 (5.5 mm) | **17.6** (575 µm) |
 
-Over the correction's bounds the ΔEs move by under 1.2.
+Over the swatch correction's bounds the ΔEs move by under 1.3. (The swatches' floor is a
+black oil film's, mostly its surface, not the powders' floor, so the measured powder
+floor leaves it as it was. At the old powder floor green earth was 4.6 at 262 µm: its
+larger K now overshoots the swatch's darkness a little.)
 - **Green earth** is the clear confirmation. Before, no film of the old paint could be as
   dark as the swatch. Fitting K and S freely, the swatch's K/S comes out at 14.7× the old
-  engine's and 0.64× the new one's (0.54–0.77).
+  engine's and 0.58× the new one's (0.49–0.70).
 - **Madder** now matches the swatch's hue as a thin transparent glaze. The swatch shows
   the paper through it, so its own K/S isn't identified (a free fit drives S to 0). It
   can't separate K per volume from thickness. A measured madder-in-oil tint with lead
@@ -785,8 +802,9 @@ Over the correction's bounds the ΔEs move by under 1.2.
 **Dry, with the switch.** These three tubes take the slot's K over the dry rule's S at
 their measured index (madder at its substrate's 1.57) times the size factor:
 - madder dry is the dry-lakes colour (the same K, ΔE < 0.05);
-- green earth matches its powder (ΔE 0.5);
-- copper green comes within ΔE 10 of its powder (it was 59 off).
+- green earth matches its powder (ΔE 0.4);
+- copper green comes within ΔE 15 of its powder (16.6 through 8-bit sRGB; it was 66
+  off at this floor).
 
 **Old paintings.** A log without the line keeps the researched slots, bit for bit. A
 checkpoint written before the slots existed has 48-float latents and the old identity
@@ -808,13 +826,14 @@ the reference backing, so a transparent paint shows the backing. "Dry" is a past
 
 | Tube | oil | oil 1:1 | dry | dry 1:1 |
 |---|---|---|---|---|
-| rose madder | 211 126 125 → **57 17 19** | 229 187 191 → **128 73 81** | 174 112 124 (unchanged) | 200 143 154 (unchanged) |
-| green earth | 176 160 126 → **131 106 51** | 207 200 184 → **192 184 167** | 228 225 218 → **139 135 114** | 236 234 229 → **224 221 213** |
-| copper green | 107 190 172 → **0 182 155** | 161 215 206 → 160 216 207 | 197 234 230 → **0 92 86** | 215 241 238 → 208 238 234 |
+| rose madder | 211 126 125 → **54 16 17** | 229 187 191 → **123 69 77** | 170 108 119 (unchanged) | 196 138 149 (unchanged) |
+| green earth | 176 160 126 → **124 98 45** | 207 200 184 → **189 181 164** | 228 225 218 → **135 131 110** | 236 234 229 → **223 220 211** |
+| copper green | 107 190 172 → **0 180 152** | 161 215 206 → 157 215 206 | 197 234 230 → **0 90 84** | 215 241 238 → 206 237 234 |
 
 Copper green in oil is now a clear glaze. Over the white backing it reads a saturated
-blue-green, and where it is thick it turns black-green (R∞ 0 21 19, §6.7). Its tints
-barely move.
+blue-green, and where it is thick it turns black-green (R∞ 0 20 18, §6.7). Its tints
+barely move. (Madder's dry colour is the dry-lakes one at its 40.5 loading, with the
+switch or without it.)
 
 Sources for this section: Cosentino 2014, *e-conservation* 2:54–65 (CHSOS copy of the
 paper; data download page

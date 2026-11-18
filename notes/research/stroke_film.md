@@ -180,14 +180,11 @@ pixels beside the bed filled to it: a 9 mm filbert's white stroke lay
 dark paint. Now it lies ~30 µm across, its edges up to 1.25 times that
 (the side leakage's bead), never past the film.
 
-**Into the tooth.** A loaded hair's paint reaches below the points the hair
-itself touches only as far as the film it leaves. In the exchange's contact
-units (±60 µm of relief, `bristle::TOOTH_UM`, scaled by its 1.6) that is
-h/(3.2 × 60 µm). Before the switch this reach was a fixed estimate
-(`WET_REACH`, half the range). A light stroke of little, stiff paint on a
-coarse weave leaves its film on the weave's crowns (the scumble test: 52%
-of a band covered against 100% pressed). The contact model gives most of
-that already; the film's reach adds a little.
+**Into the tooth.** How far a stroke's paint reaches into the weave's
+hollows below the points its hairs touch is §5's weave fill: as deep as
+the paint its bed passes on per area fills the relief's voids. Before the
+switch this reach was a fixed estimate (`WET_REACH`, half the range,
+scaled by the exchange's load ramp).
 
 ## 4. A press
 
@@ -309,26 +306,73 @@ lone disc past the mark's end where a long hair's straightened tip
 pressed; and a thin band across the end (some 15 µm in a 50 µm stroke),
 the track of the sliding hairs' last step, which no hair laid.
 
-**A press on tooth [D].** Where the patch's film lies over a weave, it
-fills the hollows under the bed as it covers the crowns, so a press lays
-over its hair's whole contact (`exchange`'s `Window::lay`), not only
-where the hair itself reaches into the relief. The weight there is
-f + (1 − f)·c, with c the hair's contact on that spot and f how far the
-hair's paint fills its share of the patch; how much the hair gives stays
-its contact's. The press squeezes the hair's paint into the patch, so f
-is what it holds over what its share takes: what it lays there and the
-paint the relief under its share holds, the contact's whole range
-(2·`TOOTH_UM`, 120 µm, as deep as a hollow can be) over the bed's area
-divided among its hairs, f at most 1. A 12 mm filbert's hair holds about
-1.2 mm³ full and its share of the patch takes about 0.03 mm³, so f stays 1
-until the hair is all but empty; only then does the press lay on the
-crowns its tip touches. (The exchange's load ramp, an estimate that is 0
-at a tenth of a full load and 1 at eight tenths, called a hair holding a
-third of its load mostly dry, and the lift of a long stroke broke on the
-crowns.) The hollows should hold
-more than the crowns, the local gap being deeper by the hollow's depth;
-that is not modeled (the film is laid evenly over the contact: an
-estimate, the simplest that doesn't break the film).
+**The weave's hollows [D].** Where the bed slides or presses over a
+weave, its paint fills the hollows below the crowns the bed rests on as
+deep as two bounds allow (`stroke_film::fill_m`, `bristle::weave_fill`).
+
+- *The yield stress.* A Bingham paste in a slot of width w moves once the
+  pressure across it beats the yield stress on its two walls: p·w = 2τ·δ
+  for a plug δ deep (the force balance behind a yield-stress fluid's flow
+  in a channel, and behind the perfectly plastic squeeze flow of a paste
+  between plates: N. Roussel and C. Lanos, "Plastic fluid flow parameters
+  identification using a simple squeezing test", Applied Rheology 13,
+  132–141, 2003; P. Coussot, *Rheometry of Pastes, Suspensions, and
+  Granular Materials*, Wiley 2005) [S]. The hollows' width w is the
+  relief's own: the mean distance between its crossings of its mean
+  level, π·σ/σ′ (S. O. Rice, "Mathematical analysis of random noise",
+  Bell Syst. Tech. J. 23, 282, 1944; for a weave of pitch λ, λ/2), over
+  the footprint of the stroke or touch.
+- *The supply.* The paint fills the relief from the crowns down, as deep
+  as the voids above that depth hold the paint the bed passes on per area
+  (`bristle::Relief::voids`, from the footprint's relief). A sliding bed
+  passes on what its hairs give: each hair's share of what it carries
+  over its step (the exchange's run, `dep_total` before its contact's
+  share), laid over its share of the area the bed sweeps (the hairs one
+  behind another along a track, the bed's length over their spacing),
+  and never more than the slider's film: h₀ is a ceiling, and a bed fed
+  less than it lays a thinner film (starved lubrication: the film follows
+  the lubricant available at the inlet, F. Chevalier, A. A. Lubrecht,
+  P. M. E. Cann, F. Colin and G. Dalmaz, "Film thickness in starved EHL
+  point contacts", J. Tribol. 120, 126–132, 1998) [M]. A press doesn't
+  move: for as long as it presses it squeezes the tuft's paint into its
+  patch, so its supply is what the hair holds over its share of the bed.
+
+The crowns are the relief's mean level and √2 its spread, the crests of
+a sinusoidal relief of that spread [D]: a bed's face spans many hair
+spacings and rests on the weave's crowns, not on its highest fibre. Where
+the paint reaches, it wets the surface, crown or hollow alike: a pixel
+takes it by the share of its own relief (σ′ either side, planar) above
+the paint's floor, not by the hair's contact ramp, which made it lie in
+proportion to the relief (bright crowns, thin hollows). The paint the
+hairs push aside is the bed's too, so it lands only where the bed's paint
+reaches; what can't land stays where it was.
+
+*Which bound acts.* The bed presses at kPa: a 6 mm hog flat at pressure
+0.15 at 35 kPa, a 12 mm filbert releasing at 0.03 at 0.6 kPa (`pad`).
+Paint yield stresses are tens to hundreds of Pa (§1). So p·w/2τ is
+millimetres against hollows of tens of µm, and no bed the hand presses
+leaves a hollow bare for its paint's stiffness. A stiffer paint, or a
+lighter bed, lifts on a thicker film (h₀ → 0.16τL/p, §3), which fills
+more. What leaves the hollows bare is the supply. A 6 mm hog flat dragged
+lightly at 200 mm/s over 12 threads/cm unground linen (crowns 80 µm, voids
+26 µm deep on average below them) with lean, blotted paint (τ ≈ 400 Pa)
+lays a 39 µm slider film; loaded at 0.3 it passes on far more than that and covers the band,
+while rubbed nearly dry (a twentieth of a full load) it passes on less
+than the voids hold and covers 0.41 of it, the hollows bare and the
+crowns painted: a scumble. A 12 mm filbert two thirds spent at the end of
+a long stroke still passes on more than its weave's voids hold, so it no
+longer breaks into crown dots there (the exchange's load ramp, an
+estimate that is 0 at a tenth of a full load and 1 at eight tenths,
+called its hairs mostly dry).
+
+*A press levels to the bed.* The gap over a hollow is deeper than over a
+crown by the hollow's depth below the crowns (to the fill's depth), so it
+holds that much more paint: a press lays its paint in proportion to the
+local gap h + d, and where it splits on the lift the canvas keeps half of
+it, (h + d)/2 (`Window::lay`, the per-pixel cap). A full press of a
+loaded 9 mm filbert on that linen leaves some 30 µm over the hollows and
+25 µm on the crowns (laid evenly, within 6 % of each other). Before this,
+a press laid one even film over its contact, an estimate.
 
 **The start on tooth [D].** At touch-down the gap holds the press film F,
 which may be thinner than h₀. For a 12 mm filbert of tube paint at the
@@ -391,14 +435,12 @@ bare ground a long stroke lays the slider's film where before its hairs
 lifted back some of their own paint (a 9 mm filbert's 15 µm of a
 23 µm ceiling is now 22 µm).
 
-**Open.** A slide's tooth reach is still the film it leaves times the
-exchange's load ramp (§3), so where a long stroke has spent two thirds of
-its load the slide through the hand's release breaks on the crowns,
-though its hairs hold far more than the gap takes. The physical law would
-ask whether the bed floods the relief: whether its paint fills the gap
-and, against its yield stress, flows into the hollows under the bed's
-pressure (a stiff paint pressed lightly shouldn't, the scumble). Not done
-here.
+**Open.** A slide levels to its bed as a press does (its outlet film over
+the crowns, deeper over the hollows); a slide lays its film evenly over
+where its paint reaches. The relief's statistics are the footprint's,
+not each spot's. The paint the bed passes on per area takes the
+exchange's run (`Tool::run`, an estimate of how far a full load lasts)
+for what a hair gives.
 
 The press film at touch-down is a touch's (`TOUCH_FILM`·`lay`,
 an estimate), not the squeeze's. A press squeezes the bed's paint for the

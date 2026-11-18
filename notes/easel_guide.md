@@ -540,9 +540,15 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
     its own and lifts half the difference. On dry paint or bare ground a
     touch lays as without the switch.
   - A press, a touch or a stroke's lift, is one film of paint between the
-    hairs and the canvas, so it splits over the whole patch: it fills the
-    weave's hollows under it as it covers the high points. Only a brush
-    nearly run dry leaves the hollows bare.
+    hairs and the canvas, so it splits over the whole patch. The brush
+    presses it into the weave's hollows, levelled to the brush resting on
+    the high points, so it lies thicker in the hollows than on the high
+    points. Only a brush nearly run dry leaves the hollows bare.
+  - A stroke's paint fills the weave's hollows from the high points down,
+    as deep as the paint its hairs give per area of the stroke fills them.
+    A loaded brush covers the weave whatever its pressure or its paint's
+    stiffness; a brush holding little paint lays on the high points and
+    leaves the hollows bare.
   - Sources and estimates: notes/research/stroke_film.md.
 - Hatching an area is the lines a pencil draws (`h:line`), one by one.
 

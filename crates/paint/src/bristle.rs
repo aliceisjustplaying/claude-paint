@@ -3879,4 +3879,180 @@ mod stroke_film_tests {
         plain.drag(&mut held(Tool::hog_flat(36.0), paint("#802010", 0.92, 0.5), 5), &Gesture::new(vec![(150.0, 500.0), (850.0, 500.0)]), None);
         assert!(plain.wet.vol == off);
     }
+
+    /// 92 mm across 240 px: a 0.38 mm pixel, as a 920 mm painting at 2400
+    /// px; 1 unit is 0.092 mm, so a 2 mm brush is 21.7 units.
+    fn fine_canvas() -> Canvas {
+        Canvas::new(240, 1.0, hex("#e3dccb")).with_engine(crate::PIGMENT_MIXER).with_size_mm(92.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true)
+    }
+
+    fn lum(c: &Canvas, x: f32, y: f32) -> f32 {
+        let p = c.seen()[c.f.index(x, y)];
+        0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
+    }
+
+    /// A 2 mm sable round loaded with a dark paint draws a dark line on a
+    /// light ground. Its hairs are out 12.4 mm (a maker's round of that
+    /// size), so it presses a few mN and its film is the hairs' meniscus,
+    /// over 25 µm (with a flat's proportions it was 7 µm). The paint hides
+    /// 95 % of what is under it in one coat (25 µm): a film of h lets
+    /// 0.05^(h/25 µm) of the ground through, under 0.06 at 25 µm, so the
+    /// line's optical density, log₁₀(ground/line) in luminance, is at least
+    /// 0.8 of the paint's own over the ground (its masstone, here a thick
+    /// knifed slab). A pointed round of the same size draws as dark.
+    #[test]
+    fn a_small_round_draws_a_dark_line() {
+        let dark = || paint("#2c2026", 0.95, 0.0);
+        for point in [0.0f32, 0.9] {
+            let mut c = fine_canvas();
+            let mut k = Knife::new(150.0);
+            k.load(dark(), 1.0);
+            c.knife(&mut k, &[(800.0, 200.0), (800.0, 800.0)], (0.2, 0.2), Some(0.0), true, 0.0);
+            let round = Tool { point, ..Tool::round_sable(21.7) };
+            let speed = crate::tally::stroke_speed_mm_s(&round, 0.092) as f32;
+            let law_um = film_um(rheology(&dark().prop(), 0.0), &pad(&round, 0.5, 0.092, speed));
+            assert!(law_um > 25.0, "the law's film for a 2 mm round: {law_um} µm");
+            let mut b = Held::new(round, 9).with_engine(crate::PIGMENT_MIXER);
+            b.load(dark(), 0.9);
+            c.drag(&mut b, &Gesture::new(vec![(100.0, 500.0), (600.0, 500.0)]).pressure(0.5, 0.5).shake(0.0), None);
+            let ground = lum(&c, 350.0, 300.0);
+            let mass = (ground / lum(&c, 800.0, 500.0)).log10();
+            // the line's darkest across its width, along its middle
+            let mut od = 0.0f32;
+            let mut n = 0.0;
+            for x in (250..=450).step_by(10) {
+                let darkest = (-12..=12).map(|dy| lum(&c, x as f32, 500.0 + dy as f32)).fold(f32::INFINITY, f32::min);
+                od += (ground / darkest).log10();
+                n += 1.0;
+            }
+            od /= n;
+            assert!(mass > 0.4, "masstone density {mass}");
+            assert!(od > 0.8 * mass, "point {point}: the line's density {od} against the paint's {mass}");
+        }
+    }
+
+    /// A stroke lies about as thick across its width as along its middle:
+    /// paint pushed aside lands beside the bed at most at the film, and the
+    /// bed lays again what was pushed out from under it. Across a 9 mm
+    /// filbert's stroke of white, the middle third is no thinner than 0.8 of
+    /// the thickest film anywhere across it, and nowhere is past the law's
+    /// film.
+    #[test]
+    fn a_stroke_has_a_body_across_its_width() {
+        let white = paint("#f2eee2", 0.98, 0.0);
+        let tool = Tool::filbert(97.8);
+        let mut c = fine_canvas();
+        let mut b = Held::new(tool.clone(), 3).with_engine(crate::PIGMENT_MIXER);
+        b.load(white.clone(), 0.85);
+        c.drag(&mut b, &Gesture::new(vec![(100.0, 500.0), (800.0, 500.0)]).pressure(0.6, 0.6).ramps(0.1, 0.3).shake(0.0), None);
+        let speed = crate::tally::stroke_speed_mm_s(&tool, 0.092) as f32;
+        let ceiling = film_um(rheology(&white.prop(), 0.0), &pad(&tool, 0.6, 0.092, speed));
+        let step = 1000.0 / 240.0;
+        for x in [300.0f32, 400.0, 500.0] {
+            let prof: Vec<f32> = (-14..=14).map(|k| c.wet.vol[c.f.index(x, 500.0 + k as f32 * step)] * COAT_UM).collect();
+            let covered: Vec<usize> = (0..prof.len()).filter(|&k| prof[k] > 1.0).collect();
+            let (lo, hi) = (covered[0], covered[covered.len() - 1]);
+            let third = (hi - lo + 1) / 3;
+            let middle = prof[lo + third..=hi - third].iter().sum::<f32>() / (hi - lo + 1 - 2 * third) as f32;
+            let top = prof.iter().cloned().fold(0.0f32, f32::max);
+            assert!(top <= ceiling * 1.0001, "x {x}: {top} µm past the film {ceiling} µm: {prof:?}");
+            assert!(middle >= 0.8 * top, "x {x}: middle {middle} µm against {top} µm at the edges: {prof:?}");
+        }
+    }
+
+    fn total(c: &Canvas) -> f64 {
+        let a = 1.0 / (c.f.scale as f64 * c.f.scale as f64);
+        c.wet.vol.iter().map(|&v| v as f64).sum::<f64>() * a
+    }
+
+    fn load(h: &Held) -> f64 {
+        h.bristles.iter().map(|b| (b.vol + b.solvent) as f64).sum()
+    }
+
+    /// A touch's paint splits on the lift, half each way, over the wet film
+    /// (W) already there: the face film F is twice what the touch lays on
+    /// dry ground. Into a thin wet film (F > W) the canvas keeps its film
+    /// and gains (F − W)/2 of the brush's paint, which is most of what lies
+    /// there, and the brush takes up none of the wet paint. Into a thick one
+    /// (F < W) it lays none of its own and lifts about (W − F)/2. The brush
+    /// gives what the canvas gains.
+    enum Wet {
+        Thin,
+        Thick,
+    }
+
+    /// The share by volume of green (`g`) in a brush loaded with red (`r`):
+    /// its hairs' color is mixed by volume, so their mean projects onto
+    /// the line from red to green.
+    fn green_share(h: &Held, r: &crate::wet::Latent, g: &crate::wet::Latent) -> f32 {
+        let (mut num, mut vol) = (0.0f32, 0.0f32);
+        let d2: f32 = (0..crate::wet::LAT).map(|k| (g[k] - r[k]).powi(2)).sum();
+        for b in &h.bristles {
+            let t: f32 = (0..crate::wet::LAT).map(|k| (b.lat[k] - r[k]) * (g[k] - r[k])).sum::<f32>() / d2;
+            num += t * b.vol;
+            vol += b.vol;
+        }
+        num / vol.max(1e-9)
+    }
+
+    /// A touch's paint splits on the lift, half each way, over the wet film
+    /// (W) already there: the face film F is twice what the touch lays on
+    /// dry ground. Into a thin wet film (F > W) the canvas keeps its film
+    /// and gains (F − W)/2 of the brush's paint, more than the film it lies
+    /// on, and the brush takes up next to none of the wet paint. Into a
+    /// thick one (F < W) it lays none of its own and lifts about (W − F)/2.
+    /// The brush gives what the canvas gains. (An impasto brush, `lay` 3,
+    /// so its face is several times a stroke's film.)
+    #[test]
+    fn a_touch_splits_its_paint_over_the_wet_film() {
+        let red = || paint("#c02818", 0.9, 0.0);
+        let green = || paint("#2a5a48", 0.9, 0.0);
+        let tool = Tool { lay: 3.0, ..Tool::filbert(60.0) };
+        let (r, g) = (held(tool.clone(), red(), 7).bristles[0].lat.clone(), held(tool.clone(), green(), 7).bristles[0].lat.clone());
+        let at = (500.0, 500.0);
+        let touch = |wet: Option<Wet>| {
+            let mut c = canvas();
+            let i = c.f.index(at.0, at.1);
+            match wet {
+                // a stroke of green thinned with medium: a thin film
+                Some(Wet::Thin) => {
+                    let mut gb = held(Tool::hog_flat(150.0), paint("#2a5a48", 0.9, 0.5), 4);
+                    c.drag(&mut gb, &steady(500.0, 0.8, 100.0), None);
+                }
+                // green knifed thick, three times over
+                Some(Wet::Thick) => {
+                    for _ in 0..3 {
+                        let mut k = Knife::new(300.0);
+                        k.load(green(), 1.0);
+                        c.knife(&mut k, &[(500.0, 300.0), (500.0, 700.0)], (0.1, 0.1), Some(0.0), true, 0.0);
+                    }
+                }
+                None => {}
+            }
+            let w0 = c.wet.vol[i] * COAT_UM;
+            let before = total(&c);
+            let mut h = held(tool.clone(), red(), 7);
+            let l0 = load(&h);
+            c.touch(&mut h, &Touch::at(at.0, at.1).pressure(0.8), None);
+            let gave = l0 - load(&h);
+            assert!((gave - (total(&c) - before)).abs() < 1e-5 * l0, "gave {gave}, the canvas gained {}", total(&c) - before);
+            (w0, c.wet.vol[i] * COAT_UM, green_share(&h, &r, &g))
+        };
+        let (_, dry, _) = touch(None);
+        assert!(dry > 30.0, "a touch on dry ground lays {dry} µm");
+        let face = 2.0 * dry;
+        let (w0, w1, dirty) = touch(Some(Wet::Thin));
+        assert!(w0 > 5.0 && w0 < 0.5 * face, "a thin wet film: {w0} µm against the face's {face} µm");
+        let gained = w1 - w0;
+        let split = 0.5 * (face - w0);
+        assert!((gained - split).abs() < 0.25 * split, "into {w0} µm: gained {gained} µm, the split gives {split} µm");
+        assert!(gained > w0, "the touch's own paint is most of the pixel: {gained} µm on {w0} µm");
+        assert!(dirty < 0.01, "the brush took up green: {dirty} of its paint");
+        let clean = dirty;
+        let (w0, w1, dirty) = touch(Some(Wet::Thick));
+        assert!(w0 > 1.5 * face, "a thick wet film: {w0} µm against the face's {face} µm");
+        let lifted = w0 - w1;
+        let split = 0.5 * (w0 - face);
+        assert!(lifted > 0.6 * split && lifted < 1.7 * split && dirty > 10.0 * clean, "from {w0} µm: lifted {lifted} µm, the split gives {split} µm (green {dirty} of the brush, {clean} from the thin film)");
+    }
 }

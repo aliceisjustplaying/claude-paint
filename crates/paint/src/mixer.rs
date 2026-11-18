@@ -62,6 +62,47 @@ pub fn tube(name: &str) -> Option<[f32; LATENT_SIZE]> {
     measured(tube_pigment(name)?)
 }
 
+/// The oil, as a share of its weight, of the Revigo paint behind tube
+/// `name`'s engine-9 table (`scripts/pigment_densities.json`, the inputs of
+/// `measured_density9`): Geldof et al. 2018's table 5 where it measured the
+/// paint (zinc white, bone black, cobalt blue, ultramarine, Prussian blue),
+/// else the hand-ground rule 1.45·OA/(100 + 1.45·OA) on the pigment's oil
+/// absorption (an estimate, as that file says). With the tube-volume switch
+/// (`crate::Palette::tube_volume`) a tube enters a mixture at the pigment its
+/// own tube paint holds against this paint's. None for a tube without a
+/// Revigo table.
+pub fn revigo_oil(name: &str) -> Option<f32> {
+    let rule = |oa: f32| 1.45 * oa / (100.0 + 1.45 * oa);
+    Some(match tube_pigment(name)? {
+        "ZincWhite" => 0.37,
+        "BoneBlack" => 0.48,
+        "CobaltBlue" => 0.51,
+        "UltramarineBlue" => 0.41,
+        "PrussianBlue" => 0.56,
+        "LeadWhite" | "Vermillion" => rule(10.0),
+        "ChromeYellow" => rule(20.0),
+        "ChromeYellowOtero" => rule(24.0),
+        "ViridianGreen" => rule(80.0),
+        "EmeraldGreen" => rule(13.0),
+        "Minium" => rule(9.0),
+        "Cochineal" => rule(70.0),
+        _ => return None,
+    })
+}
+
+/// The dry film the Revigo paints were measured as, µm: each was drawn down
+/// with a block applicator of 100 µm gap (Geldof et al. 2018), which lays a
+/// wet film of about half its gap (BYK-Gardner), so engine 9's coefficients,
+/// fitted per 100 µm, are per this film (notes/research/lead_white_film.md).
+pub const REVIGO_FILM_UM: f32 = 50.0;
+
+/// With the tube-volume switch: engine 9's optical thickness per coat over
+/// the coefficients' nominal 100 µm (`REVIGO_FILM_UM`): a micrometre of
+/// paint holds 100 / `REVIGO_FILM_UM` of what the tables give it.
+pub fn tube_film_scale() -> f32 {
+    100.0 / REVIGO_FILM_UM
+}
+
 pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> {
     if let Some(lat) = tube(name) { return Some(lat); }
     let i = researched::RESEARCHED_TUBES.iter().position(|&n| n == name)?;

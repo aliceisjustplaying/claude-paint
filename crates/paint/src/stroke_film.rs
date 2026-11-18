@@ -88,6 +88,21 @@ pub const BEND: f32 = 0.5;
 /// a few µm.
 pub const ROUND_HAIR_MM: f32 = 5.2;
 pub const ROUND_HAIR_PER_D: f32 = 3.61;
+/// A hog-bristle round's hair out of the ferrule, ℓ = `HOG_ROUND_HAIR_MM` +
+/// `HOG_ROUND_HAIR_PER_D` × its diameter (mm): the least-squares line
+/// through Rosemary & Co's Ultimate bristle pointed rounds, sizes 2/0–16
+/// (diameter 2.3–16.7 mm, hair 8.8–46.7 mm; within 3.3 mm of every size;
+/// notes/research/stroke_film.md §2). Bristle rounds are stubbier than
+/// sable: out 3.8–4.4 of their diameters when small, 2.8 when large.
+pub const HOG_ROUND_HAIR_MM: f32 = 6.0;
+pub const HOG_ROUND_HAIR_PER_D: f32 = 2.63;
+/// The stiffness of the brushes the two round fits were measured on: the
+/// sable round preset's (`Tool::round_sable`) and the hog preset's
+/// (`Tool::hog_flat`). A round between them takes its hair's length between
+/// the two lines (the interpolation is an ESTIMATE, as the hair's diameter
+/// between sable and hog is).
+pub const SABLE_STIFFNESS: f32 = 0.2;
+pub const HOG_STIFFNESS: f32 = 0.85;
 /// The share of the slider's film h₀ that leaves its outlet on the canvas:
 /// at Reynolds's optimum (inlet/outlet 2.2) the flux is U·h*/2 with
 /// h* = 1.375 h₀ at the pressure peak, all of it carried off by the moving
@@ -186,12 +201,23 @@ pub fn pad(tool: &Tool, pressure: f32, mm_per_unit: f32, speed_mm_s: f32) -> Pad
     // (a round's hair is as long as its maker's series makes it, unless the
     // tool's `length` asks for longer)
     let free = match tool.kind {
-        Kind::Round => (trail / BEND).max((ROUND_HAIR_MM + ROUND_HAIR_PER_D * tool.width * mm_per_unit) * 1e-3),
+        Kind::Round => (trail / BEND).max(round_hair_mm(tool, mm_per_unit) * 1e-3),
         _ => trail / BEND,
     };
     let i = std::f32::consts::PI * d.powi(4) / 64.0;
     let per_hair = 3.0 * HAIR_E_PA * i * pressure.clamp(0.0, 1.0) * trail / free.powi(3);
     Pad { length: depth, width: w, force: hairs * per_hair, speed: speed_mm_s.max(1e-3) * 1e-3, hair_r: 0.5 * d }
+}
+
+/// A round's hair out of the ferrule (mm), by its maker's series for its
+/// hair: sable (`ROUND_HAIR_MM`) or hog bristle (`HOG_ROUND_HAIR_MM`), and
+/// between the two by its stiffness.
+pub fn round_hair_mm(tool: &Tool, mm_per_unit: f32) -> f32 {
+    let d = tool.width * mm_per_unit;
+    let sable = ROUND_HAIR_MM + ROUND_HAIR_PER_D * d;
+    let hog = HOG_ROUND_HAIR_MM + HOG_ROUND_HAIR_PER_D * d;
+    let t = ((tool.stiffness - SABLE_STIFFNESS) / (HOG_STIFFNESS - SABLE_STIFFNESS)).clamp(0.0, 1.0);
+    sable + (hog - sable) * t
 }
 
 /// The trailing meniscus film (m), Landau–Levich–Bretherton with the yield
@@ -407,6 +433,25 @@ mod tests {
             let hp = slider_m(plastic, &pd).unwrap();
             let rel = |r: Rheology, h0: f32| relax_m(5.0 * h0, 1.0 / b, r, &pd) / h0;
             assert!(rel(plastic, hp) < rel(fluid, h0), "yield stress {} fluid {}", rel(plastic, hp), rel(fluid, h0));
+        }
+    }
+
+    /// A round's hair is as long as its maker's series makes it: a soft
+    /// round's the sable line's, a hog round's the bristle line's, each within
+    /// a few mm of every size measured; a hog round is stubbier.
+    #[test]
+    fn a_round_has_its_makers_hair() {
+        let sable = [(1.5f32, 9.8f32), (2.0, 14.1), (3.4, 15.7), (3.9, 20.0), (5.2, 24.2)];
+        let hog = [(2.3f32, 8.8f32), (3.6, 16.0), (5.4, 21.1), (7.9, 28.8), (11.8, 35.5), (16.7, 46.7)];
+        // 1 mm per unit, so a width in units is the diameter in mm
+        for (d, l) in sable {
+            let got = round_hair_mm(&Tool::round_sable(d), 1.0);
+            assert!((got - l).abs() < 2.0, "sable {d} mm: {got} mm, the maker's {l} mm");
+        }
+        for (d, l) in hog {
+            let got = round_hair_mm(&Tool { stiffness: HOG_STIFFNESS, ..Tool::round_sable(d) }, 1.0);
+            assert!((got - l).abs() < 3.5, "hog {d} mm: {got} mm, the maker's {l} mm");
+            assert!(got < round_hair_mm(&Tool::round_sable(d), 1.0));
         }
     }
 }

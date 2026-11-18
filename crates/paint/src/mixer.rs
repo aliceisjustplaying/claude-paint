@@ -31,9 +31,10 @@ pub const LATENT_SIZE: usize = LATENT_SIZE_BEFORE_OIL_K + OIL_K.len();
 /// is the table's, or that dry S over Mie's air/oil ratio at its index and
 /// size, as a multiple of lead white's oil S spectrum (the dry rule's shape);
 /// and its dry S is the dry rule's times the Mie size factor σ′(d)/σ′(1 µm).
-/// - rose madder: K ×35.7, the dry-lakes loading (its dye's, checked against
-///   dye chemistry: 5–21 wt % alizarin on alumina, §6.3); its alumina is fine,
-///   and the table's oil S is Mie's to 1.5×, so S stays.
+/// - rose madder: K × the dry-lakes loading, `dry::ROSE_MADDER_LOADING`
+///   (its dye's, checked against dye chemistry: §6.3), read from there so the
+///   two stay one number; its alumina is fine, and the table's oil S is Mie's
+///   to 1.5×, so S stays.
 /// - green earth: grains of about 10 µm (Natural Pigments' 10–12 µm means), n
 ///   1.62: σ′ 0.0521 of 1 µm's, air/oil 5.57; K ×1.638 (1.45–1.86 over the
 ///   powder's correction; 0.77–3.6 over 5–20 µm).
@@ -43,7 +44,7 @@ pub const LATENT_SIZE: usize = LATENT_SIZE_BEFORE_OIL_K + OIL_K.len();
 /// Tuple: (tube, K factor, oil S as a multiple of lead white's oil S, or None
 /// for the table's, dry S size factor).
 pub const OIL_K: [(&str, f32, Option<f32>, f32); 3] = [
-    ("rose madder", 35.7, None, 1.0),
+    ("rose madder", crate::dry::ROSE_MADDER_LOADING, None, 1.0),
     ("green earth", 1.638, Some(0.01463), 0.05215),
     ("copper green", 0.8175, Some(0.0003667), 0.004325),
 ];
@@ -544,6 +545,8 @@ mod tests {
             }
         }
         assert!(tube9_oil_k("vermilion").is_none());
+        // madder's factor is the dry-lakes loading itself, not a copy of it
+        assert_eq!(Some(OIL_K[0].1), crate::dry::dye_loading("rose madder"));
     }
 
     #[test]

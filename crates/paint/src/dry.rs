@@ -111,13 +111,18 @@ pub const LAKE_SUBSTRATE_INDEX: f32 = 1.57;
 /// lake.
 pub fn dye_loading(name: &str) -> Option<f32> {
     match name {
-        "rose madder" => Some(40.5),
+        "rose madder" => Some(ROSE_MADDER_LOADING),
         "carmine lake" => Some(3.97),
         "yellow lake" => Some(13.7),
         "magenta" => Some(MAGENTA_LOADING),
         _ => None,
     }
 }
+
+/// Rose madder's dye loading, fitted to its corrected FORS powder
+/// (dry_lake_fit.py). The oil-K switch takes the same factor on madder's K
+/// in oil (`crate::mixer::OIL_K`): K per volume is the dye's in any medium.
+pub const ROSE_MADDER_LOADING: f32 = 40.5;
 
 /// Magenta's dye loading: K/S 5.7 at 543 nm over the engine-9 K/S there
 /// with no loading (dry_lake_fit.py).

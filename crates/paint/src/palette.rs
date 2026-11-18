@@ -1790,10 +1790,10 @@ mod tests {
 
     /// With the oil-K switch (`mixer::OIL_K`) the three tubes have one K per
     /// volume in oil and dry. Dry, madder is as the dry-lakes loading makes it
-    /// (the same K), green earth is its FORS powder (56.1/−1.9/11.3, corrected
+    /// (the same K: `OIL_K` reads `dry::ROSE_MADDER_LOADING`), green earth is its FORS powder (56.1/−1.9/11.3, corrected
     /// as for the lakes) and copper green nears its powder (33.6/−27.2/−13.6:
     /// the oil table's K shape holds the fit to ΔE 10). In oil, madder's
-    /// masstone is a deep crimson (the R∞ of §6.5, sRGB 80 29 30, L* 18.6) and
+    /// masstone is a deep crimson (the R∞ of §6.5, sRGB 76 26 28, L* 17.3) and
     /// green earth's as dark as CHSOS's linseed-oil swatch (L* 37.4, a film
     /// of it over oiled paper); both had been near-whites. Other tubes, and
     /// any palette without the switch, are as before, bit for bit.

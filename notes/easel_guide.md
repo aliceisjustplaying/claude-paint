@@ -629,6 +629,10 @@ feel(x, y)                     -- what a fingertip feels there
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for
   vermilion and the chromes). Dry blacks are a little grayer than in oil.
+  The earths are as deep dry as their measured powders: a pure burnt sienna
+  or raw umber stick is a dark red-brown or brown, red earth a deep brick red,
+  raw sienna and yellow ochre their ochres, and viridian a deep blue-green;
+  with white they make their tints (burnt sienna's a salmon).
 - **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
@@ -690,7 +694,12 @@ head says `--@ paper`); an older painting replays as it was painted, and
 has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 `tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
 fast it wears, what dry pigment looks like) are estimates, not
-measurements (notes/pastel.md).
+measurements (notes/pastel.md). A painting begun before the earths' dry
+colors came (its head has no `--@ dry-earths`) replays its burnt sienna,
+red earth, raw sienna, yellow ochre, raw umber and viridian sticks, and paper
+tones given in those tubes, as pale as it was painted (pure burnt sienna a
+light salmon); a new painting's are fitted to measured powders
+(notes/research/dry_pigment_optics.md §7).
 
 ## The rag
 

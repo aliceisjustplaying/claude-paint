@@ -828,6 +828,12 @@ pub struct Palette {
     /// (`dry::carbon_bed`; the easel's session.rs `DRY_EARTHS_MARK`): new
     /// paintings.
     pub dry_earths: bool,
+    /// Engine 9: the earths (burnt sienna, red earth, raw sienna, yellow ochre,
+    /// raw umber) and viridian, as the catalog has them, are in oil as deep as
+    /// their oil paints: one K per volume in oil and dry (their powders'), over
+    /// what their grains scatter in oil (`crate::mixer::OIL_EARTHS`; the easel's
+    /// session.rs `OIL_EARTHS_MARK`): new paintings.
+    pub oil_earths: bool,
     /// Engine 9's material revision (`Canvas::with_material`; an easel log's
     /// `--@ material`): 1 only where a log's head names it, whose baked
     /// films keep curing from the top down and wrinkle; 0, for new paintings,
@@ -836,6 +842,7 @@ pub struct Palette {
     pub material: u32,
     lat: Vec<[f32; crate::mixer::LATENT_SIZE]>,
     lat9: Vec<[f32; crate::mixer::LATENT_SIZE]>,
+    earth9: Vec<Option<[f32; crate::mixer::LATENT_SIZE]>>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
     /// Each tube's packed oil, drained floor and oil share by volume, in
@@ -850,7 +857,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, dry_earths: self.dry_earths, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -869,9 +876,12 @@ impl Palette {
                 .filter(|original| original.color == t.color && original.hiding == t.hiding)
                 .and_then(|_| crate::mixer::tube9(t.name))
         }).unwrap_or_else(|| crate::mixer::encode_tube9(&t.color, t.hiding))).collect();
+        // (a catalog tube's own oil-earths slot, used with the switch)
+        let earth9 = tubes.iter().map(|t| originals.iter().find(|o| o.name == t.name && o.color == t.color && o.hiding == t.hiding)
+            .and_then(|_| crate::mixer::tube9_oil_earths(t.name))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, dry_earths: false, lat, lat9, scat, pack, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, dry_earths: false, oil_earths: false, lat, lat9, earth9, scat, pack, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -881,7 +891,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, dry_earths: self.dry_earths, name: self.name, ..Palette::new(self.stock, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -983,7 +993,7 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, dry_earths: self.dry_earths, name: self.name, ..Palette::new(self.stock, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -999,8 +1009,11 @@ impl Palette {
         for &(i, f) in parts {
             let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
             let w = f * strength;
+            // (the oil-earths switch: the tube's own slot, `mixer::OIL_EARTHS`)
+            let own = self.oil_earths_latent(i);
+            let tube = own.as_ref().unwrap_or(&tubes[i]);
             for k in 0..crate::mixer::LATENT_SIZE {
-                lat[k] += tubes[i][k] * w;
+                lat[k] += tube[k] * w;
             }
             wsum += w;
             sct += self.scat[i] * f;
@@ -1100,6 +1113,15 @@ impl Palette {
             })
             .collect();
         crate::dry::dry_color(&list, white)
+    }
+
+    /// With the oil-earths switch at engine 9, catalog tube `i`'s own slot, if
+    /// it has one (`mixer::OIL_EARTHS`).
+    fn oil_earths_latent(&self, i: usize) -> Option<[f32; crate::mixer::LATENT_SIZE]> {
+        if !self.oil_earths || self.engine < crate::PIGMENT_MIXER {
+            return None;
+        }
+        self.earth9[i]
     }
 
     /// Whether tube `i` is the catalog's own paint: its color and hiding as
@@ -1453,6 +1475,61 @@ mod tests {
         let r = crate::dry::carbon_bed("bone black").unwrap();
         let list = (crate::spectral::SpectralPigment { k: p.k, s: p.k.map(|k| k * r) }, -1.0, 1.0);
         assert_eq!(palette.dry_color(&[(i, 1.0)]), crate::dry::spectral_color(&[list], &white));
+    }
+
+    /// With the oil-earths switch (`mixer::OIL_EARTHS`) an earth's or
+    /// viridian's oil masstone is as deep as its oil paint: one K per volume in
+    /// oil and dry (its powder's), over what its grains scatter in oil. The
+    /// expected colors are measurements, not this code's (dry_pigment_optics.md
+    /// §8.6, dry_colours_fit.py): CHSOS's linseed-oil swatches of the same Kremer
+    /// pigments, corrected as the powders, less the glossy film's 4 % specular
+    /// (the engine shows a pile with its gloss excluded, `mixer::outside`).
+    /// Before the switch the masstones were 8–43 ΔE76 off (burnt sienna L* 43,
+    /// raw umber 45, where the swatches are 15 and 17.5); the tolerances are
+    /// what's left (the K shape, as dry: yellow ochre's red end, burnt sienna's
+    /// hue) plus 2. A tint with lead white stays lighter than the masstone (how
+    /// much lighter rests on the grains' estimated 1 µm, §8.6). Other tubes, the
+    /// dry colors, a box's own earth and engine 8 are as before, bit for bit.
+    #[test]
+    fn oil_earths_are_as_deep_as_their_oil_paints() {
+        let (off, mut on) = (earths_palette(false), earths_palette(false));
+        on.oil_earths = true;
+        let at = |name: &str| on.tubes.iter().position(|t| t.name == name).unwrap();
+        let oil = |p: &Palette, parts: Vec<(usize, f32)>| lab(p.pile(parts).color);
+        for (name, measured, before, tolerance) in [
+            ("burnt sienna", [15.0, 2.9, -0.8], 43.3, 20.0),
+            ("red earth", [25.2, 24.7, 11.8], 25.7, 7.6),
+            ("raw sienna", [37.4, 17.2, 24.8], 18.6, 10.4),
+            ("yellow ochre", [49.2, 17.0, 37.7], 29.1, 24.5),
+            ("raw umber", [17.5, 6.5, 2.2], 34.4, 12.2),
+            ("viridian", [21.2, -24.0, -5.7], 8.3, 8.8),
+        ] {
+            let i = at(name);
+            let (was, now) = (oil(&off, vec![(i, 1.0)]), oil(&on, vec![(i, 1.0)]));
+            assert!((delta_e(was, measured) - before).abs() < 0.5, "{name} in oil before {was:?}");
+            assert!(delta_e(now, measured) < tolerance && delta_e(now, measured) < delta_e(was, measured), "{name} in oil {now:?} against CHSOS's {measured:?}");
+            let tint = oil(&on, vec![(i, 0.5), (at("lead white"), 0.5)]);
+            assert!(tint[0] > now[0] + 5.0 && tint[1].signum() == now[1].signum(), "{name} 1:1 lead white {tint:?} (masstone {now:?})");
+        }
+        for name in ["vermilion", "lead white", "bone black", "ultramarine blue", "cadmium red"] {
+            let i = at(name);
+            assert_eq!(on.pile(vec![(i, 1.0)]).color, off.pile(vec![(i, 1.0)]).color, "{name}");
+            assert_eq!(on.pile(vec![(i, 0.5), (at("lead white"), 0.5)]).color, off.pile(vec![(i, 0.5), (at("lead white"), 0.5)]).color, "{name}");
+        }
+        // dry, the switch changes nothing (dry-earths gives the same K)
+        assert_eq!(on.dry_color(&[(at("burnt sienna"), 1.0)]), off.dry_color(&[(at("burnt sienna"), 1.0)]));
+        // a box's own earth is its own paint; engine 8 has no slots
+        let mut custom = on.clone();
+        custom.tubes[at("raw umber")].hiding *= 0.5;
+        let custom = custom.clone();
+        let mut plain = custom.clone();
+        plain.oil_earths = false;
+        assert_eq!(custom.pile(vec![(at("raw umber"), 1.0)]).color, plain.pile(vec![(at("raw umber"), 1.0)]).color);
+        let (mut old_off, mut old_on) = (earths_palette(false), earths_palette(false));
+        old_off.engine = 8;
+        old_on.engine = 8;
+        old_on.oil_earths = true;
+        assert_eq!(old_on.pile(vec![(at("raw umber"), 1.0)]).color, old_off.pile(vec![(at("raw umber"), 1.0)]).color);
     }
 
     /// The switch's K per volume against the iron oxide's own absorption

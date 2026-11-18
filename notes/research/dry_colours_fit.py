@@ -336,6 +336,27 @@ for name, a in POWDER_K.items():
     print(f"  {name:12s} old {fmt(old):28s} new {fmt(new):28s} CHSOS oil {fmt(meas):28s} dE {de(old, meas):.1f} -> {de(new, meas):.1f}")
     print(f"  {'':12s} seen with the specular: new {fmt(saunderson(new))}, CHSOS {fmt(oil_swatch(CHSOS[name]))}")
 print("  Golden Artist Colors (CIE L*a*b*, acrylic): burnt sienna 33.96/17.64/14.17, raw umber 28.2/1.45/3.33")
+print("  the engine shows a pile with the gloss excluded (mixer.rs `outside`); CHSOS's swatches so (the sphere's")
+print("  reading less the film's 4 % specular), for the paint test:")
+for name in POWDER_K:
+    print(f"    {name:12s} {fmt(oil_swatch(CHSOS[name]) - 0.04)}")
+print("  tints 1:1 by volume with lead white, R-inf in oil (not measured: no earth tint was found).")
+print("  They rest on the grains' 1 um (§7.3): grains of 3 um scatter ~0.27x as much, and the same")
+print("  masstone then needs ~0.27x the K, so the tint is lighter:")
+WHITE_K = np.array(tubes["lead white"]["k"])
+for name in ("burnt sienna", "raw umber", "red earth"):
+    t = tubes[name]
+    n = t["n"]
+    sigma, ratio = mie(n)
+    s1, _ = mie_mod.sizeavg(n, 1.0, 1.0)
+    s3, _ = mie_mod.sizeavg(n, 1.0, 3.0)
+    row = []
+    for size in (1.0, s3 / s1):
+        k = np.array(t["k"]) * POWDER_K[name] * size
+        s_oil = rule_s(n) * size / ratio
+        row.append(fmt(km((k + WHITE_K) / (s_oil + WHITE_S))))
+    print(f"    {name:12s} 1 um {row[0]}   3 um {row[1]}")
+
 print("\nfor mixer.rs OIL_EARTHS (tube, K factor, oil S as a multiple of lead white's oil S):")
 for name, a in POWDER_K.items():
     print(f'    ("{name}", {a}, {SF[name]:.5f}),')

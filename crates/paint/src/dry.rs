@@ -153,6 +153,15 @@ pub fn rule_scatter(n: f32, white: &crate::spectral::Spectrum) -> crate::spectra
     std::array::from_fn(|w| r_white * white[w] * sigma / sigma_white)
 }
 
+/// What a pigment's grains of index `n` (1 µm) scatter in fresh oil, as a
+/// multiple of lead white's oil S: the dry rule's Mie S (`rule_scatter`) over
+/// Mie's air/oil ratio at `n`. The oil-earths slots' S (`crate::mixer::OIL_EARTHS`).
+pub fn oil_scatter(n: f32) -> f32 {
+    let (sigma_white, r_white) = mie_air(2.0);
+    let (sigma, ratio) = mie_air(n);
+    r_white * sigma / sigma_white / ratio
+}
+
 /// How pigments look dry, in a pastel stick or a sheet's pulp:
 /// two-constant Kubelka–Munk from each tube's masstone in oil (R∞ → K/S),
 /// its scattering in oil (`s_oil`, per coat), and its refractive index.

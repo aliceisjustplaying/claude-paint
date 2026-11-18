@@ -14,7 +14,24 @@ mod researched;
 mod calibration;
 
 pub const LEGACY_LATENT_SIZE: usize = 21;
-pub const LATENT_SIZE: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
+/// Engine 9's latent before the oil-earths slots (`OIL_EARTHS`): a checkpoint
+/// written then holds this many floats per latent (`identity9_before_oil_earths`).
+pub const LATENT_SIZE_BEFORE_OIL_EARTHS: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
+pub const LATENT_SIZE: usize = LATENT_SIZE_BEFORE_OIL_EARTHS + OIL_EARTHS.len();
+
+/// The oil-earths switch (`crate::Palette::oil_earths`, the easel's
+/// `--@ oil-earths`): the earths and viridian, whose engine-9 oil tables have a
+/// thin swatch's K/S (a Kremer gum-arabic chart swatch read as an assumed 100 µm
+/// oil film), so that a thick drawdown of burnt sienna or raw umber came out at
+/// L* 55–58 where the oil paint is near-black. Each is a latent slot of its own,
+/// after the researched tubes, with one K per volume in oil and dry, as a
+/// pigment's absorption is its own in any medium: its table's K times the factor
+/// its measured dry powder shows (`crate::dry::powder_k`, the dry-earths switch's).
+/// Its S is what those grains scatter in oil: the dry rule's Mie S at its index
+/// over Mie's air/oil ratio there (`crate::dry::oil_scatter`), a multiple of lead
+/// white's oil S. Nothing is fitted to oil: CHSOS's linseed-oil swatches check it
+/// (dry_pigment_optics.md §8.6, dry_colours_fit.py).
+pub const OIL_EARTHS: [&str; 6] = ["burnt sienna", "red earth", "raw sienna", "yellow ochre", "raw umber", "viridian"];
 const PRIMARIES: usize = 5;
 const PIGMENTS: usize = 18;
 const INVERSE_SIZE: usize = 33;
@@ -70,6 +87,14 @@ pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> {
     Some(lat)
 }
 
+/// With the oil-earths switch: tube `name`'s own slot (`OIL_EARTHS`), if it has one.
+pub fn tube9_oil_earths(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    let j = OIL_EARTHS.iter().position(|&n| n == name)?;
+    let mut lat = [0.0; LATENT_SIZE];
+    lat[LATENT_SIZE_BEFORE_OIL_EARTHS + j] = 1.0;
+    Some(lat)
+}
+
 pub fn tube_strength(name: &str) -> Option<f32> {
     let name = tube_pigment(name)?;
     let p = NAMES.iter().position(|&n| n == name)?;
@@ -92,9 +117,18 @@ pub fn identity() -> u64 {
 
 /// Checkpoint identity for spectral film optics and their physical wet S.
 pub fn film_identity() -> u64 {
+    film_identity_of(identity9())
+}
+
+/// `film_identity` before the oil-earths slots (`OIL_EARTHS`).
+pub fn film_identity_before_oil_earths() -> u64 {
+    film_identity_of(identity9_before_oil_earths())
+}
+
+fn film_identity_of(identity9: u64) -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
-    hash.update(identity9().to_le_bytes());
+    hash.update(identity9.to_le_bytes());
     hash.update(b"film25um/spectral-backing/transmitted-residual/v2");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
@@ -114,6 +148,27 @@ pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
 pub fn identity9() -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
+    hash.update(identity9_of(LATENT_SIZE).to_le_bytes());
+    hash.update(b"oil-earths-slots/table-k-times-powder-k/mie-oil-s/v1");
+    for name in OIL_EARTHS {
+        hash.update((name.len() as u64).to_le_bytes());
+        hash.update(name.as_bytes());
+        hash.update(crate::dry::powder_k(name).unwrap().to_le_bytes());
+        hash.update(crate::dry::oil_scatter(crate::dry::refractive_index(name)).to_le_bytes());
+    }
+    u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
+}
+
+/// Engine 9's identity before the oil-earths slots (`OIL_EARTHS`): its latents
+/// were `LATENT_SIZE_BEFORE_OIL_EARTHS` wide. A checkpoint that has it reads its
+/// latents widened with zeros.
+pub fn identity9_before_oil_earths() -> u64 {
+    identity9_of(LATENT_SIZE_BEFORE_OIL_EARTHS)
+}
+
+fn identity9_of(width: usize) -> u64 {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
     hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
     hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/catalog-inputs/v4");
@@ -121,7 +176,7 @@ pub fn identity9() -> u64 {
     hash.update(CALIBRATED);
     hash.update(DENSITIES);
     hash.update(b"independent-researched-ks/legacy18-residual3-extension/tuple-f32/v1");
-    hash.update((LATENT_SIZE as u64).to_le_bytes());
+    hash.update((width as u64).to_le_bytes());
     for name in researched::RESEARCHED_TUBES {
         hash.update((name.len() as u64).to_le_bytes());
         hash.update(name.as_bytes());
@@ -175,6 +230,32 @@ pub fn decode9(lat: &[f32; LATENT_SIZE]) -> Rgb {
 }
 
 pub fn pigment9(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
+    let mut p = pigment9_tables(lat);
+    // the oil-earths slots (`OIL_EARTHS`): each its tube's own K times its
+    // powder's factor, and Mie's S for its grains in oil
+    static EARTHS: std::sync::OnceLock<[[crate::spectral::Spectrum; 2]; OIL_EARTHS.len()]> = std::sync::OnceLock::new();
+    let earths = EARTHS.get_or_init(|| {
+        let white = pigment9_tables(&measured("LeadWhite").unwrap()).s;
+        std::array::from_fn(|j| {
+            let name = OIL_EARTHS[j];
+            let base = pigment9_tables(&tube9(name).expect("an oil-earths tube has engine-9 data"));
+            let (a, f) = (crate::dry::powder_k(name).unwrap(), crate::dry::oil_scatter(crate::dry::refractive_index(name)));
+            [base.k.map(|k| k * a), white.map(|s| s * f)]
+        })
+    });
+    for (j, slot) in earths.iter().enumerate() {
+        let c = lat[LATENT_SIZE_BEFORE_OIL_EARTHS + j].max(0.0);
+        if c == 0.0 { continue; }
+        for w in 0..crate::spectral::N {
+            p.k[w] += c * slot[0][w];
+            p.s[w] += c * slot[1][w];
+        }
+    }
+    p
+}
+
+/// `pigment9` from the measured and researched tables alone.
+fn pigment9_tables(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
     static COEFFICIENTS: std::sync::OnceLock<[[crate::spectral::Spectrum; 2]; PIGMENTS]> = std::sync::OnceLock::new();
     let coefficients = COEFFICIENTS.get_or_init(|| std::array::from_fn(|p| std::array::from_fn(|ks| std::array::from_fn(|w| {
         let offset = ((p * 2 + ks) * crate::spectral::N + w) * 4;
@@ -428,6 +509,40 @@ fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Engine 9's identity before the oil-earths slots is the one checkpoints
+    /// written then carry: main's identity9 and film_identity at 4bbbbec3
+    /// (printed by that build), 0x5ecc0e8c41eb7ada and 0x8e4aed0cc0f1a3d2.
+    /// The current ones differ, and the latent is six floats wider.
+    #[test]
+    fn the_identity_before_the_oil_earths_slots_is_the_old_one() {
+        assert_eq!(identity9_before_oil_earths(), 0x5ecc_0e8c_41eb_7ada);
+        assert_eq!(film_identity_before_oil_earths(), 0x8e4a_ed0c_c0f1_a3d2);
+        assert_ne!(identity9(), identity9_before_oil_earths());
+        assert_ne!(film_identity(), film_identity_before_oil_earths());
+        assert_eq!(LATENT_SIZE, LATENT_SIZE_BEFORE_OIL_EARTHS + 6);
+    }
+
+    /// An oil-earths slot is its tube's own K times its powder's factor
+    /// (`dry::powder_k`), and lead white's oil S times what its grains scatter
+    /// in oil (`dry::oil_scatter`); the tube's own slot is unchanged.
+    #[test]
+    fn an_oil_earths_slot_is_its_tubes_k_times_its_powders_factor() {
+        let white = pigment9(&measured("LeadWhite").unwrap()).s;
+        for name in OIL_EARTHS {
+            let (old, new) = (pigment9(&tube9(name).unwrap()), pigment9(&tube9_oil_earths(name).unwrap()));
+            let (a, f) = (crate::dry::powder_k(name).unwrap(), crate::dry::oil_scatter(crate::dry::refractive_index(name)));
+            for w in 0..crate::spectral::N {
+                assert_eq!(new.k[w], old.k[w] * a, "{name}");
+                assert_eq!(new.s[w], white[w] * f, "{name}");
+            }
+        }
+        assert!(tube9_oil_earths("vermilion").is_none());
+        // the multiples dry_colours_fit.py prints
+        for (name, f) in [("burnt sienna", 1.20099), ("red earth", 1.46500), ("raw sienna", 1.0), ("yellow ochre", 1.10145), ("raw umber", 1.10145), ("viridian", 0.57254)] {
+            assert!((crate::dry::oil_scatter(crate::dry::refractive_index(name)) - f).abs() < 2e-5, "{name}");
+        }
+    }
     use crate::color::{hex, to_oklab};
 
     #[test]

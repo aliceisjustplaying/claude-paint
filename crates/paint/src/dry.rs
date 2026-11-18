@@ -96,6 +96,43 @@ pub fn carbon_ratio(name: &str) -> Option<f32> {
     }
 }
 
+/// The factor on an earth's (or viridian's) engine-9 absorption K per
+/// volume that its measured dry powder shows, with the dry-earths switch
+/// (`Palette::dry_earths`). Their oil tables fix K/S in oil, not K per
+/// volume: each one's K comes from a Kremer gum-arabic chart swatch read as
+/// an assumed 100 µm oil film, and its S from an estimated hiding
+/// (scripts/pigment_data/researched-tubes.json), so a dry stick of them
+/// came out as pale as a tint (pure burnt sienna sRGB 198 132 111, L* 61,
+/// where the powder is 115 62 50, L* 33). Dry, each takes its K times this
+/// factor over the Mie scattering of its particles in air at its index
+/// (`rule_scatter`), and the factor is fitted so the pure stick matches the
+/// same pigment's powder (Cosentino 2014 FORS powders, corrected for the
+/// integrating sphere's floor and gain as for the lakes:
+/// notes/research/dry_pigment_optics.md §7, dry_earth_fit.py). The factors
+/// agree with the iron oxides' absorption (§7.3). None for any other tube.
+pub fn powder_k(name: &str) -> Option<f32> {
+    match name {
+        "burnt sienna" => Some(31.71),
+        "red earth" => Some(7.718),
+        "raw sienna" => Some(10.08),
+        "yellow ochre" => Some(2.087),
+        "raw umber" => Some(16.49),
+        "viridian" => Some(3.910),
+        _ => None,
+    }
+}
+
+/// The dry rule's scattering per coat of a particle of index `n` (1 µm),
+/// spectrally: lead white's oil S `white` times its Mie air/oil ratio (its
+/// dry S), times the Mie σ′(n)/σ′(2.0) (`mie_air`). It is what the rule
+/// gives any pigment under n 1.9; with the dry-earths switch it is also an
+/// earth's (`powder_k`).
+pub fn rule_scatter(n: f32, white: &crate::spectral::Spectrum) -> crate::spectral::Spectrum {
+    let (sigma_white, r_white) = mie_air(2.0);
+    let (sigma, _) = mie_air(n);
+    std::array::from_fn(|w| r_white * white[w] * sigma / sigma_white)
+}
+
 /// How pigments look dry, in a pastel stick or a sheet's pulp:
 /// two-constant Kubelka–Munk from each tube's masstone in oil (R∞ → K/S),
 /// its scattering in oil (`s_oil`, per coat), and its refractive index.

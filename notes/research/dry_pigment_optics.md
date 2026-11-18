@@ -345,6 +345,163 @@ values: 60° gloss < 10 and 85° gloss of a few tens.
 
 ---
 
+## 7. Earths and viridian dry: measured powders (`--@ dry-earths`)
+
+(§6, the dye lakes, comes with `--@ dry-lakes`.)
+
+**The problem [M, the engine's output].** A painter's pastel came out high-key: pure
+burnt sienna laid as a light salmon, lighter than the tan sheet it was on, and only
+vine-black mixes gave darks. Full-strength sticks laid heavily (three crossing passes at
+3 N) on the tan wove preset and on white drawing paper, 2026-11-18 integration build,
+L\*a\*b\* (D65) of each swatch's centre, unfixed → fixed:
+
+| Stick | the stick's own color (sRGB) | on tan wove (sheet 57.4/4.7/17.3) | on white (sheet 89.4/−0.1/9.3) |
+|---|---|---|---|
+| burnt sienna | 198 132 111 | 61.1/21.5/21.3 → 60.3/21.9/21.4 | 66.7/17.7/18.1 → 66.0/18.0/18.1 |
+| red earth | 211 129 108 | 61.8/27.2/24.1 → 61.0/27.7/24.3 | 67.0/23.1/20.5 → 66.3/23.6/20.6 |
+| raw sienna | 214 164 111 | 69.7/11.4/33.1 → 69.1/11.8/33.3 | 73.9/9.7/28.8 → 73.2/10.1/29.0 |
+| raw umber (every box) | 190 151 118 | 64.4/9.6/22.4 → 63.6/9.9/22.6 | — |
+| ultramarine | 83 125 228 | 54.6/16.1/−51.1 → 54.1/16.6/−51.6 | 60.9/12.9/−44.5 → 60.4/13.3/−44.9 |
+| viridian | 86 173 163 | 64.8/−25.5/−1.3 → 64.3/−25.6/−1.2 | 69.5/−22.3/−0.5 → 69.0/−22.2/−0.4 |
+| Prussian blue | 0 60 119 | 31.5/6.7/−28.5 → 31.1/6.7/−28.0 | 44.8/3.3/−18.5 → 44.6/3.2/−18.0 |
+| vine black | 51 54 56 | 29.2/0.9/2.9 → 28.8/1.0/2.9 | 42.8/−0.3/3.0 → 42.6/−0.2/3.1 |
+| bone black | 0 0 0 | 18.8/2.2/8.1 → 18.8/2.2/8.2 | 38.6/−0.1/4.8 → 38.6/−0.1/4.8 |
+
+On the tan sheet a heavy earth swatch reads its stick's own color to within 1–2 L\*. The
+laying (crumbs, coverage, K–M mixing, the veil, fixative) is not what pales it. Each of
+the stack's pastel switches was turned off in turn (`pastel-km-mix`, `fixative-index`,
+`wet-pastel`, `pastel-crumb-layer`, `crumb-area`, `dry-lakes`, `oil-k`,
+`relief-prefilter`, `seat-solver`, `pastel-current-heap`): burnt sienna stays at L\* 61
+on tan. Without `pastel-veil` it goes lighter (63.4), as it should. The stick is the
+cause: `dry::spectral_color` of the earth tubes.
+
+**Diagnosis [C].** The rule keeps a tube's oil K and raises its S into air (n ≥ 1.9: the
+Mie air/oil ratio × its oil S). That needs K per volume, and these tables don't identify
+it. Burnt sienna, red earth, raw umber and the others are researched tubes: K comes from a
+Kremer gum-arabic colour-chart swatch (a single thin layer over printed grey fields)
+read as an assumed 100 µm oil film, and S from an estimated hiding (0.45 for burnt
+sienna; `scripts/pigment_data/researched-tubes.json`). A thin swatch read as an opaque
+film gives a K/S far too small: burnt sienna's dry K/S is 0.34 at 600 nm, where its
+powder's is 12. It is the lakes' fault again (§6).
+
+### 7.1 Measured powders and paints
+
+Cosentino 2014 FORS powders (Kremer pigments; `CSV/powder.csv`, SHA-256 86bb05f0…ae45),
+corrected from the instrument exactly as in §6.1 (black floor 0.04, rutile titanium white
+0.945 at 550–700 nm, lead white's shape), with L\* over the bounds (black 0.03–0.05 ×
+titanium white 0.90–0.99) [M/C]:
+
+| Powder (Kremer) | sRGB | L\*a\*b\* | L\* range |
+|---|---|---|---|
+| burnt sienna (40430) | 115 62 50 | 32.6/21.7/17.6 | 30.0–35.0 |
+| red ochre | 143 85 72 | 42.4/22.8/17.8 | 40.3–44.4 |
+| raw sienna | 180 126 70 | 57.3/15.1/38.6 | 55.5–59.0 |
+| yellow ochre | 211 158 90 | 68.8/12.3/42.9 | 67.1–70.5 |
+| raw umber | 104 76 57 | 34.8/9.4/16.1 | 32.3–37.1 |
+| burnt umber (no tube) | 86 58 43 | 27.3/10.3/14.4 | 24.2–30.1 |
+| viridian | 0 126 114 | 46.3/−36.9/−3.0 | 44.3–48.2 |
+| ultramarine | 106 129 177 | 54.0/4.3/−27.9 | 52.1–55.7 |
+| Prussian blue | 41 44 84 | 19.7/11.6/−25.2 | 14.7–23.6 |
+| vine black | 61 62 61 | 26.2/−0.6/0.6 | 22.9–29.0 |
+| bone black | 52 52 52 | 21.7/0.0/0.3 | 17.4–25.1 |
+
+**Manufacturer cross-check [M].** Golden Artist Colors publish CIE L\*a\*b\* for each
+colour (method not stated on the page): Fluid Acrylic Burnt Sienna (PBr7, calcined
+natural iron oxide) 33.96/17.64/14.17, Raw Umber (PBr7) 28.2/1.45/3.33. These are bound
+paints, so they bracket the powders from the dark side. Burnt sienna dry is about as deep
+as in a binder, as a high-index pigment should be (its air/oil S ratio is only 1.6, §2.2).
+
+**Pastel sticks.** No measured L\*a\*b\* or reflectance of full-strength soft pastel
+sticks was found: no manufacturer data, and no conservation paper with stick
+colorimetry. The pastel-fixative studies (Kindl & Brown 1990, the ICR/ISCR fixing
+experiments) report ΔE, not stick colours. A pure-pigment stick is the powder with a few
+per cent of gum (n 1.5, mostly in the necks between grains), so the powder is the
+nearest measured target. It is also what §6 fits.
+
+### 7.2 The rule (switch `--@ dry-earths`)
+
+For burnt sienna, red earth, raw sienna, yellow ochre, raw umber and viridian, as the
+catalog has them:
+- **S dry** is the Mie scattering of their particles in air at their index, on lead
+  white's dry scale (`dry::rule_scatter`: the rule for any pigment under n 1.9, here at
+  the table's 1 µm), not the oil table's estimated-hiding S.
+- **K dry** is the oil table's K times one factor (`dry::powder_k`), fitted so the pure
+  dry colour matches the corrected powder (ΔE76, `dry_earth_fit.py`).
+
+The oil tables stay as they are: what the switch moves is the dry colour of a pastel
+stick and of a sheet toned with those tubes. Paper presets keep theirs (their tone parts
+are read from a fresh catalog box without the switch).
+
+| Tube | n | dry before (sRGB, L\*a\*b\*) | ΔE | factor | dry after | ΔE | factor over the bounds |
+|---|---|---|---|---|---|---|---|
+| burnt sienna | 2.3 | 199 132 112 (61.5/23.2/21.6) | 29.2 | **31.71** | 115 65 55 (33.2/20.6/15.3) | 2.6 | 27.8–36.1 |
+| red earth | 2.7 | 211 129 108 (62.3/29.4/24.7) | 22.1 | **7.718** | 152 77 66 (41.7/30.4/20.5) | 8.1 | 6.4–9.2 |
+| raw sienna | 2.0 | 214 164 111 (71.0/12.0/34.5) | 14.7 | **10.08** | 172 127 78 (56.5/11.7/32.9) | 6.7 | 9.0–11.3 |
+| yellow ochre | 2.1 | 254 211 144 (86.9/6.2/38.8) | 19.5 | **2.087** | 243 183 102 (78.3/13.1/48.7) | 11.2 | 1.8–2.4 |
+| raw umber | 2.1 | 190 151 118 (65.2/10.1/22.9) | 31.1 | **16.49** | 102 78 56 (35.0/6.9/16.7) | 2.6 | 14.3–19.1 |
+| viridian | 1.8 | 87 174 163 (65.6/−28.7/−2.9) | 20.9 | **3.910** | 12 125 114 (47.0/−31.3/−1.9) | 5.7 | 3.5–4.4 |
+
+What is left is the oil tables' K *shape*, which one factor can't fix: red earth's a\* is
+too high (30 against 23), yellow ochre's b\* too high (49 against 43) and its L\* still
+9 too light. Keeping the rule's old S and fitting a factor on K alone (as dry-lakes)
+would give burnt sienna ×9.8 (ΔE 5.9), red earth ×4.9 (16.5), raw sienna ×3.0 (1.6),
+yellow ochre ×2.4 (14.7), raw umber ×9.8 (6.9). That is no better overall, and it keeps
+an S that rests on an estimated hiding, so the Mie S stands. At 550 nm the S per coat,
+Mie against the old: burnt sienna 4.8 against 0.76, red earth 5.3 against 2.1, raw
+sienna 4.8 against 1.0, yellow ochre 4.9 against 5.5, raw umber 4.9 against 1.7, and
+viridian 4.3, unchanged (it was already under n 1.9).
+
+Tints, 1:1 by volume with lead white, before → after (not measured): burnt sienna
+230 188 180 → 143 86 75; red earth 228 163 151 → 176 99 87; raw umber 213 186 166 →
+129 101 77; viridian 123 195 187 → 55 153 142. The painting's sticks: "hair" (burnt
+sienna 2, red earth 1, lead white 0.3) 210 140 122 → 128 71 61; "brown" (vine black 1,
+burnt sienna 1) 148 127 119 → 119 70 59.
+
+### 7.3 The check against hematite's absorption [C]
+
+Per volume of pigment K = 2μ_a and S = ¾σ′ (§2.1). On lead white's absolute scale, burnt
+sienna's S at 1 µm is ¾ × 0.89 µm⁻¹, so the fitted K at 550 nm is **4.0 µm⁻¹**
+(500/600/650 nm: 13.0, 2.3, 1.2). Pure hematite, k 0.0925 at 550 nm (Longtin et al. 1988,
+as tabled by Zhang et al., *ACP* 15:12159, 2015, table 2), has μ_a = 4πk/λ = 2.1 µm⁻¹, so
+K = 4.2 µm⁻¹. Querry's 1985 hematite k runs about twice as high, and is held to be too
+high (Zhang et al.; Meland et al. 2011). So at 1 µm grains the fit makes burnt sienna
+absorb as a bed of nearly pure hematite. Burnt sienna is hematite in clay. Its grains
+are larger than 1 µm, and σ′ at 3 µm is a quarter of its 1 µm value (table 2.2), so the
+same K/S needs proportionally less K. The 1 µm S is the upper end, and the K it implies is
+the most iron oxide could give. The paint test `dry_burnt_sienna_absorbs_no_more_than_hematite`
+holds it there. At 650 nm the fitted K (1.2) is more than hematite's (k 0.0097 at 633 nm
+gives 0.39). Burnt sienna's red is absorbed more than hematite's alone, perhaps by
+manganese oxide or by the powder's own lot, which is not resolved here.
+
+**Estimates left:**
+- the grain size (1 µm, the table's), which sets S per volume and so the tints with
+  white, not the pure sticks;
+- no measured tint of an earth with white, dry, was found to pin S;
+- the K shapes of red earth, yellow ochre and raw sienna (the oil tables');
+- CHSOS doesn't say which lots it measured. Red earth is matched to CHSOS's "red ochre";
+  the researched table's source is Kremer 40020, a washed French red ochre.
+
+**Not changed, for a later PR.**
+- Brown ochre, the Mars colours, Indian red, bone brown and bitumen have no powder in
+  the set.
+- Bone black's dry stick is R∞ ≈ 10⁻⁴ (sRGB 0 0 0), where its powder is L\* 21.7: too
+  dark. It is `carbon_ratio` × an oil K/S of near zero, and the facet reflection that
+  charcoal's beds have (`CarbonBed`) is missing.
+- Ultramarine dry is L\* 53 (powder 54) but over-saturated (b\* −52 against −28).
+- The earths' oil masstones rest on the same thin-swatch K/S. They may be as pale in
+  oil, but this switch doesn't touch oil.
+
+Sources for this section: Cosentino 2014 (as §6); Golden Artist Colors, Fluid Acrylic
+Burnt Sienna and Raw Umber product pages (goldenartistcolors.com, CIE L\*a\*b\* listed);
+X. L. Zhang et al., "What is the real role of iron oxides in the optical properties of
+dust aerosols?", *Atmos. Chem. Phys.* 15 (2015) 12159–12177, table 2 (hematite n, k at
+550 and 633 nm); Longtin, Shettle, Hummel & Pryce 1988 (via Zhang); Querry 1985, *Optical
+Constants*, US Army contractor report; Meland et al., *JQSRT* 112 (2011), hematite and
+goethite scattering at 470, 550, 660 nm; Kremer Pigmente 40430 Dark Burnt Sienna
+(PR101/102, calcined Italian earth). Computation: `dry_earth_fit.py` (this folder).
+
+---
+
 ## Sources
 
 - Feller (ed.) *Artists' Pigments* vol. 1 (1986); Roy vol. 2 (1993); FitzHugh vol. 3

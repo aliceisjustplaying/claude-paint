@@ -357,6 +357,37 @@ pub(crate) fn ceiling(sf: &crate::bristle::Surf, hide: &Prop, thinner: f32) -> O
     Some(um / crate::surface::COAT_UM)
 }
 
+/// The most wet film (coats) a clean blender's hairs may plough out of
+/// pixel `i` with `want` (coats) on their way: what its bed can't ride
+/// over. A clean blender (`Surf::blend`) brings no paint to the canvas; it
+/// slides through the paint there, whose rheology (its properties and its
+/// solvent) sets the film its bed leaves, the slider's outlet film
+/// `OUTLET` h₀ (`slider_m`). Where the wet film is thinner than that the
+/// bed rides on it and its hairs pass through it pushing none aside; where
+/// it is thicker they push out the excess and no more (notes/research/
+/// blender.md, "The ladder"). So a soft blender drawn lightly through tube paint
+/// (a 5 mm badger at 0.4 rides some 140 µm, more than a dense coat) pushes
+/// none up into ridges, while a hog's bed (a 5 mm filbert at 0.4 leaves
+/// about 50 µm) furrows the same paint. A bed pressing nothing pushes
+/// nothing. Any other stroke: `want`.
+///
+/// SAFETY: `i` is a pixel of `sf`'s buffer.
+#[inline]
+pub(crate) unsafe fn blend_plough(sf: &crate::bristle::Surf, i: usize, want: f32) -> f32 {
+    if !sf.blend {
+        return want;
+    }
+    let Some(pad) = sf.pad else { return want };
+    let v = unsafe { *sf.vol.add(i) };
+    let sol_um = if sf.solv.is_null() { 0.0 } else { unsafe { *sf.solv.add(i) } };
+    let liquid_um = v * crate::surface::COAT_UM + sol_um;
+    let thinner = if sol_um > 0.0 && liquid_um > 0.0 { sol_um / liquid_um } else { 0.0 };
+    let r = rheology(unsafe { &*sf.hide.add(i) }, thinner);
+    let Some(h0) = slider_m(r, &pad) else { return 0.0 };
+    let keep = OUTLET * h0 * 1e6 / crate::surface::COAT_UM;
+    want.min((v - keep).max(0.0))
+}
+
 /// The bed of a press (`Surf::bed`: a touch's tip, or a stroke's bed as its
 /// hairs lift): its mean pressure (Pa) and the film its gap holds (m), the
 /// paint pressed between the hairs and the canvas.

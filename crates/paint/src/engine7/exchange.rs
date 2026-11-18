@@ -614,7 +614,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 continue;
             }
             let v = *sf.vol.add(i);
-            let m = v * push_k * wt * fl;
+            // (a clean blender's bed pushes aside only what it can't ride
+            // over, `stroke_film::blend_plough`)
+            let m = crate::stroke_film::blend_plough(sf, i, v * push_k * wt * fl);
             if m <= 1e-6 {
                 continue;
             }

@@ -4398,4 +4398,45 @@ mod stroke_film_tests {
             }
         }
     }
+
+    /// A canvas `mm` across at `px_mm` pixels a millimetre, as a new
+    /// painting's is set up (a painting is 2400 px across: 12 px/mm on a
+    /// 200 mm canvas).
+    fn pitch_canvas(mm: f32, px_mm: f32) -> Canvas {
+        Canvas::new((mm * px_mm).round() as usize, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(mm).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true)
+    }
+
+    /// The stroke film's laws hold at a painting's pitch as at a coarse
+    /// one: a contact larger than engine 7's window ran the engine-5 kernel,
+    /// which has neither the press's split nor the gap. At 12 px/mm a 12 mm
+    /// filbert's hairs are some 8 pixels across with the plough's margin
+    /// past it, so a stroke laid well short of its law's film (30 µm of
+    /// 52 µm here) and a touch ran without the press's split. A stroke's
+    /// middle lays the film it lays at
+    /// 1 px/mm (within 20 %), no more than its law's, and a touch into a
+    /// thin wet film keeps its brush as clean.
+    #[test]
+    fn the_stroke_film_holds_at_a_paintings_pitch() {
+        let tool = Tool::filbert(120.0);
+        let red = || paint("#c02818", 0.9, 0.0);
+        let p = paint("#802010", 0.92, 0.0);
+        let law_um = film_um(rheology(&p.prop(), 0.0), &pad(&tool, 0.7, 0.1, 200.0));
+        let (r, g) = (held(tool.clone(), red(), 7).bristles[0].lat.clone(), held(tool.clone(), paint("#2a5a48", 0.9, 0.0), 7).bristles[0].lat.clone());
+        let lay = |px_mm: f32| {
+            let mut c = pitch_canvas(100.0, px_mm);
+            c.drag(&mut held(tool.clone(), p.clone(), 5), &steady(500.0, 0.7, 200.0), None);
+            // (past its start, short of its lift, `film`)
+            let middle = (400..=760).step_by(5).flat_map(|x| (-20..=20).step_by(5).map(move |dy| (x as f32, 500.0 + dy as f32))).map(|(x, y)| c.wet.vol[c.f.index(x, y)] * COAT_UM).fold(0.0f32, f32::max);
+            // a touch of red into a thin wet green
+            let mut c = pitch_canvas(100.0, px_mm);
+            c.drag(&mut held(Tool::hog_flat(300.0), paint("#2a5a48", 0.9, 0.5), 4), &steady(500.0, 0.8, 100.0), None);
+            let mut h = held(Tool { lay: 3.0, ..tool.clone() }, red(), 7);
+            c.touch(&mut h, &Touch::at(500.0, 500.0).pressure(0.8), None);
+            (middle, green_share(&h, &r, &g))
+        };
+        let (coarse, coarse_dirty) = lay(1.0);
+        let (fine, fine_dirty) = lay(12.0);
+        assert!(fine <= law_um * 1.0001 && fine > 0.8 * coarse && fine < 1.25 * coarse, "at 12 px/mm a stroke lays {fine} µm, at 1 px/mm {coarse} µm (its law {law_um} µm)");
+        assert!(fine_dirty < 0.02, "at 12 px/mm a touch into wet green took up {fine_dirty} of its paint (at 1 px/mm {coarse_dirty})");
+    }
 }

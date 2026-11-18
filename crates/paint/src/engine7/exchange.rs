@@ -152,8 +152,9 @@ pub(crate) unsafe fn exchange(
     bounds: &mut Bounds,
     lim: Rect,
 ) {
-    // (the capsule's rectangle is at most |b − a| + 2·rb + 4 pixels a side)
-    if ((b.0 - a.0).abs() + 2.0 * rb + 4.0) * ((b.1 - a.1).abs() + 2.0 * rb + 4.0) > window::CAPACITY as f32 {
+    // (the capsule's rectangle is at most |b − a| + 2·rb + 4 pixels a side;
+    // a contact of the stroke film's press or gap runs here at any size)
+    if !film_contact(&sf, dep) && ((b.0 - a.0).abs() + 2.0 * rb + 4.0) * ((b.1 - a.1).abs() + 2.0 * rb + 4.0) > window::CAPACITY as f32 {
         unsafe { crate::bristle::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim) };
         return;
     }
@@ -161,6 +162,21 @@ pub(crate) unsafe fn exchange(
     if window::with(|w| unsafe { contact(seg, bounds, w) }).is_none() {
         unsafe { crate::bristle::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim) };
     }
+}
+
+/// Whether a contact carries the stroke film's press (a touch's hairs, or a
+/// stroke's at its lift, `Surf::press`) or its gap (a stroke's hairs as they
+/// slide, `Surf::gap`). Such a contact runs this kernel whatever its size:
+/// the engine-5 kernel a larger contact falls back to has neither law, so a
+/// press at a painting's resolution (its hairs' contacts some 8 pixels
+/// across at 2400 px for a 12 mm brush, more than `window::CAPACITY` with
+/// the plough's margin) ran without its split (no debt over the wet film,
+/// its hairs taking up wet paint as a slide's do), and a slide without its
+/// gap, a 12 mm filbert's stroke laying a third of its law's film. The
+/// window's scratch grows to fit.
+#[inline]
+fn film_contact(sf: &Surf, dep: Option<f32>) -> bool {
+    !sf.laid.is_null() && ((sf.press && dep.is_some()) || sf.gap.is_some())
 }
 
 /// One ordered contact: pass 1 gathers the capsule's contact into `win`,
@@ -206,7 +222,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         // with the same kernel as the whole canvas)
         let pad = off as usize + 3;
         let (ex0, ey0, ex1, ey1) = (cx0.max(lim.0), cy0.max(lim.1), cx1.min(lim.2), cy1.min(lim.3));
-        if ex1 > ex0 && ey1 > ey0 && ((ex1 + pad).min(lim.2) - ex0.saturating_sub(pad).max(lim.0)) * ((ey1 + pad).min(lim.3) - ey0.saturating_sub(pad).max(lim.1)) > window::CAPACITY {
+        if !film_contact(sf, dep) && ex1 > ex0 && ey1 > ey0 && ((ex1 + pad).min(lim.2) - ex0.saturating_sub(pad).max(lim.0)) * ((ey1 + pad).min(lim.3) - ey0.saturating_sub(pad).max(lim.1)) > window::CAPACITY {
             return None;
         }
         let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));

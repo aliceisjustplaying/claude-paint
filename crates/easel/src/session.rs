@@ -2337,7 +2337,11 @@ mod tests {
     /// CIE L* of every pixel before and after the pass, and the change in
     /// red minus blue (of 255).
     fn under_a_pass(drawing: &str, pass: &str) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
-        let mut s = Session::with_box(400, box_for(None).unwrap()).unwrap();
+        under_a_pass_in(box_for(None).unwrap(), drawing, pass)
+    }
+
+    fn under_a_pass_in(tubes: paint::Palette, drawing: &str, pass: &str) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let mut s = Session::with_box(400, tubes).unwrap();
         s.run("canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 0.2}}, um=120, apply=\"knife\"}}}").unwrap();
         s.run(drawing).unwrap();
         s.run("wait(30*24*60)").unwrap();
@@ -2368,7 +2372,12 @@ mod tests {
     fn a_glaze_tints_the_drawing_under_it_and_keeps_it_legible() {
         let drawing = "work(mask(function(x, y) return math.floor(x / 100) % 2 == 0 and 1 or 0 end), {hand=\"body\", pile=pile{{\"bone black\", 1}, {\"raw umber\", 1}}, coverage=3, fill=true, clip=true, angle=1.5708, seed=5})";
         let glaze = "work(everywhere(), {hand=\"glaze\", pile=pile{{\"lead white\", 0.8}, {\"yellow ochre\", 0.55}, {\"vermilion\", 0.12}, {\"bone black\", 0.1}, medium=0.92}, coverage=1, angle=0.05, seed=491})";
-        let (l0, l1, warm) = under_a_pass(drawing, glaze);
+        // (its bars were set on films as fitted to Revigo's 100 µm gap: with the tube-volume
+        // switch every film is 3.1× as thick optically, and this pile's lead white over the
+        // black bars keeps about 0.63 of their contrast; lead_white_film.md)
+        let mut tubes = box_for(None).unwrap();
+        tubes.tube_volume = false;
+        let (l0, l1, warm) = under_a_pass_in(tubes, drawing, glaze);
         let mean = |v: &[f32], ix: &[usize]| ix.iter().map(|&i| v[i]).sum::<f32>() / ix.len() as f32;
         let (dark, light) = (bars(true), bars(false));
         let kept = (mean(&l1, &light) - mean(&l1, &dark)) / (mean(&l0, &light) - mean(&l0, &dark));

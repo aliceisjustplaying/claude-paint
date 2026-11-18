@@ -81,8 +81,8 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// Marks a painting whose tubes are their box's tube paint (`paint::Palette::tube_volume`):
 /// a tube whose engine-9 table is a measured Revigo paint tints with the pigment its own
-/// tube holds, and every film hides as much per micrometre as the Revigo films measured,
-/// which were half their applicator's 100 µm gap: every new painting. Only engine 9 has it
+/// tube holds, and every film hides as much per micrometre as measured films of lead white
+/// (the Revigo films were a third of their applicator's 100 µm gap): every new painting. Only engine 9 has it
 /// (below, the line changes nothing). A log without it replays as it was painted.
 pub const TUBE_VOLUME_MARK: &str = "--@ tube-volume";
 /// Marks a painting whose earths (burnt sienna, red earth, raw sienna, yellow ochre, raw

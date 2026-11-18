@@ -387,7 +387,7 @@ powder's is 12. It is the lakes' fault again (§6).
 ### 7.1 Measured powders and paints
 
 Cosentino 2014 FORS powders (Kremer pigments; `CSV/powder.csv`, SHA-256 86bb05f0…ae45),
-corrected from the instrument exactly as in §6.1 (black floor 0.04, rutile titanium white
+corrected from the instrument exactly as in §6.1 (black floor 0.04, now the measured 0.022: §9.1, rutile titanium white
 0.945 at 550–700 nm, lead white's shape), with L\* over the bounds (black 0.03–0.05 ×
 titanium white 0.90–0.99) [M/C]:
 
@@ -475,7 +475,7 @@ manganese oxide or by the powder's own lot, which is not resolved here.
 
 **Estimates left:**
 - the grain size (1 µm, the table's), which sets S per volume and so the tints with
-  white, not the pure sticks;
+  white, not the pure sticks (replaced by measured S per volume: §9);
 - no measured tint of an earth with white, dry, was found to pin S;
 - the K shapes of red earth, yellow ochre and raw sienna (the oil tables');
 - CHSOS doesn't say which lots it measured. Red earth is matched to CHSOS's "red ochre";
@@ -556,7 +556,7 @@ powders are vine black 20.3/−0.8/0.8, bone black 13.6/0.0/0.5 and burnt sienna
 | bone black | 0 0 0 (0.0/0.1/0.0) | 31 31 31 (11.6/0/0) | 21.7/0.0/0.3 (17.4–25.1) | 10.1 | 13.6/0.0/0.5 | 2.1 |
 
 The physics, the charcoal measurement and CHSOS's measured differences agree with each
-other. They don't agree with the 0.04 floor. **Open:** the floor sets every corrected
+other. They don't agree with the 0.04 floor (taken since: §9.1). **Open:** the floor sets every corrected
 powder, the earths' and the lakes' (§6, §7) as well as the blacks'. At 0.022 the dark
 earths' targets are about 4 L\* deeper (burnt sienna 28.5), so `powder_k` and
 `dye_loading` would be refitted. That is left to the lead (it moves #318's merged
@@ -695,7 +695,8 @@ With 3 µm grains the masstones stay where they are (the factor follows S) and t
 out at 46.2, 49.4 and 54.5 (`dry_colours_fit.py`). Kremer gives no size for 40430 or 40610.
 A measured tint, or a measured size, would settle it.
 
-**Estimates left:** the earths' 1 µm grains (as §7), which set their tints in oil and dry;
+**Estimates left:** the earths' 1 µm grains (as §7), which set their tints in oil and dry
+(replaced by their measured S: §9);
 the oil S takes the dry Mie S over the 1 µm air/oil ratio; the CHSOS floor (§8.2).
 
 Sources for this section: Cosentino 2014 and 2015 (*Int. J. Conserv. Sci.* 6:287–298,
@@ -710,6 +711,198 @@ doi:10.1080/00393630.2021.1940721 (Kremer smalt 60–120 µm); Kremer Pigmente, 
 (0–120 µm), 45800 Cobalt Violet dark; Formenti et al. 2014, *JGR Atmospheres*,
 doi:10.1002/2014JD021668 (goethite and hematite k after Bedidi & Cervelle 1993, *JGR*
 98:11941); Zhang et al. 2015 (as §7); Golden Artist Colors (as §7).
+
+## 9. The black floor measured, and the earths' scattering measured
+
+Computation: `earth_scatter_lbnl.py` (the measured scattering and the tint check),
+`dry_earth_fit.py` (the refit) and `dry_colours_fit.py` (the blacks, the oil earths),
+this folder. This section supersedes §7's and §8's floor of 0.04 and their 1 µm grains.
+
+### 9.1 The floor: 0.022
+
+The CHSOS correction's black floor is now the measured 0.022 (§8.2: juniper charcoal powder
+reflects 3.00 % at 550 nm, Lethuillier et al. 2022, and CHSOS's own differences between the
+blacks put vine black 0.0076 above their mean). The 0.04 came from §3's veil estimate, which
+#329 retired. The bounds are 0.013–0.031: from the Mie vine black (R∞ 0.021, §8.1) to the
+same 0.9 % above the charcoal. CHSOS's linseed-oil swatches keep a floor of 0.04: their
+blacks are glossy films, whose surface alone reflects 0.037 (Fresnel at n 1.48).
+
+The corrected powders at 0.022 (L\* over the bounds) [M/C]:
+
+| Powder (Kremer) | at 0.04 (§7.1) | at 0.022 | L\* range |
+|---|---|---|---|
+| burnt sienna | 32.6/21.7/17.6 | 28.4/25.7/24.0 | 25.5–31.0 |
+| red ochre | 42.4/22.8/17.8 | 39.8/25.1/20.7 | 37.6–41.8 |
+| raw sienna | 57.3/15.1/38.6 | 55.9/15.9/42.6 | 54.1–57.6 |
+| yellow ochre | 68.8/12.3/42.9 | 68.0/12.7/45.7 | 66.3–69.7 |
+| raw umber | 34.8/9.4/16.1 | 31.1/11.1/20.6 | 28.4–33.5 |
+| viridian | 46.3/−36.9/−3.0 | 44.1/−41.3/−3.3 | 42.1–46.0 |
+| vine black | 26.2/−0.6/0.6 | 20.1/−0.8/0.8 | 16.0–23.5 |
+| bone black | 21.7/0.0/0.3 | 13.3/0.0/0.5 | 6.2–18.2 |
+
+**The blacks.** Their rule (§8.1) has no fitted number, so it doesn't move: vine black dry
+16.1/0/0 is ΔE76 4.2 from its powder at 0.022, bone black 11.6/0/0 is 1.8 (10.1 and 10.1 at
+0.04).
+
+**A check on the floor [C].** At 0.022 the deepest bands of some powders fall below vine
+black's 0.028–0.031: burnt sienna 0.017 at 450 nm, Prussian blue 0.007 at 700 nm, burnt
+umber below 0.01. For Prussian blue (n 1.56, a facet reflecting ~5 %) that is physical.
+For burnt sienna it is physical only if its grains' surfaces are clay-like (n ~1.55–1.9)
+rather than hematite's (n ~3, whose facets reflect ~3× charcoal's). Natural earths are
+hematite crystallites of 30–100 nm in and on clay (Hradil et al. 2003), so it is
+plausible, but not shown.
+
+### 9.2 The earths' scattering, measured
+
+The earths' tints with white rest on how much their grains scatter per volume (§7.3, §8.6).
+#351 took that from Mie at an estimated 1 µm (number median, σ 0.5: a volume median of
+2.1 µm).
+
+**Measured grain sizes [M].** Reichert et al. 2025 (*Anal. Bioanal. Chem.* 417:4351, table
+3) sized Kremer pigments by laser diffraction (Malvern Mastersizer 2000LF, in ethanol, by
+volume): burnt umber 40710, peak 6.4 µm (range 0.2–42); yellow ochre 116421, 10.5 µm
+(0.2–76); Cremnitz white 46000, 3 µm (0.1–10). No size was found for burnt sienna 40430,
+raw sienna, red ochre, raw umber or viridian. Kremer's catalogue gives none; Natural
+Pigments rates its siennas only "medium". The siennas' grains are hematite or goethite
+crystallites of 30–100 nm held in clay (Hradil et al. 2003), so "the grain" is the
+agglomerate that laser diffraction sees.
+
+**These sizes can't pin S by themselves.** S per volume is carried by the fine tail (Mie σ′
+peaks near 0.3–0.5 µm), which laser diffraction resolves worst and which a peak and a range
+don't describe. Read as log-normal either side of the peak with the range's ends at 3σ,
+burnt umber 40710 gives burnt sienna (n 2.3) 0.30 µm⁻¹ in a binder of n 1.49. Read with the
+ends at 4σ it gives 0.18, and from its coarse side alone 0.11.
+
+**Measured scattering [M].** The LBNL Pigment Database (Levinson, Berdahl & Akbari, *Sol.
+Energy Mater. Sol. Cells* 89 (2005) 319–349 and 351–389) measured Liquitex acrylic films
+(binder n ≈ 1.49, fresh linseed 1.48) of burnt sienna B13, raw sienna B14 and raw umber B15
+(natural iron oxides, PBr 7). Each was measured as a masstone and as 1:4 and 1:9 tints by
+volume with titanium white W03, over a void, a white and a black ground, and inverted to K–M
+K and S with each film's measured thickness. The datafiles are encrypted, but the spectral
+charts are vector PDFs: `earth_scatter_lbnl.py` reads the curves back from their drawing
+paths, calibrated on the charts' tick marks. Its check: the read K and S, seen through the
+film's surface (Saunderson), give each opaque film's measured reflectance over black within
+0.009.
+
+| Earth (LBNL) | PVC | S per pigment volume, µm⁻¹: 450 / 550 / 650 / 700 nm | 550–700 mean | #351 (Mie, 1 µm) |
+|---|---|---|---|---|
+| burnt sienna B13 | 13.4 % | 0.064 / 0.118 / 0.186 / 0.139 | **0.185** | 0.417 |
+| raw sienna B14 | 20.1 % | 0.248 / 0.395 / 0.364 / 0.327 | **0.382** | 0.347 |
+| raw umber B15 | 10.9 % | 0.042 / 0.096 / 0.097 / 0.084 | **0.099** | 0.383 |
+
+**Mie's absolute scale, checked [M/C].** Two synthetic hematites with the maker's mean size
+(R03 0.27 µm at 2.6 % PVC, R02 0.30 µm at 8 %) scatter 2.8–5.3 µm⁻¹ per volume at 600–700 nm.
+Mie's ¾σ′(1−g) at those sizes gives 2.5–6.5, depending on the width assumed (σ 0.5–0.3). So
+the step from Mie to an absolute K–M S holds to within the size distribution. The natural
+earths scatter 10–40× less per volume than those fine hematites. That fits coarse
+agglomerates of lower effective index, not 1 µm hematite.
+
+### 9.3 The tints, checked against measured tints
+
+LBNL's tints check the S. Take each masstone's measured K/S, give it a candidate S per
+pigment volume (K scaled to keep K/S), and mix it by volume with the measured white by K–M.
+The result is compared with the measured tints' R∞ (internal), ΔE76 at 1:4 / 1:9 by volume:
+
+| S per volume | burnt sienna | raw sienna | raw umber |
+|---|---|---|---|
+| measured, spectral | 5.8 / 4.4 | 3.1 / 3.5 | 2.6 / 1.8 |
+| measured, 550–700 nm mean (**taken**) | 5.9 / 4.1 | 2.0 / 0.5 | 6.7 / 4.7 |
+| Mie at #351's 1 µm | 13.7 / 10.0 | 1.3 / 0.5 | 17.3 / 13.0 |
+| Mie at Kremer burnt umber's measured size (3σ ends) | 9.9 / 7.1 | 2.7 / 2.8 | 13.2 / 9.6 |
+| Mie at Kremer yellow ochre's measured size | 7.5 / 5.3 | 4.3 / 4.0 | 10.4 / 7.5 |
+
+The 1 µm grains made burnt sienna's and raw umber's tints too dark: L\* 80 against a
+measured 85 for burnt sienna at 1:4, and 81 against 89 for raw umber. Raw sienna's measured
+S is near the 1 µm value. The measured S reproduces the measured tints. The flat mean keeps
+the engine's way of giving an earth lead white's spectral shape of S. Raw umber's S falls
+in the blue (0.042 at 450 nm), which the flat mean misses (b\* 12.6 against 5.9 at 1:4).
+
+### 9.4 The rule now (`--@ dry-earths`, `--@ oil-earths`)
+
+An earth's S per pigment volume in oil is the measured 550–700 nm mean (`dry::earth_scatter`).
+It enters as a multiple of lead white's oil S, whose S per volume is the dry rule's scale
+(¾σ′ in oil at 1 µm, 0.347 µm⁻¹; that scale is the estimate left, §9.5). Dry, it is that
+times Mie's air/oil ratio at the grains' measured size: burnt umber 40710's for the siennas,
+umber and red earth, yellow ochre 116421's for yellow ochre. The ratio hardly depends on
+size: 1.67 against 1.57 at 1 µm for n 2.3, 2.35 against 1.90 for n 2.0. Red earth takes
+burnt sienna's S (both are hematite in clay; no red earth film was measured), and yellow
+ochre takes raw sienna's (both goethite in clay). These two are proxies. Viridian keeps Mie
+at 1 µm: no measurement was found.
+
+| Tube | S in oil (× lead white's) | dry | `powder_k` (was) | dry ΔE76 to powder (was, floor 0.04) | oil ΔE76 to CHSOS (was) |
+|---|---|---|---|---|---|
+| burnt sienna | 0.531 (1.201) | 0.886 | 16.79 (31.71) | 11.0 (2.6) | 17.0 (18.0) |
+| red earth | 0.531 (1.465) | 0.824 | 3.600 (7.718) | 5.0 (8.1) | 5.0 (5.6) |
+| raw sienna | 1.099 (1.000) | 2.581 | 15.19 (10.08) | 10.5 (6.7) | 9.9 (8.4) |
+| yellow ochre | 1.099 (1.101) | 2.350 | 3.137 (2.087) | 10.3 (11.2) | 21.3 (22.5) |
+| raw umber | 0.286 (1.101) | 0.553 | 5.620 (16.49) | 6.4 (2.6) | 9.6 (10.2) |
+| viridian | 0.573 (0.573) | 1.710 | 4.298 (3.910) | 10.4 (5.7) | 7.1 (6.8) |
+
+(Oil ΔE: the engine's pile, gloss excluded, against CHSOS's linseed swatches less their
+4 % specular, as the paint test has them. "Was" is #351's: dry from §7.2's fit, oil its
+test's tolerances less their 2.)
+
+The pure sticks' larger ΔEs come from the floor, not the S: one factor on K takes up any S
+scale exactly. At 0.022 the powders are more saturated (burnt sienna C\* 35 against 28) than
+the oil tables' K shape reaches with one factor. Burnt sienna's stick is now L\* 31.4 against
+28.4, but a\*/b\* 20/15 against 26/24. That is §8.5's shape problem, now larger.
+
+**K against hematite [C].** K per volume = K/S × the measured S dry. Burnt sienna's at
+550 nm is 2.1 µm⁻¹, half a pure hematite bed's 4.2 (k 0.0925). With 1 µm grains (§7.3) it
+had needed all of it. Red earth comes to 34 %, raw umber 19 % (with manganese oxide), raw
+sienna 21 % and yellow ochre 3 % (goethite absorbs less than hematite at 550 nm). These are
+plausible for iron oxide in clay. The paint test is `dry_burnt_sienna_absorbs_as_hematite_in_clay`.
+
+**Tints, 1:1 by volume with lead white**, R∞ in oil (`dry_colours_fit.py`), #351 → now:
+burnt sienna 35.1 → 38.9 L\*, red earth 43.7 → 47.7, raw umber 36.1 → 44.5, raw sienna 57.2
+→ 52.2, yellow ochre 78.9 → 75.6, viridian 45.8 → 44.4. The masstones went deeper with the
+floor (burnt sienna 27.1 → 24.8), which takes back part of the lightening. In the engine's
+pile (gloss excluded), burnt sienna 1:1 is L\* 28.2 over a masstone of 16.5. Dry, 1:1 burnt
+sienna with lead white goes from #351's 143 86 75 (L\* 42) to 155 97 86 (L\* 47.4).
+
+These are not checked against a measured tint *with lead white*: none was found. LBNL's
+white is titanium white, about 8× lead white's S per volume. The check (§9.3) is of the
+earths' S per volume against LBNL's measured tints. The paint test
+`earth_tints_follow_from_their_measured_scattering` holds the engine's S there: each
+measured tint's R∞ within 0.06 at 550, 600 and 650 nm.
+
+### 9.5 Estimates left
+
+- Lead white's S per volume, the scale all of these are multiples of: Mie at 1 µm (0.347
+  µm⁻¹ in oil). Kremer's Cremnitz white measures 3 µm (0.1–10), and Mie at that size gives
+  0.50, or less depending on the tail. No absolute measured S of lead white in oil was
+  found. If it is larger, every earth's tint with lead white is lighter in proportion.
+- The LBNL earths are Liquitex's, not CHSOS's Kremer lots. Their S stands in for Kremer's.
+- Red earth's and yellow ochre's S are proxies (burnt sienna's and raw sienna's). Viridian's
+  is Mie at 1 µm.
+- The flat 550–700 nm S. The measured S falls in the blue (burnt sienna 0.064 at 450 nm),
+  which the engine's lead-white shape doesn't follow.
+- The non-additivity seen in LBNL's tints: an earth's K in a tint is 1.6–2× its masstone K
+  per volume (dispersion). K–M with the measured masstone S still lands within ΔE 2–6.
+
+### 9.6 #318's dye lakes at the floor 0.022
+
+#318's `dye_loading` (fork/fix/dry-lake-color, `dry_lake_fit.py`) was fitted against the
+same correction at 0.04. Rerun at 0.022 (bounds 0.012–0.032), with nothing else changed:
+
+| Lake | target at 0.04 → 0.022 | loading 0.04 → 0.022 | fit ΔE76 | over the bounds |
+|---|---|---|---|---|
+| rose madder | 54.5/24.6/8.8 → 52.9/26.0/9.4 | 35.7 → **40.5** (+13 %) | 5.0 → 5.3 | 38.1–46.3 |
+| carmine lake | 30.7/41.0/7.7 → 26.1/48.6/10.1 | 3.01 → **3.97** (+32 %) | 9.9 → 4.8 | 3.25–4.52 |
+| yellow lake | 66.1/2.9/41.9 → 65.1/3.1/45.0 | 12.2 → **13.7** (+12 %) | 3.5 → 3.1 | 12.0–15.5 |
+| magenta | dye chemistry, no powder | 6.26, unchanged | — | — |
+
+Sources for this section: Lethuillier et al. 2022 (as §8); Levinson, Berdahl & Akbari,
+"Solar spectral optical properties of pigments", Parts I and II, *Sol. Energy Mater. Sol.
+Cells* 89 (2005) 319–349, 351–389, and the LBNL Pigment Database spectral charts B13, B14,
+B15, R02, R03 and W03 (https://coolcolors.lbl.gov/LBNL-Pigment-Database/, SHA-256 in the
+script); A. S. Reichert et al., "Database of DRIFTS and HSI spectra of pigments and dyes
+for historical document analysis", *Anal. Bioanal. Chem.* 417 (2025) 4351–4372,
+doi:10.1007/s00216-025-05948-3, table 3; D. Hradil, T. Grygar, J. Hradilová & P. Bezdička,
+"Clay and iron oxide pigments in the history of painting", *Appl. Clay Sci.* 22 (2003)
+223–236 (iron oxide crystallites 30–100 nm in natural ochres); Zhang et al. 2015 and Longtin
+et al. 1988 (hematite k, as §7.3); Natural Pigments, Italian Burnt Sienna (particle size
+"medium", oil absorption 45–55 g/100 g for its Ardennes burnt sienna).
 
 ---
 

@@ -22,16 +22,24 @@ Inputs (as dry_lake_fit.py):
   uv run notes/research/dry_earth_fit.py <repo root> <CSV dir> <tubes.json>
 
 The steps:
-1. The powders are corrected from the instrument exactly as dry_lake_fit.py does (black
-   floor 0.04 from a carbon black powder's total reflectance, gain from rutile titanium
-   white's 0.945 at 550-700 nm, lead white's shape), with L* over the bounds.
-2. S dry is the Mie scattering of the particles in air at the tube's index, on lead
-   white's dry scale (dry.rs `rule_scatter`, the rule for any pigment under n 1.9), at the
-   table's 1 um.
+1. The powders are corrected from the instrument as dry_lake_fit.py does (gain from rutile
+   titanium white's 0.945 at 550-700 nm, lead white's shape), but with the black floor
+   measured: 0.022, what CHSOS's vine black reads less its measured difference from the
+   blacks' mean if it reflects as charcoal powder does (3.00 % at 550 nm, Lethuillier et al.
+   2022; dry_colours_fit.py step 2), in place of #318's 0.04 from a retired veil estimate.
+   L* over the bounds 0.013-0.031 (the Mie vine black, 2.1 %, to 0.9 % above the charcoal).
+2. S dry is what the earth's grains scatter in oil, measured (dry.rs `earth_scatter`,
+   earth_scatter_lbnl.py: LBNL's acrylic films of burnt sienna, raw sienna and raw umber,
+   their S per pigment volume at 550-700 nm), on lead white's scale (its S per volume in oil
+   the Mie 3/4 sigma'(2.0) at 1 um, as `rule_scatter` has it), times Mie's air/oil ratio at
+   the grains' measured size (Kremer's earths, laser diffraction). Red earth takes burnt
+   sienna's S and yellow ochre raw sienna's (no film of either was measured). Viridian keeps
+   the rule's Mie S at 1 um (no measurement found).
 3. One factor on the oil table's K per volume is fitted so the pure dry colour matches the
    corrected powder's CIELAB (dE76).
-4. The check against physics: the K per volume the fit gives, in um^-1 (S on lead white's
-   absolute scale, 0.75 sigma'), against the iron oxide's own absorption coefficient.
+4. The check against physics: the K per volume the fit gives, in um^-1 (K/S times the
+   measured S per volume dry, the oil S times the air/oil ratio), against the iron oxide's
+   own absorption coefficient: the hematite it takes, by volume.
 """
 import ast
 import csv
@@ -45,7 +53,7 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 
 SHA256 = {"powder.csv": "86bb05f002d64ad5aa0a1f66c7226f18b62824e77d3aa3e4e2a2aee3f0efae45"}
-BLACK_TRUE = (0.03, 0.04, 0.05)
+BLACK_TRUE = (0.013, 0.022, 0.031)
 TITANIUM_TRUE = (0.90, 0.945, 0.99)
 # tube -> CHSOS powder (Kremer pigments)
 EARTHS = {"burnt sienna": "burntsienna", "red earth": "redochre", "raw sienna": "rawsienna",
@@ -137,13 +145,28 @@ def rule_s(n):
     return RATIO_WHITE * WHITE_S * mie(n)[0] / SIGMA_WHITE
 
 
+# dry.rs `earth_scatter`: S per pigment volume in oil (um^-1, measured) and the Mie air/oil ratio
+# at the measured grain size (earth_scatter_lbnl.py)
+EARTH_SCATTER = {"burnt sienna": (0.1845, 1.669), "red earth": (0.1845, 1.551), "raw sienna": (0.3817, 2.349),
+                 "yellow ochre": (0.3817, 2.139), "raw umber": (0.0993, 1.936)}
+WHITE_S_VOL = 0.75 * SIGMA_WHITE / RATIO_WHITE   # lead white's S per volume in oil on the rule's scale
+
+
+def earth_s(name, medium="air"):
+    """S per coat of an earth's grains with the switch, dry (air) or in oil."""
+    if name not in EARTH_SCATTER:
+        return rule_s(tubes[name]["n"]) if medium == "air" else rule_s(tubes[name]["n"]) / mie(tubes[name]["n"])[1]
+    s, ratio = EARTH_SCATTER[name]
+    return WHITE_S * s / WHITE_S_VOL * (ratio if medium == "air" else 1.0)
+
+
 def part_ks(name, factor=None):
     """(K, S) per coat of one tube dry: the engine's rule (dry.rs `spectral_color`), or with the
     switch, its K times `factor` over the Mie S at its index (`rule_scatter`)."""
     t = tubes[name]
     k, s, n = np.array(t["k"]), np.array(t["s"]), t["n"]
     if factor is not None:
-        return k * factor, rule_s(n)
+        return k * factor, earth_s(name)
     if n < 0:
         return k, -n * s
     sigma, ratio = mie(n)
@@ -165,28 +188,28 @@ def fit(tube, target_lab):
     return float(np.exp(r.x)), float(r.fun)
 
 
-print("1. the corrected powders (black 0.04, titanium white 0.945): sRGB (L*a*b*), L* over the bounds")
+print("1. the corrected powders (black 0.022, titanium white 0.945): sRGB (L*a*b*), L* over the bounds")
 for tube, powder in {**EARTHS, **CONTEXT}.items():
     ls = [lab(corrected(powder, b, t))[0] for b in BLACK_TRUE for t in TITANIUM_TRUE]
     print(f"  {tube:16s} {powder:13s} {fmt(corrected(powder))}  L* {min(ls):.1f}-{max(ls):.1f}")
 
-print("\n2-3. the factor on K, S the Mie rule at the tube's index (1 um); dE76 to the powder")
+print("\n2-3. the factor on K, S the measured S (dry); dE76 to the powder")
 print(f"  {'tube':16s} {'n':>4s}  {'engine dry now':26s} dE  {'factor':>7s}  {'with it':26s} dE   factor over the bounds")
 FACTORS = {}
 for tube, powder in EARTHS.items():
     target = lab(corrected(powder))
     a, de = fit(tube, target)
     FACTORS[tube] = a
-    lo_hi = [fit(tube, lab(corrected(powder, b, t)))[0] for b in (0.03, 0.05) for t in (0.90, 0.99)]
+    lo_hi = [fit(tube, lab(corrected(powder, b, t)))[0] for b in (BLACK_TRUE[0], BLACK_TRUE[2]) for t in (0.90, 0.99)]
     now = dry([(tube, 1)])
     print(f"  {tube:16s} {tubes[tube]['n']:4.2f}  {fmt(now):26s} {np.linalg.norm(lab(now) - target):4.1f} {a:8.3f}  "
           f"{fmt(dry([(tube, 1)], {tube: a})):26s} {de:4.1f}  {min(lo_hi):.3f}-{max(lo_hi):.3f}")
 
-print("\n   the S the switch takes against the rule's now (n >= 1.9: the Mie air/oil ratio x the oil table's S"
-      " from an estimated hiding), at 550 nm:")
+print("\n   the S dry the switch takes, against #351's (Mie at 1 um) and the rule's without it, at 550 nm:")
 i550 = list(NM).index(550)
 for tube in EARTHS:
-    print(f"  {tube:16s} Mie rule {rule_s(tubes[tube]['n'])[i550]:.4f}   now {part_ks(tube)[1][i550]:.4f}   per coat")
+    print(f"  {tube:16s} measured {earth_s(tube)[i550]:.4f}   #351 {rule_s(tubes[tube]['n'])[i550]:.4f}   "
+          f"no switch {part_ks(tube)[1][i550]:.4f}   per coat")
 
 print("\n   for the record, the same fit keeping the rule's S now (a factor on K alone, as dry-lakes):")
 for tube, powder in EARTHS.items():
@@ -208,15 +231,16 @@ for label, parts in {"hair: burnt sienna 2, red earth 1, lead white 0.3": [("bur
     p = [(n, c / tot) for n, c in parts]
     print(f"  {label:52s} {fmt(dry(p))} -> {fmt(dry(p, FACTORS))}")
 
-print("\n4. the check against the iron oxides' absorption: K per volume (um^-1) = K/S x S, S = 0.75 sigma'(n)")
+print("\n4. the check against the iron oxides' absorption: K per volume (um^-1) = K/S x S, S dry per volume")
+print("   the measured oil S x the air/oil ratio; hematite (k 0.0925 at 550 nm) has K = 2 x 4 pi k / lambda = 4.23")
 # hematite: its absorption coefficient alpha = 4 pi k / lambda; K = 2 alpha (diffuse) per volume of oxide
+K_HEMATITE = 2 * 4 * np.pi * 0.0925 / 0.55
 for tube in ("burnt sienna", "red earth", "raw umber", "yellow ochre", "raw sienna"):
-    n = tubes[tube]["n"]
-    s_abs = 0.75 * mie(n)[0]
+    s_vol, ratio = EARTH_SCATTER[tube]
     k, s = part_ks(tube, FACTORS[tube])
-    kv = k / s * s_abs
+    kv = k / s * s_vol * ratio
     print(f"  {tube:16s} K/S at 500/550/600/650 nm {np.round((k / s)[[12, 17, 22, 27]], 2)}   "
-          f"K um^-1 {np.round(kv[[12, 17, 22, 27]], 2)}")
+          f"K um^-1 {np.round(kv[[12, 17, 22, 27]], 2)}   at 550 nm as hematite by volume {kv[17] / K_HEMATITE:.0%}")
 for tube in ("burnt sienna", "red earth"):
     k0, s0 = part_ks(tube)
     print(f"  {tube:16s} K/S now at 500/550/600/650 nm {np.round((k0 / s0)[[12, 17, 22, 27]], 3)}")

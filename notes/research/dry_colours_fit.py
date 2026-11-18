@@ -23,11 +23,12 @@ Steps:
    the oil table's S. Vine black: charred wood (Jager et al. 1998's cellulose chars, the
    500 C mean), 3 um. Bone black: hydroxyapatite with 10 wt% carbon (CAMEO), the carbon
    spread through the grain (Bruggeman), grains 3-15 um (Rublev's bone black; median 7).
-2. The black floor of the powders' correction. dry_earth_fit.py takes the four carbon
-   blacks' mean as 0.04 (0.03-0.05), from §3's veil estimate. An absolute measurement of
-   charcoal powder (Lethuillier et al. 2022, MNRAS, doi:10.1093/mnras/stac1734,
-   arXiv:2110.05832, table 4: sieved juniper charcoal, albedo 3.00 % at 550 nm from its
-   reflectance factor, normal illumination) and step 1's physics both put it lower.
+2. The black floor of the powders' correction. #351 took the four carbon blacks' mean as
+   0.04 (0.03-0.05), from §3's veil estimate. An absolute measurement of charcoal powder
+   (Lethuillier et al. 2022, MNRAS, doi:10.1093/mnras/stac1734, arXiv:2110.05832, table 4:
+   sieved juniper charcoal, albedo 3.00 % at 550 nm from its reflectance factor, normal
+   illumination) and step 1's physics both put it lower: 0.022, which every correction here
+   now takes (bounds 0.013-0.031, from the Mie vine black to the charcoal's 0.9 % above).
 3. Ultramarine: CHSOS's powder is natural ultramarine (Kremer 10510, Cosentino 2015,
    IJCS 6:287, table 1); the engine's tube is synthetic. Their K/S shapes, against the
    gum-arabic swatch measured with the 45/45 probe.
@@ -35,9 +36,9 @@ Steps:
    size other than the rule's 1 um would do.
 5. The earths' shape errors: the causes tried.
 6. The oil earths: the same K per volume as dry (dry::powder_k times the table's), over
-   the scattering those grains have in oil (Mie: the dry rule's S over the air/oil ratio
-   at the tube's index), against CHSOS's linseed-oil swatches and Golden's published
-   masstones.
+   the scattering those grains have in oil (measured: dry.rs `earth_scatter`,
+   earth_scatter_lbnl.py), against CHSOS's linseed-oil swatches and Golden's published
+   masstones; their tints with lead white before and after.
 """
 import ast
 import csv
@@ -123,20 +124,24 @@ OIL = loader("linseed oil.csv")
 PROBE = loader("gum arabic refletion probe.csv")
 
 
-def correction(get, blacks):
+def correction(get, blacks, floor_true):
     black = np.mean([get(n) for n in blacks], axis=0)
     lead, ti = get("leadwhite"), get("titaniumwhite")
 
-    def corrected(name, black_true=0.04, ti_true=0.945):
+    def corrected(name, black_true=floor_true, ti_true=0.945):
         lead_true = black_true + (ti_true - black_true) * (lead - black)[FLAT].mean() / (ti - black)[FLAT].mean()
         return black_true + (get(name) - black) * (lead_true - black_true) / (lead - black)
     return corrected, black
 
 
-powder, BLACK = correction(POWDER, ("ivoryblack", "vineblack", "boneblack", "lampblack"))
+# the powders' black floor: 0.022, the measured one (step 2); #351 took 0.04 from a retired
+# veil estimate. The oil swatches' blacks are glossy films: their floor is their surface's
+# reflection (Fresnel at n 1.48, 0.037) and a little diffuse light, 0.04 as before.
+FLOOR, FLOOR_BOUNDS, OIL_FLOOR = 0.022, (0.013, 0.031), 0.04
+powder, BLACK = correction(POWDER, ("ivoryblack", "vineblack", "boneblack", "lampblack"), FLOOR)
 # CHSOS's linseed-oil lamp black column is misnamed "lampblaxk"; its Van Dyke brown is a
 # second wavelength column. The oil blacks' floor is taken from the three named ones.
-oil_swatch, _ = correction(OIL, ("ivoryblack", "vineblack", "boneblack"))
+oil_swatch, _ = correction(OIL, ("ivoryblack", "vineblack", "boneblack"), OIL_FLOOR)
 
 
 def saunderson_inverse(rm, k1=0.04, k2=0.6):
@@ -183,16 +188,29 @@ def engine_dry(name):
     return km(k / (ratio * s if n >= 1.9 else rule_s(n)))
 
 
-POWDER_K = {"burnt sienna": 31.71, "red earth": 7.718, "raw sienna": 10.08, "yellow ochre": 2.087,
-            "raw umber": 16.49, "viridian": 3.910}
+POWDER_K = {"burnt sienna": 16.79, "red earth": 3.600, "raw sienna": 15.19, "yellow ochre": 3.137,
+            "raw umber": 5.620, "viridian": 4.298}
+# dry.rs `earth_grains`: S per pigment volume in oil (um^-1, LBNL's films) and the Mie air/oil
+# ratio at the measured grain size (earth_scatter_lbnl.py); viridian keeps Mie at 1 um
+EARTH_SCATTER = {"burnt sienna": (0.1845, 1.669), "red earth": (0.1845, 1.551), "raw sienna": (0.3817, 2.349),
+                 "yellow ochre": (0.3817, 2.139), "raw umber": (0.0993, 1.936)}
 CHSOS = {"burnt sienna": "burntsienna", "red earth": "redochre", "raw sienna": "rawsienna",
          "yellow ochre": "yellowochre", "raw umber": "rawumber", "viridian": "viridian"}
 
 
+def earth_s(name, medium="air"):
+    """dry.rs `earth_scatter`: S per coat of a switched earth's grains, dry or in oil."""
+    n = tubes[name]["n"]
+    if name not in EARTH_SCATTER:
+        return rule_s(n) if medium == "air" else rule_s(n) / mie(n)[1]
+    s, ratio = EARTH_SCATTER[name]
+    return WHITE_S * s / (0.75 * SIGMA_WHITE / RATIO_WHITE) * (ratio if medium == "air" else 1.0)
+
+
 def switched_dry(name):
-    """With #351's dry-earths: K times powder_k over the Mie S at the tube's index."""
+    """With dry-earths: K times powder_k over the grains' measured S dry."""
     t = tubes[name]
-    return km(np.array(t["k"]) * POWDER_K[name] / rule_s(t["n"]))
+    return km(np.array(t["k"]) * POWDER_K[name] / earth_s(name))
 
 
 # ---------------------------------------------------------------- 1. the blacks
@@ -259,7 +277,7 @@ print("               bone at 3/15 um", [round(black_ratio(BLACKS['bone black'][
 # ------------------------------------------------- 2. the powders' black floor
 print("\n2. the correction's black floor")
 raw = {n: POWDER(n)[FLAT].mean() for n in ("ivoryblack", "vineblack", "boneblack", "lampblack")}
-gain = (powder("leadwhite") - 0.04)[FLAT].mean() / (POWDER("leadwhite") - BLACK)[FLAT].mean()
+gain = (powder("leadwhite", 0.04) - 0.04)[FLAT].mean() / (POWDER("leadwhite") - BLACK)[FLAT].mean()
 print("  raw sphere readings 550-700 nm:", {k: round(v, 4) for k, v in raw.items()}, f"(gain to true {gain:.3f})")
 print("  measured differences from the four blacks' mean (true units):",
       {k: round((v - BLACK[FLAT].mean()) * gain, 4) for k, v in raw.items()})
@@ -271,10 +289,10 @@ for bt in (0.04, floor):
           f"burnt sienna {fmt(powder('burntsienna', bt))}")
 for name, (_, _, col) in BLACKS.items():
     r = km(np.array(1 / RATIO[name])) * np.ones(38)
-    print(f"  {name:11s} physics {fmt(r)}: dE {de(r, powder(col)):.1f} to the repo's correction (floor 0.04, L* bounds "
-          f"{min(lab(powder(col, b, t))[0] for b in (0.03, 0.05) for t in (0.90, 0.99)):.1f}-"
-          f"{max(lab(powder(col, b, t))[0] for b in (0.03, 0.05) for t in (0.90, 0.99)):.1f}), "
-          f"{de(r, powder(col, floor)):.1f} at the charcoal floor {floor:.3f}")
+    print(f"  {name:11s} physics {fmt(r)}: dE {de(r, powder(col, 0.04)):.1f} to #351's correction (floor 0.04), "
+          f"{de(r, powder(col)):.1f} at the floor taken, {FLOOR} (powder {fmt(powder(col))}, L* bounds "
+          f"{min(lab(powder(col, b, t))[0] for b in FLOOR_BOUNDS for t in (0.90, 0.99)):.1f}-"
+          f"{max(lab(powder(col, b, t))[0] for b in FLOOR_BOUNDS for t in (0.90, 0.99)):.1f})")
 
 # ------------------------------------------------------------ 3. ultramarine
 print("\n3. ultramarine: CHSOS's powder is natural (Kremer 10510); the engine's tube is synthetic")
@@ -321,15 +339,14 @@ print("  yellow ochre 600-700 nm: switch", np.round(switched_dry("yellow ochre")
       "- K there is the thin swatch's, near nothing")
 
 # ---------------------------------------------------------- 6. the oil earths
-print("\n6. the oil earths: one K per volume (the table's x powder_k), oil S = the dry rule's Mie S / the air-oil ratio")
+print("\n6. the oil earths: one K per volume (the table's x powder_k), oil S the grains' measured S per volume")
 print("   R-inf (internal) and, as a sphere sees a glossy film, Saunderson (k1 0.04, k2 0.6)")
 SF = {}
 for name, a in POWDER_K.items():
     t = tubes[name]
     n = t["n"]
-    sigma, ratio = mie(n)
-    s_oil = rule_s(n) / ratio
-    SF[name] = RATIO_WHITE * sigma / SIGMA_WHITE / ratio
+    s_oil = earth_s(name, "oil")
+    SF[name] = float((s_oil / WHITE_S)[0])
     old = km(np.array(t["k"]) / np.array(t["s"]))
     new = km(np.array(t["k"]) * a / s_oil)
     meas = saunderson_inverse(oil_swatch(CHSOS[name]))
@@ -340,24 +357,20 @@ print("  the engine shows a pile with the gloss excluded (mixer.rs `outside`); C
 print("  reading less the film's 4 % specular), for the paint test:")
 for name in POWDER_K:
     print(f"    {name:12s} {fmt(oil_swatch(CHSOS[name]) - 0.04)}")
-print("  tints 1:1 by volume with lead white, R-inf in oil (not measured: no earth tint was found).")
-print("  They rest on the grains' 1 um (§7.3): grains of 3 um scatter ~0.27x as much, and the same")
-print("  masstone then needs ~0.27x the K, so the tint is lighter:")
+print("  tints 1:1 by volume with lead white, R-inf in oil: #351 (Mie at 1 um, floor 0.04) -> now (the grains'")
+print("  measured S, floor 0.022). LBNL's measured tints with titanium white check the S (earth_scatter_lbnl.py).")
 WHITE_K = np.array(tubes["lead white"]["k"])
-for name in ("burnt sienna", "raw umber", "red earth"):
+OLD_K = {"burnt sienna": 31.71, "red earth": 7.718, "raw sienna": 10.08, "yellow ochre": 2.087, "raw umber": 16.49, "viridian": 3.910}
+for name in POWDER_K:
     t = tubes[name]
     n = t["n"]
-    sigma, ratio = mie(n)
-    s1, _ = mie_mod.sizeavg(n, 1.0, 1.0)
-    s3, _ = mie_mod.sizeavg(n, 1.0, 3.0)
+    old_s = rule_s(n) / mie(n)[1]
     row = []
-    for size in (1.0, s3 / s1):
-        k = np.array(t["k"]) * POWDER_K[name] * size
-        s_oil = rule_s(n) * size / ratio
-        row.append(fmt(km((k + WHITE_K) / (s_oil + WHITE_S))))
-    print(f"    {name:12s} 1 um {row[0]}   3 um {row[1]}")
+    for k, s_oil in ((np.array(t["k"]) * OLD_K[name], old_s), (np.array(t["k"]) * POWDER_K[name], earth_s(name, "oil"))):
+        row.append(f"masstone {fmt(km(k / s_oil))} 1:1 {fmt(km((k + WHITE_K) / (s_oil + WHITE_S)))}")
+    print(f"    {name:12s} {row[0]}  ->  {row[1]}")
 
-print("\nfor mixer.rs OIL_EARTHS (tube, K factor, oil S as a multiple of lead white's oil S):")
+print("\nfor mixer.rs OIL_EARTHS (tube, K factor, oil S as a multiple of lead white's oil S, dry.rs `earth_scatter`):")
 for name, a in POWDER_K.items():
     print(f'    ("{name}", {a}, {SF[name]:.5f}),')
 print("for dry.rs carbon_bed (S/K of the grains in air):")

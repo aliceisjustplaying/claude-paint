@@ -472,6 +472,17 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     let land = (d - pay).min((cap - used.max(0.0)).max(0.0));
                     *sf.laid_id.add(i) = id;
                     *sf.laid.add(i) = used + pay + land;
+                    // With the stroke film the ceiling caps how thick the
+                    // film is, not where it lies: a pointed tip's loaded hair
+                    // passing over the film already at its ceiling wets its
+                    // own track in it, so the film covers that share of the
+                    // pixel too (without this a fine line's later hairs
+                    // laid nothing and added no cover, and it stayed a
+                    // broken, pale trace).
+                    if fine && law.is_some() && land <= 0.0 && d > 0.0 && *sf.vol.add(i) > 1e-6 {
+                        let cv = &mut *sf.cover.add(i);
+                        *cv = (*cv + wt * excl).min(1.0);
+                    }
                     d = land;
                 }
                 if d > 0.0 {

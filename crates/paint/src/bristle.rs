@@ -358,6 +358,16 @@ pub(crate) struct Bristle {
     pub(crate) solvent: f32,
 }
 
+impl Bristle {
+    /// Whether what the hair carries is paint: its volume and solvent
+    /// neither negative nor infinite, and its color, properties and cure
+    /// numbers. (Debug builds assert it after every exchange of a hair that
+    /// carried paint, so a bad value fails at the exchange that made it.)
+    pub(crate) fn carries_paint(&self) -> bool {
+        self.vol.is_finite() && self.vol >= 0.0 && self.solvent.is_finite() && self.solvent >= 0.0 && self.cure.is_finite() && crate::engine7::add::laid_ok(self.vol, &self.lat.color, &self.hide)
+    }
+}
+
 /// A brush in the hand, with paint in its bristles. (`Debug` is part of
 /// `easel run --state-digest`: see its impl.)
 #[derive(Clone)]
@@ -878,7 +888,14 @@ impl Surf {
             let l = &mut *self.lat.add(i);
             let hd = &mut *self.hide.add(i);
             let t = *vol + v;
+            // (paint that rounds to nothing on a bare pixel lays nothing,
+            // as `engine7::add::Film::add`)
+            if t == 0.0 {
+                return crate::engine7::add::bare(if self.cure_now { self.dry } else { std::ptr::null_mut() }, i, vol);
+            }
             let a = v / t;
+            #[cfg(debug_assertions)]
+            let was_ok = crate::engine7::add::laid_ok(*vol, &l.color, hd) && v.is_finite() && crate::engine7::add::laid_ok(0.0, &lat.color, &hide);
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
@@ -896,6 +913,8 @@ impl Surf {
                 p.cure = if t < 1e-5 { 0.0 } else { p.cure + (cure - p.cure) * a };
             }
             *vol = t;
+            #[cfg(debug_assertions)]
+            debug_assert!(!was_ok || crate::engine7::add::laid_ok(t, &l.color, hd), "a brush laid paint into an invalid film at {i}: {t} of {hd:?}");
             // engine 4: an absorbent ground under the film draws oil out of
             // the paint just laid, until its pores are full: a thin wash goes
             // lean (stiff, matte, quick to set), thick paint barely notices.
@@ -1686,6 +1705,8 @@ pub(crate) unsafe fn exchange(
     lim: Rect,
 ) {
     unsafe {
+        // (debug builds: a hair that came carrying paint leaves carrying paint)
+        let mut hair_ok = cfg!(debug_assertions) && br.carries_paint();
         // pixel coordinates are whole-canvas ones; buffer index of (x, y) is
         // (y - oy) * bw + x - ox
         let (w, h) = (sf.fw, sf.fh);
@@ -1818,7 +1839,11 @@ pub(crate) unsafe fn exchange(
                 let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
                 let wt = match clip {
                     None => cov * smoothstep(th - give, th + 0.2, surf),
-                    Some(Clip::Mask(m)) => cov * smoothstep(th - give, th + 0.2, surf) * m.data[y * w + x],
+                    Some(Clip::Mask(m)) => {
+                        // (debug builds: a mask outside 0..1, as engine 7's)
+                        hair_ok &= !cfg!(debug_assertions) || (0.0..=1.0).contains(&m.data[y * w + x]);
+                        cov * smoothstep(th - give, th + 0.2, surf) * m.data[y * w + x]
+                    }
                     // past a fence the hairs lift off the weave's hollows
                     Some(c @ Clip::Fence { .. }) => {
                         let (k, lift) = c.at(y * w + x);
@@ -2127,6 +2152,7 @@ pub(crate) unsafe fn exchange(
             br.cure = mix_cure(br.cure, br.vol, got_c / got_v, got_v);
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
+        debug_assert!(!hair_ok || br.carries_paint(), "the exchange left a hair carrying invalid paint: {br:?}");
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }

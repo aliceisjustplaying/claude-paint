@@ -172,6 +172,8 @@ pub(crate) unsafe fn exchange(
 unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) -> Option<AcceptedTransfer> {
     unsafe {
         let SegmentInput { sf, bristle: br, tool, a, b, rb, reach, full, dep, excl, clip, stroke_id: id, limit: lim } = seg;
+        // (debug builds: a hair that came carrying paint leaves carrying paint)
+        let mut hair_ok = cfg!(debug_assertions) && br.carries_paint();
         let sf = &sf;
         let (w, h) = (sf.fw, sf.fh);
         let (ox, oy, bw_buf) = (sf.ox, sf.oy, sf.w);
@@ -320,7 +322,13 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let surf = (*sf.base.add(i) + 0.35 * v).min(1.5);
                 let wt = match clip {
                     None => cov * ramp(s_e0, s_inv, surf),
-                    Some(Clip::Mask(m)) => cov * ramp(s_e0, s_inv, surf) * m.data[y * w + x],
+                    Some(Clip::Mask(m)) => {
+                        // (debug builds: a mask outside 0..1 weighs the
+                        // contact beyond it, as engines before 9 take one,
+                        // and may make anything of the paint)
+                        hair_ok &= !cfg!(debug_assertions) || (0.0..=1.0).contains(&m.data[y * w + x]);
+                        cov * ramp(s_e0, s_inv, surf) * m.data[y * w + x]
+                    }
                     Some(c @ Clip::Fence { .. }) => {
                         let (k, lift) = c.at(y * w + x);
                         let wt = cov * ramp(s_e0 + lift, s_inv, surf) * k;
@@ -584,6 +592,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             br.cure = mix_cure(br.cure, br.vol, got[CURE] / got_v, got_v);
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
+        debug_assert!(!hair_ok || br.carries_paint(), "engine 7's exchange left a hair carrying invalid paint: {br:?}");
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
         Some(AcceptedTransfer { picked: got_v + got_s, laid, outside: ploughed })

@@ -460,12 +460,16 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
     }
     let t = *rv + v;
     let a = v / t;
+    #[cfg(debug_assertions)]
+    let was_ok = crate::engine7::add::laid_ok(*rv, &rl.color, rh) && v.is_finite() && crate::engine7::add::laid_ok(0.0, &lat.color, &hide);
     for k in 0..LAT {
         rl[k] += (lat[k] - rl[k]) * a;
     }
     rl.blend_parts(lat, a);
     lerp_prop(rh, hide, a);
     *rv = t;
+    #[cfg(debug_assertions)]
+    debug_assert!(!was_ok || crate::engine7::add::laid_ok(t, &rl.color, rh), "paint mixed into paint made invalid paint: {t} of {rh:?}");
 }
 
 

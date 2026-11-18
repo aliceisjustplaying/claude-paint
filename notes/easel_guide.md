@@ -147,10 +147,11 @@ off to make room. (A painting whose log has no `--@ full-palette-refuses`
 line scrapes the oldest off instead.) The earths (burnt sienna, red earth,
 raw sienna, yellow ochre, raw umber) and viridian are as deep in oil as
 their oil paints: thick, burnt sienna and raw umber are near-black browns
-and red earth a deep brick red, and they tint strongly with white. (A
-painting whose log's head has no `--@ oil-earths` line keeps their older,
-paler oil colors: thick burnt sienna a mid red-brown. Sources:
-notes/research/dry_pigment_optics.md §8.6.)
+and red earth a deep brick red, and they tint with white as strongly as
+measured tints of them do. (A painting whose log's head has no
+`--@ oil-earths` line keeps their older, paler oil colors: thick burnt
+sienna a mid red-brown. Sources: notes/research/dry_pigment_optics.md §8.6,
+§9.)
 
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
@@ -709,7 +710,7 @@ tones given in those tubes, as pale as it was painted (pure burnt sienna a
 light salmon), and its bone black and vine black sticks as they were (bone
 black a dead black, vine black a mid grey); a new painting's are fitted to
 measured powders, and its blacks follow from their grains
-(notes/research/dry_pigment_optics.md §7–8).
+(notes/research/dry_pigment_optics.md §7–9).
 
 ## The rag
 

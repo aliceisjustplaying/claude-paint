@@ -79,6 +79,36 @@ stress τ.
   lays as much as the brush gives, about 35 µm on bare ground, as it did
   before the switch. A round given a `length=` longer than the maker's hair
   keeps it (the hair is as long as asked).
+- **[M] A hog round's free length.** Bristle rounds are stubbier than
+  sable. Rosemary & Co's Ultimate bristle pointed rounds (the maker's size
+  chart, rosemaryandco.com/oil-brushes/ultimate/ultimate-pointed-round,
+  "All measurements shown in mm"), diameter/hair: 2/0 2.3/8.8, 0 2.8/11.2,
+  1 3.0/13.3, 2 3.6/16.0, 3 4.4/18.5, 4 5.4/21.1, 5 6.6/24.2, 6 7.1/26.5,
+  7 7.9/28.8, 8 9.3/32.4, 10 11.8/35.5, 12 12.5/40.7, 14 14.6/44.5,
+  16 16.7/46.7 mm. The least-squares line is ℓ = 6.0 mm + 2.63 d (within
+  3.3 mm of every size), `HOG_ROUND_HAIR_MM`, `HOG_ROUND_HAIR_PER_D`: out
+  3.8–4.4 diameters when small and 2.8 when large, where a sable round is
+  out 4.6–7. A second maker runs a little longer: Escoda's Clasico
+  Chungking white bristle round, series 5131 (retailers' listings of the
+  maker's figures, dickblick.com items 06610-1012 and size 4, artlounge.in,
+  jacksonsart.com): 2/0 0.8/7.9, 4 2.8/16, 8 4.4/21–24, 10 5.7/27,
+  12 6.9–7.0/27–30, 14 8.2/33 mm, 0–6 mm over the Rosemary line. **[E]** A
+  round takes its hair between the sable and the bristle line by its
+  stiffness, from the sable round preset's (0.2) to the hog preset's (0.85),
+  as it takes its hair's diameter between sable and hog.
+- **[M] Stipplers.** A stippling brush is a short, full, blunt round. Lynne
+  Andrews's stippler series (goat hair; brushesandmore.com), diameter/hair:
+  2 3.4/7, 4 5.2/10, 6 6.4/12, 8 7.9/15, 10 9.3/18 mm, ℓ = 0.42 mm + 1.86 d
+  (within 0.33 mm). Rosemary & Co's Series 142 hog domed rounds
+  (rosemaryandco.com/hog-bristle-domed-round): 7.0/12.6, 9.2/18.0,
+  15.1/20.8 mm, 1.4–2 diameters. Conservators' soft hog stipplers
+  (preservationequipment.com): 6/10 and 7/15 mm. A stippler's hair is out
+  about twice its diameter, a third to a half of a round's. The engine's
+  stippler (`Tool::stippler`) is a `Kind::Round` with nothing in its `Tool`
+  that tells it apart from a round (its fields are serialized in replay
+  effects, so a new field is not added here), so it takes a soft round's
+  line. It is used for touches (`stipple`), which take no bed; only a
+  stippler dragged as a stroke would press its bed with too long a hair.
 - **[S] Each hair** is a cantilever: F = 3EIδ/ℓ³, I = πd⁴/64.
 - **[E] Tuft shape**: a flat's ferrule is about a quarter as deep as it is
   wide, a filbert's a third. Rounds, riggers and blenders are round, and a
@@ -206,7 +236,88 @@ film at the hand's stroke speed), laid ~55 µm into the wet film, picked the
 green up as a stroke does and read brick-brown. With the split it lays
 (F − W)/2 ≈ 80 µm of scarlet on the green and the brush stays clean.
 
-## 5. Not modeled
+## 5. A stroke's start and lift [D]
+
+A brush comes down loaded. At touch-down the gap between the hairs and the
+canvas holds the press film F a touch would press out there (twice what a
+touch lays: `TOUCH_FILM`·`lay`·(0.4 + 0.6p)·fill coats, with p the hand's
+firmest pressure along the stroke, its attack being the press). As the bed
+moves, the squeeze drives that paint out and the gap relaxes toward the
+slider's film h₀ (§3). Laying a short stroke only the slider's film from
+its first step was wrong: a 1.2 mm dab of red with an impasto filbert into
+a thin wet green laid 16 µm over 22 µm of green, picked the green up and
+read brown, where a touch at the same spot lays its own paint on top.
+
+**The gap's relaxation.** The bed's load per width is carried by the
+slider's lift (§3, with its yield stress) and by the squeeze of the film
+between the bed and the canvas. Reynolds's squeeze between parallel plates
+of length L (a strip, infinitely wide, as the slider is taken; Hamrock,
+Schmid & Jacobson, the squeeze-film chapter [S]): W' = ηL³(−ḣ)/h³. So
+p L = 0.16 L²(ηU + τh)/h² + ηL³(−ḣ)/h³. In z = 1/h² and the travel s = Ut:
+
+  dz/ds = A − B z − C √z, A = 2p/(ηUL²), B = 0.32/L, C = 0.32 τ/(ηUL).
+
+Its fixed point is the slider's h₀ (p = 0.16L(ηU/h₀² + τ/h₀)). From a
+thick press film z grows at A, the squeeze alone (z ≈ 2pt/(ηL²), the
+squeeze time), then settles on z₀ over 1/B = L/0.32. For a fluid paint
+that is exact: z = z₀ + (z_F − z₀)e^(−Bs). The relaxation length is about
+three bed depths whatever the hand's speed and pressure, since both the
+squeeze time and h₀² scale as η/p (h₀² ∝ ηUL/p, t ∝ ηL²/(ph₀²) ∝ L/U).
+A yield stress shortens it (the C term). The yield stress enters through
+the slider's lift, which holds the film at its plug at U → 0; the squeeze
+uses the plastic viscosity η (a Bingham squeeze's own yield term would
+count the same plug twice). A finite bed leaks at its sides too, which
+would shorten the relaxation further (not modeled, as in §3).
+
+For a 9 mm filbert (bed 3 mm deep) the gap is at twice h₀ about 0.9 L
+(2.7 mm) along the stroke and within 10 % of it by 5.5 L (16 mm): at
+200 mm/s some 0.08 s (an earlier estimate put it at about 0.4 s). The
+relaxation is a length, not a time. `relax_m` integrates it per hair and
+step (fourth-order Runge–Kutta in z), with each hair's own paint.
+
+**What each spot takes.** A spot the bed's rear leaves during the stroke
+takes the outlet film of the gap as it leaves (`OUTLET`·h, never more than
+the hairs' meniscus film, as in §3; the bed's rear is the hairs' rearmost
+contact). With it goes the paint the squeeze drives out past the slider's
+film, `OUTLET`·(h − h₀) over the strip each hair stands for, besides what
+the hair gives by its run. The spots still under the bed when the hand
+lifts (ahead of where the bed's rear will be when it lifts, its hairs
+straightened) take no part in the slide. Each hair over them waits, and
+presses its share of the gap's film where it leaves the canvas, as firmly
+as it was down while it waited: a touch's split (§4), the canvas keeping
+half of the gap's film over the wet film and the brush lifting half the
+difference where the wet film is the thicker. So the last bed length of a
+stroke does lay a lift split. A stroke shorter than `TOUCH_STEPS` sweep
+steps is sampled in that many, so its attack and release press and lift it
+(sampled only at its two ends, a dab's ramps left it barely pressed).
+
+**Pickup.** The split runs at the middle of the gap: the brush takes up
+wet paint only where its gap's film h is thinner than the wet film W the
+stroke found, and then (W − h)/2. In the slide the hairs take the share
+(W − h)/W of what they take scraping the canvas bare. This holds along the
+whole stroke. A stroke pressed hard into thick wet paint (h₀ < W) still
+works it up. A light loaded stroke over a thinner wet film lays on top,
+and a stroke no longer lifts back its own fresh paint.
+
+**One law.** As the stroke's length goes to 0 the slid strip, no longer
+than the stroke, goes to nothing, and the stroke is the lift's split over
+the bed: on bare ground a stroke of no length lays 22 µm where a touch
+lays 24 µm (the bed's hairs sit as a stroke places them, not as a touch
+spreads them). For a long stroke the gap is the slider's film past its
+first few relaxation lengths, and the stroke lays the slider's film as
+before. Between them the film falls along the stroke from its start. On
+bare ground a long stroke lays the slider's film where before its hairs
+lifted back some of their own paint (a 9 mm filbert's 15 µm of a
+23 µm ceiling is now 22 µm).
+
+**Open.** Spots the slide leaves take the slider's outlet film on top of
+the wet film they had (the ceiling counts what the stroke adds, as in §3),
+while the lift's split keeps (h + W)/2 in all. By mass balance the outlet
+carries the wet film in with it, so it should keep `OUTLET`·h in all. Over
+wet paint the two laws then differ by the strip a stroke slides. That is
+left as §3 has it.
+
+## 6. Not modeled
 
 The film levelling after the stroke is the drying model's (`drying`,
 Orchard). The brush's own reservoir draining (Washburn flow along the

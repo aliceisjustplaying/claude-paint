@@ -475,8 +475,9 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   No mode picks it. The bristle bed is a slider riding on the paint. Each
   hair is a keratin cantilever (3.5 GPa; 90 µm across for soft hair, 250 µm
   for hog, by the brush's stiffness) bent by the pressure; a round's hair
-  is as long as a maker's rounds are (5.2 mm + 3.6 times its width; a flat's
-  and a filbert's about 1.4 widths). The tuft's force
+  is as long as a maker's rounds are (a soft round's 5.2 mm + 3.6 times its
+  width, a hog round's 6.0 mm + 2.6 times, between the two by its
+  stiffness; a flat's and a filbert's about 1.4 widths). The tuft's force
   over its footprint gives the bed's pressure p. The film that passes under
   a bed of length L moving at U is h₀ = 0.4√(ηUL/p) (Reynolds's slider). A
   yield stress τ adds to it, h₀² = 0.16L(ηU + τh₀)/p, so a paint with one
@@ -512,6 +513,20 @@ b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); 
   - The paint a loaded hair carries reaches into the ground's tooth only as
     deep as that film. Where the hairs touch only the weave's high points
     (light pressure, little paint, a coarse weave), the film breaks.
+  - A stroke starts and ends with a press. The brush comes down loaded,
+    so at first the paint between the hairs and the canvas is the film a
+    touch would press out. As the bed moves the squeeze drives that paint
+    out toward the slider's film, over about three times the bed's depth
+    along the stroke (less for paint with a yield stress), whatever the
+    hand's speed. The spots the bed leaves behind take the film the gap
+    held as it left them. A stroke's first few bed lengths lie thicker,
+    and a long stroke lays the slider's film after them. The spots still
+    under the bed when the hand lifts split its paint as a touch does. So a
+    short dab lays about what a touch there lays, and on wet paint its own
+    paint lies on top while the brush comes away clean. The hairs lift wet
+    paint only where the gap's film is thinner than the wet film under it.
+    A stroke shorter than a few hair widths is still pressed, held and
+    lifted as a touch is, whatever its `ramps`.
   - A touch (`b:touch`) is a press, not a slide: no bed draws a film out
     under it. The paint between each hair and the canvas splits as the
     tip lifts, half to each side, over the wet paint already there. Where

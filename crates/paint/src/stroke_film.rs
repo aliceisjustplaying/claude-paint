@@ -94,6 +94,17 @@ pub const ROUND_HAIR_PER_D: f32 = 3.61;
 /// surface: 0.69 h₀.
 pub const OUTLET: f32 = 0.6875;
 
+/// The gap under a stroke's bed where one hair meets the canvas, at a
+/// stroke's start (`Surf::gap`): the film it holds as the bed's rear leaves
+/// that pixel (`h`, m), and the paint the squeeze drives out past the
+/// slider's film over the hair's step (`squeeze`, coats × units²), laid
+/// besides what the hair gives.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Gap {
+    pub h: f32,
+    pub squeeze: f32,
+}
+
 /// A paint's viscosity at brushing shear (Pa·s) and yield stress (Pa).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rheology {
@@ -183,27 +194,93 @@ pub fn pad(tool: &Tool, pressure: f32, mm_per_unit: f32, speed_mm_s: f32) -> Pad
     Pad { length: depth, width: w, force: hairs * per_hair, speed: speed_mm_s.max(1e-3) * 1e-3, hair_r: 0.5 * d }
 }
 
-/// The film (µm) one stroke of paint `r` under `pad` leaves on the canvas:
-/// the slider's outlet film or the hairs' meniscus film, whichever is
-/// thinner (module notes).
-pub fn film_um(r: Rheology, pad: &Pad) -> f32 {
+/// The trailing meniscus film (m), Landau–Levich–Bretherton with the yield
+/// stress's share of the drag (a fixed point: the film sets the shear).
+fn meniscus_m(r: Rheology, pad: &Pad) -> f32 {
     let (eta, tau, u) = (r.eta.max(1e-6), r.tau.max(0.0), pad.speed);
-    // the trailing meniscus, Landau–Levich–Bretherton with the yield
-    // stress's share of the drag (a fixed point: the film sets the shear)
     let cap = pad.hair_r;
     let mut ll = (1.34 * pad.hair_r * (eta * u / SIGMA_N_M).powf(2.0 / 3.0)).min(cap);
     for _ in 0..12 {
         ll = (1.34 * pad.hair_r * ((eta * u + tau * ll) / SIGMA_N_M).powf(2.0 / 3.0)).min(cap);
     }
-    if pad.force <= 0.0 {
-        return ll * 1e6;
-    }
-    // the squeeze film under the bed: h₀² = 0.16 L (ηU + τh₀)/p
-    let p = pad.force / (pad.width * pad.length);
+    ll
+}
+
+/// The bed's mean pressure (Pa), or None for a bed pressing nothing.
+fn pressure(pad: &Pad) -> Option<f32> {
+    (pad.force > 0.0).then(|| pad.force / (pad.width * pad.length))
+}
+
+/// The slider's steady film h₀ (m) under `pad`: h₀² = 0.16 L (ηU + τh₀)/p.
+pub fn slider_m(r: Rheology, pad: &Pad) -> Option<f32> {
+    let p = pressure(pad)?;
+    let (eta, tau, u) = (r.eta.max(1e-6), r.tau.max(0.0), pad.speed);
     let b = 0.16 * pad.length * tau / p;
     let c = 0.16 * pad.length * eta * u / p;
-    let h0 = 0.5 * (b + (b * b + 4.0 * c).sqrt());
-    (OUTLET * h0).min(ll) * 1e6
+    Some(0.5 * (b + (b * b + 4.0 * c).sqrt()))
+}
+
+/// The film (µm) one stroke of paint `r` under `pad` leaves on the canvas:
+/// the slider's outlet film or the hairs' meniscus film, whichever is
+/// thinner (module notes).
+pub fn film_um(r: Rheology, pad: &Pad) -> f32 {
+    let ll = meniscus_m(r, pad);
+    match slider_m(r, pad) {
+        None => ll * 1e6,
+        Some(h0) => (OUTLET * h0).min(ll) * 1e6,
+    }
+}
+
+/// The film (µm) a bed whose gap holds `gap_m` of paint leaves from its
+/// outlet: the slider's share of the gap, or the hairs' meniscus film,
+/// whichever is thinner (`film_um` with the gap in place of h₀).
+pub fn outlet_um(r: Rheology, pad: &Pad, gap_m: f32) -> f32 {
+    let ll = meniscus_m(r, pad);
+    if pressure(pad).is_none() {
+        return ll * 1e6;
+    }
+    (OUTLET * gap_m).min(ll) * 1e6
+}
+
+/// The gap film (m) under a moving bed that held `h` a distance `ds` (m)
+/// of travel before: it relaxes toward the slider's film h₀ by squeeze flow
+/// (the start of a stroke, notes/research/stroke_film.md §5).
+///
+/// The bed's load per width is carried by the slider's lift and by the
+/// squeeze of the film between the bed and the canvas (Reynolds's
+/// parallel-plate strip, W' = ηL³(−ḣ)/h³):
+/// p L = 0.16 L²(ηU + τh)/h² + ηL³(−ḣ)/h³. In z = 1/h² and the travel
+/// s = Ut that is dz/ds = A − B z − C √z, with A = 2p/(ηUL²), B = 0.32/L and
+/// C = 0.32 τ/(ηUL): from a thick press film z grows at A (the squeeze) and
+/// settles on z₀ = 1/h₀² over 1/B = L/0.32, about three bed lengths for
+/// a fluid paint, whatever the speed and pressure (less with a yield
+/// stress, which holds the film where the squeeze can't thin it).
+pub fn relax_m(h: f32, ds: f32, r: Rheology, pad: &Pad) -> f32 {
+    let Some(p) = pressure(pad) else { return h };
+    if !(h > 0.0) || !(ds > 0.0) {
+        return h;
+    }
+    let (eta, tau, u, l) = (r.eta.max(1e-6), r.tau.max(0.0), pad.speed, pad.length);
+    let a = 2.0 * p / (eta * u * l * l);
+    let b = 0.32 / l;
+    let c = 0.32 * tau / (eta * u * l);
+    // past some 20 relaxation lengths the gap is the slider's film
+    if b * ds > 20.0 {
+        return slider_m(r, pad).unwrap_or(h);
+    }
+    let f = |z: f32| a - b * z - c * z.max(0.0).sqrt();
+    // fourth-order Runge–Kutta, steps of at most a quarter of 1/B
+    let n = ((b * ds / 0.25).ceil() as usize).clamp(1, 80);
+    let dt = ds / n as f32;
+    let mut z = 1.0 / (h * h);
+    for _ in 0..n {
+        let k1 = f(z);
+        let k2 = f(z + 0.5 * dt * k1);
+        let k3 = f(z + 0.5 * dt * k2);
+        let k4 = f(z + dt * k3);
+        z += dt / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+    }
+    1.0 / z.max(1e-30).sqrt()
 }
 
 /// The most wet film (coats) the hair whose paint has properties `hide`
@@ -213,7 +290,14 @@ pub fn film_um(r: Rheology, pad: &Pad) -> f32 {
 #[inline]
 pub(crate) fn ceiling(sf: &crate::bristle::Surf, hide: &Prop, thinner: f32) -> Option<f32> {
     let pad = sf.pad.filter(|_| !sf.laid.is_null())?;
-    Some(film_um(rheology(hide, thinner), &pad) / crate::surface::COAT_UM)
+    let r = rheology(hide, thinner);
+    // (at a stroke's start the gap still holds the press film, relaxing
+    // toward the slider's: `Surf::gap`)
+    let um = match sf.gap {
+        Some(g) => outlet_um(r, &pad, g.h),
+        None => film_um(r, &pad),
+    };
+    Some(um / crate::surface::COAT_UM)
 }
 
 /// How far into the tooth's contact range (`bristle::TOOTH_UM`: ±60 µm
@@ -292,5 +376,37 @@ mod tests {
         assert!(glaze < 0.6 * tube, "glaze {glaze} µm, tube {tube} µm");
         let soft = film_um(rheology(&hide(0.6, 0.0), 0.0), &pad(&Tool::round_sable(36.0), 0.8, 0.2, speed));
         assert!(soft > glaze, "sable {soft} µm, hog {glaze} µm");
+    }
+
+    /// The gap at a stroke's start relaxes from the press film toward the
+    /// slider's: for a fluid paint z = 1/h² follows z₀ + (z_F − z₀)e^(−Bs)
+    /// exactly (B = 0.32/L), so the gap is within 1 % of h₀ by some three
+    /// relaxation lengths whatever the hand's speed, and a yield stress
+    /// brings it there sooner. A gap thinner than h₀ fills toward it.
+    #[test]
+    fn the_gap_relaxes_to_the_slider_film() {
+        let tool = Tool::filbert(45.0);
+        let fluid = Rheology { eta: 0.6, tau: 0.0 };
+        for speed in [50.0f32, 400.0] {
+            let pd = pad(&tool, 0.8, 0.2, speed);
+            let h0 = slider_m(fluid, &pd).unwrap();
+            let (b, f) = (0.32 / pd.length, 5.0 * h0);
+            for s in [0.1f32, 0.5, 1.0, 2.0, 4.0] {
+                let ds = s / b;
+                let z = 1.0 / (h0 * h0) + (1.0 / (f * f) - 1.0 / (h0 * h0)) * (-b * ds).exp();
+                let exact = 1.0 / z.sqrt();
+                let h = relax_m(f, ds, fluid, &pd);
+                assert!((h - exact).abs() < 1e-3 * exact, "speed {speed}, {s} lengths: {h} against {exact}");
+                // and in steps as `drag_on` takes them
+                let stepped = (0..10).fold(f, |h, _| relax_m(h, ds / 10.0, fluid, &pd));
+                assert!((stepped - exact).abs() < 1e-3 * exact, "stepped {stepped} against {exact}");
+            }
+            assert!(relax_m(f, 3.0 / b, fluid, &pd) < 1.03 * h0 && relax_m(f, 6.0 / b, fluid, &pd) < 1.002 * h0);
+            assert!(relax_m(0.2 * h0, 6.0 / b, fluid, &pd) > 0.95 * h0);
+            let plastic = Rheology { eta: 0.6, tau: 300.0 };
+            let hp = slider_m(plastic, &pd).unwrap();
+            let rel = |r: Rheology, h0: f32| relax_m(5.0 * h0, 1.0 / b, r, &pd) / h0;
+            assert!(rel(plastic, hp) < rel(fluid, h0), "yield stress {} fluid {}", rel(plastic, hp), rel(fluid, h0));
+        }
     }
 }

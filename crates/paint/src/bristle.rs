@@ -867,6 +867,11 @@ pub(crate) struct Surf {
     /// its tool's (`Tool::run`, how far a full load lasts): on a blender
     /// stroke, the contact `blend_contact` gives. None: the tool's.
     pub(crate) lay_run: Option<f32>,
+    /// The gap under the stroke's bed where the hair being laid meets the
+    /// canvas (`drag_on`, with the stroke film): at a stroke's start it still
+    /// holds the press film, relaxing toward the slider's. None: the
+    /// slider's.
+    pub(crate) gap: Option<crate::stroke_film::Gap>,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1147,6 +1152,7 @@ impl Canvas {
             press: false,
             blend: false,
             lay_run: None,
+            gap: None,
         }
     }
 
@@ -1486,6 +1492,12 @@ pub(crate) unsafe fn drag_on(
     let step = sweep_step(&tool, g, &path, &arc, s, rb.max(1.25), !sf.e7 && sf.adaptive_sweep);
     sf.sweep_spacing = if step > rb.max(1.25) { Some(rb.max(1.25)) } else { None };
     let nsteps = ((total / step).ceil() as usize).max(1);
+    // (the stroke film's press and lift, below)
+    let start = sf.e7 && sf.stroke_film.is_some() && !sf.laid.is_null();
+    // A short stroke is pressed and lifted as a touch is, through its
+    // press, hold and lift (`TOUCH_STEPS`): sampled at its two ends only, a
+    // dab's attack and release left it barely pressed anywhere.
+    let (step, nsteps) = if start && nsteps < TOUCH_STEPS && total > 0.0 { (total / TOUCH_STEPS as f32, TOUCH_STEPS) } else { (step, nsteps) };
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
     // (the stroke film: the hand's speed, given or the steering law's)
@@ -1512,6 +1524,27 @@ pub(crate) unsafe fn drag_on(
     // at the path's end (a lift-off draws down to the tip, it doesn't stop
     // short of the end where the pressure falls below the tip's own length)
     let tip = held.bristles.iter().enumerate().min_by(|a, b| a.1.thresh.total_cmp(&b.1.thresh)).map_or(0, |(i, _)| i);
+    // With the stroke film a stroke starts and ends with a press
+    // (notes/research/stroke_film.md §5): the brush comes down loaded, so
+    // the gap under each hair holds the press film a touch lays
+    // and relaxes toward the slider's film by squeeze flow as the bed moves
+    // (`gap`, `crate::stroke_film::relax_m`); a pixel the bed's rear leaves
+    // takes its outlet film of the gap then (`Surf::gap`). The pixels still
+    // under the bed when it lifts take the lift's split of the gap instead,
+    // as a touch's do: a hair over them waits (`pend`) and presses where it
+    // lifts, or where the stroke ends.
+    let nb = if start { held.bristles.len() } else { 0 };
+    let held_n = held.bristles.len().max(1);
+    let mut gap = vec![0.0f32; nb];
+    let mut rheo = vec![crate::stroke_film::Rheology { eta: 0.0, tau: 0.0 }; nb];
+    // (where a waiting hair last met the canvas)
+    let mut pend: Vec<Option<(f32, f32)>> = vec![None; nb];
+    let mut lift_w = vec![0.0f32; nb];
+    let mut d_prev = 0.0f32;
+    let lag_end = if sf.reach_end { 0.0 } else { 0.6 };
+    // the press that fills the gap: the hand's firmest along the stroke
+    // (its attack is the press)
+    let p_press = if start { (0..=nsteps).map(|k| g.pressure_at(if total > 0.0 { (k as f32 * step).min(total) / total } else { 0.5 })).fold(0.0f32, f32::max).clamp(0.0, 1.0) } else { 0.0 };
     for k in 0..=nsteps {
         let d = (k as f32 * step).min(total);
         while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
@@ -1576,6 +1609,34 @@ pub(crate) unsafe fn drag_on(
             let lag = if k == nsteps && sf.reach_end { 0.0 } else { 0.6 };
             contact[bi] = Some(((root.0 + b.bend.0 * lag, root.1 + b.bend.1 * lag), reach.max(0.0)));
         }
+        // the gap under each hair, and where the bed's rear is now and will
+        // be when the hand lifts (its hairs straightened, `lag_end`)
+        let (mut rear, mut lift_rear) = (f32::INFINITY, f32::INFINITY);
+        if start {
+            let mmu = sf.stroke_film.unwrap_or(1.0);
+            let pad = sf.pad.expect("the stroke film sets the bed");
+            let ds = (d - d_prev).max(0.0) / s * mmu * 1e-3;
+            let lag = if k == nsteps && sf.reach_end { 0.0 } else { 0.6 };
+            for (bi, b) in held.bristles.iter().enumerate() {
+                let liquid = b.vol + b.solvent;
+                let phi = if b.solvent > 0.0 { b.solvent / liquid } else { 0.0 };
+                rheo[bi] = crate::stroke_film::rheology(&b.hide, phi);
+                if k == 0 {
+                    // the press film: twice what a touch lays (`touch_on`)
+                    gap[bi] = 2.0 * TOUCH_FILM * tool.lay * (0.4 + 0.6 * p_press) * (liquid / full).min(1.0) * COAT_UM * 1e-6;
+                } else {
+                    gap[bi] = crate::stroke_film::relax_m(gap[bi], ds, rheo[bi], &pad);
+                }
+                if let Some((c, _)) = contact[bi] {
+                    let along = c.0 * dir.0 + c.1 * dir.1;
+                    rear = rear.min(along);
+                    lift_rear = lift_rear.min(along - (lag - lag_end) * (b.bend.0 * dir.0 + b.bend.1 * dir.1));
+                }
+            }
+            lift_rear += total - d;
+        }
+        d_prev = d;
+        let mut presses: Vec<(usize, (f32, f32), f32)> = Vec::new();
         // the track each hair of a pointed tuft lays (see `exchange`): the
         // touching hairs lie over and beside each other, so each covers its
         // own share of the contact's width, from halfway to its neighbor on
@@ -1606,7 +1667,41 @@ pub(crate) unsafe fn drag_on(
             }
         }
         for (bi, b) in held.bristles.iter_mut().enumerate() {
-            let Some((cur, reach)) = contact[bi] else { continue };
+            let Some((cur, reach)) = contact[bi] else {
+                if let Some(at) = pend.get_mut(bi).and_then(Option::take) {
+                    // a waiting hair lifted: it presses where it was
+                    presses.push((bi, at, lift_w[bi]));
+                }
+                continue;
+            };
+            if start {
+                let along = cur.0 * dir.0 + cur.1 * dir.1;
+                if pend[bi].is_some() || along >= lift_rear || k == nsteps {
+                    // (the gap splits where it was pressed: the hair as
+                    // firmly down as it was while it waited, though the
+                    // hand's release lifts it before the paint parts)
+                    lift_w[bi] = if pend[bi].is_some() { lift_w[bi].max(reach) } else { reach };
+                    pend[bi] = (k < nsteps).then_some(cur);
+                    b.prev[0] = Some(cur);
+                    if k == nsteps {
+                        presses.push((bi, cur, reach));
+                    }
+                    continue;
+                }
+                let pad = sf.pad.expect("the stroke film sets the bed");
+                let mmu = sf.stroke_film.unwrap_or(1.0);
+                // the gap as the bed's rear leaves where this hair is
+                let h = crate::stroke_film::relax_m(gap[bi], (along - rear).max(0.0) / s * mmu * 1e-3, rheo[bi], &pad);
+                // the paint the squeeze drives out of the gap past the
+                // slider's film leaves by the outlet too: on the strip this
+                // hair stands for (spacing wide) along its step
+                let h0 = crate::stroke_film::slider_m(rheo[bi], &pad).unwrap_or(h);
+                let spacing_u = half / s * (root_area(tool.kind) / held_n as f32).sqrt();
+                let prev = b.prev[0].unwrap_or(cur);
+                let seg_u = ((cur.0 - prev.0).powi(2) + (cur.1 - prev.1).powi(2)).sqrt() / s;
+                let squeeze = crate::stroke_film::OUTLET * (h - h0).max(0.0) / (COAT_UM * 1e-6) * spacing_u * seg_u;
+                sf.gap = Some(crate::stroke_film::Gap { h, squeeze });
+            }
             // a pointed tool's hair that has just come down lays its share
             // of the step it came down in (its neighbors' tracks tile with it)
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
@@ -1620,7 +1715,28 @@ pub(crate) unsafe fn drag_on(
             }
             b.prev[0] = Some(cur);
         }
+        if !presses.is_empty() {
+            // the lift: each hair presses its share of the gap's film where
+            // it leaves the canvas, as a touch's hairs do (`touch_on`: a
+            // hair stands for spacing² of the patch, its contact as wide as
+            // the pressed tip's)
+            let spacing_u = half / s * (root_area(tool.kind) / held.bristles.len().max(1) as f32).sqrt();
+            let rbp = (tool.hair_radius() * s).max(1.4 * spacing_u * s).max(0.75);
+            let sp = Surf { press: true, pad: None, gap: None, ..sf };
+            for &(bi, at, reach) in &presses {
+                let v = 0.5 * gap[bi] / (COAT_UM * 1e-6) * spacing_u * spacing_u;
+                let b = &mut held.bristles[bi];
+                unsafe { crate::engine7::exchange::exchange(sp, b, &tool, at, at, rbp, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+            }
+        }
+        sf.gap = None;
         feed(&mut held.bristles, feed_k);
+    }
+    if start && lift_w.iter().any(|&w| w > 0.0) {
+        // where the wet film was thicker than the gap's film the lift takes
+        // half the difference up into the brush
+        let sp = Surf { press: true, pad: None, gap: None, ..sf };
+        unsafe { crate::engine7::exchange::press_lift(&sp, &mut held.bristles, &lift_w, id, bounds) };
     }
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
@@ -3857,10 +3973,13 @@ mod stroke_film_tests {
     }
 
     /// The greatest wet film (µm) the stroke laid (it lays thinner at its
-    /// edges, where fewer hairs reach), over the band y ± 20 units.
+    /// edges, where fewer hairs reach), over the band y ± 20 units, past its
+    /// start: over its first 250 units (50 mm, some nine of the hog flat's
+    /// relaxation lengths, `stroke_film::relax_m`) the gap still holds more
+    /// than the slider's film, from the press film the brush came down with.
     fn film(c: &Canvas, y: f32) -> f32 {
         let mut max = 0.0f32;
-        for x in (150..=850).step_by(5) {
+        for x in (400..=850).step_by(5) {
             for dy in (-20..=20).step_by(5) {
                 max = max.max(c.wet.vol[c.f.index(x as f32, y + dy as f32)] * COAT_UM);
             }
@@ -4151,5 +4270,113 @@ mod stroke_film_tests {
         let lifted = w0 - w1;
         let split = 0.5 * (w0 - face);
         assert!(lifted > 0.6 * split && lifted < 1.7 * split && dirty > 10.0 * clean, "from {w0} µm: lifted {lifted} µm, the split gives {split} µm (green {dirty} of the brush, {clean} from the thin film)");
+    }
+
+    /// Green thinned with medium, one stroke of a broad hog flat: a thin wet
+    /// film (as `a_touch_splits_its_paint_over_the_wet_film` lays it).
+    fn thin_green(c: &mut Canvas) {
+        let mut gb = held(Tool::hog_flat(150.0), paint("#2a5a48", 0.9, 0.5), 4);
+        c.drag(&mut gb, &steady(500.0, 0.8, 100.0), None);
+    }
+
+    /// A dab: a stroke two points and 6 units (1.2 mm) long, drawn as a
+    /// painter's `b:stroke` draws it (the gesture's own attack and release),
+    /// with an impasto brush (`lay` 3, its face several times a stroke's
+    /// film) of red into a thin wet green. It is mostly its start and its
+    /// lift, so it lays as a touch there does: over the pixels it lies on
+    /// its own paint is more than the green under it and at least 0.6 of
+    /// what the touch gains over its own, and the brush stays as clean (it
+    /// takes up next to none of the green).
+    #[test]
+    fn a_dab_into_wet_paint_keeps_its_colour_as_a_touch_does() {
+        let red = || paint("#c02818", 0.9, 0.0);
+        let tool = Tool { lay: 3.0, ..Tool::filbert(60.0) };
+        let (r, g) = (held(tool.clone(), red(), 7).bristles[0].lat.clone(), held(tool.clone(), paint("#2a5a48", 0.9, 0.0), 7).bristles[0].lat.clone());
+        let at = (500.0, 500.0);
+        // the mean film gained over the pixels the mark lies on (where it
+        // gained over 2 µm), and the wet film there before
+        let mark = |dab: bool| {
+            let mut c = canvas();
+            thin_green(&mut c);
+            let before = c.wet.vol.clone();
+            let mut h = held(tool.clone(), red(), 7);
+            if dab {
+                c.drag(&mut h, &Gesture::new(vec![(at.0 - 3.0, at.1), (at.0 + 3.0, at.1)]), None);
+            } else {
+                c.touch(&mut h, &Touch::at(at.0, at.1).pressure(0.8), None);
+            }
+            let (mut n, mut gain, mut w) = (0.0f32, 0.0f32, 0.0f32);
+            for (v, b) in c.wet.vol.iter().zip(&before) {
+                if (v - b) * COAT_UM > 2.0 {
+                    n += 1.0;
+                    gain += (v - b) * COAT_UM;
+                    w += b * COAT_UM;
+                }
+            }
+            (w / n, gain / n, green_share(&h, &r, &g))
+        };
+        let (w0, touch, _) = mark(false);
+        let (w1, dab, dirty) = mark(true);
+        assert!(dab > w1 && dab > 0.6 * touch, "the dab gained {dab} µm on {w1} µm of green; a touch gains {touch} µm on {w0} µm");
+        assert!(dirty < 0.02, "the dab's brush took up green: {dirty} of its paint");
+    }
+
+    /// One law from a touch to a long stroke. A stroke of no length is a
+    /// press and lift: it lays where it comes down what a touch lays (within
+    /// 15 %). A long one starts with its press film in the gap, thicker than
+    /// the slider's, and lays more there than the slider's film; past nine
+    /// of the bed's relaxation lengths (`stroke_film::relax_m`: L/0.32, L the
+    /// bed's depth) it lays the slider's film, no more and at least 0.8 of
+    /// it. The film along a stroke falls from its start to its middle.
+    #[test]
+    fn a_stroke_runs_from_a_touch_to_the_slider_film() {
+        let p = paint("#c02818", 0.9, 0.0);
+        let tool = Tool::hog_flat(36.0);
+        let (pressure, speed) = (0.8, 200.0);
+        let um = |c: &Canvas, x: f32| c.wet.vol[c.f.index(x, 500.0)] * COAT_UM;
+        let mut c = canvas();
+        c.touch(&mut held(tool.clone(), p.clone(), 7), &Touch::at(500.0, 500.0).pressure(pressure), None);
+        let touch = um(&c, 500.0);
+        let mut c = canvas();
+        c.drag(&mut held(tool.clone(), p.clone(), 7), &Gesture::new(vec![(500.0, 500.0)]).pressure(pressure, pressure).ramps(0.0, 0.0).shake(0.0).speed(speed), None);
+        let point = um(&c, 500.0);
+        assert!((point - touch).abs() < 0.15 * touch, "a stroke of no length lays {point} µm, a touch {touch} µm");
+        let law_um = law(&p, &tool, pressure, speed);
+        let pd = pad(&tool, pressure, 0.2, speed);
+        let relax_u = pd.length / 0.32 * 1e3 / 0.2;
+        let mut c = canvas();
+        c.drag(&mut held(tool.clone(), p.clone(), 7), &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(pressure, pressure).ramps(0.0, 0.0).shake(0.0).speed(speed), None);
+        let start = (0..8).map(|k| um(&c, 105.0 + 5.0 * k as f32)).fold(0.0f32, f32::max);
+        assert!(start > 1.2 * law_um, "the start lays {start} µm, the slider's film is {law_um} µm");
+        let from = 100.0 + 9.0 * relax_u;
+        assert!(from < 700.0, "relaxation length {relax_u} units");
+        for x in (from as usize..=800).step_by(10) {
+            let h = um(&c, x as f32);
+            assert!(h <= law_um * 1.0001 && h >= 0.8 * law_um, "x {x}: {h} µm against the slider's {law_um} µm");
+        }
+        let mid = um(&c, 500.0);
+        assert!(start > mid, "start {start} µm, middle {mid} µm");
+    }
+
+    /// What a stroke's brush gives is what the canvas gains, whatever its
+    /// length, into wet paint (it lifts some at its lift) or on bare ground.
+    #[test]
+    fn a_stroke_with_its_press_and_lift_conserves_paint() {
+        for wet in [false, true] {
+            for len in [0.0f32, 6.0, 40.0, 300.0] {
+                let mut c = canvas();
+                if wet {
+                    thin_green(&mut c);
+                }
+                let before = total(&c);
+                let mut h = held(Tool { lay: 3.0, ..Tool::filbert(60.0) }, paint("#c02818", 0.9, 0.0), 7);
+                let l0 = load(&h);
+                c.drag(&mut h, &Gesture::new(vec![(400.0, 500.0), (400.0 + len, 500.0)]), None);
+                let gave = l0 - load(&h);
+                let gained = total(&c) - before;
+                assert!(gave.abs() > 1e-3 * l0, "wet {wet}, len {len}: the stroke gave nothing");
+                assert!((gave - gained).abs() < 1e-4 * l0, "wet {wet}, len {len}: the brush gave {gave}, the canvas gained {gained}");
+            }
+        }
     }
 }

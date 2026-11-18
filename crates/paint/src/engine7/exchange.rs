@@ -375,7 +375,16 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let travel = if exch { travel * (1.0 - phi).powf(crate::thinner::exchange_kj().0) } else { travel };
         let touch = (sum_w / ct.coverage.max(1e-6)).min(1.0);
         let dep_total = match dep {
-            None => liquid * (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) * touch,
+            // (at a stroke's start, with what the squeeze drives out of the
+            // gap, `Surf::gap`; a blender lays over its hairs' contact,
+            // `Surf::lay_run`)
+            None => {
+                let run = sf.lay_run.unwrap_or(tool.run);
+                match sf.gap {
+                    Some(g) => (liquid * (1.0 - (-travel / run).exp()) + g.squeeze).min(liquid * 0.95) * touch,
+                    None => liquid * (1.0 - (-travel / run).exp()) * touch,
+                }
+            }
             Some(v) => v.min(liquid * 0.5) * touch,
         };
         let dep_total = if matches!(clip, Some(Clip::Fence { .. })) { dep_total * (ct.fence / sum_w).min(1.0) } else { dep_total };
@@ -431,13 +440,25 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 *sf.laid_id.add(i) = id;
                 *sf.laid.add(i) = -0.5 * v;
             }
-            if v > 1e-6 && !press {
+            // At a stroke's start the brush lifts wet paint only where its
+            // gap is thinner than the wet film, as a press's split does: the
+            // split runs at the middle of the gap, so the hairs take the
+            // share (W − h)/W of what they would scraping the canvas bare
+            // (W the film the stroke found there, h the gap's).
+            let reach_wet = match sf.gap {
+                Some(g) => {
+                    let found = v - if *sf.laid_id.add(i) == id { (*sf.laid.add(i)).max(0.0) } else { 0.0 };
+                    (1.0 - g.h / (COAT_UM * 1e-6) / found.max(1e-9)).clamp(0.0, 1.0)
+                }
+                None => 1.0,
+            };
+            if v > 1e-6 && !press && reach_wet > 0.0 {
                 let tk = if exch {
                     (v * pickup * wt * fl).min(v)
                 } else {
                     let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                     (v * pickup * wt * own * fl).min((v - *sf.floor.add(i)).max(0.0))
-                };
+                } * reach_wet;
                 if tk > 0.0 {
                     let cure = if dry { (*sf.dry.add(i)).cure } else { 0.0 };
                     if !sf.solv.is_null() {

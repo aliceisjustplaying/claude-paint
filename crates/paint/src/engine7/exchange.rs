@@ -33,7 +33,7 @@
 use super::Rect;
 use super::add::{Film, Paint7};
 use super::window::{self, COVER, CURE, HIDE0, Hit, LAT0, PACK, SOLV, VOL, Window};
-use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, fine_cover, grow, mix_cure};
+use crate::bristle::{self, Bounds, Bristle, Clip, GHOST_TOUCH, Surf, TOOTH_UM, Tool, WET_REACH, capsule_cover, fine_cover, grow, mix_cure};
 use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Prop, mix_into};
@@ -300,24 +300,40 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             _ => cap,
         };
         let wet = smoothstep(0.1, 0.8, liquid / full);
-        // (how far below the tooth's peaks the paint a loaded hair carries
-        // reaches: with the stroke film, the film it leaves; before it, an
-        // estimate, `WET_REACH`)
-        // At a stroke's start (`Surf::gap`) the ceiling is the outlet film of
-        // the gap, which may be thinner than the slider's film while the gap
-        // still holds the press film the brush came down with; the paint the
-        // moving bed carries wets the tooth at least as deep as the slider's
-        // film (its inlet floods the relief as it does once the gap has
-        // relaxed), so the start reaches no shallower than the stroke's
-        // middle. Taking the gap's thinner film here left a lightly pressed
-        // start (its attack) on the weave's crowns alone: a grid of dots at
-        // the thread pitch.
-        let reach_law = match (law, sf.gap) {
-            (Some(c), Some(_)) => crate::stroke_film::ceiling(&Surf { gap: None, ..*sf }, &br.hide, phi).map_or(Some(c), |s| Some(c.max(s))),
-            _ => law,
+        // Where the paint a loaded hair carries reaches below where the hair
+        // itself touches: with the stroke film, the weave's hollows as deep
+        // as the bed's paint fills them from the crowns down
+        // (`bristle::weave_fill`: the bed's pressure against the paint's
+        // yield stress, and the paint the bed passes on per area, which
+        // fills the relief's voids that deep); before it, an estimate,
+        // `WET_REACH` by the exchange's load ramp `wet`. (The stroke film
+        // took the film the hair leaves times that ramp, which called a hair
+        // holding a third of a full load mostly dry though its bed still
+        // passed on more than the hollows hold: a long stroke's slide broke
+        // on the crowns through the hand's release.) What the hair gives
+        // over this step, wherever it lands, is `dep_total`'s below before
+        // its contact's share: the run's share of what it carries, and at a
+        // stroke's start what the squeeze drives out of the gap.
+        let fill = if law.is_some() || press {
+            let travel = (seg / s).max(rb / s * 0.5);
+            let travel = if exch { travel * (1.0 - phi).powf(crate::thinner::exchange_kj().0) } else { travel };
+            let gives = liquid * (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()) + sf.gap.map_or(0.0, |g| g.squeeze);
+            // At a stroke's start (`Surf::gap`) the gap's outlet film, the
+            // film over the crowns, may be thinner than the slider's while
+            // the gap still holds the press film the brush came down with;
+            // but the gap fills toward the slider's film from its inlet, and
+            // that paint passes over the hollows under the bed, so the
+            // slider's film bounds what fills them (bounded by the gap's,
+            // the lightly pressed attack broke on the crowns).
+            let slider = match sf.gap {
+                Some(_) if !press => crate::stroke_film::ceiling(&Surf { gap: None, ..*sf }, &br.hide, phi),
+                _ => law,
+            };
+            bristle::weave_fill(sf, br, tool, liquid, phi, press, slider, gives.min(liquid * 0.95), travel)
+        } else {
+            None
         };
-        let wet_reach = reach_law.map_or(WET_REACH, crate::stroke_film::tooth_reach);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(wet_reach * wet);
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(if fill.is_some() { 0.0 } else { WET_REACH * wet });
         let th = 1.0 - reach.max(wick) * 1.6;
 
         let spread = dep.is_none();
@@ -357,29 +373,18 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let mut ct = Contact::default();
         // the contact weight on pixels that take what the bristle lays
         let mut sum_r = 0.0f32;
-        // A press lays its paint over its whole contact (`Window::lay`): the
-        // paint pressed between the hairs and the canvas is one film over
-        // the patch, the weave's hollows under it as full of it as its
-        // crowns, so where it splits on the lift the canvas keeps its share
-        // whether the hair itself reaches the hollow or not. How much the
-        // hair gives is still its contact's (`touch`, below). Only a hair
-        // with too little paint to fill its share of the patch lays on the
-        // crowns it touches, as a dragged one does: the press squeezes its
-        // paint into the patch, so it fills it while it holds what it lays
-        // there and the paint the relief under its share holds (the
-        // contact's whole range, 2·`TOOTH_UM`, as deep as the hollows can
-        // be), its share the bed's area over its hairs. (The exchange's
-        // load ramp `wet`, an estimate, calls a hair holding a third of a
-        // full load mostly dry, though a 12 mm brush's hair then holds some
-        // twenty times what its share of the patch takes.)
+        // A press lays its paint as one film over its patch (`Window::lay`),
+        // levelled to the bed: the paint pressed between the hairs and the
+        // canvas fills the weave's hollows under it as deep as the bed fills
+        // them (`fill`), so the gap over a hollow is deeper than over a crown
+        // by the hollow's depth below the crowns the bed rests on
+        // (`bristle::Relief::top`), and holds that much more paint. How
+        // much the hair gives is still its contact's (`touch`, below); it
+        // lies where the paint reaches in proportion to the gap there, and
+        // where it splits on the lift the canvas keeps half of that gap.
         let flood = press;
-        let fills = if flood {
-            let share_u2 = (0.5 * tool.width).powi(2) * crate::bristle::root_area(tool.kind) / tool.bristles.max(1) as f32;
-            let need = dep.unwrap_or(0.0) + 2.0 * crate::bristle::TOOTH_UM / COAT_UM * share_u2;
-            (liquid / need.max(1e-9)).min(1.0)
-        } else {
-            wet
-        };
+        // (the film over the crowns, contact units)
+        let crown_u = sf.bed.map_or(f32::INFINITY, |b| b.h / (2.0 * TOOTH_UM * 1e-6)).max(1e-6);
         let mut sum_lay = 0.0f32;
         for y in y0..y1 {
             let py = y as f32 + 0.5;
@@ -404,30 +409,23 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let i = row + x - ox;
                 let v = *sf.vol.add(i);
                 let surf = (*sf.base.add(i) + 0.35 * v).min(1.5);
+                // (with the stroke film, where the hair touches or its
+                // paint wets, `WeaveFill::wets`)
+                let touch = |lift: f32| {
+                    let h = ramp(s_e0 + lift, s_inv, surf);
+                    fill.map_or(h, |f| h.max(f.wets(surf - lift)))
+                };
                 let wt = match clip {
-                    None => cov * ramp(s_e0, s_inv, surf),
-                    Some(Clip::Mask(m)) => cov * ramp(s_e0, s_inv, surf) * m.data[y * w + x],
+                    None => cov * touch(0.0),
+                    Some(Clip::Mask(m)) => cov * touch(0.0) * m.data[y * w + x],
                     Some(c @ Clip::Fence { .. }) => {
                         let (k, lift) = c.at(y * w + x);
-                        let wt = cov * ramp(s_e0 + lift, s_inv, surf) * k;
+                        let wt = cov * touch(lift) * k;
                         ct.fence += wt * k * k;
                         wt
                     }
                 };
                 ct.weight += wt;
-                let lw = if flood {
-                    let t = |e0: f32| fills + (1.0 - fills) * ramp(e0, s_inv, surf);
-                    match clip {
-                        None => cov * t(s_e0),
-                        Some(Clip::Mask(m)) => cov * t(s_e0) * m.data[y * w + x],
-                        Some(c @ Clip::Fence { .. }) => {
-                            let (k, lift) = c.at(y * w + x);
-                            cov * t(s_e0 + lift) * k
-                        }
-                    }
-                } else {
-                    0.0
-                };
                 let mut fl = 1.0;
                 if dry {
                     let p = *sf.dry.add(i);
@@ -435,19 +433,26 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     fl = f;
                     ct.tack += wt * tack;
                 }
-                if wt > 0.0 || lw > 0.0 {
+                if wt > 0.0 {
                     win.hits.push(Hit { i, x: x as u32, y: y as u32, fl });
                     win.weights.push(wt);
                     sum_r += wt * sf.takes(i);
                     if flood {
-                        win.lay.push(lw);
-                        sum_lay += lw;
+                        // (the pixel's level, for the gap over it below)
+                        win.lay.push(surf);
                     }
                 }
             }
         }
         if ct.weight <= 1e-6 {
             return Some(none);
+        }
+        if flood {
+            let (top, deep) = fill.map_or((0.0, 0.0), |f| (f.top, f.deep));
+            for (l, &wt) in win.lay.iter_mut().zip(&win.weights) {
+                *l = wt * (1.0 + (top - *l).clamp(0.0, deep) / crown_u);
+                sum_lay += *l;
+            }
         }
         let sum_w = ct.weight;
         let tack = ct.tack / sum_w;
@@ -574,6 +579,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                     // (a press's debt is paid first and stays on the hair)
                     let pay = if press { d.min((-used).max(0.0)) } else { 0.0 };
+                    // (a press keeps half the gap over the pixel, deeper over
+                    // a hollow by the paint the bed filled it with)
+                    let cap = if flood && wt > 0.0 { cap * lw / wt } else { cap };
                     let land = (d - pay).min((cap - used.max(0.0)).max(0.0));
                     *sf.laid_id.add(i) = id;
                     *sf.laid.add(i) = used + pay + land;
@@ -627,7 +635,15 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 }
                 let (tx, ty) = (tx as usize, ty as usize);
                 let j = (ty - oy) * bw_buf + tx - ox;
-                let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j));
+                // (with the stroke film, the paint the hairs push aside is
+                // the bed's: it lands where the bed's paint reaches in the
+                // relief, `fill`, and bridges the hollows below that; what
+                // can't land stays where it was)
+                let c = win.cell(tx, ty, j, || {
+                    let sj = (*sf.base.add(j) + 0.35 * *sf.vol.add(j)).min(1.5);
+                    let reached = fill.map_or(1.0, |f| ramp(s_e0, s_inv, sj).max(f.wets(sj)));
+                    clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j) * reached
+                });
                 let mut mm = m * sh * c.k;
                 if let Some((_, from)) = pass_film.filter(|_| mm > 0.0) {
                     mm *= crate::bristle::film_lay(&sf, j, from, cap * c.k, id, mm * (1.0 + src_solv / COAT_UM));

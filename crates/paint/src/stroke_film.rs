@@ -326,14 +326,36 @@ pub(crate) fn ceiling(sf: &crate::bristle::Surf, hide: &Prop, thinner: f32) -> O
     Some(um / crate::surface::COAT_UM)
 }
 
-/// How far into the tooth's contact range (`bristle::TOOTH_UM`: ±60 µm
-/// of relief spans it, scaled by the exchange's 1.6) the paint on a loaded
-/// hair reaches below where the hair itself touches, for a film ceiling of
-/// `coats`: the paint under a hair is the film it leaves, and it fills the
-/// relief that far down and no further.
-#[inline]
-pub(crate) fn tooth_reach(coats: f32) -> f32 {
-    coats * crate::surface::COAT_UM / (1.6 * 2.0 * crate::bristle::TOOTH_UM)
+/// The bed of a press (`Surf::bed`: a touch's tip, or a stroke's bed as its
+/// hairs lift): its mean pressure (Pa) and the film its gap holds (m), the
+/// paint pressed between the hairs and the canvas.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bed {
+    pub pa: f32,
+    pub h: f32,
+}
+
+/// The bed's mean pressure (Pa), or None for a bed pressing nothing.
+pub fn bed_pa(pad: &Pad) -> Option<f32> {
+    pressure(pad)
+}
+
+/// How deep (m) below the crowns a bed's paint fills a rough surface's
+/// hollows (notes/research/stroke_film.md §5, "The weave's hollows"): the
+/// shallower of
+///
+/// - how far the bed's pressure `pa` drives the paste into a hollow
+///   `hollow_m` wide against its yield stress: a Bingham plug in a slot
+///   moves once the pressure across it beats the yield stress on its two
+///   walls, p·w = 2τ·δ (as a yield-stress paste extruded into a channel or
+///   squeezed out of a gap stops where the pressure gradient falls to
+///   2τ/w); a paint with no yield stress flows in however light the bed;
+/// - `supply_m`: how deep the paint there fills the hollows from the crowns
+///   down, where the relief's voids above that depth hold all of it
+///   (`bristle::Relief::fills`).
+pub fn fill_m(r: Rheology, pa: f32, hollow_m: f32, supply_m: f32) -> f32 {
+    let flow = if r.tau > 0.0 { pa.max(0.0) * hollow_m / (2.0 * r.tau) } else { f32::INFINITY };
+    flow.min(supply_m.max(0.0))
 }
 
 #[cfg(test)]

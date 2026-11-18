@@ -89,6 +89,160 @@ fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
 /// reaches ahead of the hair (see `exchange`).
 pub(crate) const WET_REACH: f32 = 0.5;
 
+/// The relief under a stroke or a touch with the stroke film (`Surf::relief`),
+/// over its footprint, in the tooth's contact units (2·`TOOTH_UM` to one):
+/// the level of the crowns a bed rests on, and how wide its hollows are.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Relief {
+    /// The crowns: the relief's mean level and √2 times its spread, the
+    /// crests of a sinusoidal relief with that spread (a bed's face is many
+    /// hair spacings across, and rests on the weave's crowns, not on its
+    /// highest fibre).
+    pub top: f32,
+    /// The hollows' width (pixels): the mean distance between the relief's
+    /// crossings of its mean level, π·σ/σ′ (Rice's formula for a random
+    /// relief, σ its height's spread and σ′ its slope's along a line; for a
+    /// weave of pitch λ, λ/2). At least a pixel; infinite where the
+    /// footprint resolves no relief.
+    pub hollow_px: f32,
+    /// The relief's slope's spread σ′ (contact units per pixel): how far a
+    /// pixel's own relief spans either side of its mean level.
+    pub slope: f32,
+    /// The voids below the crowns per area down to each depth
+    /// k·`VOID_STEP` (the mean over the footprint of how far the relief lies
+    /// below the crowns, up to that depth): what filling it to that depth
+    /// takes.
+    pub voids: [f32; VOID_STEPS + 1],
+}
+
+/// The depths `Relief::voids` holds: steps of `VOID_STEP` contact units down
+/// to 2 below the crowns (240 µm, past any weave's hollows).
+pub(crate) const VOID_STEPS: usize = 32;
+pub(crate) const VOID_STEP: f32 = 2.0 / VOID_STEPS as f32;
+
+impl Relief {
+    /// How deep below the crowns (contact units) paint of `film` (contact
+    /// units, per area) fills the relief: where the voids above that depth
+    /// hold it all. Infinite past the deepest hollow.
+    pub fn fills(&self, film: f32) -> f32 {
+        if film >= self.voids[VOID_STEPS] {
+            return f32::INFINITY;
+        }
+        let k = self.voids.partition_point(|&v| v <= film).max(1);
+        let (v0, v1) = (self.voids[k - 1], self.voids[k]);
+        let t = if v1 > v0 { (film - v0) / (v1 - v0) } else { 0.0 };
+        ((k - 1) as f32 + t) * VOID_STEP
+    }
+}
+
+/// The relief under the footprint `lim` (whole-canvas pixels), over the part
+/// of it inside `sf`'s buffer; None where none of it is.
+pub(crate) fn relief(sf: &Surf, lim: (usize, usize, usize, usize)) -> Option<Relief> {
+    let (x0, y0) = (lim.0.max(sf.ox), lim.1.max(sf.oy));
+    let (x1, y1) = (lim.2.min(sf.ox + sf.w), lim.3.min(sf.oy + sf.h));
+    let (mut n, mut s1, mut s2, mut g2) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    for y in y0..y1.saturating_sub(1) {
+        let row = (y - sf.oy) * sf.w;
+        for x in x0..x1.saturating_sub(1) {
+            let i = row + x - sf.ox;
+            // SAFETY: i, i + 1 and i + w lie inside the buffer
+            let (b, bx, by) = unsafe { ((*sf.base.add(i)) as f64, (*sf.base.add(i + 1)) as f64, (*sf.base.add(i + sf.w)) as f64) };
+            n += 1.0;
+            s1 += b;
+            s2 += b * b;
+            g2 += 0.5 * ((bx - b).powi(2) + (by - b).powi(2));
+        }
+    }
+    if n < 4.0 {
+        return None;
+    }
+    let mean = s1 / n;
+    let var = (s2 / n - mean * mean).max(0.0);
+    let hollow_px = if g2 <= 1e-12 * n { f32::INFINITY } else { ((std::f64::consts::PI * (var / (g2 / n)).sqrt()) as f32).max(1.0) };
+    let top = (mean + (2.0 * var).sqrt()) as f32;
+    // how far each pixel lies below the crowns, in steps of VOID_STEP / 8
+    let fine = 8 * VOID_STEPS;
+    let mut depth = vec![0u32; fine + 1];
+    for y in y0..y1.saturating_sub(1) {
+        let row = (y - sf.oy) * sf.w;
+        for x in x0..x1.saturating_sub(1) {
+            // SAFETY: as above
+            let b = unsafe { *sf.base.add(row + x - sf.ox) };
+            depth[(((top - b) / VOID_STEP * 8.0).max(0.0) as usize).min(fine)] += 1;
+        }
+    }
+    let mut voids = [0.0f32; VOID_STEPS + 1];
+    for (k, v) in voids.iter_mut().enumerate() {
+        let d = k as f32 * VOID_STEP;
+        *v = (depth.iter().enumerate().map(|(j, &c)| c as f64 * (((j as f32 + 0.5) * VOID_STEP / 8.0).min(d)) as f64).sum::<f64>() / n) as f32;
+    }
+    Some(Relief { top, hollow_px, slope: (g2 / n).sqrt() as f32, voids })
+}
+
+/// Where the paint under a bed with the stroke film wets the relief
+/// (`weave_fill`), in the tooth's contact units (2·`TOOTH_UM` to one).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WeaveFill {
+    /// The crowns the bed rests on (`Relief::top`).
+    pub top: f32,
+    /// How far below them the paint fills the hollows.
+    pub deep: f32,
+    /// Half the span of a pixel's own relief about its mean level.
+    pub edge: f32,
+}
+
+impl WeaveFill {
+    /// How much of a pixel at level `surf` the paint wets: all of it above
+    /// the paint's floor, none below, and across it the share of the pixel's
+    /// own relief (`edge` either side of its level, taken as planar) above
+    /// the floor. Where the paint reaches it wets the surface, crown or
+    /// hollow alike, and lies as one film.
+    #[inline(always)]
+    pub fn wets(&self, surf: f32) -> f32 {
+        ((surf - (self.top - self.deep) + self.edge) / (2.0 * self.edge)).clamp(0.0, 1.0)
+    }
+}
+
+/// With the stroke film: where the paint under the bed reaches in the
+/// relief, for the hair `br` (its `liquid`, the share `phi` of it a
+/// thinner). The paint fills the
+/// relief's hollows from the crowns the bed rests on (`Surf::relief`) as
+/// deep as `stroke_film::fill_m` has it from the bed's pressure, the
+/// paint's yield stress, the hollows' width and the paint the bed passes
+/// on per area. A slide's bed (`Surf::pad`) passes on what its hairs give:
+/// `gives`, what this hair gives over its step of `travel` units wherever it
+/// lands, laid over its share of the area the bed sweeps (the hairs one
+/// behind another along a track, the bed's length over their spacing, each
+/// laying on it), and never more than the film `law` (coats) the slider
+/// leaves: that is a ceiling, and a brush holding little paint lays less
+/// (a dry brush). A press's bed (`Surf::bed`) doesn't move: for as long as
+/// it presses it squeezes the tuft's paint into its patch, so what fills
+/// the hollows under it is what the hair holds over its share of the bed.
+/// None without the stroke film, a bed or the relief.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn weave_fill(sf: &Surf, br: &Bristle, tool: &Tool, liquid: f32, phi: f32, press: bool, law: Option<f32>, gives: f32, travel: f32) -> Option<WeaveFill> {
+    use crate::stroke_film as film;
+    let mmu = sf.stroke_film.filter(|_| !sf.laid.is_null())?;
+    let rel = sf.relief?;
+    let rh = film::rheology(&br.hide, phi);
+    // (a hair's share of the bed, units²)
+    let share_u2 = ((0.5 * tool.width).powi(2) * root_area(tool.kind) / tool.bristles.max(1) as f32).max(1e-9);
+    let (pa, holds) = if press {
+        (sf.bed?.pa, liquid / share_u2 * COAT_UM * 1e-6)
+    } else {
+        let pad = sf.pad?;
+        // (the bed's length along the travel, units)
+        let bed_u = pad.length / (mmu * 1e-3);
+        let supply = gives * bed_u / (share_u2 * travel.max(1e-6));
+        (film::bed_pa(&pad).unwrap_or(0.0), law?.min(supply) * COAT_UM * 1e-6)
+    };
+    let w = rel.hollow_px * mmu / sf.scale * 1e-3;
+    // (the depth the paint fills from the crowns down: m to contact units and back)
+    let unit = 2.0 * TOOTH_UM * 1e-6;
+    let reach = rel.fills(holds / unit) * unit;
+    Some(WeaveFill { top: rel.top, deep: film::fill_m(rh, pa, w, reach) / unit, edge: (0.5 * rel.slope).max(1e-3) })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub enum Kind {
@@ -873,6 +1027,14 @@ pub(crate) struct Surf {
     /// slider's (and always on a clean-blender stroke, whose bed brings no
     /// film of its own down).
     pub(crate) gap: Option<crate::stroke_film::Gap>,
+    /// A press with the stroke film (`press`): the bed pressing it, its
+    /// pressure and the film its gap holds, which fill the weave's hollows
+    /// under it (`crate::stroke_film::fill_m`). A slide's bed is `pad` and
+    /// its film `gap` (or the slider's).
+    pub(crate) bed: Option<crate::stroke_film::Bed>,
+    /// With the stroke film, the relief under the stroke or touch being
+    /// laid (`relief`): the crowns its bed rests on and its hollows' width.
+    pub(crate) relief: Option<Relief>,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1154,6 +1316,8 @@ impl Canvas {
             blend: false,
             lay_run: None,
             gap: None,
+            bed: None,
+            relief: None,
         }
     }
 
@@ -1501,6 +1665,9 @@ pub(crate) unsafe fn drag_on(
     let (step, nsteps) = if start && nsteps < TOUCH_STEPS && total > 0.0 { (total / TOUCH_STEPS as f32, TOUCH_STEPS) } else { (step, nsteps) };
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
+    if sf.stroke_film.is_some() && !sf.laid.is_null() {
+        sf.relief = relief(&sf, lim);
+    }
     // (the stroke film: the hand's speed, given or the steering law's)
     let film_speed = sf.stroke_film.map(|mmu| g.speed.unwrap_or_else(|| crate::tally::stroke_speed_mm_s(&tool, mmu) as f32));
 
@@ -1764,6 +1931,8 @@ pub(crate) unsafe fn drag_on(
             // the pressed tip's)
             let spacing_u = half / s * (root_area(tool.kind) / held.bristles.len().max(1) as f32).sqrt();
             let rbp = (tool.hair_radius() * s).max(1.4 * spacing_u * s).max(0.75);
+            // (the bed presses at the hand's pressure of this step)
+            let bed_pa = sf.pad.and_then(|pd| crate::stroke_film::bed_pa(&pd)).unwrap_or(0.0);
             let sp = Surf { press: true, pad: None, gap: None, ..sf };
             for &(bi, from, at, reach) in &presses {
                 // (half the gap's film over its share of the patch, spacing
@@ -1772,7 +1941,7 @@ pub(crate) unsafe fn drag_on(
                 let v = 0.5 * gap[bi] / (COAT_UM * 1e-6) * spacing_u * (spacing_u + track_u);
                 let b = &mut held.bristles[bi];
                 // (its gap: the canvas keeps half its film where it lifts)
-                let sp = Surf { gap: Some(crate::stroke_film::Gap { h: gap[bi], squeeze: 0.0 }), ..sp };
+                let sp = Surf { gap: Some(crate::stroke_film::Gap { h: gap[bi], squeeze: 0.0 }), bed: Some(crate::stroke_film::Bed { pa: bed_pa, h: gap[bi] }), ..sp };
                 unsafe { crate::engine7::exchange::exchange(sp, b, &tool, from, at, rbp, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             }
         }
@@ -2039,10 +2208,19 @@ pub(crate) unsafe fn exchange(
         });
         let wet = smoothstep(0.1, 0.8, liquid / full);
         // (how far below the tooth's peaks the paint a loaded hair carries
-        // reaches: with the stroke film, the film it leaves; before it, an
-        // estimate, `WET_REACH`)
-        let wet_reach = law.map_or(WET_REACH, crate::stroke_film::tooth_reach);
-        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(wet_reach * wet);
+        // reaches: with the stroke film, as deep as the bed fills the
+        // relief's hollows, `weave_fill`; before it, an estimate, `WET_REACH`
+        // by the load)
+        // (what the hair gives over this step wherever it lands: the run's
+        // share of what it carries)
+        let fill = if law.is_some() {
+            let travel = (seg / s).max(rb / s * 0.5);
+            let travel = if exch { travel * (1.0 - phi).powf(crate::thinner::exchange_kj().0) } else { travel };
+            weave_fill(&sf, br, tool, liquid, phi, false, law, liquid * (1.0 - (-travel / sf.lay_run.unwrap_or(tool.run)).exp()), travel)
+        } else {
+            None
+        };
+        let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(if fill.is_some() { 0.0 } else { WET_REACH * wet });
         let th = 1.0 - reach.max(wick) * 1.6;
 
         // pass 1: contact weights
@@ -2083,14 +2261,20 @@ pub(crate) unsafe fn exchange(
                 // soft hair bends down into the valleys of the weave; stiff hog
                 // bristles ride on the peaks
                 let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
+                // (with the stroke film, where the hair touches or its
+                // paint wets, `WeaveFill::wets`)
+                let touch = |th: f32, lift: f32| {
+                    let h = smoothstep(th - give, th + 0.2, surf);
+                    fill.map_or(h, |f| h.max(f.wets(surf - lift)))
+                };
                 let wt = match clip {
-                    None => cov * smoothstep(th - give, th + 0.2, surf),
-                    Some(Clip::Mask(m)) => cov * smoothstep(th - give, th + 0.2, surf) * m.data[y * w + x],
+                    None => cov * touch(th, 0.0),
+                    Some(Clip::Mask(m)) => cov * touch(th, 0.0) * m.data[y * w + x],
                     // past a fence the hairs lift off the weave's hollows
                     Some(c @ Clip::Fence { .. }) => {
                         let (k, lift) = c.at(y * w + x);
                         let th = th + lift;
-                        let wt = cov * smoothstep(th - give, th + 0.2, surf) * k;
+                        let wt = cov * touch(th, lift) * k;
                         sum_k += wt * k * k;
                         wt
                     }
@@ -2325,7 +2509,14 @@ pub(crate) unsafe fn exchange(
                                 let j = (ty - oy) * bw_buf + tx - ox;
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
-                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j);
+                                // (with the stroke film, nor below where the bed's
+                                // paint reaches in the relief, as in engine 7)
+                                let reached = fill.map_or(1.0, |f| {
+                                    let sj = (*sf.base.add(j) + 0.35 * *sf.vol.add(j)).min(1.5);
+                                    let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
+                                    smoothstep(th - give, th + 0.2, sj).max(f.wets(sj))
+                                });
+                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j) * reached;
                                 // a thinned stroke adds no more wet film to the
                                 // pixel it ploughs into than its ceiling there
                                 // allows; the solvent goes with the paint
@@ -2550,6 +2741,9 @@ pub(crate) unsafe fn touch_on(mut sf: Surf, held: &mut Held, t: &Touch, clip: Op
     let (dx, dy) = (t.drag.0 * s, t.drag.1 * s);
     let rb = touch_rb(&tool, p, s);
     let lim = limit(touch_footprint_checked(&tool, t, s, sf.fw, sf.fh));
+    if sf.press {
+        sf.relief = relief(&sf, lim);
+    }
     let dlen = (dx * dx + dy * dy).sqrt();
     let steps = (TOUCH_STEPS + (dlen / rb.max(1.0)).ceil() as usize).min(64);
     // press, hold, lift
@@ -2573,6 +2767,9 @@ pub(crate) unsafe fn touch_on(mut sf: Surf, held: &mut Held, t: &Touch, clip: Op
         let theta = t.angle + t.twist * u;
         let (st, ct) = theta.sin_cos();
         let (hx, hy) = (cx + dx * u, cy + dy * u);
+        // (with the stroke film, the tip's bed: its pressure now; a press
+        // doesn't move, so its speed doesn't matter here)
+        let bed_pa = sf.stroke_film.filter(|_| sf.press).and_then(|mmu| crate::stroke_film::bed_pa(&crate::stroke_film::pad(&tool, pk, mmu, 1.0)));
         for (bi, b) in held.bristles.iter_mut().enumerate() {
             let reach = reach_of(b, pk);
             if reach <= 0.0 {
@@ -2586,6 +2783,9 @@ pub(crate) unsafe fn touch_on(mut sf: Surf, held: &mut Held, t: &Touch, clip: Op
             let prev = b.prev[0].unwrap_or(cur);
             let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
+            // (the press film between this hair and the canvas: twice what
+            // the touch lays there, as at a stroke's start)
+            sf.bed = bed_pa.map(|pa| crate::stroke_film::Bed { pa, h: 2.0 * TOUCH_FILM * tool.lay * (0.4 + 0.6 * p) * fill * COAT_UM * 1e-6 });
             if sf.e7 {
                 unsafe { crate::engine7::exchange::exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             } else {
@@ -4099,35 +4299,103 @@ mod stroke_film_tests {
         assert!(lum(300.0) < 0.95 * (ground[0] + ground[1] + ground[2]), "the glaze laid nothing visible");
     }
 
-    /// A stiff, lean, opaque paint dragged lightly over canvas tooth breaks:
-    /// the weave's peaks take it and its hollows stay bare. The same brush
-    /// pressed with a fluid paint covers.
+    /// 100 mm across 800 px (1/8 mm), on a coarse linen (12 threads a
+    /// centimetre, crowns 80 µm high) under no ground.
+    fn coarse_linen() -> Canvas {
+        Canvas::new(800, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(100.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true).with_linen(Linen { warp_per_cm: 12.0, weft_per_cm: 12.0, crown_um: 80.0, slubs: 0.3, seed: 3 })
+    }
+
+    /// The share of the band y 490..510, x 300..700 (units) of `c` holding
+    /// paint (over 0.5 µm).
+    fn band_covered(c: &Canvas) -> f32 {
+        let mut n = 0;
+        let mut hit = 0;
+        for x in 300..700 {
+            for y in 490..510 {
+                n += 1;
+                hit += (c.wet.vol[c.f.index(x as f32, y as f32)] * COAT_UM > 0.5) as usize;
+            }
+        }
+        hit as f32 / n as f32
+    }
+
+    /// A scumble breaks on the tooth: a hog flat rubbed nearly dry on the
+    /// palette (a twentieth of a full load of stiff, lean, opaque paint)
+    /// and dragged lightly over a coarse weave lays its paint on the
+    /// weave's crowns and leaves its hollows bare, because the paint its
+    /// hairs give per area of the track is less than the hollows hold (a
+    /// bed's paint fills the relief from the crowns down, as deep as what
+    /// it passes on fills the voids there; the slider's film is only a
+    /// ceiling). The bed's pressure, tens of kPa, would drive any paste
+    /// into the hollows against its yield stress of a few hundred Pa. It
+    /// covers some 0.4 of the band. The same brush loaded with a fluid
+    /// paint and pressed covers.
     #[test]
     fn a_scumble_breaks_on_the_tooth() {
-        // 100 mm across 800 px (1/8 mm), on a coarse linen (12 threads a
-        // centimetre, crowns 80 µm high) under no ground
-        let linen = || Canvas::new(800, 1.0, hex("#e8e0d0")).with_engine(crate::PIGMENT_MIXER).with_size_mm(100.0).with_glaze_film(true).with_blend_feather(true).with_brush_skim(true).with_stroke_film(true).with_linen(Linen { warp_per_cm: 12.0, weft_per_cm: 12.0, crown_um: 80.0, slubs: 0.3, seed: 3 });
-        let covered = |c: &Canvas| {
-            let mut n = 0;
-            let mut hit = 0;
-            for x in 300..700 {
-                for y in 490..510 {
-                    n += 1;
-                    hit += (c.wet.vol[c.f.index(x as f32, y as f32)] * COAT_UM > 0.5) as usize;
-                }
-            }
-            hit as f32 / n as f32
-        };
-        let mut c = linen();
-        // a little of it on the brush
+        let mut c = coarse_linen();
         let mut h = Held::new(Tool::hog_flat(60.0), 6).with_engine(crate::PIGMENT_MIXER);
-        h.load(paint("#e8e4d8", 0.98, -0.2), 0.3);
+        h.load(paint("#e8e4d8", 0.98, -0.2), 0.05);
         c.drag(&mut h, &steady(500.0, 0.15, 200.0), None);
-        let scumble = covered(&c);
-        let mut c = linen();
+        let scumble = band_covered(&c);
+        let mut c = coarse_linen();
         c.drag(&mut held(Tool::hog_flat(60.0), paint("#e8e4d8", 0.98, 0.3), 6), &steady(500.0, 0.8, 200.0), None);
-        let pressed = covered(&c);
+        let pressed = band_covered(&c);
+        eprintln!("scumble covers {scumble}, pressed {pressed}");
         assert!(scumble < 0.7 && scumble > 0.1 && pressed > 0.95, "scumble covers {scumble}, pressed {pressed}");
+    }
+
+    /// The share of the band's pixels (as `band_covered`) in the
+    /// lowest (`hollows`) or highest quarter of the relief the brush rests
+    /// on that hold paint, and their mean film (µm).
+    fn by_relief(c: &mut Canvas, hollows: bool) -> (f32, f32) {
+        let base: Vec<f32> = {
+            let sf = c.surf();
+            (0..c.f.w * c.f.h).map(|i| unsafe { *sf.base.add(i) }).collect()
+        };
+        let px: Vec<usize> = (300..700).flat_map(|x| (490..510).map(move |y| (x, y))).map(|(x, y)| c.f.index(x as f32, y as f32)).collect();
+        let mut lv: Vec<f32> = px.iter().map(|&i| base[i]).collect();
+        lv.sort_by(f32::total_cmp);
+        let (lo, hi) = (lv[lv.len() / 4], lv[3 * lv.len() / 4]);
+        let pick: Vec<usize> = px.into_iter().filter(|&i| if hollows { base[i] <= lo } else { base[i] >= hi }).collect();
+        let n = pick.len() as f32;
+        let um = |i: usize| c.wet.vol[i] * COAT_UM;
+        (pick.iter().filter(|&&i| um(i) > 0.5).count() as f32 / n, pick.iter().map(|&i| um(i)).sum::<f32>() / n)
+    }
+
+    /// A light drag of a scant load of stiff paint (`a_scumble_breaks_on_the_tooth`)
+    /// leaves the weave's hollows bare: its paint lies on the crowns, most
+    /// of the relief's highest quarter taking it, and less than a fifth of
+    /// its lowest.
+    #[test]
+    fn a_light_stiff_thin_drag_leaves_the_hollows_bare() {
+        let mut c = coarse_linen();
+        let mut h = Held::new(Tool::hog_flat(60.0), 6).with_engine(crate::PIGMENT_MIXER);
+        h.load(paint("#e8e4d8", 0.98, -0.2), 0.05);
+        c.drag(&mut h, &steady(500.0, 0.15, 200.0), None);
+        let (hollows, hollow_um) = by_relief(&mut c, true);
+        let (crowns, crown_um) = by_relief(&mut c, false);
+        eprintln!("light drag: crowns {crowns} painted ({crown_um} µm), hollows {hollows} ({hollow_um} µm)");
+        assert!(crowns > 0.5 && hollows < 0.2, "crowns {crowns} painted, hollows {hollows}");
+    }
+
+    /// A full-pressure press fills the weave's hollows: the paint pressed
+    /// between the tip and the canvas is levelled to the bed resting on the
+    /// crowns, so it lies thicker over the hollows than on the crowns, and
+    /// covers both: a loaded 9 mm filbert pressed down along the coarse
+    /// weave, its hollows some 30 µm, its crowns some 25 µm.
+    #[test]
+    fn a_full_pressure_press_fills_the_hollows_thicker_than_the_crowns() {
+        let mut c = coarse_linen();
+        for k in 0..7 {
+            c.touch(&mut held(Tool::filbert(90.0), paint("#203c8c", 0.95, 0.0), 3), &Touch::at(320.0 + 60.0 * k as f32, 500.0).pressure(1.0), None);
+        }
+        let (hollows, hollow_um) = by_relief(&mut c, true);
+        let (crowns, crown_um) = by_relief(&mut c, false);
+        eprintln!("full press: crowns {crowns} painted ({crown_um} µm), hollows {hollows} ({hollow_um} µm)");
+        assert!(hollows > 0.95 && crowns > 0.95, "crowns {crowns} painted, hollows {hollows}");
+        // (laid evenly over the contact, as before the weave's fill, they
+        // were within 6 per cent)
+        assert!(hollow_um > 1.1 * crown_um, "hollows {hollow_um} µm, crowns {crown_um} µm");
     }
 
     /// Without the switch a stroke lays what it did.
@@ -4515,6 +4783,26 @@ mod stroke_film_tests {
         if shares.is_empty() { 0.0 } else { shares.iter().sum::<f32>() / shares.len() as f32 }
     }
 
+    /// How a grid `g` (`w` wide, of the units rect `r`) correlates over the
+    /// pixels `inside` with the canvas's height there: above 0 where the
+    /// film is thicker on the crowns, below where in the hollows.
+    fn relief_corr(c: &Canvas, r: (f32, f32, f32, f32), g: &[f32], w: usize, inside: &[bool]) -> f32 {
+        let s = c.f.scale;
+        let (x0, y0) = ((r.0 * s) as usize, (r.1 * s) as usize);
+        let idx: Vec<usize> = (0..g.len()).filter(|&i| inside[i]).collect();
+        let hg = |i: usize| c.height[(y0 + i / w) * c.f.w + x0 + i % w];
+        let n = idx.len().max(1) as f32;
+        let (mg, mh) = (idx.iter().map(|&i| g[i]).sum::<f32>() / n, idx.iter().map(|&i| hg(i)).sum::<f32>() / n);
+        let (mut cv, mut vg, mut vh) = (0.0f32, 0.0f32, 0.0f32);
+        for &i in &idx {
+            let (a, b) = (g[i] - mg, hg(i) - mh);
+            cv += a * b;
+            vg += a * a;
+            vh += b * b;
+        }
+        cv / (vg * vh).sqrt().max(1e-12)
+    }
+
     /// The painted pixels (over 0.5 µm) of a grid `w` wide that are not
     /// joined (by a side or a corner) to its largest painted patch.
     fn apart(g: &[f32], w: usize) -> usize {
@@ -4600,7 +4888,11 @@ mod stroke_film_tests {
             assert!(bare == 0, "{what}: {bare} of {n} pixels inside its footprint bare");
             for (lam, of) in [(weave, "the weave's pitch"), (hairs(p), "the hairs' spacing")] {
                 let rp = ripple(&g, w, &inside, lam);
-                assert!(rp < 0.08, "{what}: its film repeats at {of} ({lam} px): {rp} of its variance");
+                // (levelled to the bed, a press's film is thicker over the
+                // weave's hollows: it may follow the weave, but never lie
+                // on its crowns)
+                let crowns = relief_corr(&c, r, &g, w, &inside);
+                assert!(rp < 0.08 || (lam == weave && crowns < 0.0), "{what}: its film repeats at {of} ({lam} px): {rp} of its variance, correlating {crowns} with the relief");
             }
         }
         for (what, r) in [("the stroke's end", (500.0, 190.0, 620.0, 310.0)), ("the dab's end", (700.0, 190.0, 780.0, 310.0))] {

@@ -29,6 +29,10 @@ pub const ENGINE_MARK: &str = "--@ engine";
 /// A log's head line: its knife's paint laid on wet paint stays on top of it
 /// (`paint::Canvas::with_knife_skim`). Every new painting has it.
 pub const KNIFE_SKIM_MARK: &str = "--@ knife-skim";
+/// A log's head line: what its knife leaves standing taller than its
+/// paint's yield stress holds up slumps (`paint::Canvas::with_knife_slump`;
+/// engine 4 and later). Every new painting has it.
+pub const KNIFE_SLUMP_MARK: &str = "--@ knife-slump";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
@@ -732,6 +736,9 @@ impl Session {
         }
         if self.st.borrow().tubes.knife_skim {
             let _ = writeln!(s, "{KNIFE_SKIM_MARK}");
+        }
+        if self.st.borrow().tubes.knife_slump {
+            let _ = writeln!(s, "{KNIFE_SLUMP_MARK}");
         }
         if self.st.borrow().tubes.carried_paint {
             let _ = writeln!(s, "{CARRIED_PAINT_MARK}");
@@ -1555,6 +1562,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::PIGMENT_MIXER;
         b.knife_skim = true;
+        b.knife_slump = true;
         b.limbs_join_nearest = true;
         b.reload_finite = true;
         b.carried_paint = true;
@@ -1589,6 +1597,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::PIGMENT_MIXER) {
         return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7, 8 or 9"));
     }
+    let knife_slump = head(KNIFE_SLUMP_MARK);
+    if knife_slump && engine < 4 {
+        return Err(format!("the log's knife slump switch ({KNIFE_SLUMP_MARK}) requires engine 4 or later"));
+    }
     for (on, mark) in [(blend_feather, BLEND_FEATHER_MARK), (brush_skim, BRUSH_SKIM_MARK)] {
         if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::PIGMENT_MIXER) {
             return Err(format!("the log's switch {mark:?} requires engine 7, 8 or 9"));
@@ -1617,6 +1629,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.knife_skim = knife_skim;
+    b.knife_slump = knife_slump;
     b.carried_paint = head(CARRIED_PAINT_MARK);
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
     b.reload_finite = head(RELOAD_FINITE_MARK);
@@ -2119,6 +2132,47 @@ mod tests {
             assert_eq!(restored.knife_skim(), skims);
         }
         assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting's knife holds one full load and what it leaves standing
+    /// taller than its paint holds up slumps (`paint::Canvas::with_knife_slump`),
+    /// and its log's head says so; a replay and a save of that log do too, and
+    /// a log without the line (every painting before it) loads on top of what
+    /// the blade carries and leaves its ridges as laid, as it was painted.
+    #[test]
+    fn new_paintings_record_the_knife_slump_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        // (a knife loaded before each of six overlapping pulls, cassatt7's cloth)
+        let pulls = "w = pile{{\"lead white\", 4}, name=\"w\"}\nk = knife{width=40}\nfor j = 0, 5 do k:load(w, 1.0); k:lay({{100, 100 + j*30}, {300, 100 + j*30}}) end\nprint(k:fullness())";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().knife_slump());
+        live.run(pulls).unwrap();
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{KNIFE_SLUMP_MARK}\n")), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.knife_slump());
+        let laid = |s: &Session| s.canvas().unwrap().wet_total() as f32;
+        let mut ran = Vec::new();
+        for (log, slumps) in [(text.clone(), true), (text.replace(&format!("{KNIFE_SLUMP_MARK}\n"), ""), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            let mut out = String::new();
+            for chunk in parse_program(&log) {
+                out = replay.run(&chunk).unwrap().out;
+            }
+            assert_eq!(replay.canvas().unwrap().knife_slump(), slumps);
+            assert_eq!(replay.program("p"), log);
+            let mut saved = Vec::new();
+            replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+            assert_eq!(Canvas::read_state(&mut &saved[..]).unwrap().0.knife_slump(), slumps);
+            ran.push((out.trim().parse::<f32>().unwrap(), laid(&replay)));
+        }
+        // with the switch the blade ends no fuller than a full load; without
+        // it the six loads piled up on it, and more paint went down
+        assert!(ran[0].0 <= 1.0 + 1e-4 && ran[1].0 > 1.1, "{ran:?}");
+        assert!(ran[1].1 > ran[0].1, "{ran:?}");
+        assert!(box_for(Some(&as_engine(&text, 3))).is_err());
     }
 
     /// A new painting's rag keeps what it lifts and stays inside a mask

@@ -242,6 +242,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.drawing_optics = canvas.drawing_optics();
     tubes.rag_lift = canvas.rag_lift();
     tubes.knife_skim = canvas.knife_skim();
+    tubes.knife_slump = canvas.knife_slump();
     tubes.blend_feather = canvas.blend_feather();
     tubes.brush_skim = canvas.brush_skim();
     tubes.carried_paint = h.get("carried_paint") == Some(&"1");

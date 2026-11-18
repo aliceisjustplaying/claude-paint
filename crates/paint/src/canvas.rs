@@ -264,6 +264,9 @@ pub struct Canvas {
     /// Engine 7: a knife's paint laid on wet paint stays on top of it
     /// (`Canvas::knife`).
     pub(crate) knife_skim: bool,
+    /// Engine 4 and later: what a knife pass leaves standing taller than its
+    /// paint's yield stress holds up slumps (`bristle::slump`).
+    pub(crate) knife_slump: bool,
     /// Engine 7: a blender lays the wet paint it carries only where wet paint
     /// was when its pass began, and a little way past it (`Canvas::work`).
     pub(crate) blend_feather: bool,
@@ -341,6 +344,7 @@ impl Canvas {
             film_pass: None,
             rag_lift: false,
             knife_skim: false,
+            knife_slump: false,
             blend_feather: false,
             brush_skim: false,
             receptive: None,
@@ -360,6 +364,7 @@ impl Canvas {
         self.glaze_film &= crate::engine7::active(v);
         self.rag_lift &= crate::engine7::active(v);
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
+        self.knife_slump &= v >= 4;
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         if v < crate::PIGMENT_MIXER {
@@ -473,6 +478,18 @@ impl Canvas {
 
     pub fn knife_skim(&self) -> bool {
         self.knife_skim
+    }
+
+    /// The knife slump switch (engine 4 and later): what a knife pass leaves
+    /// standing taller than its paint's yield stress holds up slumps onto
+    /// its neighbors (`Canvas::knife`).
+    pub fn with_knife_slump(mut self, enabled: bool) -> Self {
+        self.knife_slump = enabled && self.engine >= 4;
+        self
+    }
+
+    pub fn knife_slump(&self) -> bool {
+        self.knife_slump
     }
 
     pub fn with_blend_feather(mut self, enabled: bool) -> Self {
@@ -855,6 +872,34 @@ impl Canvas {
 #[cfg(test)]
 mod review_lighting_tests {
     use super::*;
+
+    /// A bead `h` µm tall lit at elevation `e` casts a shadow h/tan(e) long
+    /// (the units of the relief, µm, against the pixel's pitch): a bead 10 mm
+    /// tall and 9 mm across on a canvas of 1 mm pixels, lit from the right,
+    /// shades as far left of it as the geometry says, give or take the pixel
+    /// the relief is softened over (`box_blur`, 1) and the shadow's soft tip:
+    /// three pixels, at 20° a tenth of the shadow.
+    #[test]
+    fn a_bead_casts_a_shadow_of_its_geometric_length() {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(300.0);
+        let um = 10_000.0f32;
+        let (cx, cy) = (200usize, 150usize);
+        for y in cy - 4..=cy + 4 {
+            for x in cx - 4..=cx + 4 {
+                if (x as f32 - cx as f32).powi(2) + (y as f32 - cy as f32).powi(2) <= 16.5 {
+                    c.height[y * 300 + x] += um;
+                }
+            }
+        }
+        let flat = c.seen_lit(0.0, 45.0, 1.0)[50 * 300 + 50][0];
+        for e in [20.0f32, 30.0, 45.0, 60.0] {
+            let lit = c.seen_lit(0.0, e, 1.0);
+            // (from the bead's left edge, at its middle row)
+            let shaded = (1..120).take_while(|d| lit[cy * 300 + cx - 4 - d][0] < flat * 0.995).count() as f32;
+            let geometric = um / (e.to_radians().tan() * c.px_mm() * 1000.0);
+            assert!((shaded - geometric).abs() <= 3.0, "elevation {e}: shaded {shaded} px, geometric {geometric} px");
+        }
+    }
 
     /// The light's two ends, exactly: overhead (90°) casts no shadow and
     /// lights flat paint fully; grazing (0°), a lamp in the canvas's plane,

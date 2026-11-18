@@ -2966,6 +2966,10 @@ pub struct Knife {
     shows_packing: bool,
     spectral_films: bool,
     volume_latent: bool,
+    /// The knife slump switch (`with_capacity`): the blade holds no more
+    /// than a full load when it is loaded. Not printed.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    capped: bool,
 }
 
 /// As derived, but the paint's properties without the pigment's packing
@@ -3000,7 +3004,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false, spectral_films: false, volume_latent: false }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false, spectral_films: false, volume_latent: false, capped: false }
     }
     pub fn with_engine(mut self, engine: u32) -> Self {
         self.volume_latent = engine >= crate::PIGMENT_MIXER;
@@ -3017,13 +3021,29 @@ impl Knife {
     pub fn full(&self) -> f32 {
         self.width * self.width * 2.0 * 12.0
     }
+    /// The knife of a painting with the knife slump switch
+    /// (`Canvas::with_knife_slump`): a blade loaded holds no more than a
+    /// full load (`load`).
+    pub fn with_capacity(mut self, on: bool) -> Self {
+        self.capped = on;
+        self
+    }
+
     /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
+    /// With the knife slump switch (`with_capacity`) a blade that still
+    /// carries paint takes up only what fills it to a full load, the bead
+    /// it holds (`full`): it can't carry more, and what it would take
+    /// beyond that stays in the pile. Without it a load came on top of
+    /// whatever was on the blade, so a knife loaded before each pull
+    /// carried several full loads, and left a share of them in the ridge
+    /// where it lifted (`Canvas::knife`).
     pub fn load(&mut self, paint: Paint, amount: f32) {
         // (no amount that is not a number: it would leave the blade's paint NaN)
         if !(0.0..=1.0).contains(&amount) || !self.width.is_finite() || !(1.0..=1000.0).contains(&self.width) {
             return;
         }
         let liquid = amount * self.full();
+        let liquid = if self.capped { liquid.min((self.full() - self.vol - self.solvent).max(0.0)) } else { liquid };
         let paint = if self.volume_latent { paint.with_engine(crate::PIGMENT_MIXER) } else { paint };
         self.volume_latent = paint.volume_latent;
         let v = liquid * (1.0 - paint.thinner);
@@ -3346,11 +3366,157 @@ impl Canvas {
         }
         k.vol += held;
         k.solvent += held_solvent;
+        // (the knife slump switch: what the knife left standing taller than
+        // its paint holds up slumps, `slump`)
+        if self.knife_slump {
+            // SAFETY: as above
+            bounds = unsafe { slump(&sf, height, self.engine, s_mm, bounds, id) };
+        }
         // (the window's own pixels, as a brush's bounds: a crop's start at its corner)
         if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);
         }
     }
+}
+
+/// Oil's density, kg/m³ (linseed oil 0.93 g/cm³: notes/research/pigment_oil.md §2).
+const OIL_KG_M3: f32 = 930.0;
+/// A pigment's density for the slump, kg/m³. ESTIMATE: a pixel's paint
+/// doesn't carry its pigments' densities, so the slump takes 2.5 g/cm³ for
+/// all of them, about ultramarine's (2.35) and yellow ochre's (2.8)
+/// (notes/research/pigment_oil.md §3); lead white (6.81) and vermilion
+/// (8.1) are heavier and would slump further. It is a floor on the weight:
+/// the paint stands no taller than this lets it, and heavier paint might
+/// stand a little less.
+const SLUMP_PIGMENT_KG_M3: f32 = 2500.0;
+/// Gravity, m/s².
+const G_M_S2: f32 = 9.81;
+/// A step of the surface (µm) too small to move paint over: the slump
+/// stops within it of the yield stress's slope.
+const SLUMP_TOL_UM: f32 = 1.0;
+
+/// The knife slump switch (`Canvas::with_knife_slump`): the wet paint a knife
+/// pass touched (`b`, whole-canvas pixels) stands no steeper than its yield
+/// stress holds it, and what stands steeper slumps onto its neighbors.
+///
+/// A paste with a yield stress τ holds its shape until the shear stress in
+/// it passes τ. Under its own weight the shear at the bottom of a layer
+/// `h` deep whose surface slopes by `|∇s|` is ρ·g·h·|∇s|, so a heap of it
+/// at rest has ρ·g·h·|∇s| ≤ τ everywhere: the perfectly plastic profile
+/// (Nye 1951, Proc. R. Soc. A 207; the slump of a yield-stress paste: Pashias et
+/// al. 1996, J. Rheol. 40; Roussel and Coussot 2005, J. Rheol. 49;
+/// notes/research/knife_slump.md),
+/// h(x) = √(2τ(L − x)/(ρg)) for a ridge of half-width L. The knife's
+/// ridges and the bead it leaves where it lifts were laid into a pixel or
+/// three, however small a pixel, and a knife that kept picking up its own
+/// ridges stood them tens of millimetres tall on a quarter-millimetre
+/// pixel; the paint can't stand so. Paint moves from a pixel to a
+/// neighbor whose surface it overtops by more than τ·dx/(ρ·g·h) (dx the
+/// pixel's width, h its wet paint's depth), half the excess at a time,
+/// until nothing does: in millimetres, so a heap slumps to the same shape
+/// at any resolution. A knife's slab, a few hundred µm thick, overtops its
+/// neighbors by far less than it may (some tens of mm), and stays as laid.
+///
+/// Each pixel's τ is its paint's (`surface::rheology_at`, from its
+/// stiffness), divided by how fluid its film still is (`drying::fluid`:
+/// setting paint holds), and its density its oil's and pigment's by its
+/// oil's share of the volume (`Prop`'s 8). The paint moves with its color,
+/// properties, cure and solvent, as a knife's ridge does (`Surf::add`).
+///
+/// SAFETY: as `Canvas::knife`: exclusive use of `sf`'s buffers; `height`
+/// indexes as they do.
+unsafe fn slump(sf: &Surf, height: *const f32, engine: u32, mm_px: f32, b: Bounds, id: u32) -> Bounds {
+    let Some((x0, y0, x1, y1)) = b else { return b };
+    let (w, h) = (sf.w, sf.h);
+    if w == 0 || h == 0 {
+        return b;
+    }
+    let dx_m = mm_px * 1e-3;
+    let mut bounds = b;
+    let clip = |v: usize, o: usize, n: usize| v.saturating_sub(o).min(n);
+    let (bx0, by0, bx1, by1) = (clip(x0, sf.ox, w), clip(y0, sf.oy, h), clip(x1, sf.ox, w), clip(y1, sf.oy, h));
+    let mut queue: std::collections::VecDeque<usize> = (by0..by1).flat_map(|y| (bx0..bx1).map(move |x| y * w + x)).collect();
+    let mut queued: std::collections::HashSet<usize> = queue.iter().copied().collect();
+    // (a bound on the work: every move halves an excess, so this is far
+    // more than a heap needs to settle)
+    let mut budget = 64 * queue.len() + 1_000_000;
+    unsafe {
+        let surface = |i: usize| *height.add(i) + *sf.vol.add(i) * COAT_UM + if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) };
+        while let Some(i) = queue.pop_front() {
+            queued.remove(&i);
+            if budget == 0 {
+                break;
+            }
+            budget -= 1;
+            let v = *sf.vol.add(i);
+            if v <= 1e-6 {
+                continue;
+            }
+            let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) };
+            let depth_um = v * COAT_UM + sol;
+            let hd = *sf.hide.add(i);
+            let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
+            if fl <= 0.0 {
+                continue;
+            }
+            let tau = crate::surface::rheology_at(engine, hd[1]).1 / fl;
+            let oil = hd[8].clamp(0.0, 1.0);
+            let rho = OIL_KG_M3 * oil + SLUMP_PIGMENT_KG_M3 * (1.0 - oil);
+            // the step the paint here holds to a neighbor, µm
+            let hold = tau * dx_m / (rho * G_M_S2 * depth_um * 1e-6) * 1e6;
+            let si = surface(i);
+            let (x, y) = (i % w, i / w);
+            let mut out = [(0usize, 0.0f32); 4];
+            let mut n = 0;
+            let mut total = 0.0f32;
+            for (nx, ny) in [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)] {
+                if nx >= w || ny >= h {
+                    continue;
+                }
+                let j = ny * w + nx;
+                let over = si - surface(j) - hold;
+                if over > SLUMP_TOL_UM {
+                    out[n] = (j, 0.5 * over);
+                    n += 1;
+                    total += 0.5 * over;
+                }
+            }
+            if n == 0 {
+                continue;
+            }
+            // (never more than half the paint here in one move)
+            let k = (0.5 * depth_um / total).min(1.0);
+            let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
+            for &(j, um) in &out[..n] {
+                let um = um * k;
+                let coats = um / depth_um * v;
+                let ms = um / depth_um * sol;
+                let l = sf.pickup_lat(i, coats).unwrap_or_else(|| (*sf.lat.add(i)).clone());
+                let got = sf.take(i, coats);
+                sf.add(j, coats, &l, got, cure);
+                if !sf.solv.is_null() && ms > 0.0 {
+                    *sf.solv.add(i) -= ms;
+                    *sf.solv.add(j) += ms;
+                }
+                *sf.cover.add(j) = 1.0;
+                *sf.stroke.add(j) = id;
+                let (jx, jy) = (j % w + sf.ox, j / w + sf.oy);
+                grow(&mut bounds, jx, jy, jx + 1, jy + 1);
+                for q in [i, j] {
+                    if queued.insert(q) {
+                        queue.push_back(q);
+                    }
+                }
+            }
+            // (the neighbors of a pixel that gave may now overtop it)
+            for (nx, ny) in [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)] {
+                if nx < w && ny < h && queued.insert(ny * w + nx) {
+                    queue.push_back(ny * w + nx);
+                }
+            }
+        }
+    }
+    bounds
 }
 
 #[cfg(test)]
@@ -3554,6 +3720,107 @@ mod skim_pigments {
                     assert_eq!(restored.look_px(i), expected);
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod knife_slump {
+    use super::*;
+    use crate::color::hex;
+
+    /// A heap of `mm3` of a stiff white (tube paint, its stiffness `stiff`)
+    /// stood on one pixel of a canvas `px` pixels across 100 mm, slumped:
+    /// the canvas, and the height of the heap's top above the canvas, mm.
+    fn heap(px: usize, mm3: f32, stiff: f32) -> (Canvas, f32) {
+        let mut c = Canvas::new(px, 1.0, hex("#e8e0d0")).with_size_mm(100.0).with_engine(9).with_knife_slump(true);
+        let paint = Paint { stiff, ..Paint::body(hex("#f2ece0")) };
+        let (w, h) = (c.f.w, c.f.h);
+        let i = h / 2 * w + w / 2;
+        let mm_px = c.px_mm();
+        c.wet.vol[i] = mm3 / (mm_px * mm_px) / (COAT_UM * 1e-3);
+        c.wet.lat[i] = paint.latent();
+        c.wet.hide[i] = paint.prop();
+        let height = c.height.clone();
+        let sf = c.surf();
+        let b = Some((w / 2, h / 2, w / 2 + 1, h / 2 + 1));
+        unsafe { slump(&sf, height.as_ptr(), 9, mm_px, b, 1) };
+        let top = c.wet.vol.iter().cloned().fold(0.0f32, f32::max) * COAT_UM * 1e-3;
+        (c, top)
+    }
+
+    /// cassatt7's knife ridges: a knife loaded before each pull carried
+    /// several loads and left them where it lifted, a pixel or three wide,
+    /// tens of mm tall at 2400 px, and gallery light drew them as rain.
+    /// A heap of paste stands only as its yield stress holds it: it slumps
+    /// until ρ·g·h·|∇s| ≤ τ everywhere (perfect plasticity), keeps its
+    /// paint, and stands as tall in mm at any resolution, near the
+    /// axisymmetric plastic heap's √(2τR/(ρg)) for its volume
+    /// (V = (8π/15)·√(2τ/(ρg))·R^(5/2)). (On pixels of 0.25 mm, 2400 px
+    /// across a 610 mm canvas, and 0.125 mm: a heap some 3 mm across is
+    /// resolved on both; on 0.5 mm pixels it stands a fifth lower, 1 mm a
+    /// half, where a pixel is a third of the heap.)
+    #[test]
+    fn a_heap_stands_as_its_yield_stress_holds_it() {
+        let (stiff, mm3) = (0.8, 50.0);
+        let mut tops = Vec::new();
+        for px in [400, 800] {
+            let (c, top) = heap(px, mm3, stiff);
+            let mm_px = c.px_mm();
+            let total: f32 = c.wet.vol.iter().sum::<f32>() * mm_px * mm_px * COAT_UM * 1e-3;
+            assert!((total - mm3).abs() < 1e-3 * mm3, "{px} px: {total} mm³ of {mm3}");
+            // nowhere steeper than the yield stress holds
+            let (w, h) = (c.f.w, c.f.h);
+            let tau = crate::surface::rheology_at(9, c.wet.hide[h / 2 * w + w / 2][1]).1;
+            for y in 1..h - 1 {
+                for x in 1..w - 1 {
+                    let i = y * w + x;
+                    let d = c.wet.vol[i] * COAT_UM * 1e-6;
+                    if d <= 0.0 {
+                        continue;
+                    }
+                    let oil = c.wet.hide[i][8];
+                    let rho = OIL_KG_M3 * oil + SLUMP_PIGMENT_KG_M3 * (1.0 - oil);
+                    for j in [i - 1, i + 1, i - w, i + w] {
+                        let step = (c.wet.vol[i] - c.wet.vol[j]) * COAT_UM * 1e-6;
+                        assert!(rho * G_M_S2 * d * step / (mm_px * 1e-3) <= tau * 1.01 + rho * G_M_S2 * d * SLUMP_TOL_UM * 1e-6 / (mm_px * 1e-3), "{px} px: too steep at {x},{y}");
+                    }
+                }
+            }
+            let rho = OIL_KG_M3 * c.wet.hide[h / 2 * w + w / 2][8] + SLUMP_PIGMENT_KG_M3 * (1.0 - c.wet.hide[h / 2 * w + w / 2][8]);
+            let k = 2.0 * tau / (rho * G_M_S2) * 1e3;
+            let r = (mm3 * 15.0 / (8.0 * std::f32::consts::PI * k.sqrt())).powf(0.4);
+            let plastic = (k * r).sqrt();
+            assert!(top > 0.75 * plastic && top < 1.25 * plastic, "{px} px: {top} mm against the plastic heap's {plastic} mm");
+            tops.push(top);
+        }
+        assert!((tops[0] - tops[1]).abs() < 0.05 * tops[1], "{tops:?}");
+    }
+
+    /// A slab a knife lays, a few hundred µm thick, overtops its neighbors by
+    /// far less than its paint holds: the slump leaves it as laid.
+    #[test]
+    fn a_slab_stays_as_laid() {
+        let run = |slump: bool| {
+            let mut c = Canvas::new(300, 1.0, hex("#e8e0d0")).with_engine(9).with_knife_slump(slump);
+            let mut k = Knife::new(120.0).with_capacity(slump);
+            k.load(Paint::body(hex("#f2ece0")), 1.0);
+            c.knife(&mut k, &[(300.0, 300.0), (700.0, 300.0)], (0.45, 0.45), None, true, 0.0);
+            c.wet.vol.clone()
+        };
+        assert_eq!(run(true), run(false));
+    }
+
+    /// A blade holds one full load: loaded again it is topped up to it.
+    /// Without the switch a load came on top of what it carried.
+    #[test]
+    fn a_blade_holds_one_full_load() {
+        for capped in [true, false] {
+            let mut k = Knife::new(40.0).with_capacity(capped);
+            k.load(Paint::body(hex("#f2ece0")), 0.6);
+            k.load(Paint::body(hex("#f2ece0")), 1.0);
+            let f = k.fullness();
+            assert!(if capped { (f - 1.0).abs() < 1e-6 } else { (f - 1.6).abs() < 1e-5 }, "{capped}: {f}");
         }
     }
 }

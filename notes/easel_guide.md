@@ -144,7 +144,13 @@ hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles. A 17th is an
 error that lists the piles on the palette, oldest first; nothing is scraped
 off to make room. (A painting whose log has no `--@ full-palette-refuses`
-line scrapes the oldest off instead.)
+line scrapes the oldest off instead.) The earths (burnt sienna, red earth,
+raw sienna, yellow ochre, raw umber) and viridian are as deep in oil as
+their oil paints: thick, burnt sienna and raw umber are near-black browns
+and red earth a deep brick red, and they tint strongly with white. (A
+painting whose log's head has no `--@ oil-earths` line keeps their older,
+paler oil colors: thick burnt sienna a mid red-brown. Sources:
+notes/research/dry_pigment_optics.md §8.6.)
 
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
@@ -628,7 +634,9 @@ feel(x, y)                     -- what a fingertip feels there
 - **Color.** A stick is its pigments as they look dry: absorption as in oil,
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for
-  vermilion and the chromes). Dry blacks are a little grayer than in oil.
+  vermilion and the chromes). Bone black and vine black sticks are
+  near-blacks, as dark as their powders (their grains return only what
+  their facets reflect); with white they make neutral greys.
   The earths are as deep dry as their measured powders: a pure burnt sienna
   or raw umber stick is a dark red-brown or brown, red earth a deep brick red,
   raw sienna and yellow ochre their ochres, and viridian a deep blue-green;
@@ -698,8 +706,10 @@ measurements (notes/pastel.md). A painting begun before the earths' dry
 colors came (its head has no `--@ dry-earths`) replays its burnt sienna,
 red earth, raw sienna, yellow ochre, raw umber and viridian sticks, and paper
 tones given in those tubes, as pale as it was painted (pure burnt sienna a
-light salmon); a new painting's are fitted to measured powders
-(notes/research/dry_pigment_optics.md §7).
+light salmon), and its bone black and vine black sticks as they were (bone
+black a dead black, vine black a mid grey); a new painting's are fitted to
+measured powders, and its blacks follow from their grains
+(notes/research/dry_pigment_optics.md §7–8).
 
 ## The rag
 

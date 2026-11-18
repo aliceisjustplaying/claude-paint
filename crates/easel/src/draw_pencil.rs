@@ -1085,6 +1085,47 @@ end"#);
         }
     }
 
+    /// A new painting's earths are as deep in oil as their oil paints (`OIL_EARTHS_MARK`):
+    /// raw umber worked thickly over a lead white ground reads near-black (its tube's own
+    /// pile L* 18.5 against CHSOS's linseed swatch, gloss excluded, 17.5: paint's
+    /// `oil_earths_are_as_deep_as_their_oil_paints`), where an older log's lays a mid
+    /// brown (its pile L* 45). The log and a save keep the switch; below engine 9 the line
+    /// changes nothing.
+    #[test]
+    fn a_new_paintings_raw_umber_is_deep_in_oil() {
+        use crate::session::{OIL_EARTHS_MARK, box_for};
+        assert!(box_for(None).unwrap().oil_earths);
+        let umber = |b: paint::Palette| {
+            let i = b.tubes.iter().position(|t| t.name == "raw umber").unwrap();
+            b.pile(vec![(i, 1.0)]).color
+        };
+        let engine8 = "--@ box every\n--@ engine 8\n";
+        assert_eq!(umber(box_for(Some(&format!("{engine8}{OIL_EARTHS_MARK}\n"))).unwrap()), umber(box_for(Some(engine8)).unwrap()));
+        let mut lum = [0.0f32; 2];
+        for enabled in [false, true] {
+            let head = format!("--@ box every\n--@ engine 9\n{}", if enabled { format!("{OIL_EARTHS_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.oil_earths, enabled);
+            let mut s = Session::with_box(96, tubes).unwrap();
+            run(&mut s, CANVAS);
+            run(&mut s, r#"work(rect(300, 250, 700, 500), {hand="broad", pile=pile{{"raw umber", 1}}, coverage=2, fill=true, seed=1})"#);
+            let c = s.canvas().unwrap();
+            let (f, seen) = (c.window(), c.seen());
+            let px: Vec<f32> = (0..f.w * f.h).filter(|i| (400.0..600.0).contains(&((i % f.w) as f32 / f.scale)) && (320.0..430.0).contains(&((i / f.w) as f32 / f.scale))).map(|i| 0.2126 * seen[i][0] + 0.7152 * seen[i][1] + 0.0722 * seen[i][2]).collect();
+            lum[enabled as usize] = px.iter().sum::<f32>() / px.len() as f32;
+            let program = s.program("umber");
+            assert_eq!(program.lines().any(|l| l == OIL_EARTHS_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().oil_earths, enabled);
+            let path = std::env::temp_dir().join(format!("easel-oil-earths-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.oil_earths, enabled);
+        }
+        let l = |y: f32| 116.0 * y.cbrt() - 16.0;
+        assert!(l(lum[1]) < 30.0 && l(lum[0]) > l(lum[1]) + 12.0, "raw umber in oil: an older log's L* {}, a new painting's {}", l(lum[0]), l(lum[1]));
+    }
+
     #[test]
     fn erasing_a_sealed_drawing_keeps_its_guide() {
         let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();

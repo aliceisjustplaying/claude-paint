@@ -82,10 +82,17 @@ pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// Marks a painting whose earths (burnt sienna, red earth, raw sienna, yellow ochre, raw
 /// umber) and viridian look dry, as a pastel stick or a sheet's tone, as their measured
 /// powders do: each one's absorption per volume at the factor the powder shows, over its
-/// particles' scattering in air (`paint::Palette::dry_earths`): every new painting. Only
-/// engine 9's dry colors have it (below, the line changes nothing). A log without it
-/// replays its earths' dry colors as painted.
+/// particles' scattering in air; and whose blacks (bone, vine) are as dark dry as their
+/// opaque grains' facets make them (`paint::Palette::dry_earths`): every new painting.
+/// Only engine 9's dry colors have it (below, the line changes nothing). A log without it
+/// replays its earths' and blacks' dry colors as painted.
 pub const DRY_EARTHS_MARK: &str = "--@ dry-earths";
+/// Marks a painting whose earths (burnt sienna, red earth, raw sienna, yellow ochre, raw
+/// umber) and viridian are as deep in oil as their oil paints: the absorption per volume
+/// their powders show, over what their grains scatter in oil (`paint::Palette::oil_earths`):
+/// every new painting. Only engine 9 has it (below, the line changes nothing). A log
+/// without it replays its earths in oil as painted.
+pub const OIL_EARTHS_MARK: &str = "--@ oil-earths";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -784,6 +791,9 @@ impl Session {
         }
         if self.st.borrow().tubes.dry_earths {
             let _ = writeln!(s, "{DRY_EARTHS_MARK}");
+        }
+        if self.st.borrow().tubes.oil_earths {
+            let _ = writeln!(s, "{OIL_EARTHS_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1557,7 +1567,7 @@ fn box_list() -> String {
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise their earths' dry colors
-/// (`DRY_EARTHS_MARK`). New paintings are of
+/// (`DRY_EARTHS_MARK`), and their earths in oil (`OIL_EARTHS_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
@@ -1577,6 +1587,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.pastel_current_heap = true;
         b.calls_agree = true;
         b.dry_earths = true;
+        b.oil_earths = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1646,6 +1657,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.calls_agree = head(CALLS_AGREE_MARK);
     b.dry_earths = head(DRY_EARTHS_MARK);
+    b.oil_earths = head(OIL_EARTHS_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

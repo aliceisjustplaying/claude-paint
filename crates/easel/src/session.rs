@@ -105,6 +105,12 @@ pub const DRY_EARTHS_MARK: &str = "--@ dry-earths";
 /// every new painting. Only engine 9 has it (below, the line changes nothing). A log
 /// without it replays its earths in oil as painted.
 pub const OIL_EARTHS_MARK: &str = "--@ oil-earths";
+/// Marks a painting whose earths in oil (with `OIL_EARTHS_MARK`) tint as their tube paint
+/// does: each with the pigment its own tube holds, much less than lead white's, and yellow
+/// ochre with no more absorption than its iron oxide gives (`paint::Palette::earth_tints`):
+/// every new painting. Only engine 9 has it (below, or without the oil earths, the line
+/// changes nothing). A log without it replays its earths' tints as painted.
+pub const EARTH_TINTS_MARK: &str = "--@ earth-tints";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -809,6 +815,9 @@ impl Session {
         }
         if self.st.borrow().tubes.oil_earths {
             let _ = writeln!(s, "{OIL_EARTHS_MARK}");
+        }
+        if self.st.borrow().tubes.earth_tints {
+            let _ = writeln!(s, "{EARTH_TINTS_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1582,8 +1591,8 @@ fn box_list() -> String {
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise their earths' dry colors
-/// (`DRY_EARTHS_MARK`), their earths in oil (`OIL_EARTHS_MARK`) and their tubes as tube paint
-/// (`TUBE_VOLUME_MARK`). New paintings are of
+/// (`DRY_EARTHS_MARK`), their earths in oil (`OIL_EARTHS_MARK`) and their tints
+/// (`EARTH_TINTS_MARK`), and their tubes as tube paint (`TUBE_VOLUME_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
@@ -1605,6 +1614,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.tube_volume = true;
         b.dry_earths = true;
         b.oil_earths = true;
+        b.earth_tints = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1676,6 +1686,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.tube_volume = head(TUBE_VOLUME_MARK);
     b.dry_earths = head(DRY_EARTHS_MARK);
     b.oil_earths = head(OIL_EARTHS_MARK);
+    b.earth_tints = head(EARTH_TINTS_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

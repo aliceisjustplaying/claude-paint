@@ -827,6 +827,13 @@ pub struct Palette {
     /// own thickness, `mixer::REVIGO_FILM_UM`, not their applicator's
     /// 100 µm gap (`tube_film_scale`): new paintings.
     pub tube_volume: bool,
+    /// Engine 9's earths as their box's tube paint (an easel log's
+    /// `--@ earth-tints`), with the oil-earths switch: an earth's slot
+    /// (`crate::mixer::OIL_EARTHS`) is its pigment at lead white's Revigo
+    /// paint's volume share, so it enters a mixture at the pigment volume
+    /// its own tube holds, counted on the Revigo films' measured thickness
+    /// (`earth_tints_weight`): new paintings.
+    pub earth_tints: bool,
     /// Engine 9: burnt sienna, raw sienna, raw umber, Mars red and Mars yellow
     /// look dry as the films LBNL measured of them, their K per volume over
     /// their S raised into air (`dry::lbnl_film`); red earth, yellow ochre and
@@ -867,7 +874,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, earth_tints: self.earth_tints, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -891,7 +898,7 @@ impl Palette {
             .and_then(|_| crate::mixer::tube9_oil_earths(t.name))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, tube_volume: false, dry_earths: false, oil_earths: false, lat, lat9, earth9, scat, pack, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, tube_volume: false, earth_tints: false, dry_earths: false, oil_earths: false, lat, lat9, earth9, scat, pack, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -901,7 +908,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, earth_tints: self.earth_tints, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -1003,7 +1010,7 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, earth_tints: self.earth_tints, dry_earths: self.dry_earths, oil_earths: self.oil_earths, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -1018,7 +1025,7 @@ impl Palette {
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
             let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
-            let w = f * strength * self.tube_volume_weight(i);
+            let w = f * strength * self.tube_volume_weight(i) * self.earth_tints_weight(i);
             // (the oil-earths switch: the tube's own slot, `mixer::OIL_EARTHS`)
             let own = self.oil_earths_latent(i);
             let tube = own.as_ref().unwrap_or(&tubes[i]);
@@ -1054,6 +1061,10 @@ impl Palette {
             return 1.0;
         }
         let t = &self.tubes[i];
+        // (a tube in an oil-earths slot isn't the Revigo paint: `earth_tints_weight`)
+        if self.oil_earths_latent(i).is_some() {
+            return 1.0;
+        }
         let Some(w) = crate::mixer::revigo_oil(t.name) else { return 1.0 };
         let revigo = 1.0 / (1.0 + w / (1.0 - w) * t.density / 0.93);
         (1.0 - self.pack[i].2) / revigo
@@ -1160,6 +1171,21 @@ impl Palette {
             return None;
         }
         self.earth9[i]
+    }
+
+    /// With the earth-tints and oil-earths switches (`earth_tints`), the weight
+    /// on tube `i`'s oil-earths slot per volume of the box's tube paint. The slot
+    /// holds the earth's measured K and S per pigment volume times
+    /// `mixer::oil_earths_scale`, and a volume of tube paint holds its pigment
+    /// volume share (1 − `tube_packing`'s oil share) of pigment, which engine 9's
+    /// unit counts over the Revigo films' measured thickness
+    /// (`mixer::REVIGO_FILM_UM`): the share × that thickness over the scale. 1 for
+    /// every other tube and without the switches.
+    pub fn earth_tints_weight(&self, i: usize) -> f32 {
+        if !self.earth_tints || self.oil_earths_latent(i).is_none() {
+            return 1.0;
+        }
+        (1.0 - self.pack[i].2) * crate::mixer::REVIGO_FILM_UM / crate::mixer::oil_earths_scale()
     }
 
     /// Whether tube `i` is the catalog's own paint: its color and hiding as

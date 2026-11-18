@@ -90,6 +90,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.oil_earths {
         kv("oil_earths", "1".to_string());
     }
+    if st.tubes.earth_tints {
+        kv("earth_tints", "1".to_string());
+    }
     if st.tubes.drain {
         kv("drain", "1".to_string());
     }
@@ -262,6 +265,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.tube_volume = h.get("tube_volume") == Some(&"1");
     tubes.dry_earths = h.get("dry_earths") == Some(&"1");
     tubes.oil_earths = h.get("oil_earths") == Some(&"1");
+    tubes.earth_tints = h.get("earth_tints") == Some(&"1");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {

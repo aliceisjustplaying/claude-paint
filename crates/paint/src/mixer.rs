@@ -288,14 +288,23 @@ pub fn decode9(lat: &[f32; LATENT_SIZE]) -> Rgb {
 /// §10). None for any other tube.
 pub fn lbnl_pigment9(name: &str) -> Option<crate::spectral::SpectralPigment> {
     let (k, s, _) = crate::dry::lbnl_film(name)?;
+    let scale = oil_earths_scale();
+    Some(crate::spectral::SpectralPigment { k: k.map(|v| v * scale), s: s.map(|v| v * scale) })
+}
+
+/// What one µm⁻¹ per pigment volume is in an oil-earths slot (`OIL_EARTHS`),
+/// in engine 9's units (per 100 µm of the Revigo paints): lead white's
+/// calibrated S, luminance-weighted, over its S per pigment volume in oil,
+/// `crate::dry::lead_white_scatter`. So a slot is the earth's pigment at the
+/// volume share lead white's Revigo paint holds (dry_pigment_optics.md §10.4).
+pub fn oil_earths_scale() -> f32 {
     static SCALE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    let scale = *SCALE.get_or_init(|| {
+    *SCALE.get_or_init(|| {
         let white = pigment9_tables(&measured("LeadWhite").unwrap()).s;
         let y = &crate::spectral::CMF[1];
         let mean = (0..crate::spectral::N).map(|w| y[w] * f64::from(white[w])).sum::<f64>() / y.iter().sum::<f64>();
         mean as f32 / crate::dry::lead_white_scatter()
-    });
-    Some(crate::spectral::SpectralPigment { k: k.map(|v| v * scale), s: s.map(|v| v * scale) })
+    })
 }
 
 pub fn pigment9(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {

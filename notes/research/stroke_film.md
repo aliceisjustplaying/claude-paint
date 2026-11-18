@@ -159,7 +159,54 @@ coarse weave leaves its film on the weave's crowns (the scumble test: 52%
 of a band covered against 100% pressed). The contact model gives most of
 that already; the film's reach adds a little.
 
-## 4. Not modeled
+## 4. A press
+
+A touch (`touch_on`) presses the tip down and lifts it. No bed slides, so
+no slider film forms and the stroke film's ceiling doesn't apply to it. (As
+the slider's speed goes to 0, Reynolds's film tends to the yield-stress
+plug, a few µm; a lift-off is not that.)
+
+**Film splitting [M].** A liquid film pulled apart between two surfaces
+splits inside the liquid, each surface keeping part of it. Printing
+measures the share: in Walker and Fetsko's ink transfer equation the free
+film splits in a fraction f "usually 50 %" (W. C. Walker and J. M. Fetsko,
+"A concept of ink transfer in printing", TAGA Proc. 1955, 139; S. Abbott,
+*Practical Coatings*, "Walker-Fetsko", stevenabbott.co.uk). Roll coating
+shows the same split at a nip's exit, at a stagnation line inside the film
+(D. J. Coyle, C. W. Macosko and L. E. Scriven, J. Fluid Mech. 171, 183,
+1986).
+
+**Over wet paint [D].** Pressed into wet paint of film W, the gap under a
+hair holds the wet film against the canvas and the brush's paint F against
+the hair, one on the other: a press doesn't shear them together. The film
+splits at the middle of the gap, (F + W)/2 from the canvas. Where F > W the
+split runs through the brush's paint: the canvas keeps all of its film and
+(F − W)/2 of the brush's paint lies on it, and the brush takes back only
+its own paint, clean. Where F < W the split runs through the wet film: the
+canvas keeps (F + W)/2 of its own paint and none of the brush's, and the
+brush takes up (W − F)/2. (Printers see the second case as back-trapping,
+a wet first ink lifted onto a later plate's blanket.) On dry paint or bare
+ground (W = 0) the canvas keeps F/2. That is what a touch already lays (its
+law, with or without the touch split, gives each hair's share as the half
+of its face film that a split leaves), so F is twice that, and a touch on
+dry ground lays as before but for one thing: its hairs no longer lift back
+paint the touch's other hairs have just laid (the split happens once, at
+the lift, as the stroke split has it for a stroke).
+
+In the exchange: each pixel starts the touch owing W/2 (`Surf::laid`,
+negative). Paint the hairs press onto it pays that first and stays on
+them; the rest lands. Where the debt is not paid when the tip has lifted,
+the brush takes up what is left of it, (W − F)/2, shared among the hairs by
+how long and how hard each was down (`press_lift`). The touch lifts no wet
+paint otherwise. The paint the brush gives is what the canvas gains.
+
+Scarlet dabbed with a 9 mm filbert into wet green (some 30 µm) took the
+stroke film's ceiling before this (an integration estimate: the stroke's
+film at the hand's stroke speed), laid ~55 µm into the wet film, picked the
+green up as a stroke does and read brick-brown. With the split it lays
+(F − W)/2 ≈ 80 µm of scarlet on the green and the brush stays clean.
+
+## 5. Not modeled
 
 The film levelling after the stroke is the drying model's (`drying`,
 Orchard). The brush's own reservoir draining (Washburn flow along the

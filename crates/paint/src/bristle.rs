@@ -855,6 +855,10 @@ pub(crate) struct Surf {
     /// it with the stroke film): every hair's film ceiling follows from it
     /// and the paint it carries.
     pub(crate) pad: Option<crate::stroke_film::Pad>,
+    /// A press and lift with the stroke film (`touch_on`): the paint
+    /// between each hair and the canvas splits on the lift, half each way,
+    /// over the wet film already there (`engine7::exchange::press_lift`).
+    pub(crate) press: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -1132,6 +1136,7 @@ impl Canvas {
             layers: self.engine >= crate::PIGMENT_MIXER,
             stroke_film: self.stroke_film.then_some(self.mm_per_unit),
             pad: None,
+            press: false,
         }
     }
 
@@ -2336,9 +2341,14 @@ impl Canvas {
 /// SAFETY: no other thread may touch pixels in `touch_footprint(..)` of `t`,
 /// and `held.tool` must pass `Tool::validate` (accesses are clamped to that
 /// footprint too, as in `drag_on`).
-pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option<Clip<'_>>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
+pub(crate) unsafe fn touch_on(mut sf: Surf, held: &mut Held, t: &Touch, clip: Option<Clip<'_>>, id: u32, scratch: &mut Vec<f32>) -> Bounds {
     t.assert_valid();
     let mut bounds: Bounds = None;
+    // With the stroke film a press is not a slide: no bed draws a film out
+    // under it, so a touch takes no stroke-film ceiling. The paint between
+    // each hair and the canvas splits on the lift (`Surf::press`,
+    // notes/research/touch_film_split.md, "A press over wet paint").
+    sf.press = sf.e7 && sf.stroke_film.is_some();
     let s = sf.scale;
     let tool = held.tool.clone();
     let full = held.full();
@@ -2390,6 +2400,11 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             }
             b.prev[0] = Some(cur);
         }
+    }
+    if sf.press {
+        // where the wet film was thicker than the paint the hairs pressed
+        // onto it, the lift takes half the difference up into the brush
+        unsafe { crate::engine7::exchange::press_lift(&sf, &mut held.bristles, &sums, id, bounds) };
     }
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))

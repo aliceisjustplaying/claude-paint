@@ -255,7 +255,18 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         // the stroke film (`crate::stroke_film`): the film this hair's paint
         // leaves under the bed, in place of the thinner's estimate
         let law = crate::stroke_film::ceiling(sf, &br.hide, phi);
-        let capped = thinned || pass_film.is_some() || law.is_some();
+        // a touch with the stroke film (`Surf::press`): the paint pressed
+        // between the hair and the canvas splits on the lift, half each way
+        // (Walker and Fetsko's f ≈ 0.5), in a gap that holds the wet film
+        // under the brush's paint. The canvas keeps its film and half the
+        // excess of the brush's over it; where the film is the thicker the
+        // brush lays none of its own and lifts half the difference
+        // (`press_lift`). Each pixel starts the touch owing half its film
+        // (`Surf::laid`, negative): what the hairs press onto it pays that
+        // first and stays on them.
+        let press = sf.press && dep.is_some() && !sf.laid.is_null();
+        let ploughs_capped = thinned || pass_film.is_some() || law.is_some();
+        let capped = ploughs_capped || press;
         let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(match law {
             Some(c) => c,
             None if thinned => crate::thinner::stroke_limit_um(phi) / COAT_UM,
@@ -416,7 +427,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 *sf.touched.add(i) = id;
                 *sf.floor.add(i) = v * (1.0 - tool.pickup * fl);
             }
-            if v > 1e-6 {
+            if press && *sf.laid_id.add(i) != id {
+                *sf.laid_id.add(i) = id;
+                *sf.laid.add(i) = -0.5 * v;
+            }
+            if v > 1e-6 && !press {
                 let tk = if exch {
                     (v * pickup * wt * fl).min(v)
                 } else {
@@ -452,9 +467,12 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     d *= crate::bristle::film_lay(&sf, i, from, cap * clip.map_or(1.0, |c| c.at(y as usize * w + x as usize).0), id, d);
                 } else if capped {
                     let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
-                    d = d.min((cap - used).max(0.0));
+                    // (a press's debt is paid first and stays on the hair)
+                    let pay = if press { d.min((-used).max(0.0)) } else { 0.0 };
+                    let land = (d - pay).min((cap - used.max(0.0)).max(0.0));
                     *sf.laid_id.add(i) = id;
-                    *sf.laid.add(i) = used + d;
+                    *sf.laid.add(i) = used + pay + land;
+                    d = land;
                 }
                 if d > 0.0 {
                     let cv = &mut *sf.cover.add(i);
@@ -497,12 +515,12 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let mut mm = m * sh * c.k;
                 if let Some((_, from)) = pass_film.filter(|_| mm > 0.0) {
                     mm *= crate::bristle::film_lay(&sf, j, from, cap * c.k, id, mm * (1.0 + src_solv / COAT_UM));
-                } else if capped && mm > 0.0 {
+                } else if ploughs_capped && mm > 0.0 {
                     // a thinned stroke adds no more wet film to the pixel it
                     // ploughs into than its ceiling there allows
                     let ms = src_solv / COAT_UM * mm;
                     let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
-                    let room = (cap - used).max(0.0);
+                    let room = (cap - used.max(0.0)).max(0.0);
                     let f = if mm + ms > room { room / (mm + ms) } else { 1.0 };
                     *sf.laid_id.add(j) = id;
                     *sf.laid.add(j) = used + (mm + ms) * f;
@@ -584,7 +602,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             film.add(j, m, &Paint7::new(sf.lean, sf.drain, &lat, hide, c.a[CURE] * inv));
         }
         let had = br.vol + br.solvent;
-        if phi > 0.0 || pass_film.is_some() || law.is_some() {
+        if phi > 0.0 || pass_film.is_some() || law.is_some() || press {
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
             br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
             br.solvent = (br.solvent - gone * phi).max(0.0);
@@ -611,6 +629,82 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
         Some(AcceptedTransfer { picked: got_v + got_s, laid, outside: ploughed })
+    }
+}
+
+/// The lift of a press with the stroke film (`Surf::press`): over the
+/// touch's pixels (`bounds`, whole-canvas pixels), wherever the wet film was
+/// thicker than the paint the hairs pressed onto it the pixel still owes
+/// (`Surf::laid` < 0) half the difference, and the brush takes that much of
+/// the film up. It goes to the hairs that were down, by how long and how
+/// far each was pressed (`weights`), as the paint between the hairs of a
+/// pressed tip is shared.
+///
+/// SAFETY: as `exchange`: no other thread touches the touch's footprint, and
+/// `bounds` lies inside `sf`'s window.
+pub(crate) unsafe fn press_lift(sf: &Surf, bristles: &mut [Bristle], weights: &[f32], id: u32, bounds: Bounds) {
+    let Some((x0, y0, x1, y1)) = bounds else { return };
+    if sf.laid.is_null() {
+        return;
+    }
+    let px_area = 1.0 / (sf.scale * sf.scale);
+    let dry = !sf.dry.is_null();
+    let mut got = [0.0f32; PACK];
+    let mut got_parts = Latent::default();
+    let mut got_s = 0.0f32;
+    unsafe {
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = (y - sf.oy) * sf.w + x - sf.ox;
+                if *sf.laid_id.add(i) != id || *sf.laid.add(i) >= 0.0 {
+                    continue;
+                }
+                let v = *sf.vol.add(i);
+                let tk = (-*sf.laid.add(i)).min(v);
+                *sf.laid.add(i) = 0.0;
+                if tk <= 1e-9 {
+                    continue;
+                }
+                let cure = if dry { (*sf.dry.add(i)).cure } else { 0.0 };
+                if !sf.solv.is_null() {
+                    let sv = &mut *sf.solv.add(i);
+                    if *sv > 0.0 {
+                        let ts = (*sv * tk / v).min(*sv);
+                        *sv -= ts;
+                        sf.film_give(i, ts / COAT_UM);
+                        got_s += ts / COAT_UM * px_area;
+                    }
+                }
+                let (hp, picked) = sf.take_with_lat(i, tk);
+                accumulate(&mut got, &packed(sf, i, &hp, cure, picked.as_ref()), tk * px_area);
+                got_parts.add_parts(picked.as_ref().unwrap_or(&*sf.lat.add(i)), tk * px_area);
+            }
+        }
+    }
+    let got_v = got[VOL];
+    let total: f32 = weights.iter().sum();
+    if got_v <= 0.0 || total <= 0.0 {
+        return;
+    }
+    let mut got_l: Latent = Latent::default();
+    got_l.parts = got_parts.parts;
+    got_l.scale_parts(1.0 / got_v);
+    for k in 0..LAT {
+        got_l[k] = got[LAT0 + k] / got_v;
+    }
+    let mut got_h: Prop = [0.0; 10];
+    for k in 0..got_h.len() {
+        got_h[k] = got[HIDE0 + k] / got_v;
+    }
+    for (br, &w) in bristles.iter_mut().zip(weights) {
+        if w <= 0.0 {
+            continue;
+        }
+        let share = w / total;
+        let v = got_v * share;
+        br.solvent += got_s * share;
+        br.cure = mix_cure(br.cure, br.vol, got[CURE] / got_v, v);
+        mix_into(&mut br.vol, &mut br.lat, &mut br.hide, v, &got_l, got_h);
     }
 }
 

@@ -29,7 +29,11 @@ The raw sphere readings have a flat floor (carbon blacks 0.16-0.17) and a gain
 geometry. Physics fixes the correction:
 - the sphere is linear: on the 54 gum-arabic swatches it reads the probe's
   value plus a flat 0.18, with a quadratic term below the scatter (printed);
-- the floor is a carbon black powder's total reflectance, 0.03-0.05 (§3);
+- the floor is a carbon black powder's total reflectance: 0.022, measured
+  (juniper charcoal powder reflects 3.00 % at 550 nm, Lethuillier et al. 2022,
+  and CHSOS's own differences put vine black 0.0076 above the blacks' mean;
+  bounds 0.013-0.031, dry_pigment_optics.md §9.1). #318 first took 0.03-0.05
+  from §3's veil estimate, which #329 retired;
 - the gain is set by the whites, and no powder can exceed 1. Rutile titanium
   white, the brightest, is flat from 550 to 700 nm and reflects 0.90-0.99 there
   as a dry powder (bulk rutile 0.90-0.91, fine pigment rutile 0.995 against
@@ -62,7 +66,7 @@ SHA256 = {
     "gum Arabic.csv": "56fd4e490d07faadf8f7a5b02a277f18d492900bf9065d43df73690a213e219d",
     "gum arabic refletion probe.csv": "eb9d5a6266c6d1a7ebc937f4ea2bb689b330409850079d3f48944d34b71402d6",
 }
-BLACK_TRUE = (0.03, 0.04, 0.05)  # a carbon black powder's total reflectance (§3): low, mid, high
+BLACK_TRUE = (0.013, 0.022, 0.031)  # a carbon black powder's total reflectance (§9.1): low, mid, high
 TITANIUM_TRUE = (0.90, 0.945, 0.99)  # rutile powder, 550-700 nm: low, mid, high
 SUBSTRATE_N = 1.57  # alumina hydrate (gibbsite)
 LAKES = {"rose madder": "madderlake", "carmine lake": "carminelake", "yellow lake": "yellowlakeresed"}
@@ -171,10 +175,10 @@ def corrected(name, black_true=BLACK_TRUE[1], titanium_true=TITANIUM_TRUE[1]):
 old_cg = 0.04 + (TITANIUM - BLACK) * 0.89 / (CHALK_GYPSUM - BLACK)
 print(f"energy check: with chalk and gypsum taken as 0.93 (the earlier correction), titanium white would reflect "
       f"{old_cg[FLAT].mean():.3f} > 1, so that reference is out; lead white comes out at "
-      f"{corrected('leadwhite')[FLAT].mean():.3f} (range {corrected('leadwhite', 0.03, 0.90)[FLAT].mean():.3f}-"
-      f"{corrected('leadwhite', 0.05, 0.99)[FLAT].mean():.3f})")
+      f"{corrected('leadwhite')[FLAT].mean():.3f} (range {corrected('leadwhite', BLACK_TRUE[0], 0.90)[FLAT].mean():.3f}-"
+      f"{corrected('leadwhite', BLACK_TRUE[2], 0.99)[FLAT].mean():.3f})")
 
-print("\npowder, corrected (black 0.04, titanium white 0.945): sRGB, L*a*b*; L* over the bounds")
+print(f"\npowder, corrected (black {BLACK_TRUE[1]}, titanium white 0.945): sRGB, L*a*b*; L* over the bounds")
 for label, name in {**LAKES, **CONTEXT}.items():
     r = corrected(name)
     ls = [lab(corrected(name, b, t))[0] for b in BLACK_TRUE for t in TITANIUM_TRUE]

@@ -98,7 +98,9 @@ pub const LAKE_SUBSTRATE_INDEX: f32 = 1.57;
 /// scattering in air. Each loading is fitted so the pure lake's dry color
 /// matches measured powder (Cosentino 2014 FORS powders, corrected for the
 /// integrating sphere's floor and gain, set by a carbon black powder's total
-/// reflectance and rutile's: dry_pigment_optics.md §6, dry_lake_fit.py).
+/// reflectance, the measured 0.022 (charcoal powder reflects 3.00 % at
+/// 550 nm, Lethuillier et al. 2022), and rutile's: dry_pigment_optics.md §6,
+/// dry_lake_fit.py).
 /// The loadings agree with dye chemistry: madder's K/S needs 2–9 wt% dye on
 /// its alumina, as lakes carry. Magenta (fuchsine on alumina) has no
 /// measured powder, so its loading comes from its dye: fuchsine's measured
@@ -109,9 +111,9 @@ pub const LAKE_SUBSTRATE_INDEX: f32 = 1.57;
 /// lake.
 pub fn dye_loading(name: &str) -> Option<f32> {
     match name {
-        "rose madder" => Some(35.7),
-        "carmine lake" => Some(3.01),
-        "yellow lake" => Some(12.2),
+        "rose madder" => Some(40.5),
+        "carmine lake" => Some(3.97),
+        "yellow lake" => Some(13.7),
         "magenta" => Some(MAGENTA_LOADING),
         _ => None,
     }

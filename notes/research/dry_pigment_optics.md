@@ -399,9 +399,14 @@ the samples' geometry (sample distance or seating).
   substitution error would bend the curve upward, and it doesn't. So the raw reading is
   offset + gain × reflectance.
 - *The offset* is set by the blacks. A carbon black powder's total reflectance is
-  0.03–0.05: its grains' facet reflections (§3), and carbon-based pigments measured at
-  3–5 % in the visible (SPIE *Photonics Focus*, May/June 2026, "In pursuit of the perfect
-  black"). Midpoint 0.04.
+  **0.022**, measured: sieved juniper charcoal powder reflects 3.00 % at 550 nm
+  (Lethuillier et al. 2022, *MNRAS*, doi:10.1093/mnras/stac1734, table 4), and CHSOS's own
+  differences between its four blacks put vine black 0.0076 above their mean, so the mean
+  is 0.022. Bounds 0.013–0.031: from a Mie vine black (R∞ 0.021, charred wood in 3 µm
+  splinters) to 0.9 % above the charcoal (#351, dry_pigment_optics.md §8.2, §9.1 there).
+  #318 first took 0.03–0.05 (midpoint 0.04) from §3's veil estimate and carbon pigments
+  quoted at 3–5 % (SPIE *Photonics Focus*, May/June 2026); #329 later showed that veil
+  double-counts the facets, so it is retired.
 - *The gain* is set by the whites, and **no powder can reflect more than 1**. The
   earlier correction mapped chalk and gypsum to 0.93. That puts titanium white at 1.085,
   so it is out. Rutile titanium white is the brightest powder and is flat from 550 to
@@ -413,17 +418,18 @@ the samples' geometry (sample distance or seating).
   pigments. Corrected, lead white comes out at 0.92 (0.88–0.96), zinc white at L\* 96,
   chalk 92 and gypsum 91. Natural chalk and gypsum are off-white, so these fit.
 
-Corrected L\*a\*b\* (D65) at black 0.04 and titanium white 0.945, with L\* over the bounds
-(black 0.03–0.05 × titanium white 0.90–0.99) [M/C]:
+Corrected L\*a\*b\* (D65) at black 0.022 and titanium white 0.945, with L\* over the bounds
+(black 0.013–0.031 × titanium white 0.90–0.99) [M/C]; at #318's first floor of 0.04 in
+brackets:
 
-| Powder | sRGB | L\* (range) | a\* | b\* |
-|---|---|---|---|---|
-| madder lake | 175 114 116 | 54.5 (52.6–56.2) | 24.6 | 8.8 |
-| carmine lake | 130 39 62 | 30.7 (28.0–33.2) | 41.0 | 7.7 |
-| yellow lake (reseda, weld) | 189 157 84 | 66.1 (64.3–67.7) | 2.9 | 41.9 |
-| alizarin (synthetic, for context) | 193 38 48 | 42.6 (40.5–44.6) | 59.8 | 33.9 |
-| lac dye lake (context) | 162 46 51 | 37.6 (35.2–39.7) | 47.5 | 24.7 |
-| vermilion (check) | 180 91 90 | 49.4 (47.5–51.3) | 36.1 | 17.4 |
+| Powder | sRGB | L\* (range) | a\* | b\* | at 0.04 |
+|---|---|---|---|---|---|
+| madder lake | 173 109 111 | 52.9 (51.1–54.7) | 26.0 | 9.4 | 54.5/24.6/8.8 |
+| carmine lake | 126 5 49 | 26.1 (23.0–28.9) | 48.6 | 10.1 | 30.7/41.0/7.7 |
+| yellow lake (reseda, weld) | 187 154 76 | 65.1 (63.4–66.8) | 3.1 | 45.0 | 66.1/2.9/41.9 |
+| alizarin (synthetic, for context) | 191 2 29 | 40.0 (37.8–42.0) | 64.8 | 42.5 | 42.6/59.8/33.9 |
+| lac dye lake (context) | 159 24 33 | 34.3 (31.9–36.5) | 53.0 | 31.9 | 37.6/47.5/24.7 |
+| vermilion (check) | 179 84 82 | 47.5 (45.6–49.4) | 38.6 | 19.3 | 49.4/36.1/17.4 |
 
 The earlier two-reference estimate gave madder 54.7–57.7. The correction now has its
 bounds from physics, and the energy check removed its lighter half.
@@ -437,7 +443,7 @@ bounds from physics, and the energy check removed its lighter half.
   doi:10.1021/acs.jchemed.9b01093: madder lake 62.6 / 23.9 / 16.7.
 
 **Cross-check.** Their a\* (23.9–25.5) and Sattar's b\* (9.4) match the corrected Kremer
-powder (24.6, 8.8). Their L\* is 8–12 higher (ΔE76 11.4–11.7). Both are classroom lakes:
+powder (26.0, 9.4). Their L\* is 10–13 higher (ΔE76 12.3–13.2). Both are classroom lakes:
 dye from silk shearings or a single extraction, laked once. That carries less dye than a
 commercial lake, and a lighter powder is what less dye gives (§6.3). So the lab lakes
 bracket the measured span from the light side and don't contradict the FORS powder. The
@@ -462,19 +468,24 @@ For a lake, K_dry(λ) = a · K_oil(λ), and S_dry is the rule for n < 1.9 at the
 1.57. The factor a is the dye loading the oil tables leave unidentified. It is fitted per
 lake so the pure dry color matches the corrected powder's L\*a\*b\* [C]:
 
-| Lake | a (earlier) | ΔE76 to powder after (before) | Range of a over the correction's bounds |
+| Lake | a (at the floor 0.04; earlier) | ΔE76 to powder after (before) | Range of a over the correction's bounds |
 |---|---|---|---|
-| rose madder | **35.7** (31.9) | 5.0 (38.9) | 31.5–40.8 |
-| carmine lake | **3.01** (2.57) | 9.9 (13.5) | 1.9–4.1 |
-| yellow lake | **12.2** (10.6) | 3.5 (29.2) | 10.6–14.0 |
+| rose madder | **40.5** (35.7; 31.9) | 5.3 (41.0) | 35.8–46.0 |
+| carmine lake | **3.97** (3.01; 2.57) | 4.8 (15.8) | 3.3–4.5 |
+| yellow lake | **13.7** (12.2; 10.6) | 3.1 (31.8) | 12.1–15.5 |
 | magenta | **6.26** from dye chemistry, K/S 5.7 at 543 nm (§6.3; was yellow lake's 12.2, an estimate) | no powder | 5.35–6.34 over 3–20 wt % dye |
 
 The physical correction moved the loadings up 12–17 %, because the energy check removed
-the lighter reference. Madder still needs about thirty-five times the absorption the oil
-table gives it, however the powder is corrected. Magenta has no powder, so its loading
+the lighter reference. The measured floor (0.022 for 0.04) moved them up again, 12–32 %:
+a lower floor makes every corrected powder deeper and more saturated, most of all the
+darkest (carmine, whose band sits near the floor). Madder still needs about forty times the
+absorption the oil table gives it, however the powder is corrected. Magenta's loading comes
+from its dye, not a powder, so the floor doesn't move it. Magenta has no powder, so its loading
 is set by its dye (§6.3): a fuchsine lake's K/S at 543 nm over the engine's K/S there
 with no loading.
-Carmine's fit stops at ΔE 9.9 because of its oil K's own shape: b\* 13.9 against 7.7.
+Carmine's fit stops at ΔE 4.8 because of its oil K's own shape: b\* 14.6 against 10.1
+(at the floor 0.04 it stopped at 9.9). Madder's b\* is 4.2 against 9.4, the same kind of
+shape: a loading scales K at every wavelength and can't move the hue.
 
 A flat substrate S (lead white's mean, not its spectrum) fits madder and yellow lake as
 well, but carmine only to ΔE 16. Revigo's carmine K and lead-white S share a dip near
@@ -486,9 +497,9 @@ box that has the tube):
 
 | Tube (boxes) | pure | 1:1 lead white |
 |---|---|---|
-| rose madder (friedrich, sargent, alma-tadema, giverny, impressionist, seurat, cezanne, every) | 242 218 223 → 174 112 124 | 247 230 233 → 200 143 154 |
-| carmine lake (giverny, impressionist, every) | 171 58 87 → 139 22 52 | 190 88 117 → 163 47 77 |
-| yellow lake (impressionist, every) | 232 221 175 → 183 157 80 | 239 232 198 → 205 184 112 |
+| rose madder (friedrich, sargent, alma-tadema, giverny, impressionist, seurat, cezanne, every) | 242 218 223 → 170 108 119 | 247 230 233 → 196 138 149 |
+| carmine lake (giverny, impressionist, every) | 171 58 87 → 130 14 45 | 190 88 117 → 156 38 68 |
+| yellow lake (impressionist, every) | 232 221 175 → 180 153 75 | 239 232 198 → 202 180 107 |
 | magenta (sargent, every) | 239 142 211 → 198 71 159 | 248 170 224 → 220 101 185 |
 | permanent alizarin (tonn, every) | 213 200 219 → 165 129 153 | 225 217 230 → 218 207 223 |
 | green earth | 213 205 184 → 228 225 218 | 233 231 223 → 236 234 229 |
@@ -540,23 +551,23 @@ K/S at the band [C]:
 
 | | madder, 510 nm | carmine, 530 nm |
 |---|---|---|
-| corrected powder (bounds) | 2.42 (2.13–2.76) | 15.9 (11.5–25.4) |
+| corrected powder (bounds) | 2.81 (2.47–3.21) | 42.9 (22.8–283) |
 | engine before (oil K) | 0.112 | 5.56 |
-| engine with the loading | 4.05 | 16.9 |
+| engine with the loading | 4.59 | 22.3 |
 | dye chemistry, 3 wt % | 1.0–3.0 | 0.69–1.2 |
 | dye chemistry, 20 wt % | 4.0–5.6 | 3.2–4.3 |
 | dye chemistry, pure dye | 5.7–5.8 | 5.5–5.7 |
-| **dye content the powder needs** | **2.1–8.8 wt %** | **beyond pure dye at d = 1 µm** |
+| **dye content the powder needs** | **2.7–11 wt %** | **beyond pure dye at d = 1 µm** |
 | dye content the oil K alone gives | 0.08–0.3 wt % | ≥ 62 wt % |
-| dye content the loading gives | 5–21 wt % | beyond pure dye |
+| dye content the loading gives | 7–28 wt % | beyond pure dye |
 
-**Madder: consistent.** The powder's K/S needs 2–9 wt % alizarin on the alumina, a
-normal madder lake. The loaded engine needs 5–21 wt %, which is still a lake. The oil K
+**Madder: consistent.** The powder's K/S needs 3–11 wt % alizarin on the alumina, a
+normal madder lake. The loaded engine needs 7–28 wt %, which is still a lake. The oil K
 alone would mean 0.08–0.3 wt %, a hundredth of any lake. That is the pale stick this
-switch fixes. The ×36 is the oil table's missing dye, not a fudge.
+switch fixes. The ×40 is the oil table's missing dye, not a fudge.
 
 **Carmine: K/S bounded only from below.** At 530 nm the corrected powder reflects about
-0.03, under the black anchor itself, so its K/S (11–25) is fixed by the floor more than
+0.012 (0.002–0.021 over the bounds), at the black anchor itself, so its K/S (23–283) is fixed by the floor more than
 by the dye. Even pure dye in 1 µm grains reaches only K/S ≈ 5.7, because the package
 effect caps it. Finer grains lift that cap but scatter more (σ′ 2.7 µm⁻¹ at 0.3 µm), so
 they gain little. What the numbers do say: Kremer's "carmine lake" is dark as a near-pure
@@ -597,8 +608,8 @@ so the pure lake has the K/S its dye gives at its band:
   - The engine's dry K/S for magenta at 543 nm with no loading is 0.912. That is linear
     between the 540 and 550 nm bands, with the substrate's S at n 1.57.
   - **The loading is therefore 6.26** (5.35–6.34 over 3–20 wt %).
-  - Yellow lake's 12.2, used before, gave K/S 11.1. That is twice what fuchsine in a 1 µm
-    grain can absorb.
+  - Yellow lake's loading, used before (12.2 then), gave K/S 11.1. That is twice what
+    fuchsine in a 1 µm grain can absorb.
 - **Pure dry magenta:** 175 50 134 (L\*a\*b\* 43.0/58.4/−19.2 at 12.2) → **198 71 159**
   (50.8/59.5/−21.7). 1:1 with lead white: 220 101 185.
 - **Estimate left:** the dye content (10 wt %, taken as a lake's middle). It moves K/S by
@@ -656,13 +667,13 @@ engine's decoded masstone is 211 126 125). Its 1:1 with lead white in oil is 240
 its K comes from a gum swatch read as an assumed 100 µm film. A physically grounded fix
 for a later PR [C]:
 - **K:** absorption per volume is the dye's in any medium (§2.4), so oil K takes the
-  dry loading, ×35.7. This is checked against dye chemistry in §6.3.
+  dry loading, ×40.5. This is checked against dye chemistry in §6.3.
 - **S:** the substrate's S in oil is the dry S divided by the Mie air/oil ratio at n 1.57
   (×43, table 2.2). That gives 0.107 per coat at 550 nm against the table's 0.159. They
   agree to 1.5×, so the oil S is roughly physical and stays.
-- **Result:** masstone R∞ 80 29 30 (L\*a\*b\* 18.6/24.2/11.1), a deep crimson-brown as a
-  thick madder glaze is. 1:1 with lead white 163 100 110 (49.4/26.9/5.2). With the Mie S
-  as well, the masstone is 48 18 23 and the tint is unchanged (160 98 109).
+- **Result:** masstone R∞ 76 26 28 (L\*a\*b\* 17.3/23.5/10.8), a deep crimson-brown as a
+  thick madder glaze is. 1:1 with lead white 158 95 105 (47.7/27.0/5.3). With the Mie S
+  as well, the masstone is 45 17 21 and the tint is nearly unchanged (155 93 104).
 - **Check needed first:** a measured madder-in-oil tint with lead white. CHSOS's
   linseed-oil swatches are on paper, not opaque, and come from another sphere session,
   so they can't pin it. The fix would also move every oil painting's madder, so it needs
@@ -823,7 +834,10 @@ spheres) ; Bohren & Huffman, *Absorption and Scattering of Light by Small Partic
 https://www.rruff.net/doclib/hom/goethite.pdf, and zincite ; Natural Pigments, Mars yellow
 (PY42) dry pigment datasheet ;
 Sanjeev et al., size-dependent reflectance of TiO₂, chalcogen.ro/607_Sanjeev.pdf ;
-SPIE Photonics Focus May/June 2026, "In pursuit of the perfect black" ; Coatings 2018,
+SPIE Photonics Focus May/June 2026, "In pursuit of the perfect black" ; Lethuillier et
+al., "Cometary dust analogues for physics experiments", *MNRAS* (2022),
+doi:10.1093/mnras/stac1734 (arXiv:2110.05832), table 4 (juniper charcoal powder, albedo
+3.00 % at 550 nm: the black floor 0.022) ; Coatings 2018,
 8:171, https://doi.org/10.3390/coatings8050171 ; Heritage 2023, 6:192,
 https://www.mdpi.com/2571-9408/6/4/192 ; CAMEO (MFA Boston): Quinacridone dyes,
 Glauconite, Verdigris, Lead-tin yellow ; SSHADE, goethite ; CHSOS fuchsine,

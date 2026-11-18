@@ -80,17 +80,22 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// the mask's value: every new painting. A log without it replays as it was painted.
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// Marks a painting whose earths (burnt sienna, red earth, raw sienna, yellow ochre, raw
-/// umber) and viridian look dry, as a pastel stick or a sheet's tone, as their measured
-/// powders do: each one's absorption per volume at the factor the powder shows, over what
-/// its grains scatter in air (measured); and whose blacks (bone, vine) are as dark dry as their
+/// umber), Mars colours (red, yellow) and viridian look dry, as a pastel stick or a sheet's
+/// tone, as their measured pigments do: burnt sienna, raw sienna, raw umber and the Mars
+/// colours as the films LBNL measured of them (their absorption and scattering per volume,
+/// the scattering raised into air), the others as their measured powders (absorption per
+/// volume at the factor the powder shows, over what their grains scatter in air, measured);
+/// and whose blacks (bone, vine) are as dark dry as their
 /// opaque grains' facets make them (`paint::Palette::dry_earths`): every new painting.
 /// Only engine 9's dry colors have it (below, the line changes nothing). A log without it
 /// replays its earths' and blacks' dry colors as painted.
 pub const DRY_EARTHS_MARK: &str = "--@ dry-earths";
 /// Marks a painting whose earths (burnt sienna, red earth, raw sienna, yellow ochre, raw
-/// umber) and viridian are as deep in oil as their oil paints: the absorption per volume
-/// their powders show, over what their grains scatter in oil, measured (so their tints with
-/// white are as strong as measured tints) (`paint::Palette::oil_earths`):
+/// umber), Mars colours (red, yellow) and viridian are in oil as their measured paints:
+/// burnt sienna, raw sienna, raw umber and the Mars colours with the absorption and
+/// scattering per volume LBNL measured in films of them, the others with the absorption
+/// per volume their powders show over what their grains scatter in oil, measured (so their
+/// tints with white are as strong as measured tints) (`paint::Palette::oil_earths`):
 /// every new painting. Only engine 9 has it (below, the line changes nothing). A log
 /// without it replays its earths in oil as painted.
 pub const OIL_EARTHS_MARK: &str = "--@ oil-earths";

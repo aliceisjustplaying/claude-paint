@@ -1014,16 +1014,14 @@ mod tests {
         }
     }
 
-    /// A new painting's earth sticks are as deep as their powders (`DRY_EARTHS_MARK`):
-    /// a burnt sienna stick laid heavily on a tan sheet goes darker than the sheet, where
-    /// an older log's (and the stick before the switch) lays a salmon paler than it. Where
-    /// the stick has filled the tooth (the patch's darkest tenth) it reads within ΔE76 12.5
-    /// of burnt sienna's measured powder (Cosentino 2014 FORS, corrected with the measured
-    /// black floor 0.022: L*a*b* 28.4/25.7/24.0, dry_pigment_optics.md §7, §9; it reads
-    /// 11.1 off, L* 31.5): the stick itself is 11.0 off (paint's
-    /// `dry_earths_look_as_their_powders_do`: its lightness is the powder's, its chroma
-    /// short, the oil table's K shape), and the rest is what the tooth and the sheet
-    /// between the crumbs add. The log and a save keep the
+    /// A new painting's earth sticks are as deep as their measured pigments
+    /// (`DRY_EARTHS_MARK`): a burnt sienna stick laid heavily on a tan sheet goes darker
+    /// than the sheet, where an older log's (and the stick before the switch) lays a salmon
+    /// paler than it. Where the stick has filled the tooth (the patch's darkest tenth) it
+    /// reads within ΔE76 3 of burnt sienna's film as LBNL measured it, dry (its K and S per
+    /// volume, its S raised into air: L*a*b* 43.1/33.2/41.2, dry_pigment_optics.md §10,
+    /// earth_lbnl_ks.py; paint's `dry_lbnl_earths_are_their_films_dry`); it reads 0.3 off.
+    /// The log and a save keep the
     /// switch; below engine 9 the line changes nothing. (The sheet here is toned with
     /// parts of tubes, so the switch deepens its yellow ochre too.)
     #[test]
@@ -1045,7 +1043,7 @@ mod tests {
             };
             [116.0 * f(1) - 16.0, 500.0 * (f(0) - f(1)), 200.0 * (f(1) - f(2))]
         };
-        let powder = [28.4f32, 25.7, 24.0];
+        let film = [43.1f32, 33.2, 41.2];
         for enabled in [false, true] {
             let head = format!("--@ box every\n--@ engine 9\n--@ paper\n--@ drawing-optics\n{}", if enabled { format!("{DRY_EARTHS_MARK}\n") } else { String::new() });
             let tubes = box_for(Some(&head)).unwrap();
@@ -1071,8 +1069,8 @@ end"#);
             let (got, bare) = (lab(mean), lab(sheet));
             if enabled {
                 assert!(got[0] < bare[0] - 5.0, "burnt sienna laid {got:?} on the sheet {bare:?}");
-                let de = (0..3).map(|k| (got[k] - powder[k]).powi(2)).sum::<f32>().sqrt();
-                assert!(de < 12.5, "burnt sienna laid {got:?} against its powder {powder:?}: dE {de}");
+                let de = (0..3).map(|k| (got[k] - film[k]).powi(2)).sum::<f32>().sqrt();
+                assert!(de < 3.0, "burnt sienna laid {got:?} against its film dry {film:?}: dE {de}");
             } else {
                 assert!(got[0] > bare[0], "an older log's burnt sienna lays paler than the sheet: {got:?} on {bare:?}");
             }
@@ -1087,10 +1085,10 @@ end"#);
         }
     }
 
-    /// A new painting's earths are as deep in oil as their oil paints (`OIL_EARTHS_MARK`):
-    /// raw umber worked thickly over a lead white ground reads near-black (its tube's own
-    /// pile L* 15.7 against CHSOS's linseed swatch, gloss excluded, 17.5: paint's
-    /// `oil_earths_are_as_deep_as_their_oil_paints`), where an older log's lays a mid
+    /// A new painting's earths are as deep in oil as their measured paints
+    /// (`OIL_EARTHS_MARK`): raw umber worked thickly over a lead white ground reads
+    /// near-black (its tube's own pile L* 19.5, LBNL's film of it seen without its gloss
+    /// 16.8: paint's `oil_lbnl_earths_are_their_films`), where an older log's lays a mid
     /// brown (its pile L* 45). The log and a save keep the switch; below engine 9 the line
     /// changes nothing.
     #[test]

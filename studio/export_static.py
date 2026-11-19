@@ -52,7 +52,7 @@ MODEL_NAMES = {
     "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
     "claude-sonnet-5": "Claude Sonnet 5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
     "gpt-6-astra": "GPT-6 Astra", "gpt-6-luna": "GPT-6 Luna", "gpt-6.1-sol": "GPT-6.1 Sol",
-    "gemini-3.8-flash": "Gemini 3.8 Flash", "muse-spark-1.3": "Muse Spark 1.3", "muse-wonder-full-1.0": "Muse Wonder Full",
+    "gemini-3.8-flash": "Gemini 3.8 Flash", "gemini-4-neon": "Gemini 4 Neon", "muse-spark-1.3": "Muse Spark 1.3", "muse-wonder-full-1.0": "Muse Wonder Full",
     "glm-5.3-flash": "GLM-5.3 Flash", "mimo-v2.6-pro": "MiMo v2.6 Pro",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "kimi-k3": "Kimi K3", "space-bunny-free": "Space Bunny",
 }

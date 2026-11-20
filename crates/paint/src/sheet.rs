@@ -356,8 +356,15 @@ impl Canvas {
     /// Pastel landed on the sheet: `(pixel, µm)` of `color`, kept there
     /// (coverage by volume, as on paper) until the sheet is lifted.
     pub(crate) fn sheet_catch(&mut self, caught: &[(usize, f32)], color: Rgb) {
+        self.sheet_catch_lying(caught, color, 1.0);
+    }
+
+    /// `sheet_catch` of a volume that lies at `lies` of itself (a stick's
+    /// worn volume, `crate::pastel::Grains::lies`).
+    pub(crate) fn sheet_catch_lying(&mut self, caught: &[(usize, f32)], color: Rgb, lies: f32) {
         let Some(s) = self.sheet.as_mut() else { return };
         for &(i, dv) in caught {
+            let dv = dv * lies;
             let q = 1.0 - (-dv / PARTICLE_UM).exp();
             let old = s.a[i] * (1.0 - q);
             let w = old + q;
@@ -373,12 +380,17 @@ impl Canvas {
         if !s.over[i] {
             return None;
         }
-        // (paper is matte: its first-surface veil, as a matte surface's)
+        // (paper is matte: its first-surface veil, as a matte surface's; with
+        // the pastel veil switch, not over the pastel it caught, a bed of
+        // particles: `Cell::bare_bed`)
+        if self.pastel_veil {
+            return Some(cover(crate::canvas::haze(s.tone, 0.0), s.a[i], s.r[i]));
+        }
         Some(crate::canvas::haze(cover(s.tone, s.a[i], s.r[i]), 0.0))
     }
 
     /// (pixels of the whole canvas) and direction.
-    fn walk(&self, pts: &[(f32, f32)]) -> Vec<((f32, f32), (f32, f32))> {
+    pub(crate) fn walk(&self, pts: &[(f32, f32)]) -> Vec<((f32, f32), (f32, f32))> {
         let s = self.f.scale;
         let p: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
         let path = if p.len() >= 2 { crate::path::densify(&p) } else { vec![p[0], p[0]] };
@@ -409,7 +421,7 @@ impl Canvas {
     }
 
     /// Window pixel at whole-canvas pixel (x, y).
-    fn win_px(&self, x: f32, y: f32) -> Option<usize> {
+    pub(crate) fn win_px(&self, x: f32, y: f32) -> Option<usize> {
         let f = self.f;
         let (xi, yi) = (x.floor() as isize - f.x0 as isize, y.floor() as isize - f.y0 as isize);
         if xi < 0 || yi < 0 || xi >= f.w as isize || yi >= f.h as isize {
@@ -489,6 +501,7 @@ impl Canvas {
         let mut heights = std::mem::take(&mut self.height);
         let (mut taken, mut pushed) = (0.0f32, 0.0f32);
         let mut col = [0.0f32; 3];
+        let mut carry = crate::pastel::Carried::new(self.pastel_km);
         let mut last_band: Vec<usize> = Vec::new();
         let mut dent: Vec<(usize, f32)> = Vec::new();
         let mut napped: Vec<(usize, f32)> = Vec::new();
@@ -514,11 +527,13 @@ impl Canvas {
             // the edge cuts fiber walls past q = H·2R (a scalpel's 1 µm edge
             // at 0.15–0.85 N/mm; a knife's never at a hand's load), shaving
             // about a fiber layer
-            let shave = if q * 1000.0 > FIBER_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
+            // (on a gritted ground no fiber is bare: the blade rides the hard
+            // grains, cuts none and tears none loose)
+            let shave = if paper.grit.is_none() && q * 1000.0 > FIBER_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
             // its drag on each fiber it crosses tears the fiber's joints past
             // their strength: the torn ends stand proud (nap)
             let drag = STEEL_PAPER_MU * q * paper.fiber_um * 1e-3;
-            let nap = ((drag - FIBER_JOINT_N) / FIBER_JOINT_N).clamp(0.0, 1.0);
+            let nap = if paper.grit.is_some() { 0.0 } else { ((drag - FIBER_JOINT_N) / FIBER_JOINT_N).clamp(0.0, 1.0) };
             let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
             let mut blade: Vec<usize> = Vec::with_capacity(nb + 1);
             for k in 0..=nb {
@@ -565,8 +580,10 @@ impl Canvas {
                     let r = cl.r;
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
+                        let km = carry.mixed(col, pushed, r, ex * 0.35, cl.s);
+                        carry.take(pushed, ex * 0.35, cl);
                         let tot = pushed + ex * 0.35;
-                        col = [0, 1, 2].map(|j| (col[j] * pushed + r[j] * ex * 0.35) / tot.max(1e-9));
+                        col = km.unwrap_or_else(|| [0, 1, 2].map(|j| (col[j] * pushed + r[j] * ex * 0.35) / tot.max(1e-9)));
                         pushed = tot;
                         taken += ex;
                     }
@@ -587,9 +604,12 @@ impl Canvas {
         // closed by what the dent took), once per pixel, by the deepest press
         dent.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.partial_cmp(&a.1).unwrap()));
         dent.dedup_by_key(|d| d.0);
+        // (a gritted ground's hollows are between hard grains a blade doesn't
+        // flatten: the sheet under them gives, the tooth stays)
+        let gritted = self.paper.is_some_and(|p| p.grit.is_some());
         for &(i, r) in &dent {
             heights[i] -= r;
-            if let Some(m) = self.micro.get_mut(i) {
+            if let Some(m) = self.micro.get_mut(i).filter(|_| !gritted) {
                 *m = (*m - r).max(0.5);
             }
         }
@@ -611,7 +631,7 @@ impl Canvas {
         if pushed > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
             let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0x5C2A);
-            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, pushed, col, &mut rng, CRUMB_MAX_UM, px_um2);
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, pushed, col, carry.grains(), &mut rng, CRUMB_MAX_UM, px_um2);
             self.film = film;
         }
         self.drawing = Some(dr);
@@ -649,6 +669,7 @@ impl Canvas {
         let total_px = (steps.len().max(1) - 1) as f32 * 0.7;
         let mut kept_um = 0.0f32;
         let (mut ahead, mut col) = (0.0f32, [0.0f32; 3]);
+        let mut carry = crate::pastel::Carried::new(self.pastel_km);
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
@@ -693,15 +714,17 @@ impl Canvas {
                 let kept = ex * room;
                 *held_mg += kept * um_to_mg;
                 kept_um += kept;
+                let km = carry.mixed(col, ahead, r, ex - kept, cl.s);
+                carry.take(ahead, ex - kept, cl);
                 let tot = ahead + (ex - kept);
-                col = [0, 1, 2].map(|j| (col[j] * ahead + r[j] * (ex - kept)) / tot.max(1e-9));
+                col = km.unwrap_or_else(|| [0, 1, 2].map(|j| (col[j] * ahead + r[j] * (ex - kept)) / tot.max(1e-9)));
                 ahead = tot;
             }
             if !front.is_empty() && ahead > 0.0 {
                 let hmax = front.iter().map(|&i| self.height[i]).fold(f32::MIN, f32::max);
                 let bed: Vec<(usize, f32, bool)> = front.iter().map(|&i| (i, 1.0 + (hmax - self.height[i]), false)).collect();
                 let film = std::mem::take(&mut self.film);
-                crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+                crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
                 self.film = film;
                 ahead = 0.0;
             }
@@ -714,7 +737,7 @@ impl Canvas {
         let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
         if ahead > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
-            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
             self.film = film;
         }
         self.drawing = Some(dr);
@@ -825,9 +848,12 @@ impl Canvas {
         let mut fines_from = vec![vec![0.0f32; nb]; nsec];
         let mut ccol = vec![(0.0f32, [0.0f32; 3]); nsec];
         let mut fcol = vec![(0.0f32, [0.0f32; 3]); nsec];
-        let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb| {
+        // (and what of them is charcoal)
+        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::new(self.pastel_km); nsec], vec![crate::pastel::Carried::new(self.pastel_km); nsec]);
+        // (by Kubelka–Munk with the K–M switch: `Carried::mixed`)
+        let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb, km: Option<Rgb>| {
             let t = acc.0 + v;
-            acc.1 = [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9));
+            acc.1 = km.unwrap_or_else(|| [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9)));
             acc.0 = t;
         };
         let sector = |wx: f32, wy: f32| (((wy.atan2(wx) + std::f32::consts::PI) / std::f32::consts::TAU * nsec as f32) as usize).min(nsec - 1);
@@ -858,7 +884,9 @@ impl Canvas {
                     let k = sector(wx, wy);
                     let crumbs = (heap * heap_goes).min(ex);
                     if crumbs > 0.0 {
-                        mix(&mut ccol[k], crumbs, r);
+                        let km = ccarry[k].mixed(ccol[k].1, ccol[k].0, r, crumbs, cl.s);
+                        ccarry[k].take(ccol[k].0, crumbs, cl);
+                        mix(&mut ccol[k], crumbs, r, km);
                         let flights = hop_at(rr);
                         for (j, roll) in rolled[k].iter_mut().enumerate() {
                             // (the crumbs of this band that the shear here set going)
@@ -884,7 +912,9 @@ impl Canvas {
                     }
                     let fv = ex - crumbs;
                     if fv > 0.0 {
-                        mix(&mut fcol[k], fv, r);
+                        let km = fcarry[k].mixed(fcol[k].1, fcol[k].0, r, fv, cl.s);
+                        fcarry[k].take(fcol[k].0, fv, cl);
+                        mix(&mut fcol[k], fv, r, km);
                         fines_from[k][bin(rr).min(nb - 1)] += fv;
                     }
                 }
@@ -1024,22 +1054,22 @@ impl Canvas {
         let (mut laid, mut caught) = (0.0f32, Vec::new());
         for k in 0..nsec {
             let share = |b: usize| per_px[k][b];
-            let mut lay = |amount: &[f32], col: Rgb, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
+            let mut lay = |amount: &[f32], col: Rgb, grains: crate::pastel::Grains, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
                 let bed: Vec<(usize, f32, bool)> = beds[k].iter().map(|&(i, b, wet)| (i, amount[b] * share(b), wet)).filter(|e| e.1 > 0.0).collect();
                 let v: f32 = bed.iter().map(|e| e.1).sum();
                 if v > 0.0 {
                     // (what falls on wet paint is lost in it: still on the picture)
-                    crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, v, col, &mut rng, dmax, px_um2);
+                    crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, v, col, grains, &mut rng, dmax, px_um2);
                     *laid += v;
                 }
                 caught.extend(on_mask[k].iter().map(|&(i, b)| (i, amount[b] * share(b), col)).filter(|e| e.1 > 0.0));
             };
             if ccol[k].0 > 0.0 {
-                lay(&dep[k], ccol[k].1, CRUMB_MAX_UM, &mut laid, &mut caught);
+                lay(&dep[k], ccol[k].1, ccarry[k].grains(), CRUMB_MAX_UM, &mut laid, &mut caught);
             }
             if fcol[k].0 > 0.0 {
                 for (sz, &(_, hi)) in FINE_SIZES.iter().enumerate() {
-                    lay(&depf[k][sz], fcol[k].1, hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
+                    lay(&depf[k][sz], fcol[k].1, fcarry[k].grains(), hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
                 }
             }
         }
@@ -1655,6 +1685,32 @@ mod tests {
         assert!(shaved > 0, "the scalpel shaved the surface");
         assert!(c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() < b0, "and took fixed pastel");
         assert!((k.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() - b0).abs() < 1e-3 * b0, "the knife left the fixed");
+    }
+
+    /// On a gritted ground the blade rides hard grains: pressed hard on a
+    /// short edge or cutting as a scalpel, it neither flattens the tooth nor
+    /// tears fibers loose there (no fiber is bare), and still takes loose
+    /// pastel; on the same sheet without grit the same scrapes change the
+    /// tooth.
+    #[test]
+    fn a_knife_leaves_the_grit_its_tooth() {
+        use crate::paper::{Binder, Grit, Paper};
+        let scraped = |grit: Option<Grit>| {
+            let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
+            let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+            for y in [300.0, 320.0, 340.0] {
+                let p = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+                c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y, pose: p, speed: 50.0 }, StrokePoint { x: 900.0, y, pose: p, speed: 50.0 }]);
+            }
+            let m0 = c.micro.clone();
+            let took = c.scrape_pastel(20.0, 100.0, &[(300.0, 200.0), (300.0, 450.0)], (1.0, 1.0), Some(0.0))
+                + c.scrape_pastel(10.0, 1.0, &[(600.0, 200.0), (600.0, 450.0)], (1.0, 1.0), Some(0.0));
+            (took, (0..m0.len()).filter(|&i| c.micro[i] != m0[i]).count())
+        };
+        let (took, changed) = scraped(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
+        assert!(took > 0.0 && changed == 0, "took {took}, the tooth changed at {changed} pixels");
+        let (_, plain) = scraped(None);
+        assert!(plain > 0, "on plain paper the scrapes change the tooth");
     }
 
     /// The fines a puff lifts settle from the wall jet as the research's

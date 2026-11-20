@@ -1395,6 +1395,57 @@ mod tests {
         Pose { force, alt: alt_deg.to_radians(), az: 45f32.to_radians(), roll: 0.0 }
     }
 
+    /// A sheet laid down on board gives a little more than one on a hard
+    /// drawing board, on canvas more, and on canvas over a strainer, in the
+    /// middle of the bay, most: the stick sinks further. Over the
+    /// strainer's bars the sheet is as firm as on canvas.
+    #[test]
+    fn a_stick_sinks_further_on_a_strainer_than_on_canvas_or_board() {
+        use crate::canvas::Crop;
+        use crate::paper::Mount;
+        let sink = |p: Paper, at: f32| {
+            // (a 300 mm sheet, only a few centimeters of it laid)
+            let crop = Crop { units: [at - 60.0, 440.0, at + 60.0, 560.0], margin: 0.0 };
+            let c = Canvas::new_window(800, 1.0, [0.55; 3], Some(crop)).with_size_mm(300.0).with_paper(p);
+            let sp = StrokePoint { x: at, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 };
+            c.seat_stick(&Stick::round([0.02; 3], 0.8, 12.0), &sp).unwrap().delta
+        };
+        let p = Paper::drawing(4);
+        let [free, board, canvas, strainer] = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::named("strainer").unwrap())].map(|q| sink(q, 500.0));
+        assert!(free < board && board < canvas && canvas < strainer, "sinks: free {free}, board {board}, canvas {canvas}, strainer {strainer}");
+        assert_eq!(sink(p.mounted(Mount::named("strainer").unwrap()), 70.0).to_bits(), sink(p.mounted(Mount::Canvas), 70.0).to_bits());
+    }
+
+    /// A softer bed lays more pastel, but never more than Archard's law
+    /// lets the stick wear (K·F·s/σp: the same on any bed, since the real
+    /// contact is F/σp however the load spreads): it spreads the stick's
+    /// contact wider, so less of it rides on pastel just laid in the
+    /// tooth. Board, then canvas; a strainer's bay more than a hard board.
+    /// (Past canvas the contact keeps spreading, but what is laid levels
+    /// off, within a few percent of canvas's with isolated dips: no order
+    /// between canvas and the bay is claimed. notes/research/
+    /// cassatt_papers.md §1.)
+    #[test]
+    fn a_softer_bed_lays_more_within_archards_wear() {
+        use crate::paper::Mount;
+        let p = Paper::drawing(4);
+        let laid: Vec<f32> = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::named("strainer").unwrap())]
+            .iter()
+            .map(|&q| {
+                let mut c = Canvas::new_window(400, 1.0, [0.55; 3], None).with_size_mm(300.0).with_paper(q);
+                let u = c.mm_per_unit;
+                let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+                // 30 mm across the middle of the sheet, at 3 N and 60°
+                let pts: Vec<StrokePoint> = (0..=30).map(|i| StrokePoint { x: (135.0 + i as f32) / u, y: 150.0 / u, pose: pose(3.0, 60.0), speed: 50.0 }).collect();
+                c.stick_stroke(&mut st, &pts).volume_mm3
+            })
+            .collect();
+        let st = Stick::round([0.02; 3], 0.8, 12.0);
+        let archard = st.wear * 3.0 * 30.0 / st.hardness;
+        assert!(laid[0] < laid[1] && laid[1] < laid[2] && laid[0] < laid[3], "laid {laid:?}");
+        assert!(laid.iter().all(|&v| v <= archard), "laid {laid:?}, Archard {archard}");
+    }
+
     #[test]
     fn stagnant_midpoints_preserve_forty_step_results() {
         let solve = |mut lo: f32, mut hi: f32, force: f32, stop: bool| {

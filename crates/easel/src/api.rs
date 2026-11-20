@@ -2037,6 +2037,21 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let paper_ok = st.borrow().paper;
                 let paper = match o.get::<Value>("paper")? {
                     Value::Nil => None,
+                    // (with the paper-presets switch, a sheet's name alone)
+                    v @ Value::String(_) if tubes.paper_presets => {
+                        let t = lua.create_table()?;
+                        t.set("preset", v)?;
+                        if !paper_ok {
+                            return err(format!("canvas: paper= needs the paper-and-pastel switch, which this painting doesn't have: its log's head has no {:?} line (it was begun before paper)", crate::session::PAPER_MARK));
+                        }
+                        if o.contains_key("linen")? {
+                            return err("canvas: a sheet of paper or linen, not both");
+                        }
+                        if raw_ok && o.contains_key("raw")? {
+                            return err("canvas: a sheet of paper or a raw canvas, not both");
+                        }
+                        Some(paper_of(&tubes, &t, seed)?)
+                    }
                     Value::Table(t) => {
                         if !paper_ok {
                             return err(format!("canvas: paper= needs the paper-and-pastel switch, which this painting doesn't have: its log's head has no {:?} line (it was begun before paper)", crate::session::PAPER_MARK));
@@ -2049,18 +2064,19 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                         }
                         Some(paper_of(&tubes, &t, seed)?)
                     }
+                    v if tubes.paper_presets => return err(format!("canvas: paper= is a sheet's name ({}) or a table of its make ({{preset=, mount=, grammage=, tone=, felt=, ...}}), got {}", preset_names(), v.type_name())),
                     v => return err(format!("canvas: paper= is a table of the sheet's make ({{grammage=, tone=, felt=, ...}}), got {}", v.type_name())),
                 };
                 let width = st.borrow().width;
                 let (mut c, sty, support) = match paper {
-                    Some((p, tone)) => {
+                    Some((p, tone, named)) => {
                         // (a sheet of paper needs no ground: it is drawn and painted on as it is)
                         let ground = match o.get::<Value>("ground")? {
                             Value::Nil => Vec::new(),
                             g => ground_of(&tubes, &g)?,
                         };
                         let sty = Style { name: "oil", width_mm: mm, raw: tone, ground, ..Style::oil_with((*tubes).clone()) };
-                        (sty.prepare_paper(width, aspect, seed, p), sty, format!("paper={} g/m²", fmt_num(p.grammage)))
+                        (sty.prepare_paper(width, aspect, seed, p), sty, format!("paper={} g/m²{named}", fmt_num(p.grammage)))
                     }
                     None => {
                         let or_paper = if paper_ok { ", or paper= (a sheet of paper)" } else { "" };
@@ -2556,14 +2572,78 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
 
 const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or paper={grammage=, tone={{\"<tube>\", <parts>}, ...}, felt={cell=, depth=}|false, laid={per_cm=, chain=, deficit=}, ...} instead of linen: a sheet of paper (a ground is then optional)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
 
+/// A mount by its name (`paint::paper::Mount::named`).
+fn mount_named(s: &str) -> Result<paint::paper::Mount> {
+    paint::paper::Mount::named(s).ok_or_else(|| mlua::Error::runtime(format!("paper: mount= is \"board\", \"canvas\" or \"strainer\", got {s:?}")))
+}
+
+/// The named sheets, for messages: `"blue wove"`, ...
+fn preset_names() -> String {
+    paint::paper::PRESETS.iter().map(|p| format!("{:?}", p.name)).collect::<Vec<_>>().join(", ")
+}
+
 /// A sheet of paper from `canvas{paper={...}}`, and its tone: the pulp's
 /// color, tubes' pigments as they look dry (a dyed or toned sheet), or the
-/// color of cotton rag if none is given. Every key has a default
-/// (`Paper::drawing`).
-fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
-    use paint::paper::{Felt, Laid, Paper};
-    check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
-    let d = Paper::drawing(seed);
+/// color of cotton rag if none is given; and, for the canvas's setup line,
+/// its name and mount if it has them. Every key has a default
+/// (`Paper::drawing`). With the paper-presets switch (`Palette::paper_presets`),
+/// `preset=` names a sheet whose dials are then the defaults (a key given
+/// overrides its preset's), and `mount=` lays it down on board, canvas, or
+/// canvas over a strainer (`Paper::mounted`; `{"strainer", bar=, cross=}`
+/// its bars' width and crossbars); without it both are unknown
+/// keys, as they were.
+fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb, String)> {
+    use paint::paper::{Felt, Laid, Mount, Paper};
+    const KEYS: [&str; 15] = ["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"];
+    let presets = tubes.paper_presets;
+    if presets {
+        let mut keys = KEYS.to_vec();
+        keys.extend(["preset", "mount"]);
+        check_keys(t, &keys, "paper")?;
+    } else {
+        check_keys(t, &KEYS, "paper")?;
+    }
+    let preset = match if presets { t.get::<Value>("preset")? } else { Value::Nil } {
+        Value::Nil => None,
+        Value::String(s) => {
+            let s = s.to_str()?.to_string();
+            Some(Paper::preset(&s).ok_or_else(|| mlua::Error::runtime(format!("paper: no sheet called {s:?} (the sheets: {})", preset_names())))?)
+        }
+        v => return err(format!("paper: preset= is a sheet's name ({}), got {}", preset_names(), v.type_name())),
+    };
+    let mount = match if presets { t.get::<Value>("mount")? } else { Value::Nil } {
+        Value::Nil => None,
+        Value::String(s) => Some(mount_named(&s.to_str()?)?),
+        // {"strainer", bar=<mm>, cross=<n>}: a strainer's bars and crossbars
+        Value::Table(m) => {
+            check_keys(&m, &["bar", "cross"], "paper mount")?;
+            let name = match m.get::<Value>(1)? {
+                Value::String(s) => s.to_str()?.to_string(),
+                v => return err(format!("paper: mount= is a name or {{\"strainer\", bar=, cross=}}, got {} first", v.type_name())),
+            };
+            if m.raw_len() != 1 {
+                return err("paper: mount= {\"strainer\", bar=, cross=} has one name");
+            }
+            match mount_named(&name)? {
+                Mount::Strainer { bar_mm, cross } => {
+                    let bar = num(&m, "bar")?.unwrap_or(bar_mm);
+                    if !(5.0..=150.0).contains(&bar) {
+                        return err(format!("paper: mount bar= is the strainer's bars' width in mm (5..150), got {bar}"));
+                    }
+                    let cross = match num(&m, "cross")? {
+                        None => cross,
+                        Some(c) if c.fract() == 0.0 && (0.0..=paint::paper::MAX_CROSS as f32).contains(&c) => c as u32,
+                        Some(c) => return err(format!("paper: mount cross= is a number of crossbars (0..{}), got {c}", paint::paper::MAX_CROSS)),
+                    };
+                    Some(Mount::Strainer { bar_mm: bar, cross })
+                }
+                _ if m.contains_key("bar")? || m.contains_key("cross")? => return err(format!("paper: mount bar= and cross= are a strainer's, not {name:?}'s")),
+                other => Some(other),
+            }
+        }
+        v => return err(format!("paper: mount= is \"board\", \"canvas\" or \"strainer\" (or {{\"strainer\", bar=, cross=}}), got {}", v.type_name())),
+    };
+    let d = preset.map_or_else(|| Paper::drawing(seed), |p| p.paper(seed));
     let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
         let v = num(t, k)?.unwrap_or(def);
         if !(lo..=hi).contains(&v) {
@@ -2586,7 +2666,9 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         _ => return err("paper: felt= {cell=mm, depth=µm}, or false for none"),
     };
     let laid = match t.get::<Value>("laid")? {
-        Value::Nil | Value::Boolean(false) => None,
+        // (a preset's wires, or none)
+        Value::Nil => d.laid,
+        Value::Boolean(false) => None,
         Value::Table(l) => {
             check_keys(&l, &["per_cm", "chain", "deficit"], "paper laid")?;
             let (per_cm, chain, deficit) = (num(&l, "per_cm")?.unwrap_or(10.0), num(&l, "chain")?.unwrap_or(25.0), num(&l, "deficit")?.unwrap_or(0.15));
@@ -2612,15 +2694,50 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
         felt,
         laid,
+        drum: None,
         seed,
     };
-    // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...})
+    // laid down on its mount: the backing's give with the sheet's own
+    let p = mount.map_or(p, |m| p.mounted(m));
+    // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...});
+    // a preset's are the catalog's tubes, whatever the box
     let tone = match t.get::<Value>("tone")? {
-        Value::Nil => paint::hex("#e8e0cf"),
+        Value::Nil => match preset {
+            Some(pr) => preset_tone(tubes, pr),
+            None => paint::hex("#e8e0cf"),
+        },
         Value::Table(p) => tubes.dry_color(&parts_of(tubes, &p, "paper tone")?.0),
         v => return err(format!("paper: tone= is parts of tubes ({{{{\"tube\", parts}}, ...}}), got {}", v.type_name())),
     };
-    Ok((p, tone))
+    let mut named = String::new();
+    if let Some(pr) = preset {
+        named.push_str(&format!(", {}", pr.name));
+    }
+    match mount {
+        Some(Mount::Board) => named.push_str(", on board"),
+        Some(Mount::Canvas) => named.push_str(", on canvas"),
+        Some(Mount::Strainer { bar_mm, cross }) => {
+            named.push_str(", on canvas over a strainer");
+            if bar_mm != paint::paper::STRAINER_BAR_MM || cross != 0 {
+                named.push_str(&format!(" (bars {} mm, {cross} crossbar{})", fmt_num(bar_mm), if cross == 1 { "" } else { "s" }));
+            }
+        }
+        None => {}
+    }
+    Ok((p, tone, named))
+}
+
+/// A preset sheet's tone: its parts of the catalog's tubes, seen dry as the
+/// painting's engine sees them (the same whatever the box).
+fn preset_tone(tubes: &Palette, pr: &paint::paper::Preset) -> paint::Rgb {
+    let mut every = Palette::named_box("every").expect("the catalog box");
+    every.engine = tubes.engine;
+    let parts: Vec<(usize, f32)> = pr
+        .tone
+        .iter()
+        .map(|&(name, f)| (every.tubes.iter().position(|t| t.name == name).expect("a preset's tube is in the catalog"), f))
+        .collect();
+    every.dry_color(&parts)
 }
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
@@ -3154,5 +3271,183 @@ mod reload_finite_tests {
         let mut old = older_log();
         old.run("b:reload(p, 0/0)").unwrap();
         old.run("assert(b:fullness() ~= b:fullness(), 'an older log no longer reloads a NaN')").unwrap();
+    }
+}
+
+// Named and mounted sheets (`--@ paper-presets`): tiny canvases, no painting.
+#[cfg(test)]
+mod paper_presets_tests {
+    use crate::session::{MARK, PAPER_MARK, PAPER_PRESETS_MARK, Session, box_for, parse_program};
+    use paint::paper::{Mount, Paper};
+
+    fn session(presets: bool) -> Session {
+        let head = format!("--@ engine 9\n{PAPER_MARK}\n{}", if presets { format!("{PAPER_PRESETS_MARK}\n") } else { String::new() });
+        Session::replay_with(48, box_for(Some(&head)).unwrap()).unwrap().with_paper(true).unwrap()
+    }
+
+    fn sheet(s: &Session) -> Paper {
+        *s.canvas().unwrap().paper().unwrap()
+    }
+
+    fn tone(s: &Session) -> paint::Rgb {
+        s.st.borrow().style.as_ref().unwrap().raw
+    }
+
+    /// Each named sheet, by its name alone or as `preset=`, is its preset's
+    /// dials and tone (the catalog's tubes, whatever the box); a key given
+    /// overrides its preset's and leaves the rest.
+    #[test]
+    fn a_named_sheet_is_its_preset_and_keys_override_it() {
+        for pr in paint::paper::PRESETS {
+            for src in [format!("paper={:?}", pr.name), format!("paper={{preset={:?}}}", pr.name)] {
+                let mut s = session(true);
+                s.run(&format!("canvas{{size=200, aspect=1, seed=3, {src}}}")).unwrap();
+                assert_eq!(sheet(&s), pr.paper(3), "{src}");
+                assert_eq!(tone(&s), super::preset_tone(&s.st.borrow().tubes, pr), "{src}");
+                assert!(s.st.borrow().setup.as_ref().unwrap().contains(&format!(", {}, seed=3", pr.name)), "{src}");
+            }
+        }
+        // the default box has no ultramarine or viridian: the tone is the catalog's
+        let mut s = session(true);
+        assert!(!s.st.borrow().tubes.tubes.iter().any(|t| t.name == "ultramarine blue"));
+        s.run(r#"canvas{size=200, aspect=1, seed=3, paper="blue wove"}"#).unwrap();
+        let blue = tone(&s);
+        assert!(blue[2] > blue[0] + 0.05, "blue: {blue:?}");
+        // explicit keys win; the rest is the preset's
+        let mut s = session(true);
+        s.run(r#"canvas{size=200, aspect=1, seed=3, paper={preset="cream laid", grammage=200, laid=false, felt={cell=1.2}, stiffness=80, tone={{"raw umber", 1}}}}"#).unwrap();
+        let base = Paper::preset("cream laid").unwrap().paper(3);
+        let felt = Some(paint::paper::Felt { cell_mm: 1.2, depth_um: 20.0 });
+        assert_eq!(sheet(&s), Paper { grammage: 200.0, laid: None, felt, z_mpa: 80.0, ..base });
+        let mut plain = session(true);
+        plain.run(r#"canvas{size=200, aspect=1, seed=3, paper={tone={{"raw umber", 1}}}}"#).unwrap();
+        assert_eq!(tone(&s), tone(&plain));
+        // a preset's laid wires stay unless a key replaces them
+        let mut s = session(true);
+        s.run(r#"canvas{size=200, aspect=1, seed=3, paper={preset="cream laid", laid={per_cm=12}}}"#).unwrap();
+        assert_eq!(sheet(&s).laid, Some(paint::paper::Laid { per_cm: 12.0, chain_mm: 25.0, deficit: 0.15 }));
+        for (bad, says) in [
+            (r#"paper="vellum""#, "no sheet called \"vellum\""),
+            (r#"paper={preset="Tan Wove"}"#, "no sheet called"),
+            (r#"paper={preset=3}"#, "preset= is a sheet's name"),
+            (r#"paper={mount="easel"}"#, "mount= is \"board\""),
+            (r#"paper=true"#, "a sheet's name"),
+        ] {
+            let e = session(true).run(&format!("canvas{{size=200, aspect=1, seed=3, {bad}}}")).unwrap_err();
+            assert!(e.contains(says), "{bad}: {e}");
+        }
+    }
+
+    /// `mount=` lays the sheet down: its give is the sheet's and the
+    /// backing's together, board firmest, a strainer's bay softest; it
+    /// goes with a preset or any sheet.
+    #[test]
+    fn a_mount_lays_the_sheet_down() {
+        let mut give = Vec::new();
+        for m in ["board", "canvas", "strainer"] {
+            let mut s = session(true);
+            s.run(&format!(r#"canvas{{size=200, aspect=1, seed=3, paper={{preset="tan wove", mount="{m}", stiffness=50}}}}"#)).unwrap();
+            let want = Paper { z_mpa: 50.0, ..Paper::preset("tan wove").unwrap().paper(3) }.mounted(Mount::named(m).unwrap());
+            let p = sheet(&s);
+            assert_eq!(p, want, "{m}");
+            give.push(p.give_at(100.0, 100.0, 200.0, 200.0));
+            let on = match m { "strainer" => "on canvas over a strainer", _ => &format!("on {m}") };
+            assert!(s.st.borrow().setup.as_ref().unwrap().contains(on), "{m}");
+        }
+        assert!(give[0] > give[1] && give[1] > give[2], "{give:?}");
+        let mut s = session(true);
+        s.run(r#"canvas{size=200, aspect=1, seed=3, paper={mount="canvas"}}"#).unwrap();
+        assert_eq!(sheet(&s), Paper::drawing(3).mounted(Mount::Canvas));
+        // a strainer's bars and crossbars
+        for (src, want, says) in [
+            (r#"{"strainer", bar=30, cross=1}"#, Mount::Strainer { bar_mm: 30.0, cross: 1 }, "over a strainer (bars 30 mm, 1 crossbar)"),
+            (r#"{"strainer", cross=2}"#, Mount::Strainer { bar_mm: 50.0, cross: 2 }, "(bars 50 mm, 2 crossbars)"),
+            (r#"{"strainer"}"#, Mount::named("strainer").unwrap(), "over a strainer, seed"),
+            (r#"{"board"}"#, Mount::Board, "on board"),
+        ] {
+            let mut s = session(true);
+            s.run(&format!("canvas{{size=200, aspect=1, seed=3, paper={{mount={src}}}}}")).unwrap();
+            assert_eq!(sheet(&s), Paper::drawing(3).mounted(want), "{src}");
+            assert!(s.st.borrow().setup.as_ref().unwrap().contains(says), "{src}: {:?}", s.st.borrow().setup);
+        }
+        for (bad, says) in [
+            (r#"{"strainer", bar=2}"#, "bars' width in mm (5..150), got 2"),
+            (r#"{"strainer", cross=1.5}"#, "a number of crossbars (0..8), got 1.5"),
+            (r#"{"strainer", cross=9}"#, "a number of crossbars (0..8), got 9"),
+            (r#"{"board", bar=30}"#, "bar= and cross= are a strainer's, not \"board\"'s"),
+            (r#"{"strainer", "canvas"}"#, "has one name"),
+            (r#"{"strainer", tension=1}"#, "paper mount: unknown option \"tension\" (options: bar, cross)"),
+            (r#"{bar=30}"#, "got nil first"),
+            (r#"{"easel"}"#, "mount= is \"board\""),
+        ] {
+            let e = session(true).run(&format!("canvas{{size=200, aspect=1, seed=3, paper={{mount={bad}}}}}")).unwrap_err();
+            assert!(e.contains(says), "{bad}: {e}");
+        }
+    }
+
+    /// Without the switch `preset=` and `mount=` are unknown keys, refused
+    /// as any unknown key is, with the same options listed as before, and a
+    /// sheet's name alone is not a table; a sheet with neither is the same
+    /// canvas either way, bit for bit.
+    #[test]
+    fn without_the_switch_names_and_mounts_are_refused_and_nothing_changes() {
+        let keys = "grammage, fiber, fiber_width, thickness, coarseness, porosity, floc, floc_size, press, calender, felt, laid, absorbent, stiffness, tone";
+        for (src, says) in [
+            (r#"paper={preset="tan wove"}"#, format!("paper: unknown option \"preset\" (options: {keys})")),
+            (r#"paper={mount="board"}"#, format!("paper: unknown option \"mount\" (options: {keys})")),
+            (r#"paper="tan wove""#, "canvas: paper= is a table of the sheet's make ({grammage=, tone=, felt=, ...}), got string".to_string()),
+        ] {
+            let e = session(false).run(&format!("canvas{{size=200, aspect=1, seed=3, {src}}}")).unwrap_err();
+            assert!(e.contains(&says), "{src}: {e}");
+        }
+        let src = r#"canvas{size=200, aspect=1, seed=3, paper={grammage=120, tone={{"yellow ochre", 1}, {"lead white", 2}}, laid={per_cm=9}}}"#;
+        let bytes = |presets: bool| {
+            let mut s = session(presets);
+            s.run(src).unwrap();
+            let mut b = Vec::new();
+            s.canvas().unwrap().write_state(&mut b, "").unwrap();
+            (b, s.st.borrow().setup.clone())
+        };
+        assert!(bytes(false) == bytes(true));
+    }
+
+    /// The switch is read from the log's head (before the first chunk), is a
+    /// new painting's, is written into its log and its saves, and rides on
+    /// engine 5 and later; a log without it replays without it.
+    #[test]
+    fn the_switch_comes_from_the_log_head() {
+        assert!(box_for(None).unwrap().paper_presets);
+        assert!(box_for(Some(&format!("--@ engine 9\n{PAPER_MARK}\n {PAPER_PRESETS_MARK} \n{MARK} 1\n"))).unwrap().paper_presets);
+        assert!(!box_for(Some(&format!("--@ engine 9\n{PAPER_MARK}\n{MARK} 1\n{PAPER_PRESETS_MARK}\n"))).unwrap().paper_presets);
+        assert!(!box_for(Some(&format!("--@ engine 9\n{PAPER_MARK}\n{PAPER_PRESETS_MARK}-ish\n"))).unwrap().paper_presets);
+        assert!(!box_for(Some("--@ engine 9\n--@ paper\n")).unwrap().paper_presets);
+        let e = box_for(Some(&format!("--@ engine 4\n{PAPER_PRESETS_MARK}\n"))).unwrap_err();
+        assert!(e.contains(PAPER_PRESETS_MARK), "{e}");
+        for presets in [false, true] {
+            let mut live = session(presets);
+            live.run(r#"canvas{size=200, aspect=1, seed=3, paper={grammage=120}}"#).unwrap();
+            let log = live.program("t");
+            assert_eq!(log.contains(&format!("{PAPER_MARK}\n{PAPER_PRESETS_MARK}\n")), presets, "{log}");
+            let mut replay = Session::replay_with(48, box_for(Some(&log)).unwrap()).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.st.borrow().tubes.paper_presets, presets);
+            let path = std::env::temp_dir().join(format!("easel-paper-presets-{}-{presets}.ckpt", std::process::id()));
+            crate::save::write(&live, &log, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.paper_presets, presets);
+        }
+        // a painting begun with the switch replays its named, mounted sheet
+        let mut live = session(true);
+        live.run(r#"canvas{size=200, aspect=1, seed=3, paper={preset="blue wove", mount="strainer"}}"#).unwrap();
+        let log = live.program("t");
+        let mut replay = Session::replay_with(48, box_for(Some(&log)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&log) {
+            replay.run(&chunk).unwrap();
+        }
+        assert_eq!(sheet(&replay), sheet(&live));
+        assert_eq!(tone(&replay), tone(&live));
     }
 }

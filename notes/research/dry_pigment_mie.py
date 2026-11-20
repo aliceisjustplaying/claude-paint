@@ -49,7 +49,7 @@ def sizeavg(npart, nmed, d_med, lam=0.55, sig=0.5, N=41):
         S += wi*area*qs*(1-g); A += wi*area*qa; V += wi*np.pi*d**3/6
     return S/V, A/V   # transport-scattering and absorption cross-section per unit particle volume (1/um)
 
-if __name__ == "__main__":
+if __name__ == "__main__" and __import__("sys").argv[1:] != ["media"]:
     mats = [("lead white",2.0),("zinc white",2.01),("vermilion",3.0),("hematite (red ochre)",3.0),("goethite ochre",2.3),
             ("chrome yellow",2.4),("cadmium yellow",2.45),("Naples yellow",2.15),("red lead",2.42),
             ("cobalt blue",1.74),("cerulean",1.84),("emerald green",1.75),("viridian",1.8),("cobalt violet",1.7),
@@ -63,3 +63,43 @@ if __name__ == "__main__":
             s2,_ = sizeavg(n,1.57,d)
             row.append("%6.2f %8s %8s" % (sa, "%.1f"%(sa/so) if so>1e-6 else "inf", "%.1f"%(sa/s2) if s2>1e-6 else "inf"))
         print("%-22s %5.2f | " % (name,n) + " | ".join(row))
+
+# The same particles in a medium between air and water (wet pastel,
+# crates/paint/src/dry.rs `scatter_in`): uv run notes/research/dry_pigment_mie.py media
+# prints, per particle index, the transport scattering in media of index
+# 1.0 .. 1.333 as a share of its scattering in air, at whiting's Sauter
+# mean d32 = 1.7 um (a pastel's particles; wet_pastel.md §1), and whiting's
+# dry scattering per volume against lead white's at 1 um (dry.rs
+# `WHITING_S_REL`).
+MEDIA = (1.0, 1.01, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.333)
+D_PASTEL = 1.7
+def media_table():
+    print("n     " + " ".join("%6.3f" % m for m in MEDIA))
+    for n in (1.50, 1.56, 1.59, 1.65, 1.70, 1.74, 1.84, 2.00, 2.15, 2.30, 2.40, 2.45, 3.00):
+        s = [sizeavg(n, m, D_PASTEL)[0] for m in MEDIA]
+        print("%.2f  " % n + " ".join("%6.4f" % (v / s[0]) for v in s))
+    # the fillers, birefringence-averaged (calcite ω twice, ε once)
+    for name, idx in (("calcite", ((1.658, 2/3), (1.486, 1/3))), ("kaolin", ((1.553, 1/3), (1.559, 1/3), (1.565, 1/3))), ("gypsum", ((1.520, 1/3), (1.523, 1/3), (1.530, 1/3)))):
+        s = [sum(w * sizeavg(n, m, D_PASTEL)[0] for n, w in idx) for m in MEDIA]
+        print("%-6s" % name + " ".join("%6.4f" % (v / s[0]) for v in s))
+    sw, sl = sizeavg(1.59, 1.0, D_PASTEL)[0], sizeavg(2.0, 1.0, 1.0)[0]
+    print("whiting (n 1.59, d %.1f) dry %.3f /um, lead white (n 2.0, d 1) %.3f /um: ratio %.3f" % (D_PASTEL, sw, sl, sw / sl))
+
+if __name__ == "__main__" and __import__("sys").argv[1:] == ["media"]:
+    media_table()
+
+# A fixative's resin in the pores (pastel_surface.md §4; dry.rs `scatter_in_resin`):
+# transport scattering in poly(n-butyl methacrylate), n 1.49, over the same in
+# air, at a pastel's particle size (the size average as `media`'s).
+RESIN = 1.49
+
+def resin_table():
+    print("n     S_resin/S_air (d %.1f um)" % D_PASTEL)
+    for n in (1.50, 1.56, 1.59, 1.65, 1.70, 1.74, 1.84, 2.00, 2.15, 2.30, 2.40, 2.45, 3.00):
+        print("%.2f  %.4f" % (n, sizeavg(n, RESIN, D_PASTEL)[0] / sizeavg(n, 1.0, D_PASTEL)[0]))
+    for name, idx in (("calcite", ((1.658, 2/3), (1.486, 1/3))), ("kaolin", ((1.553, 1/3), (1.559, 1/3), (1.565, 1/3)))):
+        r = sum(w * sizeavg(n, RESIN, D_PASTEL)[0] for n, w in idx) / sum(w * sizeavg(n, 1.0, D_PASTEL)[0] for n, w in idx)
+        print("%-6s%.4f" % (name, r))
+
+if __name__ == "__main__" and __import__("sys").argv[1:] == ["resin"]:
+    resin_table()

@@ -117,7 +117,8 @@ fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result
         Verb::Pass | Verb::Wait => flush(st, true),
         Verb::Query => {}
     }
-    if let Some(c) = st.borrow().canvas.as_ref() {
+    // (the hand-time frames are the painting's: not of a sheet beside it, surfaces.rs)
+    if let Some(c) = st.borrow().canvas.as_ref().filter(|_| st.borrow().surfaces.main_current()) {
         crate::frames::after_verb(c);
     }
     if st.borrow().live {

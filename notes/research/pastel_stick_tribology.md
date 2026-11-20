@@ -38,6 +38,43 @@ No measured values exist for artist pastel. Proxies:
 - **Hard square sticks:** 6–6.35 mm square × 65–92 mm (Conté carré, NuPastel).
 - **Pastel-pencil cores:** Ø 4.3–4.7 mm (Faber-Castell Pitt, Stabilo CarbOthello, Caran d'Ache).
 
+### Sharpening a pastel pencil
+These are behind the easel's `--@ pastel-pencil-sharpen`. A log without it keeps the pencil it was painted with: 120 mm, Ø 4.5 mm, cut at 0.22 rad and blunted 0.15 mm up (`Stick::pencil_as_before`).
+
+- **[M] The pencil.** 175 mm long: Faber-Castell's Pitt Pastel is listed at 17.5 cm (Jerry's Artarama). The core is 4.4 mm: Stabilo gives the CarbOthello lead as 4.4 mm (stabilo.com), and The Art Gear Guide measured a Pitt core at 4.3 mm.
+- **[M, practice] The point's taper, 0.20 rad (11.5°).** A pastel pencil is sharpened with a craft knife or blade, then often touched up with a sharpener or on sandpaper. A plain sharpener tends to break the soft core. Derwent (Martin Aveling) starts the blade a couple of centimetres back and turns the pencil until "a little over a centimetre" of pastel is exposed all round. Emily Rose exposes about half an inch, then finishes on 150/180-grit sandpaper. Over a 4.4 mm core, a bared length L gives τ = atan(2.2 / L): 0.22 at 10 mm, 0.17 at 12.7 mm. "A little over a centimetre", 11 mm, gives 0.197, so **0.20**. The engine's point (`pastel.rs` `Stick::pencil`) is eight cuts at that angle; they reach the full diameter 2.2 / tan 0.20 = 10.85 mm up.
+- **[A] The blunt tip.** A freshly cut point crumbles under the lightest touch until its flat bears that touch at the core's indentation hardness. The flat the eight cuts leave is an octagon of apothem a, area 8 tan(π/8) a², so a = √(F / (8 tan(π/8) H)), and the flat sits a / tan τ up the axis. With F = 0.1 N, the bottom of a feather scumble (§5, an estimate), and H = 11.6 MPa (`Stick::mechanics(0.35)`, the pencil's default softness), a = 0.051 mm and the flat is **0.25 mm** up. The engine takes H from each pencil's own softness. The flat stays wider than the core's grains (1–20 µm), so a blade can cut it.
+- **[A] What a sharpening costs the core.** No measured loss per sharpening was found. The engine computes it from geometry: the least shift up the axis that puts a fresh point inside the worn core. That is the largest (h − d)/(−n_z) over the wear facets, where h is how far the fresh point reaches along a facet's normal n and d is the facet's support. A knife takes no more core than it must.
+- **[A] Which flats the blade leaves: those flatter than the taper.** The blade cuts planes at τ to the axis. A wear facet at φ > τ is blunter than a cut and meets the fresh cone near its tip, so moving the point back clears it. A facet at φ < τ meets the cone far up its side, if at all. Clearing it would take a cut of (h − d)/sin φ, unbounded as φ → 0 and soon longer than the bared cone (≈ 11 mm). So the knife reshapes the point and leaves the flat on the round side (the core laid flat, `p:side`). The threshold is therefore the taper itself, not a separate angle (the PR's first version used 10°).
+- **[M + E] Hand time: 16 s.** This is built from MTM-1 predetermined motion times. The metric table used is Németh, *Gépipari szerelés* (1973). 1 TMU = 0.036 s, and an "m-B" move is one whose hand is already moving.
+
+  | step | MTM-1 elements | TMU |
+  |---|---|---|
+  | pencil to the other hand | G3 | 5.6 |
+  | knife taken up and set on the pencil | R30B 12.9 + G1C 8.7 + M30B 13.3 + P1SE 5.6 | 40.5 |
+  | the wood shaved round, 8 cuts | each: AP2 10.6 + M3B against 20 N (1.6 + 1.04 × 3.0) + the return m-B 3 cm, 2.25, while the other hand turns the pencil, T30S 2.8 (the longer, 2.8) + P1SE 5.6 = 23.7 | 189.8 |
+  | the core's 8 cuts | each: M3B 3.0 + 2.8 + P1SE 5.6 = 11.4 (the soft core needs no pressure) | 91.2 |
+  | knife put down | M30B 13.3 + RL1 2.0 | 15.3 |
+  | sandpaper taken up | R30B 12.9 + G1A 2.0 + M30B 13.3 + P1SE 5.6 | 33.8 |
+  | 5 strokes on it | each: M4B 4.0 + m-B 2.8 | 34.0 |
+  | sandpaper put down | M30B 13.3 + RL1 2.0 | 15.3 |
+  | pencil back to the drawing hand | G3 5.6 + G2 5.6 | 11.2 |
+  | **total** | | **436.7 TMU = 15.7 s** |
+
+  - Estimates in it: the counts (one round of eight wood shavings, since a resharpening moves the wood back only as far as the core, plus eight core cuts to match the engine's point), the 30 cm reaches and the 20 N cutting resistance. The resistance adds 0.5 s in all.
+  - Bounds: a full sharpening from bare wood, with two rounds of shavings, takes 626 TMU = 22.6 s. Re-cutting the core alone, with no wood and no sandpaper, takes 164 TMU = 5.9 s.
+  - The tables give a trained worker's normal pace, with no allowances.
+  - The only timing found otherwise is a beginner's ten minutes per pencil by knife (drawing-pencils.com).
+- **[M + E] Shortest pencil held: 75 mm.**
+  - A tripod grip pinches the shaft about 20–25 mm up from the tip (occupational-therapy guidance: "about 2 cm", teachhandwriting.co.uk; "about 1 inch", Health Sciences North). A pastel pencil's bared wood starts a couple of centimetres back, so the pinch sits there.
+  - The shaft rests on the web of the hand, at the base of the index finger.
+  - Index-finger length, tip to the crease at its base, is 62 / 69 / 76 mm for women at the 5th / 50th / 95th percentiles, and 67 / 74 / 82 mm for men (FAA Technical Operations anthropometric survey, *HFDS* appendix B, table 2, item 12).
+  - The pinch is at the pad's middle, about 9 mm from the fingertip (an estimate: half the distal phalanx).
+  - A pencil still reaching the web of a 5th-percentile woman's hand is therefore 20 + (62 − 9) = 73 mm long, so **75 mm**. For the median woman it is 80 mm, and for the median man 85 mm.
+  - Bounds: 45 mm, a stub pinched by the pads alone, up to 95 mm.
+  - Informal sources put the point where a pencil is extended or discarded at 65–80 mm overall (Quora). Wikipedia's "Pencil extender" gives no length.
+  - The ResearchGate index-finger means quoted in the estimates audit (79.3 / 86.6 mm, a different landmark) could not be reached, so they are not used.
+
 ---
 
 ## 2. Wear and deposited mass
@@ -110,6 +147,13 @@ No measured values exist for artist pastel. Proxies:
   - Coverage after n passes: c = 1 − (1 − c₁)ⁿ.
   - Let the effective roughness amplitude, and with it K, decay as valleys fill, so deposit per pass tends to zero.
   - **[E]** Pastel saturates in about 3–10 heavy layers on standard paper.
+
+### At the pixel's scale (`--@ crumb-area`)
+- **[D] A crumb covers its own area.** A crumb of volume V pressed flat by the face into particles h_p thick (`PARTICLE_UM`, 6 µm) covers A = V/h_p, whatever the pixel. A 250 µm crumb (V ≈ 8.2·10⁶ µm³) covers about 1.4 mm² before the stick's own packing (`Grains::lies`), five pixels at 0.5 mm. The engine had pressed each crumb into the one pixel it fell in. That is right only where a pixel is larger than A. On a 540 mm sheet at 2400 px (0.225 mm a pixel), the largest crumbs, which carry most of the volume (§3, Morphology: area even in volume under A^(−3/2)), covered a fifth to a sixth of their area. The rest of their volume piled into that pixel unseen.
+- **[D] Patches fall independently.** Each patch lies as a disc about a point drawn uniformly in the pixel it falls in. Each pixel takes its share of the disc's area as coverage and of its volume as pastel, combined with what is there as c ← c + (1 − c)q. For random placement this gives the expected union at any pixel size. The coarse limit, many small patches in a pixel, is Poisson's 1 − exp(−v/h_p), the face deposit's law.
+- **[D] The tooth fills under the pastel, not over the pixel.** The fill line (§3, Repeated strokes) is set by the pastel's depth where it lies: v/c over the covered share c of the pixel, with the rest bare tooth. The material ratio the stick files is min(B(o), 1 − v/µ) there, a concave function of v. Averaging v over the pixel first gave a different answer at each pixel size once the patches were resolved.
+- **[D] With the crumb layer** (`--@ pastel-crumb-layer`, pastel_layering.md) each patch lies over the loose pastel as a Kubelka layer at its own depth, volume / q over the share q it covers. It lies over loose pastel on the share l·q of the cell (l is the cell's coverage, less what of it is fixed) and beside it on (1 − l)·q, rather than at the coverage 1 − exp(−v/h_p) of its volume smeared over the pixel. In a light hatched over a loose near-black one (30 mm sheet, both switches), luminance agrees at 0.33 and 0.17 mm a pixel (0.348 and 0.349 over 0.213 and 0.217) within the paired blocks' standard error. The smeared form gives 0.351 here: only 0.003 more, but a pixel wholly under a patch would read as 63 % covered.
+- **Check** (tiny scenes with a new painting's switches of 2026-11-16, the veil and fixative-index ones among them, 60 mm of blue wove on a strainer, white soft pastel hatched at 1.2 N every 4 mm, mean linear red over a 36 mm patch). Without the switch: 0.563, 0.475 and 0.404 at 0.667, 0.222 and 0.111 mm a pixel. With it: 0.595, 0.632, 0.633 and 0.631 at 0.667, 0.333, 0.222 and 0.111 mm. Seed-to-seed scatter was ±0.002. The face deposit alone (crumbs off) is 0.302, 0.301 and 0.293 at 0.667, 0.222 and 0.111 mm without any change. The finger and fixative over the same deposit agree to 0.001 at 0.667 and 0.222 mm. The crumbs alone were the cause. At 0.667 mm a pixel is as large as the largest patches, and the patches' landing (the bed's depths, sampled per pixel) is coarser. That width stays a few percent paler.
 
 ---
 
@@ -289,4 +333,8 @@ This replaces every [E] in §2–4.
 - JFDE review, "Temporal features of handwriting". https://jfde.org/index.php/jfde/article/download/255/131
 - MS handwriting kinematics, *Sci. Rep.* (2017). https://www.nature.com/articles/s41598-017-18066-7
 - Pastel composition: https://www.webexhibits.org/pigments/intro/pastel.html; https://en.wikipedia.org/wiki/Pastel; https://www.wetcanvas.com/forums/topic/instructions-for-making-your-own-pastels/; https://www.liveabout.com/how-to-make-your-own-pastels-2579005; https://en.wikipedia.org/wiki/Cont%C3%A9
+- Pastel pencil sizes: Faber-Castell Pitt Pastel, 17.5 cm, https://www.jerrysartarama.com/faber-castell-pitt-pastel-pencils; Pitt core 4.3 mm, http://www.theartgearguide.com/home/faber-castell-pitt-pastel-pencils; Stabilo CarbOthello lead 4.4 mm, https://www.stabilo.com/us/products/coloring-drawing/chalk-pastel-pencil-stabilo-carbothello/.
+- MTM-1 tables (metric): Németh Tibor, *Gépipari szerelés*, Műszaki Könyvkiadó, Budapest, 1973, as tabulated at http://old.bgk.uni-obuda.hu/ggyt/targyak/seged/bagka15nnk/mtm.pdf; worked examples and 1 TMU = 0.036 s, https://industrialeblog.wordpress.com/wp-content/uploads/2016/08/chapter-14.pdf.
+- Hand size: FAA *Human Factors Design Standard*, appendix B, "Anthropometric data of Federal Aviation Administration Technical Operations personnel", table 2, https://hf.tc.faa.gov/hfds/download-hfds/hfds_pdfs/App_B_Tech_Ops_Anthropometrics.pdf. Grip height: https://teachhandwriting.co.uk/adaptive-tripod-grip.html; https://hsnsudbury.ca/Portals/1/Services/Newborn_and_Childrens_Care/CTC%20Documents/OT/Pencil%20Grasp.pdf. Stub lengths (informal): https://www.quora.com/How-short-is-too-short-a-pencil-graphite-grey-lead-colour-etc.
+- Sharpening pastel pencils: Derwent, "Tips for sharpening pastel pencils with Martin Aveling" (2020), https://blog.derwentart.com/2020/12/04/tips-for-sharpening-pastel-pencils-with-martin-aveling/; Colin Bradley, "How to sharpen pastel pencils", https://www.colinbradleyart.com/blog/how-to-sharpen-pastel-pencils; Emily Rose, "How to sharpen pastel pencils", https://www.emilyrosefineart.co.uk/blog/how-to-sharpen-pastel-pencils; https://drawing-pencils.com/how-to-sharpen-pastel-pencils-a-stepbystep-guide-for-artists/ (anecdotal timing); "Pencil extender", https://en.wikipedia.org/wiki/Pencil_extender.
 - Stick dimensions: Jerry's Artarama / Dick Blick / Dakota Pastels listings (Sennelier, Rembrandt, Schmincke, NuPastel); Conté à Paris (https://eu.conteaparis.com/blogs/tutoriels/qu-est-ce-qu-un-carre); Faber-Castell, Stabilo, Caran d'Ache product pages.

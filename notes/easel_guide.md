@@ -99,13 +99,97 @@ cotton drawing paper with a felt grain):
 | `porosity`, `floc`, `floc_size`, `press`, `calender` | the sheet's pore share; the share of fibers in flocs and their size (mm); how much of the thickness variation the press turns into density (0.5–0.8); calendering 0..1 |
 | `felt` | `{cell=mm, depth=µm}`, or `false` for none |
 | `laid` | `{per_cm=, chain=mm, deficit=}`: a laid mold's wires |
-| `absorbent`, `stiffness` | how much of the pores take oil (0..1); the sheet's give under a stick (MPa) |
+| `absorbent`, `stiffness` | how much of the pores take a liquid, oil or water (0..1); the sheet's give under a stick (MPa) |
+| `grit` | a gritted ground: `{size=µm, cover=0.3..1, binder="acrylic"\|"glue"}`, `true` for a P400 sanded paper (35 µm, cover 0.6, acrylic), or `false` for none |
+
+**Sanded paper.** `grit=` coats the sheet with grains held in a binder,
+as a sanded pastel paper or board is, or a ground of pumice in glue or
+gesso painted onto paper. `size` is the grains' median size (by grade:
+P240 58 µm, P320 46, P400 35, P600 26, P800 22). `cover` is the share of the
+sheet the grains cover, seen from above (an open coat 0.5–0.7; a closed one
+holds a little less). The binder is `"acrylic"` (modern sanded papers, or
+pumice in acrylic gesso) or `"glue"` (glue or starch, the older pumice
+grounds; leaner, so more of the coat is open). The tooth is then the open
+room between the grains, under the tallest ones the stick rests on: at P400
+4 times a drawing paper's in acrylic and 5.5 times in glue, more on the
+coarse grades (P240 7–9 times), less on the fine (P800 2.5–3.5). The hard,
+angular grains also wear a stick about three times as fast ("sanded paper
+eats pastel"), so at the same force it fills in a few more strokes than
+paper does. Laid with a lighter hand, a pass at a time as thick as one on
+fresh paper, it takes 10–15 layers where drawing paper goes slick after
+two or three. The sheet's grain shows through the coat. An acrylic coat seals the paper
+against oil, so only the coat's own pores take it; a glue coat lets oil
+through to the paper. A ground laid over the grit fills its tooth as thick
+paint would. A knife rides the grains: it neither burnishes the tooth nor
+raises a nap. Pumice grounds are 18th century and on; pumice papers were
+sold by about 1890; acrylic sanded papers are late 20th century. Sources,
+and which numbers are estimates: notes/research/sanded_paper.md.
+| `cobb` | with pastel and water (below): the sheet's sizing, the g/m² of water it takes up in its first minute (its Cobb60, 5 to 200; 25 by default, a sized drawing paper), or `false` for an unsized sheet, which drinks water at once |
 
 A ground is optional on paper. Thin oil paint on it goes lean and matte, as
 on an absorbent ground. The numbers come from paper physics and, where no
 measurement of artists' papers exists, are estimates. Paper is there in a painting begun since
 it came (its log's head says `--@ paper`); an older painting replays as it
-was painted, and `paper=` in it is refused.
+was painted, and `paper=` in it is refused. Grit is there in a painting
+begun since it came (its log's head also says `--@ grit`); in an older
+painting `grit=` is refused as an unknown key.
+
+**Named sheets and mounts.** A sheet may be one of Cassatt's and her
+circle's by name: `paper="tan wove"`, or `paper={preset="tan wove", ...}`
+with keys of your own, which override the preset's (`laid=false` takes a
+laid sheet's wires away). A preset sets the dials below and the tone; a
+preset's tone is mixed from the catalog's tubes, whatever your box. The
+colored papers have faded in museums (many blue sheets are tan now), so
+these are the sheets as estimated new; sources and estimates in
+notes/research/cassatt_papers.md.
+
+| `preset` | grammage | fiber (mm) | felt | laid | calender | tone (parts) |
+|---|---|---|---|---|---|---|
+| `"blue wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, ultramarine blue 1, bone black 0.45 |
+| `"gray-blue wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, ultramarine blue 1, viridian 1.5, red earth 1.5 |
+| `"tan wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | yellow ochre 0.2, bitumen 1, vine black 0.23 |
+| `"buff wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, yellow ochre 2.2, raw umber 3, Prussian blue 0.02 |
+| `"green wove"` | 130 | 1.6 | 0.7 mm, 14 µm | | 0.25 | lead white 1, yellow ochre 0.65, viridian 0.45, bone black 0.45 |
+| `"brown wove"` | 150 | 1.4 (coarseness 0.2, floc 0.6) | 0.8 mm, 18 µm | | 0.25 | raw sienna 1, bitumen 3 |
+| `"cream laid"` | 110 | 2.2 | 0.8 mm, 15 µm | 9 per cm, chains 25 mm, deficit 0.15 | 0.2 | lead white 1, yellow ochre 0.15, raw sienna 0.02, green earth 3 |
+| `"japan paper"` | 45 | 10 (width 30 µm, coarseness 0.1, porosity 0.6, floc 0.15) | none | | 0.6 | lead white 1, yellow ochre 0.1, raw sienna 0.1, viridian 0.02 |
+
+Every other dial is the drawing paper's (fiber width 25 µm, thickness
+6 µm, coarseness 0.16, porosity 0.5, floc 0.5 of 1.5 mm, press 0.65,
+absorbent 0.8, stiffness 39). Japan paper is thin, long-fibered and
+smooth: the sheet for counterproofs.
+
+`mount=` lays the sheet down on something, which gives under a stick with
+the sheet (`stiffness` stays the sheet's own; the mount's give adds to it):
+
+- no mount: a sheet pinned on a hard drawing board, all but rigid behind it
+- `"board"`: laid down on pasteboard or millboard; about ten times softer
+  than the sheet alone
+- `"canvas"`: laid down on canvas on a firm bed; the cloth compacts under
+  the stick, softer still
+- `"strainer"`: on canvas tacked to a wooden strainer. Over the bars (the
+  outer 50 mm of the picture) it is as firm as on canvas. Between them the
+  sheet and canvas drum: they soften over the first centimeter or so in
+  from a bar, then give the same over the rest of the bay, whatever its
+  size (the whole bay sinks millimeters under the hand, but that carries
+  the stick and the surface round it down together).
+  `mount={"strainer", bar=30, cross=1}` sets the bars' width (mm, 5–150)
+  and a number of crossbars (0–8), as wide as the bars, which divide the
+  longer side into equal bays and are as firm as the bars
+
+Each give is derived from measured moduli under a worn stick's full facet
+(notes/research/cassatt_papers.md §1). A softer bed spreads the stick's
+contact wider, so less of it rides on pastel the stroke has just laid in
+the tooth and the same stroke lays a little more: on board about 6% more
+than on a hard drawing board, on canvas about 12%, and in a strainer's bay
+about as on canvas (past canvas it levels off). It never lays more than the
+stick wears, which is the same on any bed
+(Archard). A firm bed's marks are crisper (a narrower contact), which may
+be the "bite" painters describe.
+
+Named sheets and mounts are there in a painting begun since they came (its
+log's head says `--@ paper-presets`); in an older painting `preset=` and
+`mount=` are unknown keys and a sheet's name alone is refused.
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -151,8 +235,11 @@ line scrapes the oldest off instead.)
 evaporates as the paint is laid, so it leaves a film that much thinner, of
 the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
 is the other way to thin a pile: its solvent stays in the film for a while
-and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
-little slower) or `"poppy"` (dries much slower, yellows least).
+and leaves over painting time.) Your tubes come ground in the oils your
+box's colormen used, some with a little wax (it dries slower and more
+matte). `oil` grinds the pile's pigments again in another, without wax:
+`"linseed"`, `"walnut"` (dries a little slower) or `"poppy"` (dries slower
+still, yellows least).
 
 `blot` is the opposite of medium: the paint laid out on blotting paper
 first, which draws out that share of its own oil (0 to 0.5):
@@ -175,8 +262,9 @@ line, the paper draws the full share.) A pile takes either medium or blot.
   heap, in the units its recipe was given in (a pile knifed as
   `{"<tube A>", 4}, {"<tube B>", 0.35}` takes `{"<tube B>", 0.1}`
   as a tenth of a part more): look, adjust, look again. It returns the pile,
-  its recipe with the added parts. The added paint is tube paint (linseed,
-  unthinned), so it dilutes the heap's turpentine, its `thinner` and its oil;
+  its recipe with the added parts. The added paint is tube paint (in its
+  tube's own oil, unthinned), so it dilutes the heap's turpentine, its
+  `thinner` and its oil;
   a scraped heap is knifed fresh first.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
@@ -543,7 +631,7 @@ shore = outline{{0, 500}, {500, 480}, {1000, 550}, open=true}
 land = shore:below()
 ```
 
-## Drawing: pencil, chalk, pastel and eraser
+## Drawing: pencil, chalk, pastel, charcoal and eraser
 
 ```lua
 h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
@@ -571,7 +659,8 @@ a solid that rests on the tooth, wears and sheds what it abrades.
 ```lua
 p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"})   -- a round stick, Ø12 mm (diameter=)
 h = pastel(pile{{"bone black", 1}}, {kind="hard"})                     -- a square stick, 6.35 mm
-q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, sharpened
+q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, Ø4.4 mm, 175 mm long, sharpened
+q:sharpen()                    -- a pencil only: cut a fresh point; returns the mm of core it took off
 p:stroke(pts, {force=2, alt=60, azimuth=45, roll=0, speed=80})          -- one stroke; each may be a list along pts
 p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide as it is long (p:snap(mm) breaks one)
 p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
@@ -600,13 +689,55 @@ feel(x, y)                     -- what a fingertip feels there
   one way grows a facet and draws wider as it does; rolled or tilted it cuts a
   new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
   says how many facets it has and how long it is.
+- **Sharpening a pencil.** A new painting's pastel pencil is a Pitt
+  Pastel's: 175 mm long on a 4.4 mm core, its point eight cuts at 0.20 rad
+  (11.5°) that bare about 11 mm of core, the very tip crushed flat until it
+  bears a 0.1 N touch at the core's hardness (0.25 mm up at the default
+  `soft`). It wears flat as it draws, and its line goes wider and paler.
+  `q:sharpen()` cuts a fresh point, as a blade does: the core gets shorter
+  by what the cut takes off (as far back as the worn end sits behind a fresh
+  point, measured along the taper; a few mm after twenty lines) and the call
+  returns that in mm. It takes 16 s of hand time (MTM-1's motion times for
+  the knife, eight wood cuts, eight core cuts and a touch-up on sandpaper). A
+  pencil shorter than 75 mm once cut no longer reaches the web of a small
+  hand and is refused; take a fresh one. A flat worn along the core with the
+  pencil laid on its side (`q:side`), lying flatter than the cuts, stays. A
+  soft or hard stick has no point and refuses `sharpen`. All this needs the
+  switch `--@ pastel-pencil-sharpen`, which every new painting has; an older
+  log keeps the pencil it was painted with (120 mm, Ø4.5 mm, cut at 0.22
+  rad and blunted 0.15 mm), and its `sharpen` replays as it was painted
+  (refused). The sources are in notes/research/pastel_stick_tribology.md §1.
 - **Crumbs.** Most of what the stick abrades comes away as crumbs that ride
   under its face and settle into the tooth along and beside the stroke, the
   hollows taking more: a mark covers several times what the stick touches,
   as discrete specks. Crumbs that fall on wet paint are lost in it.
+  Pressed flat by the face, each crumb covers its own area (its volume as a
+  layer of particles 6 µm thick: a 250 µm crumb about 1.4 mm²), over as
+  many pixels as that takes, and where it fills the tooth the stick meets
+  the filled pores over that area and bare tooth beside it (with
+  `--@ pastel-crumb-layer` each patch lies over the loose pastel it lands
+  on as a layer of its own depth). So a passage
+  covers the same, shows the same color and lets the same paper through at
+  any width; only its detail changes (at 0.67 mm a pixel and coarser, where
+  a pixel is as large as the largest crumbs, it reads a few percent paler).
+  This needs the switch `--@ crumb-area`, which every new painting has; an
+  older log packs each crumb into the one pixel it falls in, as it was
+  painted, so its `--width` previews look fuller than the painting.
+- **Keeping pastel inside a shape.** A stick has no `clip=`: it lays where
+  it touches, and its crumbs land beside the stroke, so pastel worked up to
+  a shape's edge spills past it. To keep a passage clean, cover it first:
+  `lay_sheet(mask)` lays a sheet of paper over the mask, you work the
+  neighbouring area up to and over its edge, and `lift_sheet()` takes it
+  away with what landed on it, leaving an edge as sharp as the stick's angle
+  and force make it. Lay and lift it in the same chunk (see **The sheet**
+  below).
 - **The tooth fills.** Loose pastel in the pores is a third body the stick
   slides on: the more there is, the less a stroke lays, until the paper
-  refuses it. Fixative binds it into a rough crust that files the stick again,
+  refuses it. A drawing paper takes two or three layers. A sanded sheet
+  (`paper={grit=...}`) holds four to five and a half times as much at
+  P400, and its grains file the stick about three times as fast, so a light
+  hand lays layer on layer there.
+  Fixative binds it into a rough crust that files the stick again,
   so a fixed passage takes more pastel; and darkens it a little, as the resin
   wets the particles.
   The eraser lifts loose pastel out of the tooth with the coverage it takes,
@@ -629,11 +760,147 @@ feel(x, y)                     -- what a fingertip feels there
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for
   vermilion and the chromes). Dry blacks are a little grayer than in oil.
-- **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
+  A dye lake (rose madder, carmine, yellow lake, magenta) is its dye on a
+  white alumina, as its measured powder is: rose madder a muted rose,
+  carmine a deep crimson, and with white they make clear pinks. Permanent
+  alizarin (a quinacridone, not a lake) is a dusky violet-rose dry, and green
+  earth, verdigris, lead-tin yellow and transparent oxide yellow scatter by
+  their measured indices.
+- **Feel.** `feel(x, y)` answers in words: the surface (paper or sanded paper, paint and how
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
 - Pastel skips wet paint, as graphite does; let the paint set first. Paint
   laid over pastel seals it, as it seals a drawing.
+
+**Strokes over an area.** A stick's `hatch` covers a passage as a
+pastellist does, each mark one stroke of the stick (it wears and sheds as
+`stroke` does). By default its marks are Cassatt's open strokes, 8 mm apart
+and 50 mm long; a pencil's `hatch` keeps its 1.5 mm and 12 mm:
+
+```lua
+p:hatch(m, {angle=function(x, y) return -0.9 - x / 2000 end})  -- strokes along a direction field (radians), or a form's field
+p:hatch(m, {angle=-1.0, zigzag=true})                           -- each mark one back-and-forth stroke
+p:hatch(m, {zigzag={amplitude=30, period=50, round=0}})         -- its swing to either side and per swing there and back (units), sharp corners
+p:hatch(m, {angle=-1.0, length=600, spacing=120, jitter=true, open=0.3})  -- slashing diagonals, loose, the paper between
+p:hatch(m, {open=bare})                                         -- open in proportion to a mask: 1 bare paper, 0 covered
+p:hatch(m, {alt=30, azimuth=45, speed=250})                     -- how the hand holds and moves the stick
+```
+
+- `angle` is radians (as for a pencil: 0 along x, positive turning down the
+  canvas), or a `function(x, y)` returning them, or a form's field, as
+  `work` takes. Along a field the strokes follow it: lines a `spacing` apart
+  traced through the mask, each cut into strokes of up to `length`, so the
+  hatching turns with the form and stays evenly spaced as the field fans.
+- `zigzag` turns each mark into one continuous stroke swinging back and forth
+  across its line: `amplitude` to either side, `period` along the line per
+  swing there and back, `round` 0 for sharp corners to 1 for a sine (the
+  default: a hand oscillating across the line; at 5 mm and 8 mm its turns are
+  0.3 mm across, sharp under a stick's line). The
+  marks run along `angle` and the legs cross it, the more squarely the larger
+  `amplitude` is against `period` (by default at about 68° to it): for legs
+  slanting one way, run the zigzag across the slant. A swing that would leave
+  the mask is cut short at its edge.
+  With a zigzag, marks are 40 mm long and bands sit a swing's width apart
+  unless `length` and `spacing` say otherwise; `zigzag=true` swings 5 mm to
+  either side and 8 mm per swing.
+- `jitter={length=, angle=}` stretches each mark by up to ± the share
+  `length` (a mark that would grow out of the mask keeps its length) and turns
+  it by up to ± `angle` radians about its middle; `jitter=true` is ±30% and
+  ±0.17 rad. Seeded: the same `seed=` lays the same strokes.
+- `open` leaves that share of the marks out, the paper (or what is under)
+  showing between the rest: a number 0..1, or a mask whose value at each
+  mark's middle is its chance to be left out. The same marks are left out
+  whatever the jitter.
+- `alt`, `azimuth` and `speed` hold the stick for every mark as `stroke`
+  takes them. By default it is held at 50° (a held pen's measured altitude)
+  with its upper end to the lower right (45°), and each stroke goes as fast as
+  its length asks: 80 mm/s for 12 mm (150 ms), as L^0.53 for others (171 mm/s
+  for 50 mm; a straight line's drawing time goes as L^0.469), a zigzag at its
+  legs' speed. A `speed=` holds every mark at that.
+- Each mark bows as the hand swings it: an arc about the wrist (the hand's
+  189 mm), its middle away from the hand, L²/(8R) for a mark across the
+  wrist's swing (1.7 mm for 50 mm), less as the mark turns toward the hand,
+  none along it; a sweep longer than the wrist turns (132 mm) swings from the
+  elbow (467 mm). The hand is where `azimuth` points.
+- The defaults for zigzags and jitter are estimates from Cassatt's pastels
+  of 1895–1908, as are the lengths and angles of her passages:
+  backgrounds of diagonals 30–80 mm long at 40–65°, 5–15 mm apart; dresses
+  of long strokes along the folds; zigzag legs 6–20 mm
+  (notes/research/cassatt_pastel_strokes.md, which also sources the hold,
+  speed and bow). In a new painting a plain `p:hatch` with a stick (none of
+  these options) lays these strokes, not the pencil's as before.
+- A painting begun before these came (its log's head has no
+  `--@ pastel-area-strokes`) refuses them, as it did, and replays as painted:
+  its plain stick hatching lays the pencil's marks, 1.5 mm apart, 12 mm long,
+  at 60° and 80 mm/s, as it did. A pencil's `hatch` doesn't take them.
+
+**Pastel with water.** A stick dipped in water, a wet brush through laid pastel, ground pastel as a paste:
+
+```lua
+p:wet(1)                                  -- dip the tip (share 0..1 of what it soaks up); returns how wet it is
+p:stroke(pts, {force=2})                  -- a creamy line: lays more, darker while wet, fewer crumbs
+b = brush("round", 20)
+b:dip(0.8)                                -- water only (a clean brush: no oil paint on it)
+b:wash(pts, {pressure=0.5})               -- through laid pastel: the loose pastel turns to paste and moves along
+b:dip(1, {pastel=p, amount=0.5})          -- ground pastel in the water: a paste (or, with little of it, a wash)
+b:wash(pts)                               -- lays it, wet; returns the pastel laid, mm³
+```
+
+- **While wet** the water fills the air between the particles and the
+  pastel darkens, by how much of its pores the water fills and by its
+  pigments' refractive index: an ultramarine or a lake goes nearly as deep
+  as in oil, a vermilion or an earth hardly changes. `feel` says `, wet`.
+- **It dries on the painting's clock** (strokes' hand time and `wait`).
+  The pastel's fine pores hold their water; what stands over them sinks
+  into the sheet as its sizing lets it (`paper={cobb=25}`, the default:
+  about 3 µm in the first second, 25 µm in a minute; `cobb=false`, an
+  unsized sheet, at once), until the sheet's pores are full (`absorbent`).
+  The studio (20 °C, 50 % RH) evaporates about 0.7 µm of water a minute,
+  first what stands, then what the sheet took in, up through the pastel,
+  which stays dark until the sheet under it is dry: a wet stick's line
+  dries in minutes, a brushed wash in about an hour.
+- **Dry again** its gum has set: the pastel is bound where it kept enough
+  of its gum to hold against a firm finger (about half a percent of it).
+  Water that sank into the sheet took its share of the gum with it, so a
+  thin veil flooded with many times its own water on a sheet that drinks
+  it stays loose; a wetted passage that kept its pores' water binds.
+  Wetting it again binds no more. Bound,
+  the finger, a dry brush and the eraser move it no more than fixed
+  pastel, and a stick takes to it as to a fixed crust. Its color comes
+  back almost to dry: the gum in its pores darkens it a little.
+- **A dipped tip** has lost its gum's hold and is a wet chalk: barely
+  damp (under about half full) it draws as dry; wetter, it is plastic,
+  far softer, laying more for the same force and smearing instead of
+  crumbling; soaked (past about two thirds full) it is a slurry the face
+  presses into the tooth as a paste, a creamy line with no crumbs. A dip
+  soaks about 3 mm of the end, and its water spreads up the dry stick (a
+  third of it left at the tip after ten seconds), so a dip serves a few
+  strokes; dip it again (`p:wet`, a reach to the jar's hand time).
+- **A wet brush** holds water in its belly (a round about 0.16 mL for a
+  6 mm brush), lays it as it lays paint (more for a harder press), and picks up the wetted paste as it picks up wet paint,
+  laying it on along its run, with what it already held: drawn out of a
+  passage, it drags its color across the paper. Bound and fixed pastel
+  stays. Grinding a stick into the water (`pastel=`) shortens it; a full
+  paste (`amount=1`) fills the space between the hairs, and its solids
+  push out the water. `b:wipe(1)` empties the brush. Not under a sheet,
+  and not on wet paint.
+- **Water over charcoal.** Charcoal brings no gum: vine charcoal wetted
+  dries as loose as it was, and over pastel it is bound only by the
+  pastel's gum. A wet brush carries charcoal on as charcoal, and grinding a
+  charcoal stick into the water (`pastel=`) makes a charcoal wash. A
+  charcoal stick's own tip can't be wetted (`p:wet` refuses it): it is no
+  chalk soil, and its wet tip isn't modeled.
+- **On a sanded sheet** (`grit=`) an acrylic coat keeps the water off the
+  paper: a wash stands in the tooth until it dries, and binds. A glue coat
+  lets it through to the sheet. Japan paper (`paper="japan paper"`) is
+  unsized and drinks a wash at once.
+- Not modeled: water running sideways (backruns, blooms), the paper itself
+  darkening while wet, cockling, steam.
+- Pastel with water is there in a painting begun since it came (its log's
+  head says `--@ wet-pastel`, with `--@ paper` and `--@ drawing-optics`);
+  an older painting replays as it was painted and has no `p:wet`, `b:dip`
+  or `b:wash`. The numbers and the few estimates left are in
+  notes/research/wet_pastel.md.
 
 ```lua
 lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
@@ -688,9 +955,84 @@ tap({g=100})                          -- the board's edge struck on the table (a
 Pastel is there in a painting begun since it came, with paper (its log's
 head says `--@ paper`); an older painting replays as it was painted, and
 has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
-`tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
-fast it wears, what dry pigment looks like) are estimates, not
-measurements (notes/pastel.md).
+`tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. A painting
+begun before the lakes' dry colors came (its head has no `--@ dry-lakes`)
+replays its lake sticks and paper tones, and those of the pigments whose
+index was corrected, in the colors it was painted with. The numbers (how hard a stick is, how fast it wears, what dry pigment
+looks like) are estimates, not measurements (notes/pastel.md); the lakes'
+dry colors are fitted to measured powders
+(notes/research/dry_pigment_optics.md §6).
+
+**Charcoal.** Vine (willow) charcoal is a charred twig with no binder;
+compressed charcoal is charcoal powder pressed with a gum binder.
+Both are sticks in the tooth, as pastel is: they draw with a stick's calls
+and a pencil's, and the finger, the eraser, a dry brush, a puff and fixative
+work on them as on pastel.
+
+```lua
+v = charcoal()                          -- vine, a round stick Ø8 mm × 140 (charcoal{kind="vine", diameter=5, length=}: thin 5, medium 8, thick 10)
+k = charcoal("compressed")              -- compressed, a square stick 6.35 mm × 76 (charcoal{kind="compressed", diameter=})
+v:sketch(pts, {pressure=0.3})           -- a pencil's calls; v:stroke, v:side, v:roll, v:snap as a pastel's
+```
+
+- **Vine** is soft and black, its splinters lying loose on the tooth: the
+  kneaded eraser takes it a little more readily than graphite, a finger
+  smears it far, a dry brush or a puff lifts it. The stick is mostly pores,
+  so a stroke lays little: it reads grey where the line is broken and the
+  paper shows. It is for laying in and correcting.
+- **Compressed** is darker (half its carbon is fine soot packed with gum,
+  so its facets reflect less), covers far more per stroke, and lays finer
+  particles, which hold to the fibres about as hard as the eraser pulls:
+  the eraser lightens it and leaves a stain. Its gum binds nothing once
+  dry (at the studio's 50 % humidity), so the finger and a puff move it as
+  they move vine.
+- Charcoal is matte: no graphite sheen, and no veil of reflected light over
+  it either (a bed of carbon particles shows only what its facets reflect):
+  it is a deep black. **Fixative** (`fix()`) binds it and darkens it a
+  little, the more the thinner it lies; the eraser and the finger then
+  leave it. Paint over it seals it.
+- **Pastel over charcoal.** Pastel laid over loose charcoal mixes with it in
+  the tooth and comes out greyer; over fixed charcoal it lies clean. Fix a
+  charcoal drawing before laying pastel on it. (The stick itself doesn't
+  pick up charcoal and dirty: only the tooth mixes.)
+- Graphite doesn't smear with the finger here at all; charcoal does.
+
+**How pastels mix in the tooth.** Pastel is a powder, and powders mix by
+Kubelka–Munk, not by averaging their colors: rubbed together (the finger,
+the crumbs under a stick, a dry brush, a knife, a puff, a paste), each
+pigment absorbs in proportion to how much it scatters, so a little of a
+dark pastel or of charcoal darkens a pale one far more than its share (5 %
+of vine charcoal takes a yellow's green from 0.60 to 0.549, where the
+average was 0.571). A stroke laid over loose pastel lies over it as a
+layer: a thin stroke lets what is under it show, a heavy one hides it, so
+pastel over loose charcoal keeps more of its color than the same pastel
+rubbed into it. Where a stroke lands beside the pastel already there,
+not on it, the two lie side by side and average, as on the paper. A
+painting begun before this came (its head has no `--@ pastel-km-mix`)
+replays its mixing as it was painted, averaging the colors
+(notes/research/pastel_mixing.md).
+
+**A stroke's crumbs lie on top.** Most of what a stick lays comes off as
+crumbs that settle in the hollows under its face, where the face doesn't
+touch them. Nothing rubs them into the pastel already there, so they lie
+over it as a layer, as the stroke's own face deposit does: a light laid
+over loose dark pastel (or over a smudged passage) shows and builds up
+pass by pass, without needing `fix()` first. Only the tools that rub (the
+finger, a dry brush, a knife, a puff, a paste) mix intimately. Over a full
+tooth a stroke still lays less each pass, and a pencil lays little over
+worked pastel (it touches only the paper left above the fill); fixative
+still gives tooth back. A painting begun before this came (its head has no
+`--@ pastel-crumb-layer`) replays as it was painted: its crumbs mix into
+the loose pastel, so a light over a loose dark hardly shows
+(notes/research/pastel_layering.md).
+
+Charcoal is there in a painting begun since it came, with paper (its log's
+head says `--@ charcoal` with `--@ paper`); an older painting replays as it
+was painted and has no `charcoal`. Its color, how much a stroke covers and
+how the eraser takes it come from carbon's optics, the stick's porosity
+and the particles' adhesion; vine's hardness is wood charcoal's measured
+one; compressed's hardness and both wear rates are estimates
+(notes/research/charcoal.md).
 
 ## The rag
 
@@ -969,6 +1311,64 @@ with `scratch: true`; without it they work on the painting.
   used after the easel opens, and the reply says so.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
+
+## Surfaces: sheets beside the painting
+
+A painting begun with named surfaces (its log's head says `--@ surfaces`, beside
+`--@ paper`) may keep sheets of paper beside its canvas, in the same session: a study to
+trace from, a proof to print on. An older painting replays as it was painted, and none of
+this is there: `sheet`, `use`, `surfaces`, `handoff` and `receive` don't exist in it.
+
+```lua
+st = sheet{name="study", size=300, aspect=4/3, paper={grammage=60, calender=0.6}}
+use(st)                       -- draw on the study: every drawing verb acts on it now
+h = pencil("2B"); h:line({{100,100},{800,700}})
+use("painting")               -- back to the canvas canvas{} made
+names, current = surfaces()   -- the names, the painting first, and the current one's
+```
+
+- **`sheet{name=, size=, aspect=, paper={...}, ground=, seed=}`** takes a sheet from the
+  drawer: a surface of its own, with its own paper (the keys `canvas{paper=}` takes) and
+  size in mm. It is laid out at the painting's pixel pitch, so a line keeps its width from
+  one sheet to another. Its width is 1000 units, as the painting's is (`st.H` is its
+  height). It is not in hand until `use(st)`.
+- **One surface is current.** Every drawing verb (pencil, pastel, brushes, knives, the rag,
+  `wait`'s ageing, `drying`) acts on it. `use(s)` or `use("name")` takes another up and
+  returns the name of the one put down. A sheet laid on the picture is lifted first.
+- **What each keeps.** A surface keeps its own paint, drawing, pastel and paper. The hand
+  is shared: the same brushes, knives, rags, palette and piles go from one to the other,
+  carrying what is on them.
+- **One clock.** Time passes for every sheet: hand time spent on the study and `wait`
+  there age the painting's paint too. A surface put down is aged all at once when it is
+  taken up, or looked at, to exactly what it would be had the painter waited beside it.
+- **A failed chunk** puts back every surface it touched, and which one was current.
+- **Looking.** `look`, `probe`, `save` and `status` take `--surface <name>`. Without it
+  `look`, `probe` and `save` show the painting, as before, and `status` the current
+  surface (its line names them all). A look changes nothing.
+- **Saves and checkpoints** keep every surface. A painting that never takes a sheet saves
+  exactly as before.
+
+**Handing a surface to another session.** An artist and a printer are two sessions, each
+seeing only what it is handed. A surface goes from one to the other as a file in the
+studio:
+
+```lua
+-- the artist's session
+sha = handoff(pl, "handoff/key.surface")   -- pl leaves this session; the reply gives its sha256
+-- the printer's session
+k = receive("handoff/key.surface", {after=90, sha256="<the hash handoff gave>"})
+use(k)
+```
+
+- **`handoff(s, path)`** takes the surface out of the session, with its whole state and
+  the session's clock, into a `.surface` file in the studio (never outside it, never over
+  a file already there). The painting itself stays. It happens only if the chunk is kept.
+- **`receive(path, {after=, sha256=, name=})`** takes it in. `after=` is the minutes it
+  spent on the way (the log names them: the wall clock can't be replayed), and it arrives
+  aged by exactly that, through the same drying as `wait`: ink on a plate keeps drying,
+  paint keeps setting. `after=0` brings it as it left. `sha256=` names the file's content:
+  a receive without it says the hash, and a replay that finds another file there refuses
+  it. `name=` renames it on arrival.
 
 ## The journal
 

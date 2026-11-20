@@ -601,8 +601,10 @@ test("no reply counts the painter's work or times the machine", async () => {
 		[statusReply, "12 chunks · 2400px · canvas{size=900}", "canvas{size=900}"],
 		[statusReply, "0 chunks · 2400px · no canvas yet", "no canvas yet"],
 		[hideCounters, "the chunk ran longer than 10 minutes and was stopped; nothing it did was kept", "the chunk didn't finish and was stopped; nothing it did was kept"],
+		[hideCounters, "the chunk ran longer than 10 minutes of computing and was stopped; nothing it did was kept", "the chunk didn't finish and was stopped; nothing it did was kept"],
 		// a running chunk: what is happening and the painting's own time, nothing of the machine's
 		[statusReply, "painting a chunk (at line 8 of 20): 100 strokes and touches so far, 5 s on the painting's clock (now day 1, 09:00), running for 12 min 3 s", "painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00"],
+		[statusReply, "painting a chunk (at line 8 of 20): 100 strokes and touches so far, 5 s on the painting's clock (now day 1, 09:00), running for 12 min 3 s (2 min 10 s of the 10 min of computing a chunk may do)", "painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00"],
 		[statusReply, "painting a chunk (20 lines): 0 strokes and touches so far, 14 min 20 s on the painting's clock (now day 3, 18:40), running for 40 s", "painting a chunk: it has taken 14 min 20 s of the painting's time so far, and the painting's clock reads day 3, 18:40"],
 		[statusReply, "painting a chunk: starting, running for 2 s", "painting a chunk: starting"],
 		[statusReply, "the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s", "the chunk is in the log; the easel is finishing its reply"],

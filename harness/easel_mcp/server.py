@@ -38,7 +38,7 @@ def critic_cli(studio):
 
 def hide_counters(text):
     text = re.sub(r'\[string "chunk \d+"\]', '[string "chunk"]', text)
-    return re.sub(r"the chunk ran longer than \d+ minutes and was stopped", "the chunk didn't finish and was stopped", text)
+    return re.sub(r"the chunk ran longer than \d+ minutes(?: of computing)? and was stopped", "the chunk didn't finish and was stopped", text)
 
 
 def progress_words(text):

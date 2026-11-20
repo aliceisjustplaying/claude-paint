@@ -37,7 +37,7 @@ A missing source, unreadable input file or unavailable session returns an error.
 
 ### Becoming extended
 
-The server starts Lua and the client waits. Canvas state, globals, held brushes, rags and clock are covered by restoration. The live limit is 600 seconds, checked at Lua instruction hooks; this is not a promise that every long native operation stops exactly at ten minutes. Replays omit the live chunk limit.
+The server starts Lua and the client waits. Canvas state, globals, held brushes, rags and clock are covered by restoration. The live limit is 600 seconds of computing (the session thread's CPU time plus the engine pool's spread over its threads, so time spent waiting for a CPU on a busy machine does not count), checked at Lua instruction hooks; this is not a promise that every long native operation stops exactly at ten minutes of computing. Replays omit the live chunk limit.
 
 ### While extended
 

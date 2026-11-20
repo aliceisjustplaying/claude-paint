@@ -371,8 +371,9 @@ pub struct Held {
     /// Painting with engine 4 or later: its `Debug` gives each bristle's
     /// paint its solvent and oil too. Not printed itself.
     shows_oil: bool,
-    /// Painting on a canvas that drains (`Canvas::with_drain`): and the
-    /// pigment's packing, `Prop`'s last five (`with_packing`).
+    /// Painting on a canvas that drains (`Canvas::with_drain`) or with the
+    /// oils switch (`Canvas::with_oils`): and the pigment's packing and wax,
+    /// `Prop`'s last five (`with_packing`).
     shows_packing: bool,
     #[cfg_attr(feature = "replay-effects", serde(skip))]
     volume_latent: bool,
@@ -381,13 +382,38 @@ pub struct Held {
     /// Printed only when there is some, so a brush that never brushed pastel
     /// prints (and digests) as it did before.
     pub pastel_mg: f32,
+    /// Water in the brush, mm³, and the paste of ground pastel in it (mm³
+    /// and its dry color): `b:dip` and `b:wash` (`crate::wet_pastel`, the
+    /// wet pastel switch). A wipe takes their share off. Printed only when
+    /// there is some, as `pastel_mg`.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub water_mm3: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_mm3: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste: [f32; 3],
+    /// The paste's mean particle index (`crate::wet_pastel::WashLoad::paste_n`).
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_n: f32,
+    /// The paste's share of bare carbon and that carbon's lift
+    /// (`crate::wet_pastel::WashLoad::paste_carbon`). Printed only when
+    /// there is some.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_carbon: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_lift: f32,
+    /// The paste's scattering per its volume, with the pastel K–M switch
+    /// (`crate::wet_pastel::WashLoad::paste_s`). Printed only when there is
+    /// some.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_s: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
 /// thinner, field for field, plus `solvent` when `show` (engine 3); the
 /// paint's properties without solvent and oil unless `oil` (engine 4), and
 /// without the pigment's packing (`Prop`'s last five) unless `packing` (the
-/// drain switch, `Canvas::with_drain`).
+/// drain or oils switch, `Canvas::with_drain`, `Canvas::with_oils`).
 struct BristleText<'a>(&'a Bristle, bool, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
@@ -438,6 +464,18 @@ impl std::fmt::Debug for Held {
         d.field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing));
         if self.pastel_mg > 0.0 {
             d.field("pastel_mg", &self.pastel_mg);
+        }
+        if self.water_mm3 > 0.0 {
+            d.field("water_mm3", &self.water_mm3);
+        }
+        if self.paste_mm3 > 0.0 {
+            d.field("paste_mm3", &self.paste_mm3).field("paste", &self.paste).field("paste_n", &self.paste_n);
+            if self.paste_carbon > 0.0 {
+                d.field("paste_carbon", &self.paste_carbon).field("paste_lift", &self.paste_lift);
+            }
+            if self.paste_s > 0.0 {
+                d.field("paste_s", &self.paste_s);
+            }
         }
         d.finish()
     }
@@ -508,7 +546,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0 }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3], paste_n: 0.0, paste_carbon: 0.0, paste_lift: 0.0, paste_s: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -521,8 +559,9 @@ impl Held {
         self
     }
 
-    /// The brush of a painting whose canvas drains (`Canvas::with_drain`):
-    /// its `Debug` gives each bristle's paint the pigment's packing too.
+    /// The brush of a painting whose canvas drains (`Canvas::with_drain`) or
+    /// whose tubes come in their oils, with wax (`Canvas::with_oils`): its
+    /// `Debug` gives each bristle's paint the pigment's packing and wax too.
     pub fn with_packing(mut self, on: bool) -> Self {
         self.shows_packing = on;
         self
@@ -533,6 +572,22 @@ impl Held {
         // neighboring bristles overlap by ~hair², so each lays lay / hair²
         let track = 2.0 * self.tool.hair_radius();
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
+    }
+
+    /// The water the brush holds between its hairs, mm³, on a canvas of
+    /// `mm_per_unit` (`crate::wet_pastel`). A round's belly is a cone of its
+    /// width and a hair length 4.7 times that (Rosemary & Co Series 33
+    /// sable rounds: 15.7/3.4, 20/3.9 and 24.2/5.2 mm for sizes 4, 6, 8
+    /// [M]), the liquid filling 0.6 of it [E: the hairs' packing in a wet
+    /// bundle; no gravimetric measurement of a sable's load was found]:
+    /// about 0.16 mL for a 6 mm round. Other shapes hold a full load of
+    /// paint on every bristle (`full`, coats × square units).
+    pub fn capacity_mm3(&self, mm_per_unit: f32) -> f32 {
+        if self.tool.kind == Kind::Round {
+            let d = self.tool.width * mm_per_unit;
+            return 0.6 * std::f32::consts::PI / 12.0 * d * d * (4.7 * d);
+        }
+        self.full() * self.bristles.len() as f32 * crate::surface::COAT_UM * 1e-3 * mm_per_unit * mm_per_unit
     }
 
     /// Whether any bristle holds solvent (a thinned load, or solvent
@@ -560,12 +615,12 @@ impl Held {
                 let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
         }
     }
 
@@ -591,12 +646,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - paint.thinner);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
                 b.solvent += v * paint.thinner;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
         }
     }
 
@@ -604,6 +659,8 @@ impl Held {
     /// dry pastel it holds).
     pub fn wipe(&mut self, frac: f32) {
         self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
+        self.water_mm3 *= 1.0 - frac.clamp(0.0, 1.0);
+        self.paste_mm3 *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);
@@ -2969,7 +3026,7 @@ pub struct Knife {
 }
 
 /// As derived, but the paint's properties without the pigment's packing
-/// (`Prop`'s last five) unless `shows_packing` (the drain switch): a knife
+/// (`Prop`'s last five) unless `shows_packing` (the drain or oils switch): a knife
 /// without it prints as it always did (`easel run --state-digest` hashes it).
 impl std::fmt::Debug for Knife {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -3006,8 +3063,9 @@ impl Knife {
         self.volume_latent = engine >= crate::PIGMENT_MIXER;
         self
     }
-    /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
-    /// its `Debug` gives the paint's packing too.
+    /// The knife of a painting whose canvas drains (`Canvas::with_drain`) or
+    /// whose tubes come in their oils (`Canvas::with_oils`): its `Debug`
+    /// gives the paint's packing and wax too.
     pub fn with_packing(mut self, on: bool) -> Self {
         self.shows_packing = on;
         self
@@ -3043,7 +3101,7 @@ impl Knife {
         }
         let color = if self.volume_latent { crate::mixer::decode9(&self.lat) } else { crate::mixer::decode(&self.lat) };
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, volume_latent: self.volume_latent, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, volume_latent: self.volume_latent, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], wax: self.hide[9], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {

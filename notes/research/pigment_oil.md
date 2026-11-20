@@ -9,7 +9,10 @@ every paint carries (`Paint::packed`, `Paint::floor`, `Paint::oil_volume`),
 and behind the drain switch's absorbent ground that reads it
 (`Canvas::with_drain`, an easel log's `--@ drain`; `bristle::ground_drain`).
 Without the switch the ground draws engine 4's fixed share of oil
-(`bristle::OIL_SHARE`, §6), so a painting begun before it is unchanged. Source
+(`bristle::OIL_SHARE`, §6), so a painting begun before it is unchanged. §5
+also gives the oils each box's tubes are ground in and their wax, which the
+oils switch reads (`Palette::oils`, an easel log's `--@ oils`;
+`palette::grind_of`). Source
 keys are in brackets; the sources are listed at the end. **est.** marks an
 estimate, with its basis.
 
@@ -279,15 +282,45 @@ by weight for the whole range [GAMB], which says little.
 The same tube name stands for different paint in different boxes (red
 earth is Venetian red for Inness, light red for Alma-Tadema and Hopper), so
 where the research found a painter's own colormen, the box has its own
-oil content (`palette::BOX_GRIND`); its other tubes take its period's (§4).
+figures (`palette::BOX_GRIND`): oil content, and, read with the oils switch
+(`Palette::oils`, `--@ oils`), the oil each tube is ground in and wax. Its
+other tubes take its period's oil content (§4), in linseed without wax. Oil
+and wax set how fast the tube dries; wax also dulls it.
 
+- **Oils.** Paint ground in walnut and poppy oil dries slower than in
+  linseed; wax slows it further and dulls its gloss (`palette::WALNUT_RATE`
+  0.70, `POPPY_RATE` 0.55, `WAX_RATE` 0.60, `WAX_MATTE` 0.2). Without the
+  oils switch `pile{oil=}` keeps its rates of before, walnut 0.8 and poppy
+  0.6 against linseed, and the tubes come as linseed paint.
+  - Poppy: titanium white in safflower oil (poppy's fatty acids: no
+    linolenic, about 75% linoleic) touch-dry in 8–10 days, in alkali-refined
+    linseed 4–5 [GOLD16]; thin oil films tack-free in 5 days for linseed's
+    3–4 [EIB p.308]; Eibner's poppy paints on glass 5–6 days [MW25]; the
+    oils' bis-allylic sites (% linoleic + 2 × % linolenic) 75 for linseed's
+    125. Range 0.40–0.75.
+  - Walnut: 5–6 days [EIB p.308]; bis-allylic sites 87; its cure after
+    gelation 0.64 of linseed's, poppy's 0.36 (thin films at 70 °C [DEP24]).
+    Range 0.55–0.90.
+  - Lead speeds every oil and doesn't single out poppy (lead white is a weak
+    drier: Eibner's poppy with lead white 6 days) [DEP24; MW25]: the oil's
+    rate multiplies the pigment's.
+  - Wax: 5 drops of linseed on 90 cm² of glass dried in 4 days, with 5% wax
+    (of the oil) 8, 10% 11, 20% still wet at 14 [EIB p.415], about
+    1 + 0.18 × the per cent, so a tube's 3–6% about 1.7×; wax hinders the
+    oxygen's way in [EIB p.414]. Range 0.45–0.75.
+  - Wax gloss: beeswax gels oil at 3–5% as crystallites that roughen the
+    surface [GELS23]; "stumpfes, speckiges Aussehen" [EIB p.414], a "satiny
+    sheen" [GOLD16]; no gloss measurement exists, so 0.8 of the gloss is
+    **est.** (purpose-made matting waxes take 60° gloss from about 90 to 40
+    at 0.5–5% [ACA]).
 - **Friedrich (the default box).** He bought his colors ready-ground,
   in bladders, and mixed the blues he bought dry himself [SPSG24 pp.89–90]
-  (cobalt bought dry, letter of 1821 [SPSG24]). Bladder colors took more
-  oil than a painter's own grind [FERN]: lead white 0.14 **est.** (between
-  Watin's 0.125 and the 1901 tubes), the other bought-ground colors at its
-  ratio, 1.63 × OA **est.** (the named Friedrich box's Naples yellow and
-  rose madder too); cobalt blue at 1.2 × OA **est.**, as smalt.
+  (cobalt bought dry, letter of 1821 [SPSG24]); walnut oil, no resin, in
+  one painting [MW88; NG89]. Bladder colors took more oil than a painter's
+  own grind [FERN]: lead white 0.14 **est.** (between Watin's 0.125 and the
+  1901 tubes), the other bought-ground colors at its ratio, 1.63 × OA
+  **est.** (the named Friedrich box's Naples yellow and rose madder too);
+  cobalt blue at 1.2 × OA **est.**, as smalt.
 - **Inness.** No source names his colorman; British paint is the proxy
   (American grinders copied Winsor & Newton [UEB p.158]). His red earth is
   Venetian red, 25% oil [UEB p.231]; Antwerp blue as Church's Prussian
@@ -299,32 +332,43 @@ oil content (`palette::BOX_GRIND`); its other tubes take its period's (§4).
   sienna 0.706, burnt sienna 0.60, ivory black 0.528, cobalt blue 0.474,
   ultramarine 0.301) [CH p.66]; viridian 0.50, Parry & Coste's analyzed
   British tube [PC], over-oiled as Laurie says [LAUR pp.157–158]; magenta
-  and bone brown Roberson's (bought 1888, 1899) **est.**
+  and bone brown Roberson's (bought 1888, 1899) **est.**; poppy oil in the
+  whites, linseed in the darks [RT98].
 - **Alma-Tadema.** His colors partly Belgian (Mommen, Blockx), no
-  figures: the British average; viridian 0.50 [PC].
-- **The Impressionists.** Three measured French tubes held 28–38% binder
-  [SALV pp.129–132]; makers ground "un tiers de plus qu'il ne serait
-  nécessaire" of oil [VIB pp.116–117], and waxed continental colors (Wurm,
-  Horadam) are oilier than the British in the oil-hungry pigments (cobalt
-  blue 0.556) [EIB pp.403–406]. So true oil, about a third more than
-  British for most colors, the whites as British.
+  figures: the British average; viridian 0.50 [PC]; Blockx ground whites,
+  blues and pale lakes in poppy [BLX pp.11–12].
+- **The Impressionists.** Three measured French tubes held 28–38% binder,
+  wax in all three [SALV pp.129–132]; makers ground "un tiers de plus
+  qu'il ne serait nécessaire" of oil [VIB pp.116–117], about 3% wax on
+  Horadam's series (50 parts oil with 2% wax to 100 with 10%, the same body
+  [EIB p.414]); waxed continental colors (Wurm, Horadam) are oilier than
+  the British in the oil-hungry pigments (cobalt blue 0.556) [EIB
+  pp.403–406]. So true oil, about a third more than British for most
+  colors, the whites as British; wax in the box; poppy for whites, blues,
+  violets and greens, linseed for darks, lakes, vermilion and the chromes
+  [VIB; MV12 pp.103–104, 130; TB24].
 - **Seurat.** He painted from 1879 to 1891 in Paris, in the French tubes
-  of the Impressionists' figures above, and his box's tubes are all among
-  theirs: the box takes those figures (`palette::box_grind`).
-- **Cézanne.** Nothing found gives his paint's oil, and his years run to
-  1906, past the period the French figures describe: his box takes the
-  19th century's tube colors (§4).
-- **Late Monet.** Edouard's hand-ground colors, with no sign of lean or
-  blotted paint [TB28 pp.60–62]: the French oil.
+  of the Impressionists' figures above (his own paints among their sources
+  for the oils [TB24]), and his box's tubes are all among theirs: the box
+  takes those figures, oil content, oils and wax (`palette::box_grind`).
+- **Cézanne.** Nothing found gives his paint's oil, its oils or wax, and
+  his years run to 1906, past the period the French figures describe: his
+  box takes the 19th century's tube colors (§4), in linseed without wax.
+- **Late Monet.** Edouard's hand-ground colors; poppy in a green, a
+  yellow, a red and a lilac, linseed in a white; no wax reported, and no
+  sign of lean or blotted paint [TB28 pp.60–62]. The French oil, no wax.
 - **Hopper.** Rembrandt colors to 1938, Blockx and Winsor & Newton
   1939–45, Winsor & Newton alone from 1945 [LYONS]; "the maker is Winsor and
   Newton" [MORSE]: W&N's 1901 figures (lead white 0.13, yellow ochre 0.39,
   light red 0.41 with Stockmeier's W&N tube at 41.9%, burnt sienna 0.60,
-  ivory black 0.53, cobalt blue 0.47) [CH pp.66–67]. The cadmiums stay the
-  period's cadmium-barium.
+  ivory black 0.53, cobalt blue 0.47) [CH pp.66–67]; its whites poppy-rich
+  (a 1957 W&N flake white, with zinc oxide, chalk, baryte and aluminium
+  soaps) [TATE]. The cadmiums stay the period's cadmium-barium.
 - **Tonn.** "I mostly use Williamsburg, Old Holland, and Michael Harding"
   [TONN]: Williamsburg's chart confirms the period's figures but for its
   flake white (moderate, 0.15) and cerulean (moderate, 0.28) [WB; MH].
+  Williamsburg puts small amounts of beeswax in all its colors [WB];
+  not counted, the amount unknown.
 
 ## 6. Not modeled, and open
 
@@ -352,6 +396,17 @@ oil content (`palette::BOX_GRIND`); its other tubes take its period's (§4).
 - [SPSG24]: Most, Wenders de Calisse, Bartoll, Hinderer, *Zur Maltechnik Caspar David Friedrichs*, 2024. https://doi.org/10.25360/01-2024-00012
 - [TB28]: A. Roy, NG Technical Bulletin 28, 2007. https://www.nationalgallery.org.uk/upload/pdf/roy2007.pdf
 - [TONN]: K. Tonn, posts of 2023-11-20 and 2024-07-21 on X. https://x.com/kendrictonn/status/1815165079580528995
+- [ACA]: American Coatings Association, "Powder coating gloss reduction techniques". https://www.paint.org/coatingstech-magazine/articles/powder-coating-gloss-reduction-techniques/
+- [DEP24]: G. DePolo, P. Iedema, K. Shull, K. Hermans, *Macromolecules* 57 (2024) 8263. https://doi.org/10.1021/acs.macromol.4c01164
+- [GELS23]: beeswax oleogels, *Gels* 9:216 (2023). https://doi.org/10.3390/gels9030216
+- [GOLD16]: Golden Artist Colors, "Williamsburg's new safflower colors", *Just Paint*, 2016. https://justpaint.org/williamsburgs-new-safflower-colors/
+- [MW25]: R. S. Morrell and H. R. Wood, *The Chemistry of Drying Oils*, 1925. https://archive.org/details/in.ernet.dli.2015.212362
+- [BLX]: J. Blockx, *Compendium à l'usage des artistes peintres: peinture à l'huile*, 1881, pp. 11–12. https://archive.org/details/peinturealhuile00blocgoog
+- [MV12]: C. Moreau-Vauthier, *The Technique of Painting*, 1912, pp. 103–104, 130. https://archive.org/details/techniqueofpaint00more
+- [MW88]: J. Mills and R. White, "Analyses of paint media", NG Technical Bulletin 12, 1988, pp. 78–79. https://www.nationalgallery.org.uk/media/15763/mills_white1988.pdf
+- [NG89]: S. Leighton, A. Reeve, A. Burnstock, NG Technical Bulletin 13, 1989, pp. 44–60. https://www.nationalgallery.org.uk/media/15749/leighton_reeve_burnstock1989.pdf
+- [RT98]: J. Ridge and J. Townsend, "John Singer Sargent's later portraits", *Apollo*, 1998. http://www.jssgallery.org/Essay/Articles/Apollo/Apollo1998-Right.html
+- [TB24]: Kirby, Stonor, Roy et al., NG Technical Bulletin 24, 2003. https://www.nationalgallery.org.uk/upload/pdf/kirby_stonor_roy_burnstock_grout_white2003.pdf
 
 - [AP1], [AP2], [AP3]: *Artists' Pigments*, vols 1–3 (Feller; Roy; FitzHugh, eds.), National Gallery of Art.
 - [BOUV]: P.-L. Bouvier, *Manuel des jeunes artistes et amateurs en peinture*, 1827, pp. 100–102, 138–139.

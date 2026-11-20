@@ -232,9 +232,10 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            // (written with the drain switch on to keep the
-                            // paint's packing, below; prepared, it is off)
-                            return cached.with_drain(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material);
+                            // (written with the drain and oils switches on to
+                            // keep the paint's packing and wax, below;
+                            // prepared, they are off)
+                            return cached.with_drain(false).with_oils(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material);
                         }
                     }
                 }
@@ -242,14 +243,15 @@ impl Style {
         }
         let mut c = self.ground_on(c, seed);
         if let Some((path, key)) = cache {
-            // the cache keeps the paint's packing (`wet::Prop`'s last five),
-            // which only a draining canvas's checkpoint holds (version 14), so
-            // a ground read back is the ground just prepared, bit for bit (the
-            // caller sets the drain switch on either)
+            // the cache keeps the paint's packing and wax (`wet::Prop`'s last
+            // five), which only a checkpoint with the drain and oils switches
+            // holds (its oils and drain sections), so a ground read
+            // back is the ground just prepared, bit for bit (the caller sets
+            // the switches on either)
             let mut bytes = Vec::new();
-            c.drain = c.engine >= 4;
+            (c.drain, c.oils) = (c.engine >= 4, c.engine >= 4);
             let written = c.write_state(&mut bytes, &key).is_ok();
-            c.drain = false;
+            (c.drain, c.oils) = (false, false);
             if written {
                 use std::io::Write;
                 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -265,7 +267,7 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
+        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
     }
 
     /// A sheet of paper of this style's width, with its ground layers (if
@@ -273,7 +275,7 @@ impl Style {
     /// whose key describes a linen support: a sheet is laid afresh.
     pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
         let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
-        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
+        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_wet_pastel(self.palette.wet_pastel).with_pastel_km_mix(self.palette.pastel_km_mix).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim).with_material(self.palette.material)
     }
 
     /// This style's ground layers laid on `c`, bottom first.

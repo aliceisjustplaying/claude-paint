@@ -880,6 +880,42 @@ print(counter,rand(),drying(300,300))
         }
     }
 
+    /// A charcoal stick's table (its lift with its wear) and the
+    /// charcoal in the tooth come back from a replay checkpoint as they were.
+    #[test]
+    fn charcoal_checkpoints_reconstruct_its_sticks() {
+        let dir = Temp::new();
+        let mut plain = Session::replay_with(64, crate::session::box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in [
+            "canvas{size=200, aspect=1.25, seed=3, paper={grammage=200}}",
+            r#"v=charcoal(); c=charcoal("compressed")"#,
+            "v:stroke({{100,400},{900,400}}, {force=2}); c:line({{100,600},{900,600}}, {pressure=0.5})",
+            "smudge({{500,300},{500,700}}); erase({{300,350},{300,650}}); blow(700,400)",
+            "fix(rect(0,0,500,800)); c:side({{100,500},{900,500}}); print(v, c)",
+        ] { plain.run(chunk).unwrap(); }
+        let source = plain.program("charcoal");
+        assert!(source.lines().any(|l| l == crate::session::CHARCOAL_MARK));
+        let chunks = crate::session::parse_program(&source);
+        for until in [3, chunks.len()] {
+            let mut s = Session::replay_with(64, crate::session::box_for(Some(&source)).unwrap()).unwrap().with_paper(true).unwrap();
+            let mut batch = Batch::open(&args(&dir.0, until), &source, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            for (i, chunk) in chunks.iter().enumerate().skip(batch.done) {
+                s.run(chunk).unwrap();
+                if batch.completed(&s, i + 1).unwrap() { break; }
+            }
+            drop(batch);
+            if until == chunks.len() {
+                assert_eq!(canvas(&s), canvas(&plain));
+                assert_eq!(encode(&State::capture(&s.st)).unwrap(), encode(&State::capture(&plain.st)).unwrap());
+                for name in ["v", "c"] {
+                    assert_eq!(s.held_stick(name).unwrap(), plain.held_stick(name).unwrap());
+                }
+                assert_eq!(s.held_stick("c").unwrap().0.lift, paint::charcoal::COMPRESSED_LIFT);
+                assert_eq!(s.program("charcoal"), source);
+            }
+        }
+    }
+
     #[test]
     fn corrupt_and_mismatched_checkpoints_are_refused() {
         let dir = Temp::new();

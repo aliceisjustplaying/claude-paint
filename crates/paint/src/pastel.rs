@@ -75,6 +75,83 @@ pub struct Stick {
     pub wear: f32,
     /// The dry color of the stick: R∞ of its pigments in air (linear RGB).
     pub color: Rgb,
+    /// How readily a kneaded eraser takes what it lays, 0..1 (the drawing
+    /// cell's `lift`): `PASTEL_LIFT` for a pastel; a charcoal's from the
+    /// adhesion of its particles (`crate::charcoal`).
+    pub lift: f32,
+    /// The area a volume worn from the stick covers, as the thickness of a
+    /// layer of it, µm: `PARTICLE_UM` for a pastel; a charcoal's from what
+    /// its stick is made of (`crate::charcoal`).
+    pub cover_um: f32,
+    /// Whether what it lays is a bare bed of carbon (charcoal), seen with
+    /// no first-surface veil (`Cell::bare_carbon`).
+    pub carbon: bool,
+}
+
+/// How readily a kneaded eraser takes a pastel stick's pastel.
+pub const PASTEL_LIFT: f32 = 0.55;
+
+/// What a deposit is, beside its color: how readily the eraser takes it
+/// (`lift`), the share of it that is bare carbon (`carbon`, charcoal) and
+/// the volume it lies at in the tooth per volume it came as (`lies`).
+///
+/// The tooth's cells hold a deposit's volume as it covers by pastel's law
+/// (`PARTICLE_UM`). A stick whose worn volume covers as `cover_um` lays
+/// `PARTICLE_UM / cover_um` of it: what is already in the tooth (moved by
+/// a finger, a brush, a puff) lies as it is (1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Grains {
+    pub(crate) lift: f32,
+    pub(crate) carbon: f32,
+    pub(crate) lies: f32,
+}
+
+impl Grains {
+    /// A pastel stick's pastel, as it always was.
+    pub(crate) const PASTEL: Grains = Grains { lift: PASTEL_LIFT, carbon: 0.0, lies: 1.0 };
+
+    /// What `stick` lays.
+    pub(crate) fn of(stick: &Stick) -> Grains {
+        let lies = if stick.cover_um == PARTICLE_UM { 1.0 } else { PARTICLE_UM / stick.cover_um };
+        Grains { lift: stick.lift, carbon: if stick.carbon { 1.0 } else { 0.0 }, lies }
+    }
+}
+
+/// What a dry tool (a finger, a blade, a brush, a puff) carries of the
+/// loose layers it picks up, beside their color: the share of it that is
+/// carbon and how readily the eraser takes that carbon (the cells' `lift`,
+/// weighted by their carbon), so that charcoal moved is laid as charcoal.
+/// A pastel's pastel carries no carbon and is laid at `PASTEL_LIFT`, as it
+/// always was.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Carried {
+    carbon: f32,
+    lift: f32,
+}
+
+impl Carried {
+    /// `v` more picked up from cell `c` onto `held` already carried (both
+    /// in the same units).
+    pub(crate) fn take(&mut self, held: f32, v: f32, c: &crate::graphite::Cell) {
+        if c.carbon <= 0.0 && self.carbon <= 0.0 {
+            return;
+        }
+        let (ch, cv) = (self.carbon * held, c.carbon * v);
+        if held + v > 0.0 {
+            self.carbon = ((ch + cv) / (held + v)).clamp(0.0, 1.0);
+        }
+        if ch + cv > 0.0 {
+            self.lift = (self.lift * ch + c.lift * cv) / (ch + cv);
+        }
+    }
+
+    /// The grains it lays: carbon at its own lift, the rest as pastel.
+    pub(crate) fn grains(&self) -> Grains {
+        if self.carbon <= 0.0 {
+            return Grains::PASTEL;
+        }
+        Grains { lift: PASTEL_LIFT + (self.lift - PASTEL_LIFT) * self.carbon, carbon: self.carbon, lies: 1.0 }
+    }
 }
 
 /// Thickness of the particles a stroke leaves (µm): what turns a volume of
@@ -131,13 +208,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7), sharpened by a blade to a
@@ -153,7 +230,7 @@ impl Stick {
             facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, lift: PASTEL_LIFT, cover_um: PARTICLE_UM, carbon: false }
     }
 
     fn radius(&self) -> f32 {
@@ -307,7 +384,16 @@ pub struct Laid {
 /// loose pastel in the pores. Crumbs that fall on wet paint are lost in it;
 /// returns how much.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
+    lay_crumbs_of(d, film, pxs, bed, vol, color, Grains::PASTEL, rng, dmax, px_um2)
+}
+
+/// `lay_crumbs` of grains `g` (a stick's, `Grains::of`, or what a dry tool
+/// carried, `Carried::grains`): `vol` and what is lost are in the volume
+/// they came as.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn lay_crumbs_of(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, g: Grains, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
     let mut cum = Vec::with_capacity(bed.len());
     let mut total = 0.0f32;
     for &(_, g, _) in bed {
@@ -337,6 +423,11 @@ pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &m
             lost += dv;
             continue;
         }
+        // (as it lies in the tooth)
+        let dv = dv * g.lies;
+        if g.carbon > 0.0 && d.optics() {
+            d.carbon = true;
+        }
         let c = &mut d.cells[i];
         if c.film < 0.0 || film[i] > c.film + 1e-4 {
             c.restart(film[i], pxs[i]);
@@ -345,11 +436,18 @@ pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &m
         // about PARTICLE_UM thick, as the contact's own deposit
         let q = 1.0 - (-dv / PARTICLE_UM).exp();
         let before = (c.a, c.reflectance());
-        c.add_pastel(q, color, dv);
-        c.loose += dv;
+        lay_into(c, q, color, dv, g);
         pxs[i] = c.repaint(pxs[i], before);
     }
     lost
+}
+
+/// Lay `dv` µm (as it lies in the tooth) of a deposit of grains `g`
+/// (coverage `q`) of `color` into a cell, loose (a pastel's
+/// `Grains::PASTEL`, as it always was).
+pub(crate) fn lay_into(c: &mut crate::graphite::Cell, q: f32, color: Rgb, dv: f32, g: Grains) {
+    c.add_grains(q, color, dv, g);
+    c.loose += dv;
 }
 
 
@@ -457,6 +555,7 @@ impl Canvas {
         let crumb_max = (80.0 + 220.0 * soft) * (fmean / 2.0).clamp(0.25, 2.0).powf(0.25);
         let mut rng = crate::rng::Rng::new((pts[0].x.to_bits() as u64) << 32 ^ pts[0].y.to_bits() as u64 ^ (steps as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
         let px_um2 = (px * 1000.0) * (px * 1000.0);
+        let grains = Grains::of(stick);
         for k in 0..=steps {
             let t = k as f32 * ds;
             let mut sp = at(t);
@@ -527,10 +626,11 @@ impl Canvas {
                         wet_um3 += dv;
                         continue;
                     }
+                    // (as it lies in the tooth: what that volume covers)
+                    let dv = dv * grains.lies;
                     let q = 1.0 - (-dv / PARTICLE_UM).exp();
                     let before = (c.a, c.reflectance());
-                    c.add_pastel(q, stick.color, dv);
-                    c.loose += dv;
+                    lay_into(c, q, stick.color, dv, grains);
                     laid = true;
                     pxs[i] = c.repaint(pxs[i], before);
                 }
@@ -555,17 +655,18 @@ impl Canvas {
                 let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
                 laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
+                wet_um3 += lay_crumbs_of(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, grains, &mut rng, crumb_max, px_um2);
                 for &(i, g) in &last_sheet_bed {
                     caught.push((i, to_sheet * g / gs));
                 }
                 carried -= give;
                 d.sticks |= laid;
+                d.carbon |= laid && stick.carbon && d.optics();
             }
             self.px = pxs;
             self.film = film;
             if !caught.is_empty() {
-                self.sheet_catch(&caught, stick.color);
+                self.sheet_catch_lying(&caught, stick.color, grains.lies);
             }
             // (µm of volume per area over mm² of pixel: 10⁻³ mm³)
             let worn_mm3 = worn_um3 * a_px_mm2 * 1e-3;
@@ -582,7 +683,7 @@ impl Canvas {
             let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
             let to_sheet = carried * gs / (gp + gs).max(1e-9);
             let caught: Vec<(usize, f32)> = last_sheet_bed.iter().map(|&(i, g)| (i, to_sheet * g / gs.max(1e-9))).collect();
-            self.sheet_catch(&caught, stick.color);
+            self.sheet_catch_lying(&caught, stick.color, grains.lies);
             carried -= to_sheet;
         }
         if carried > 0.0 && !last_bed.is_empty() {
@@ -590,7 +691,7 @@ impl Canvas {
             let a_px_mm2 = px * px;
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
-            let lost = lay_crumbs(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, &mut rng, crumb_max, px_um2);
+            let lost = lay_crumbs_of(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, grains, &mut rng, crumb_max, px_um2);
             self.px = pxs;
             self.film = film;
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
@@ -696,10 +797,14 @@ impl Canvas {
     /// the resin wets the particles: their scattering falls by the share
     /// wetted (`wet` 0..1, 0.15 for a light spray) times what index matching
     /// takes (to about a fifth, for particles of n ≈ 2 in resin of n ≈ 1.5).
+    /// Charcoal in it (`Cell::carbon`) is wetted by the resin the spray lays
+    /// (`crate::charcoal::LIGHT_SPRAY_UM` for a light one, in proportion to
+    /// `wet`) over its pores' volume, and darkened as carbon is by resin.
     pub fn fix_pastel(&mut self, m: Option<&crate::Mask>, wet: f32) {
         let f = self.f;
         let w = wet.clamp(0.0, 1.0);
         let Some(d) = self.drawing.as_mut() else { return };
+        let resin = d.carbon.then_some(crate::charcoal::LIGHT_SPRAY_UM * w / crate::charcoal::LIGHT_SPRAY_WET);
         // (a sheet laid on the picture keeps the spray off what it covers)
         let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
@@ -708,7 +813,7 @@ impl Canvas {
             }
             if c.optics.is_some() {
                 let before = (c.a, c.reflectance());
-                c.bind(w);
+                c.bind_resin(w, resin);
                 self.px[i] = c.repaint(self.px[i], before);
                 continue;
             }
@@ -1115,6 +1220,9 @@ struct Pad {
     load: f32,
     col: [f32; 3],
     holds: f32,
+    /// What of its load is charcoal, and how readily the eraser takes it
+    /// (the cells' it came from: lift is the particles', not the gesture's).
+    carry: Carried,
 }
 
 impl Pad {
@@ -1169,6 +1277,7 @@ impl Rubbing<'_> {
                 continue;
             }
             let take = cell.loose * pick * share;
+            pad.carry.take(pad.load, take * a_px, cell);
             let total = pad.load + take * a_px;
             for q in 0..3 {
                 pad.col[q] = (pad.col[q] * pad.load + cell.r[q] * take * a_px) / total.max(1e-9);
@@ -1198,7 +1307,7 @@ impl Rubbing<'_> {
             // fine grains: a third of a stroke's particles' thickness
             let q = 1.0 - (-per / (PARTICLE_UM / 3.0)).exp();
             let before = (cell.a, cell.reflectance());
-            cell.add_pastel(q, pad.col, per);
+            cell.add_grains(q, pad.col, per, pad.carry.grains());
             cell.loose += per;
             self.pxs[i] = cell.repaint(self.pxs[i], before);
         }
@@ -2006,5 +2115,264 @@ mod tests {
         assert!((pad_area(2.0001, None) - knee).abs() < 0.01);
         assert!((pad_area(10.0, None) - 223.1).abs() < 0.5, "{}", pad_area(10.0, None));
         assert_eq!(pad_area(10.0, Some(4.0)), 4.0);
+    }
+
+    /// Charcoal (`crate::charcoal`): vine and compressed sticks.
+    mod charcoal {
+        use crate::graphite::{Lead, hand_line};
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        use crate::{Canvas, Mask};
+
+        /// A sheet of drawing paper with the drawing's own optics, as a new
+        /// painting's (`--@ drawing-optics`).
+        fn paper() -> Canvas {
+            Canvas::new_window(96, 1.0, [0.8; 3], None).with_size_mm(72.0).with_drawing_optics(true).with_paper(crate::paper::Paper::drawing(3))
+        }
+
+        fn stroke(c: &mut Canvas, s: &mut Stick, y: f32) {
+            let pts: Vec<StrokePoint> = (0..=8)
+                .map(|i| StrokePoint { x: 200.0 + 75.0 * i as f32, y, pose: Pose { force: 2.0, alt: 60f32.to_radians(), az: 45f32.to_radians(), roll: 0.0 }, speed: 80.0 })
+                .collect();
+            c.stick_stroke(s, &pts);
+        }
+
+        /// Darkness (0.8 minus the mean) over a band of the picture, units.
+        fn dark(c: &Canvas, x0: f32, x1: f32, y0: f32, y1: f32) -> f32 {
+            let f = c.window();
+            let (mut s, mut n) = (0.0, 0.0);
+            for (i, q) in c.pixels().iter().enumerate() {
+                let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+                if x >= x0 && x < x1 && y >= y0 && y < y1 {
+                    s += 0.8 - (q[0] + q[1] + q[2]) / 3.0;
+                    n += 1.0;
+                }
+            }
+            s / n
+        }
+
+        /// The easel's `fix()` on paper with the drawing's own optics: the
+        /// pastel's light spray, then the drawing bound.
+        fn fix(c: &mut Canvas) {
+            c.fix_pastel(None, 0.15);
+            c.fix_drawing(None);
+        }
+
+        enum Medium {
+            Vine,
+            Compressed,
+            Graphite,
+        }
+
+        /// A line of `m` across the middle of a fresh sheet.
+        fn line(m: &Medium) -> Canvas {
+            let mut c = paper();
+            match m {
+                Medium::Vine => stroke(&mut c, &mut Stick::vine(6.0), 400.0),
+                Medium::Compressed => stroke(&mut c, &mut Stick::compressed(7.0), 400.0),
+                Medium::Graphite => {
+                    let mark = hand_line(&[(200.0, 400.0), (800.0, 400.0)], &[0.7], false, true, 0.0, 5);
+                    c.draw(&Lead::pencil("6B").unwrap(), &mark, 0.0, 9);
+                }
+            }
+            c
+        }
+
+        /// The share of the line's darkness one kneaded eraser pass lifts.
+        fn erased(m: &Medium) -> f32 {
+            let mut c = line(m);
+            let d0 = dark(&c, 300.0, 700.0, 300.0, 500.0);
+            let f = c.frame();
+            c.erase(&Mask::full(f), 0.9);
+            1.0 - dark(&c, 300.0, 700.0, 300.0, 500.0) / d0
+        }
+
+        /// The share of the line's darkness a finger drawn across it carries
+        /// below it (to 4–14 mm off the line).
+        fn smeared(m: &Medium) -> f32 {
+            let mut c = line(m);
+            let d0 = dark(&c, 300.0, 700.0, 300.0, 500.0);
+            let below = dark(&c, 300.0, 700.0, 520.0, 700.0);
+            for x in [350.0, 450.0, 550.0, 650.0] {
+                c.rub(&[(x, 330.0), (x, 650.0)], 1.0, None, 40.0);
+            }
+            (dark(&c, 300.0, 700.0, 520.0, 700.0) - below) / d0
+        }
+
+        #[test]
+        fn compressed_lays_darker_than_vine() {
+            let (v, k) = (line(&Medium::Vine), line(&Medium::Compressed));
+            let (dv, dk) = (dark(&v, 300.0, 700.0, 300.0, 500.0), dark(&k, 300.0, 700.0, 300.0, 500.0));
+            eprintln!("laid: vine {dv}, compressed {dk}");
+            assert!(dv > 0.0 && dk > dv, "vine {dv}, compressed {dk}");
+        }
+
+        /// The practitioners' order: vine erases most readily, then
+        /// graphite, then compressed. The take per pass goes as the lift, so
+        /// vine over compressed is about their lifts' ratio, 0.85/0.48 = 1.8.
+        #[test]
+        fn vine_lifts_more_with_the_eraser_than_compressed_and_graphite() {
+            let (v, k, g) = (erased(&Medium::Vine), erased(&Medium::Compressed), erased(&Medium::Graphite));
+            eprintln!("erased: vine {v}, graphite {g}, compressed {k}");
+            assert!(v > g && g > k, "vine {v}, graphite {g}, compressed {k}");
+            let want = crate::charcoal::VINE_LIFT / crate::charcoal::COMPRESSED_LIFT;
+            assert!(v / k > 0.9 * want && v / k < 1.25 * want, "vine {v}, compressed {k}: {} against {want}", v / k);
+        }
+
+        /// Both charcoals lie loose (compressed's gum, glassy at room
+        /// humidity, holds nothing to the sheet), so the finger smears both
+        /// far, compressed's denser deposit (more powder in the tooth for
+        /// its darkness) at least as far as vine's; graphite not at all.
+        #[test]
+        fn the_finger_smears_both_charcoals_and_not_graphite() {
+            let (v, k, g) = (smeared(&Medium::Vine), smeared(&Medium::Compressed), smeared(&Medium::Graphite));
+            eprintln!("smeared: vine {v}, compressed {k}, graphite {g}");
+            assert!(v > 0.2 && k > 0.9 * v, "vine {v}, compressed {k}");
+            assert!(g.abs() < 1e-6, "graphite {g}");
+        }
+
+        /// Fixative binds vine and compressed charcoal and darkens them only
+        /// a little (carbon's facets reflect against resin about half what
+        /// they do against air, over the share the resin wets: charcoal.md
+        /// §2): the eraser and the finger then leave it.
+        #[test]
+        fn fixative_binds_and_darkens_charcoal() {
+            for mut s in [Stick::vine(6.0), Stick::compressed(7.0)] {
+                let mut c = paper();
+                stroke(&mut c, &mut s, 400.0);
+                let d0 = dark(&c, 300.0, 700.0, 300.0, 500.0);
+                fix(&mut c);
+                let d1 = dark(&c, 300.0, 700.0, 300.0, 500.0);
+                eprintln!("fixed: {d0} -> {d1}");
+                assert!(d1 > d0 && d1 < 1.02 * d0, "fixed a little darker: {d0} -> {d1}");
+                let f = c.frame();
+                c.erase(&Mask::full(f), 1.0);
+                c.rub(&[(500.0, 330.0), (500.0, 650.0)], 1.0, None, 40.0);
+                let d2 = dark(&c, 300.0, 700.0, 300.0, 500.0);
+                assert!((d2 - d1).abs() < 1e-5, "fixed charcoal stays: {d1} -> {d2}");
+            }
+        }
+
+        /// The cells under the line's middle, by whether they hold charcoal.
+        fn centre(c: &Canvas) -> Vec<usize> {
+            let f = c.window();
+            (0..c.pixels().len()).filter(|&i| (300.0..700.0).contains(&f.ux(i % f.w)) && (380.0..420.0).contains(&f.uy(i / f.w))).collect()
+        }
+
+        /// Bare charcoal is seen with no first-surface veil: where it covers
+        /// a cell, the picture takes off the veil's share over it, exactly
+        /// k·(1 − R) of its area; a pastel line keeps the veil; paint over
+        /// the charcoal brings it back (its own surface).
+        #[test]
+        fn charcoal_is_seen_without_the_veil_pastel_with_it() {
+            let k = crate::canvas::SURFACE_REFLECTANCE;
+            let mut c = paper();
+            stroke(&mut c, &mut Stick::vine(8.0), 400.0);
+            let seen = c.seen();
+            let d = c.drawing.as_ref().unwrap();
+            assert!(d.carbon && d.layout() == 5);
+            let mut n = 0;
+            for i in centre(&c) {
+                let veiled = crate::canvas::haze(c.px[i], c.gloss[i]);
+                let Some((share, r)) = d.cells[i].bare_carbon() else {
+                    assert_eq!(seen[i], veiled);
+                    continue;
+                };
+                n += 1;
+                for q in 0..3 {
+                    let want = veiled[q] - share * k * (1.0 - c.gloss[i]) * (1.0 - r[q]);
+                    assert!((seen[i][q] - want).abs() < 1e-6 && seen[i][q] < veiled[q], "{i}: {:?} {veiled:?} {share}", seen[i]);
+                }
+                // a whole bed of it would be seen as its R∞
+                assert!((r[1] - crate::charcoal::vine_color()[1]).abs() < 1e-4, "{r:?}");
+            }
+            assert!(n > 20, "{n} charcoal cells");
+            // pastel: the veil stays, and a canvas with no charcoal has none taken off
+            let mut p = paper();
+            stroke(&mut p, &mut Stick::round([0.1; 3], 0.8, 8.0), 400.0);
+            let seen = p.seen();
+            assert!(!p.drawing.as_ref().unwrap().carbon);
+            for i in centre(&p) {
+                assert_eq!(seen[i], crate::canvas::haze(p.px[i], p.gloss[i]));
+            }
+            // painted over: sealed, the veil is back
+            let i = centre(&c).into_iter().find(|&i| c.drawing.as_ref().unwrap().cells[i].bare_carbon().is_some()).unwrap();
+            c.film[i] += 1.0;
+            assert_eq!(c.seen()[i], crate::canvas::haze(c.look_px(i), c.gloss[i]));
+        }
+
+        /// What the finger moves of vine is laid again as vine: at vine's
+        /// lift and as bare carbon, not at pastel's 0.55 (the lift is the
+        /// particles', not the gesture's); pastel moved is laid at 0.55, as
+        /// it always was.
+        #[test]
+        fn the_finger_lays_charcoal_again_as_charcoal() {
+            for (mut s, lift, carbon) in [(Stick::vine(8.0), crate::charcoal::VINE_LIFT, 1.0), (Stick::round([0.1; 3], 0.8, 8.0), crate::pastel::PASTEL_LIFT, 0.0)] {
+                let mut c = paper();
+                stroke(&mut c, &mut s, 400.0);
+                let f = c.window();
+                let below: Vec<usize> = (0..c.pixels().len()).filter(|&i| (300.0..700.0).contains(&f.ux(i % f.w)) && (560.0..640.0).contains(&f.uy(i / f.w))).collect();
+                assert!(below.iter().all(|&i| c.drawing.as_ref().unwrap().cells[i].a == 0.0));
+                c.rub(&[(500.0, 330.0), (500.0, 650.0)], 1.0, None, 40.0);
+                let d = c.drawing.as_ref().unwrap();
+                let got: Vec<&crate::graphite::Cell> = below.iter().map(|&i| &d.cells[i]).filter(|c| c.a > 0.0).collect();
+                assert!(got.len() > 10, "{} cells smeared to", got.len());
+                for cell in got {
+                    assert!((cell.lift - lift).abs() < 1e-4 && (cell.carbon - carbon).abs() < 1e-5, "lift {} carbon {}", cell.lift, cell.carbon);
+                }
+            }
+        }
+
+        /// Fixative wets thin loose charcoal through (the light spray's
+        /// 1.5 µm of resin over its pores) and darkens it as carbon is by
+        /// resin, as the bed's own Mie in resin gives (`CarbonBed::color`),
+        /// not by pastel's ×5.
+        #[test]
+        fn fixative_darkens_charcoal_as_carbon_in_resin() {
+            let vine = crate::charcoal::vine_color();
+            let mut cell = crate::graphite::Cell { a: 0.5, r: vine, lift: crate::charcoal::VINE_LIFT, film: 0.0, loose: 1.0, carbon: 1.0, optics: Some(crate::graphite::Optics::default()), ..Default::default() };
+            assert_eq!(crate::charcoal::wet_share(crate::charcoal::LIGHT_SPRAY_UM, cell.loose), 1.0);
+            cell.bind_resin(0.15, Some(crate::charcoal::LIGHT_SPRAY_UM));
+            let want = crate::dry::VINE_CHARCOAL.color(1.0);
+            let got = cell.optics.unwrap().bound;
+            for q in 0..3 {
+                assert!((got[q] - want[q]).abs() < 0.03 * want[q], "{got:?} against {want:?}");
+            }
+            assert!((cell.carbon_bound - 1.0).abs() < 1e-6 && cell.bare_carbon().is_some());
+        }
+
+        /// A drawing with charcoal round-trips its carbon (layout 5).
+        #[test]
+        fn charcoal_s_carbon_round_trips() {
+            let mut c = paper();
+            stroke(&mut c, &mut Stick::compressed(6.35), 400.0);
+            fix(&mut c);
+            stroke(&mut c, &mut Stick::vine(8.0), 420.0);
+            let d = c.drawing.as_ref().unwrap();
+            assert_eq!(d.layout(), 5);
+            let n = d.cells.len();
+            let whole = c.window().full_w * c.window().full_h;
+            let mut v = d.to_f32s();
+            let back = crate::graphite::Drawing::from_f32s::<()>(n, whole, 5, |k| Ok(v.by_ref().take(k).collect())).unwrap().unwrap();
+            assert!(back.carbon && back.cells.iter().zip(&d.cells).all(|(a, b)| a.carbon == b.carbon && a.carbon_bound == b.carbon_bound && a.lift == b.lift));
+            assert!(d.cells.iter().any(|c| c.carbon_bound > 0.0) && d.cells.iter().any(|c| c.carbon > 0.0));
+        }
+
+        /// A pastel laid over loose charcoal mixes with it in the tooth and comes
+        /// out greyer than the same pastel over fixed charcoal.
+        #[test]
+        fn pastel_over_loose_charcoal_muddies() {
+            let mut out = Vec::new();
+            for fixed in [false, true] {
+                let mut c = paper();
+                stroke(&mut c, &mut Stick::vine(6.0), 400.0);
+                if fixed {
+                    fix(&mut c);
+                }
+                stroke(&mut c, &mut Stick::round([0.75, 0.6, 0.1], 0.8, 12.0), 400.0);
+                out.push(dark(&c, 300.0, 700.0, 380.0, 420.0));
+            }
+            eprintln!("pastel over loose {} vs over fixed {}", out[0], out[1]);
+            assert!(out[0] > out[1], "over loose {} vs over fixed {}", out[0], out[1]);
+        }
     }
 }

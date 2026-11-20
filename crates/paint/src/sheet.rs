@@ -356,8 +356,15 @@ impl Canvas {
     /// Pastel landed on the sheet: `(pixel, µm)` of `color`, kept there
     /// (coverage by volume, as on paper) until the sheet is lifted.
     pub(crate) fn sheet_catch(&mut self, caught: &[(usize, f32)], color: Rgb) {
+        self.sheet_catch_lying(caught, color, 1.0);
+    }
+
+    /// `sheet_catch` of a volume that lies at `lies` of itself (a stick's
+    /// worn volume, `crate::pastel::Grains::lies`).
+    pub(crate) fn sheet_catch_lying(&mut self, caught: &[(usize, f32)], color: Rgb, lies: f32) {
         let Some(s) = self.sheet.as_mut() else { return };
         for &(i, dv) in caught {
+            let dv = dv * lies;
             let q = 1.0 - (-dv / PARTICLE_UM).exp();
             let old = s.a[i] * (1.0 - q);
             let w = old + q;
@@ -489,6 +496,7 @@ impl Canvas {
         let mut heights = std::mem::take(&mut self.height);
         let (mut taken, mut pushed) = (0.0f32, 0.0f32);
         let mut col = [0.0f32; 3];
+        let mut carry = crate::pastel::Carried::default();
         let mut last_band: Vec<usize> = Vec::new();
         let mut dent: Vec<(usize, f32)> = Vec::new();
         let mut napped: Vec<(usize, f32)> = Vec::new();
@@ -565,6 +573,7 @@ impl Canvas {
                     let r = cl.r;
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
+                        carry.take(pushed, ex * 0.35, cl);
                         let tot = pushed + ex * 0.35;
                         col = [0, 1, 2].map(|j| (col[j] * pushed + r[j] * ex * 0.35) / tot.max(1e-9));
                         pushed = tot;
@@ -611,7 +620,7 @@ impl Canvas {
         if pushed > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
             let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0x5C2A);
-            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, pushed, col, &mut rng, CRUMB_MAX_UM, px_um2);
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, pushed, col, carry.grains(), &mut rng, CRUMB_MAX_UM, px_um2);
             self.film = film;
         }
         self.drawing = Some(dr);
@@ -649,6 +658,7 @@ impl Canvas {
         let total_px = (steps.len().max(1) - 1) as f32 * 0.7;
         let mut kept_um = 0.0f32;
         let (mut ahead, mut col) = (0.0f32, [0.0f32; 3]);
+        let mut carry = crate::pastel::Carried::default();
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
@@ -693,6 +703,7 @@ impl Canvas {
                 let kept = ex * room;
                 *held_mg += kept * um_to_mg;
                 kept_um += kept;
+                carry.take(ahead, ex - kept, cl);
                 let tot = ahead + (ex - kept);
                 col = [0, 1, 2].map(|j| (col[j] * ahead + r[j] * (ex - kept)) / tot.max(1e-9));
                 ahead = tot;
@@ -701,7 +712,7 @@ impl Canvas {
                 let hmax = front.iter().map(|&i| self.height[i]).fold(f32::MIN, f32::max);
                 let bed: Vec<(usize, f32, bool)> = front.iter().map(|&i| (i, 1.0 + (hmax - self.height[i]), false)).collect();
                 let film = std::mem::take(&mut self.film);
-                crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+                crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
                 self.film = film;
                 ahead = 0.0;
             }
@@ -714,7 +725,7 @@ impl Canvas {
         let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
         if ahead > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
-            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
             self.film = film;
         }
         self.drawing = Some(dr);
@@ -825,6 +836,8 @@ impl Canvas {
         let mut fines_from = vec![vec![0.0f32; nb]; nsec];
         let mut ccol = vec![(0.0f32, [0.0f32; 3]); nsec];
         let mut fcol = vec![(0.0f32, [0.0f32; 3]); nsec];
+        // (and what of them is charcoal)
+        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::default(); nsec], vec![crate::pastel::Carried::default(); nsec]);
         let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb| {
             let t = acc.0 + v;
             acc.1 = [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9));
@@ -858,6 +871,7 @@ impl Canvas {
                     let k = sector(wx, wy);
                     let crumbs = (heap * heap_goes).min(ex);
                     if crumbs > 0.0 {
+                        ccarry[k].take(ccol[k].0, crumbs, cl);
                         mix(&mut ccol[k], crumbs, r);
                         let flights = hop_at(rr);
                         for (j, roll) in rolled[k].iter_mut().enumerate() {
@@ -884,6 +898,7 @@ impl Canvas {
                     }
                     let fv = ex - crumbs;
                     if fv > 0.0 {
+                        fcarry[k].take(fcol[k].0, fv, cl);
                         mix(&mut fcol[k], fv, r);
                         fines_from[k][bin(rr).min(nb - 1)] += fv;
                     }
@@ -1024,22 +1039,22 @@ impl Canvas {
         let (mut laid, mut caught) = (0.0f32, Vec::new());
         for k in 0..nsec {
             let share = |b: usize| per_px[k][b];
-            let mut lay = |amount: &[f32], col: Rgb, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
+            let mut lay = |amount: &[f32], col: Rgb, grains: crate::pastel::Grains, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
                 let bed: Vec<(usize, f32, bool)> = beds[k].iter().map(|&(i, b, wet)| (i, amount[b] * share(b), wet)).filter(|e| e.1 > 0.0).collect();
                 let v: f32 = bed.iter().map(|e| e.1).sum();
                 if v > 0.0 {
                     // (what falls on wet paint is lost in it: still on the picture)
-                    crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, v, col, &mut rng, dmax, px_um2);
+                    crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, v, col, grains, &mut rng, dmax, px_um2);
                     *laid += v;
                 }
                 caught.extend(on_mask[k].iter().map(|&(i, b)| (i, amount[b] * share(b), col)).filter(|e| e.1 > 0.0));
             };
             if ccol[k].0 > 0.0 {
-                lay(&dep[k], ccol[k].1, CRUMB_MAX_UM, &mut laid, &mut caught);
+                lay(&dep[k], ccol[k].1, ccarry[k].grains(), CRUMB_MAX_UM, &mut laid, &mut caught);
             }
             if fcol[k].0 > 0.0 {
                 for (sz, &(_, hi)) in FINE_SIZES.iter().enumerate() {
-                    lay(&depf[k][sz], fcol[k].1, hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
+                    lay(&depf[k][sz], fcol[k].1, fcarry[k].grains(), hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
                 }
             }
         }

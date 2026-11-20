@@ -87,6 +87,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.paper {
         kv("paper", "1".to_string());
     }
+    if st.tubes.charcoal {
+        kv("charcoal", "1".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -250,6 +253,11 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.reload_finite = h.get("reload") == Some(&"finite");
     tubes.pastel_current_heap = h.get("pastel") == Some(&"current-heap");
     tubes.calls_agree = h.get("calls_agree") == Some(&"1");
+    tubes.charcoal = match h.get("charcoal") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's charcoal={v:?} isn't 1")),
+    };
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {

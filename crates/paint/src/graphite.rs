@@ -154,6 +154,11 @@ pub(crate) struct Cell {
     /// lies, packed): loose, and bound by fixative (`crate::pastel`).
     pub(crate) loose: f32,
     pub(crate) bound: f32,
+    /// The share of the loose and of the bound pastel (by volume) that is a
+    /// bare bed of carbon: charcoal (`crate::charcoal`), seen with no
+    /// first-surface veil (`Cell::bare_carbon`). 0 for pastel.
+    pub(crate) carbon: f32,
+    pub(crate) carbon_bound: f32,
     pub(crate) non_pastel: f32,
     pub(crate) non_pastel_floor: f32,
     pub(crate) optics: Option<Optics>,
@@ -193,7 +198,14 @@ impl Cell {
         [0, 1, 2].map(|k| ((optics.fixed * self.non_pastel_floor + optics.graphite * g) * base + optics.bound[k] * b * (1.0 - l) + self.r[k] * l) / total)
     }
 
+    #[cfg(test)]
     pub(crate) fn add_pastel(&mut self, q: f32, color: Rgb, volume: f32) {
+        self.add_grains(q, color, volume, crate::pastel::Grains::PASTEL);
+    }
+
+    /// `add_pastel` of a deposit of grains `g`: the eraser takes it as
+    /// readily as `g.lift`, and a share `g.carbon` of it is bare carbon.
+    pub(crate) fn add_grains(&mut self, q: f32, color: Rgb, volume: f32, g: crate::pastel::Grains) {
         let a1 = (self.a + (1.0 - self.a) * q).min(0.995);
         let old = if self.optics.is_some() { self.loose } else { self.a * (1.0 - q) };
         let added = if self.optics.is_some() { volume } else { q };
@@ -201,17 +213,61 @@ impl Cell {
         if w > 0.0 || self.optics.is_none() {
             let w = if self.optics.is_some() { w } else { w.max(1e-6) };
             self.r = [0, 1, 2].map(|k| ((old * self.r[k] + added * color[k]) / w).clamp(0.0, 1.0));
+            if self.carbon > 0.0 || g.carbon > 0.0 {
+                self.carbon = ((old * self.carbon + added * g.carbon) / w).clamp(0.0, 1.0);
+            }
         }
-        self.lift = (self.a * (1.0 - q) * self.lift + q * 0.55) / (self.a * (1.0 - q) + q).max(1e-6);
+        self.lift = (self.a * (1.0 - q) * self.lift + q * g.lift) / (self.a * (1.0 - q) + q).max(1e-6);
         self.a = a1;
     }
 
+    /// The bare carbon at this cell (charcoal, loose or fixed: a bed of
+    /// particles, `carbon`): the share of the pixel it covers and its
+    /// reflectance. The picture's first-surface veil (`canvas::haze`) isn't
+    /// over it: Mie's scattering of each opaque particle already holds its
+    /// facets' reflection, and the bed's R∞ is all it returns (charcoal.md
+    /// §2). None where there is none.
+    pub(crate) fn bare_carbon(&self) -> Option<(f32, Rgb)> {
+        if (self.carbon <= 0.0 && self.carbon_bound <= 0.0) || self.a <= 0.0 {
+            return None;
+        }
+        let Some(optics) = self.optics else { return Some((self.a * self.carbon, self.r)) };
+        let b = 1.0 - (-self.bound / crate::pastel::PARTICLE_UM).exp();
+        let l = 1.0 - (-self.loose / crate::pastel::PARTICLE_UM).exp();
+        let base = (1.0 - b) * (1.0 - l);
+        let total = self.non_pastel * base + b * (1.0 - l) + l;
+        let (wb, wl) = (b * (1.0 - l) * self.carbon_bound, l * self.carbon);
+        if total <= 0.0 || wb + wl <= 0.0 {
+            return None;
+        }
+        Some((self.a * (wb + wl) / total, [0, 1, 2].map(|k| (optics.bound[k] * wb + self.r[k] * wl) / (wb + wl))))
+    }
+
     pub(crate) fn bind(&mut self, wet: f32) {
+        self.bind_resin(wet, None);
+    }
+
+    /// `bind`, a light spray laying `resin_um` µm of resin: where the
+    /// loose layer is carbon (`carbon`), the resin wets the share of its
+    /// pores it fills (`crate::charcoal::wet_share`) and darkens it as
+    /// carbon's facets do against resin (`crate::charcoal::WET_KS`),
+    /// not by pastel's rule. Pastel keeps `wet` and its rule.
+    pub(crate) fn bind_resin(&mut self, wet: f32, resin_um: Option<f32>) {
         let Some(mut optics) = self.optics else { return };
         let g = (self.non_pastel - self.non_pastel_floor).max(0.0);
         let b = self.bound;
         let l = self.loose;
-        let dark = self.r.map(|r| {
+        let carbon = if resin_um.is_some() { self.carbon } else { 0.0 };
+        let wc = resin_um.map_or(0.0, |t| crate::charcoal::wet_share(t, l));
+        let dark: Rgb = std::array::from_fn(|k| {
+            let r = self.r[k];
+            if carbon > 0.0 {
+                // pastel's share by its rule, carbon's by its own (K/S scales)
+                let r = r.clamp(1e-4, 0.9999);
+                let f = (1.0 - carbon) / (1.0 - wet + wet / 5.0) + carbon * (1.0 - wc + wc * crate::charcoal::WET_KS[k]);
+                let ks = (1.0 - r).powi(2) / (2.0 * r) * f;
+                return 1.0 + ks - (ks * ks + 2.0 * ks).sqrt();
+            }
             if wet == 0.0 { return r }
             let r = r.clamp(1e-4, 0.9999);
             let ks = (1.0 - r).powi(2) / (2.0 * r) / (1.0 - wet + wet / 5.0);
@@ -225,6 +281,9 @@ impl Cell {
                 optics.bound[k] = (optics.bound[k] * b + dark[k] * l) / (b + l);
             }
         }
+        if b + l > 0.0 && (self.carbon > 0.0 || self.carbon_bound > 0.0) {
+            self.carbon_bound = (self.carbon_bound * b + self.carbon * l) / (b + l);
+        }
         self.optics = Some(optics);
         self.floor = self.a;
         self.non_pastel_floor = self.non_pastel;
@@ -237,6 +296,9 @@ impl Cell {
             let l = self.loose;
             if l + freed > 0.0 {
                 self.r = [0, 1, 2].map(|k| (self.r[k] * l + optics.bound[k] * freed) / (l + freed));
+                if self.carbon > 0.0 || self.carbon_bound > 0.0 {
+                    self.carbon = (self.carbon * l + self.carbon_bound * freed) / (l + freed);
+                }
             }
         }
         self.floor = floor;
@@ -261,6 +323,9 @@ pub struct Drawing {
     /// finger has moved some): the cells are then serialized with their
     /// color and the pastel in the tooth (`to_f32s`).
     pub(crate) sticks: bool,
+    /// Whether charcoal has landed in the tooth (with `optics`): the cells
+    /// then carry their carbon shares (`Cell::carbon`, layout 5).
+    pub(crate) carbon: bool,
     optics: bool,
 }
 
@@ -549,28 +614,36 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
 
 impl Drawing {
     fn new(n: usize, whole: usize, optics: bool) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, optics }
+        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, carbon: false, optics }
     }
 
     /// The serialized layout (the checkpoint's drawing flag): 1 graphite
     /// and chalk only, 3 with pastel and the non-pastel coverage (`sticks`),
-    /// 4 with separate retained and removable reflectances (`optics`).
+    /// 4 with separate retained and removable reflectances (`optics`), 5
+    /// that with charcoal's carbon shares (`carbon`).
     pub(crate) fn layout(&self) -> u64 {
-        if self.optics { 4 } else if self.sticks { 3 } else { 1 }
+        if self.optics && self.carbon { 5 } else if self.optics { 4 } else if self.sticks { 3 } else { 1 }
+    }
+
+    /// Whether the drawing has optics (layout 4 or 5).
+    pub(crate) fn optics(&self) -> bool {
+        self.optics
     }
 
     /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
     /// stick pastel, layout 3: a, r, g, b, lift, floor, film, loose, bound,
     /// non_pastel and non_pastel_floor; layout 4 adds fixed and removable
-    /// graphite's gray means, bound pastel's RGB mean and the underlying RGB),
+    /// graphite's gray means, bound pastel's RGB mean and the underlying RGB;
+    /// layout 5 then the loose and bound carbon shares),
     /// the guide (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
         let sticks = self.sticks || self.optics;
         let optics = self.optics;
+        let carbon = self.optics && self.carbon;
         let cells = self.cells.iter().flat_map(move |c| {
             let q = if sticks { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound, c.non_pastel, c.non_pastel_floor] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
             let o = c.optics.unwrap_or_default();
-            q.into_iter().take(if sticks { 11 } else { 5 }).chain([o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]].into_iter().take(if optics { 8 } else { 0 }))
+            q.into_iter().take(if sticks { 11 } else { 5 }).chain([o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]].into_iter().take(if optics { 8 } else { 0 })).chain([c.carbon, c.carbon_bound].into_iter().take(if carbon { 2 } else { 0 }))
         });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
         cells.chain(self.guide.iter().copied()).chain(floor)
@@ -578,13 +651,15 @@ impl Drawing {
 
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
     /// pixels, `whole` canvas pixels, `layout` the serialized layout (1, 2
-    /// through 4; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
+    /// through 5; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
     /// Loose pastel may sit a rounding residue below zero (`LOOSE_RESIDUE_UM`):
     /// it is kept as written.
     pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
         let sticks = layout >= 2;
-        let cells: Vec<Cell> = if layout == 4 {
-            get(n * 19)?.as_chunks::<19>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }) }).collect()
+        let cells: Vec<Cell> = if layout == 5 {
+            get(n * 21)?.as_chunks::<21>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }), carbon: q[19], carbon_bound: q[20] }).collect()
+        } else if layout == 4 {
+            get(n * 19)?.as_chunks::<19>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }), ..Cell::default() }).collect()
         } else if layout == 3 {
             get(n * 11)?.as_chunks::<11>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], ..Cell::default() }).collect()
         } else if sticks {
@@ -597,10 +672,10 @@ impl Drawing {
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0)
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0 && ok(c.carbon) && ok(c.carbon_bound))
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
         let valid = valid && cells.iter().all(|c| c.optics.is_none_or(|o| ok(o.fixed) && ok(o.graphite) && o.bound.into_iter().all(ok) && o.under.into_iter().all(f32::is_finite) && c.non_pastel_floor <= c.non_pastel && c.non_pastel_floor <= c.floor && c.floor + c.non_pastel - c.non_pastel_floor <= c.a + 1e-5));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, optics: layout == 4 }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, carbon: layout == 5, optics: layout >= 4 }))
     }
 }
 
@@ -650,6 +725,21 @@ impl Canvas {
     /// Whether anything has been drawn on this canvas.
     pub fn has_drawing(&self) -> bool {
         self.drawing.is_some()
+    }
+
+    /// What the first-surface veil (`canvas::haze`, `k` of it) would add
+    /// over the bare carbon at window pixel `i`, per channel, to be taken
+    /// off again: charcoal open to the eye (drawn, not painted over, no
+    /// sheet on it) is a bed of particles, seen as its R∞ (`Cell::bare_carbon`).
+    /// None where there is none (all a painting without charcoal has).
+    pub(crate) fn unveiled(&self, i: usize, k: f32) -> Option<Rgb> {
+        let d = self.drawing.as_ref().filter(|d| d.carbon)?;
+        let c = &d.cells[i];
+        if c.film < 0.0 || self.film[i] > c.film + 1e-4 || self.sheet_over(i) {
+            return None;
+        }
+        let (share, r) = c.bare_carbon()?;
+        Some(r.map(|r| share * k * (1.0 - r)))
     }
 
     pub(crate) fn drawing_mut(&mut self) -> &mut Drawing {

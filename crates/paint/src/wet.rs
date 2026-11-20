@@ -571,7 +571,15 @@ impl Canvas {
                     let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);
                     let gloss_share = if cover > 0.0 { cover * crate::smoothstep(0.0, 0.1, v / cover) } else { 0.0 };
                     let g = crate::lerp(self.gloss[i], 1.0, gloss_share);
-                    crate::canvas::haze(self.look_px(i), g)
+                    let p = crate::canvas::haze(self.look_px(i), g);
+                    // bare charcoal has no veil (`unveiled`), where wet paint doesn't cover it
+                    match self.unveiled(i, crate::canvas::SURFACE_REFLECTANCE * (1.0 - g.clamp(0.0, 1.0))) {
+                        Some(u) => {
+                            let open = if v < 1e-5 { 1.0 } else { 1.0 - cover.clamp(0.0, 1.0) };
+                            [0, 1, 2].map(|q| p[q] - open * u[q])
+                        }
+                        None => p,
+                    }
                 })
                 .collect();
         }

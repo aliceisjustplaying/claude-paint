@@ -94,6 +94,15 @@ pub const DRAIN_MARK: &str = "--@ drain";
 /// with none of it. It names no engine of its own: it rides on engine 5
 /// and later (`box_for`).
 pub const PAPER_MARK: &str = "--@ paper";
+/// The charcoal switch, in the head of a session file: a painting whose log
+/// has it has `charcoal()`, vine and compressed charcoal sticks
+/// (draw_pencil.rs, paint's `charcoal`). A new painting has it; a log
+/// without it was painted before charcoal and replays as it was painted,
+/// with no `charcoal` global. Charcoal is a stick in the tooth, so
+/// `charcoal` comes with the paper-and-pastel switch's verbs
+/// (`PAPER_MARK`, `api::install_paper`): with the line and no paper there is
+/// none. The box carries it (`Palette::charcoal`).
+pub const CHARCOAL_MARK: &str = "--@ charcoal";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
 /// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
@@ -789,6 +798,9 @@ impl Session {
         }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.charcoal {
+            let _ = writeln!(s, "{CHARCOAL_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1570,6 +1582,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.brush_skim = true;
         b.rag_lift = true;
         b.drain = true;
+        b.charcoal = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1642,6 +1655,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.drain = drain;
     b.material = material;
+    b.charcoal = head(CHARCOAL_MARK);
     Ok(b)
 }
 
@@ -1839,7 +1853,7 @@ mod tests {
         for engine in [1, 3, 4, 5, paint::engine7::ENGINE, paint::PIGMENT_MIXER] {
             let log: String = head.iter().filter(|l| {
                 let l = l.trim();
-                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK)
+                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK && l != CHARCOAL_MARK)
             }).map(|l| format!("{l}\n")).chain([format!("{ENGINE_MARK} {engine}\n")]).collect();
             let tubes = box_for(Some(&log)).unwrap();
             assert_eq!(tubes.engine, engine);

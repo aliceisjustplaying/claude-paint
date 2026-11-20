@@ -814,7 +814,7 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            v @ (1 | 2 | 3 | 4) => {
+            v @ (1 | 2 | 3 | 4 | 5) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
                 let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
@@ -850,7 +850,7 @@ impl Canvas {
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
-        if c.drawing.as_ref().is_some_and(|d| (d.layout() == 4) != c.drawing_optics) {
+        if c.drawing.as_ref().is_some_and(|d| d.optics() != c.drawing_optics) {
             return Err(bad("checkpoint drawing optics do not match its layout"));
         }
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {

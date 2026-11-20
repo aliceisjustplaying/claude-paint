@@ -79,6 +79,12 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// pass's `behind=` does, and a rag wipes a faint mask as it wipes a full one, lifting by
 /// the mask's value: every new painting. A log without it replays as it was painted.
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
+/// Marks a painting whose tubes are their box's tube paint (`paint::Palette::tube_volume`):
+/// a tube whose engine-9 table is a measured Revigo paint tints with the pigment its own
+/// tube holds, and every film hides as much per micrometre as measured films of lead white
+/// (the Revigo films were a third of their applicator's 100 µm gap): every new painting. Only engine 9 has it
+/// (below, the line changes nothing). A log without it replays as it was painted.
+pub const TUBE_VOLUME_MARK: &str = "--@ tube-volume";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -774,6 +780,9 @@ impl Session {
         }
         if self.st.borrow().tubes.calls_agree {
             let _ = writeln!(s, "{CALLS_AGREE_MARK}");
+        }
+        if self.st.borrow().tubes.tube_volume {
+            let _ = writeln!(s, "{TUBE_VOLUME_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1546,7 +1555,8 @@ fn box_list() -> String {
 /// blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
-/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
+/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise their tubes as tube paint
+/// (`TUBE_VOLUME_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
 /// (`MATERIAL_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
@@ -1565,6 +1575,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
         b.calls_agree = true;
+        b.tube_volume = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1633,6 +1644,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.calls_agree = head(CALLS_AGREE_MARK);
+    b.tube_volume = head(TUBE_VOLUME_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
@@ -2325,7 +2337,11 @@ mod tests {
     /// CIE L* of every pixel before and after the pass, and the change in
     /// red minus blue (of 255).
     fn under_a_pass(drawing: &str, pass: &str) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
-        let mut s = Session::with_box(400, box_for(None).unwrap()).unwrap();
+        under_a_pass_in(box_for(None).unwrap(), drawing, pass)
+    }
+
+    fn under_a_pass_in(tubes: paint::Palette, drawing: &str, pass: &str) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let mut s = Session::with_box(400, tubes).unwrap();
         s.run("canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 0.2}}, um=120, apply=\"knife\"}}}").unwrap();
         s.run(drawing).unwrap();
         s.run("wait(30*24*60)").unwrap();
@@ -2356,7 +2372,12 @@ mod tests {
     fn a_glaze_tints_the_drawing_under_it_and_keeps_it_legible() {
         let drawing = "work(mask(function(x, y) return math.floor(x / 100) % 2 == 0 and 1 or 0 end), {hand=\"body\", pile=pile{{\"bone black\", 1}, {\"raw umber\", 1}}, coverage=3, fill=true, clip=true, angle=1.5708, seed=5})";
         let glaze = "work(everywhere(), {hand=\"glaze\", pile=pile{{\"lead white\", 0.8}, {\"yellow ochre\", 0.55}, {\"vermilion\", 0.12}, {\"bone black\", 0.1}, medium=0.92}, coverage=1, angle=0.05, seed=491})";
-        let (l0, l1, warm) = under_a_pass(drawing, glaze);
+        // (its bars were set on films as fitted to Revigo's 100 µm gap: with the tube-volume
+        // switch every film is 3.1× as thick optically, and this pile's lead white over the
+        // black bars keeps about 0.63 of their contrast; lead_white_film.md)
+        let mut tubes = box_for(None).unwrap();
+        tubes.tube_volume = false;
+        let (l0, l1, warm) = under_a_pass_in(tubes, drawing, glaze);
         let mean = |v: &[f32], ix: &[usize]| ix.iter().map(|&i| v[i]).sum::<f32>() / ix.len() as f32;
         let (dark, light) = (bars(true), bars(false));
         let kept = (mean(&l1, &light) - mean(&l1, &dark)) / (mean(&l0, &light) - mean(&l0, &dark));

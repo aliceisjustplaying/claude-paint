@@ -146,6 +146,15 @@ error that lists the piles on the palette, oldest first; nothing is scraped
 off to make room. (A painting whose log has no `--@ full-palette-refuses`
 line scrapes the oldest off instead.)
 
+A part of a tube is a part of its box's tube paint: pigment ground in as
+much oil as its colormen used, so a tube ground oily carries less pigment
+per part than a stiff one, and mixes accordingly. A paint film hides as
+much per micrometre as measured films of that paint do: tube lead white
+about 84% (contrast ratio) at 32 µm, 98% at 130 µm. (A painting whose
+log's head has no `--@ tube-volume` line mixes its tubes as measured
+paints of a fixed richness, and its films hide about a third as much per
+micrometre. Sources: notes/research/lead_white_film.md.)
+
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
 evaporates as the paint is laid, so it leaves a film that much thinner, of

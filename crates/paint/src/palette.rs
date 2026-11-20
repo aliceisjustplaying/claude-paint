@@ -820,6 +820,13 @@ pub struct Palette {
     /// The easel's calls agree with each other (the easel's session.rs
     /// `CALLS_AGREE_MARK`): new paintings.
     pub calls_agree: bool,
+    /// Engine 9's tubes as tube paint (an easel log's `--@ tube-volume`): a
+    /// tube whose table is a measured Revigo paint enters a mixture with the
+    /// pigment its own tube holds against that paint's (`tube_volume_weight`),
+    /// and every film's optical thickness is counted on the Revigo films'
+    /// own thickness, `mixer::REVIGO_FILM_UM`, not their applicator's
+    /// 100 µm gap (`tube_film_scale`): new paintings.
+    pub tube_volume: bool,
     /// Engine 9's material revision (`Canvas::with_material`; an easel log's
     /// `--@ material`): 1 only where a log's head names it, whose baked
     /// films keep curing from the top down and wrinkle; 0, for new paintings,
@@ -842,7 +849,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -863,7 +870,7 @@ impl Palette {
         }).unwrap_or_else(|| crate::mixer::encode_tube9(&t.color, t.hiding))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, lat, lat9, scat, pack, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, material: 0, calls_agree: false, tube_volume: false, lat, lat9, scat, pack, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -873,7 +880,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -975,7 +982,7 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, name: self.name, ..Palette::new(self.stock, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide, drawing_optics: self.drawing_optics, limbs_join_nearest: self.limbs_join_nearest, carried_paint: self.carried_paint, reload_finite: self.reload_finite, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, pastel_current_heap: self.pastel_current_heap, material: self.material, calls_agree: self.calls_agree, tube_volume: self.tube_volume, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -990,7 +997,7 @@ impl Palette {
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
             let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
-            let w = f * strength;
+            let w = f * strength * self.tube_volume_weight(i);
             for k in 0..crate::mixer::LATENT_SIZE {
                 lat[k] += tubes[i][k] * w;
             }
@@ -1006,7 +1013,26 @@ impl Palette {
         if self.engine >= crate::PIGMENT_MIXER && self.glaze_film {
             sct = crate::mixer::scattering9(&lat);
         }
+        if self.engine >= crate::PIGMENT_MIXER && self.tube_volume {
+            sct *= crate::mixer::tube_film_scale();
+        }
         (lat, sct, stf)
+    }
+
+    /// With the tube-volume switch (`tube_volume`), engine 9's weight on tube
+    /// `i`'s table per volume of the box's tube paint: a measured Revigo
+    /// table is that paint's, so it enters at the pigment volume this box's
+    /// tube holds (`tube_packing`'s oil share) over the Revigo paint's
+    /// (`mixer::revigo_oil`, the same pigment density). 1 for every other tube
+    /// and without the switch.
+    pub fn tube_volume_weight(&self, i: usize) -> f32 {
+        if !self.tube_volume || self.engine < crate::PIGMENT_MIXER {
+            return 1.0;
+        }
+        let t = &self.tubes[i];
+        let Some(w) = crate::mixer::revigo_oil(t.name) else { return 1.0 };
+        let revigo = 1.0 / (1.0 + w / (1.0 - w) * t.density / 0.93);
+        (1.0 - self.pack[i].2) / revigo
     }
 
     /// The pile mixed from these parts (tube index, fraction by volume;
@@ -1151,6 +1177,87 @@ mod tests {
     }
 
     use super::*;
+
+    /// With the tube-volume switch a measured tube enters a mixture with the pigment
+    /// its box's tube holds: the impressionist box's lead white and cobalt blue,
+    /// knifed at the tube volumes that hold the pigment of Revigo's weighed 08F
+    /// (89.9 g lead white paint, 10.4 g cobalt blue paint; Geldof et al. 2018), make
+    /// Revigo's mixture, and it is the measured tint over Revigo's white field
+    /// (55.2/3.5/−46.7, D65, specular excluded) to the engine-9 fit's own residual
+    /// there (ΔE76 7.7 with Revigo's densities). The box's cobalt tube is oilier than
+    /// Revigo's paint (0.55 of its weight, the French figure, against 0.51), so the
+    /// same tube volume carries less cobalt. Off, every weight is 1.
+    #[test]
+    fn tube_volume_box_tubes_mix_as_revigos_weighed_paints() {
+        let mut p = Palette::named_box("impressionist").unwrap();
+        p.engine = crate::PIGMENT_MIXER;
+        p.glaze_film = true;
+        assert!((0..p.tubes.len()).all(|i| p.tube_volume_weight(i) == 1.0));
+        p.tube_volume = true;
+        let at = |n: &str| p.tubes.iter().position(|t| t.name == n).unwrap();
+        let (lw, co) = (at("lead white"), at("cobalt blue"));
+        let pigment = |i: usize, grams: f32| grams * (1.0 - crate::mixer::revigo_oil(p.tubes[i].name).unwrap()) / p.tubes[i].density;
+        let tube = |i: usize, grams: f32| pigment(i, grams) / (1.0 - p.pack[i].2);
+        let revigo = |i: usize, grams: f32| {
+            let w = crate::mixer::revigo_oil(p.tubes[i].name).unwrap();
+            pigment(i, grams) * (1.0 + w / (1.0 - w) * p.tubes[i].density / 0.93)
+        };
+        let (a, b) = (tube(lw, 89.9), tube(co, 10.4));
+        let m = p.pile(vec![(lw, a / (a + b)), (co, b / (a + b))]);
+        let lat = m.pigment_latent;
+        let (white, cobalt) = (crate::mixer::tube(p.tubes[lw].name).unwrap(), crate::mixer::tube(p.tubes[co].name).unwrap());
+        let (kw, kc) = (white.iter().position(|&v| v == 1.0).unwrap(), cobalt.iter().position(|&v| v == 1.0).unwrap());
+        let ratio = (lat[kc] / lat[kw]) / (revigo(co, 10.4) / revigo(lw, 89.9));
+        assert!((ratio - 1.0).abs() < 1e-5, "cobalt to lead white in the latent against Revigo's: {ratio}");
+        assert!(p.tube_volume_weight(co) < 0.9, "{}", p.tube_volume_weight(co));
+        let lab = |c: crate::Rgb| {
+            let xyz = [0.4124 * c[0] + 0.3576 * c[1] + 0.1805 * c[2], 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], 0.0193 * c[0] + 0.1192 * c[1] + 0.9505 * c[2]];
+            let f = |t: f32| if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 };
+            let (x, y, z) = (f(xyz[0] / 0.9505), f(xyz[1]), f(xyz[2] / 1.089));
+            [116.0 * y - 16.0, 500.0 * (x - y), 200.0 * (y - z)]
+        };
+        let (got, measured) = (lab(m.color), [55.2f32, 3.5, -46.7]);
+        let de = (0..3).map(|k| (got[k] - measured[k]).powi(2)).sum::<f32>().sqrt();
+        assert!(de < 9.0, "08F: {got:?} against measured {measured:?}, dE76 {de}");
+    }
+
+    /// With the tube-volume switch lead white hides as measured films of it at their
+    /// gauged thickness: Bruce's white lead paint 5B (NBS Technologic Paper 306, 1926,
+    /// tables 2–3: 68.3% white lead, 30.6% oil by weight, its dry film's pigment volume
+    /// 0.243 with the oil at 0.95 of its fresh volume; contrast ratio by a Martens
+    /// photometer over a plate's black 0.053 and white 0.75, dry film by an Ames dial)
+    /// is the impressionist box's lead white with medium to that pigment volume: rms
+    /// within 0.05 over the 18 films (the fit that sets `mixer::REVIGO_FILM_UM`, 0.044;
+    /// the engine's curve is shallower, +0.05 on the thinnest films and −0.04 at
+    /// 70–110 µm, as engine 9's lead white S at 600–650 nm is half its S at 550), and at
+    /// Bruce's mean hiding thickness, 127 µm, where he measured 0.98, above 0.95. As
+    /// fitted to the applicator's 100 µm (the switch off), rms over 0.2 and below 0.85
+    /// at 127 µm.
+    #[test]
+    fn tube_volume_lead_white_hides_as_bruces_measured_films() {
+        const BRUCE: [(f32, f32); 18] = [(14.0, 0.494), (22.0, 0.559), (36.0, 0.782), (42.0, 0.822), (49.0, 0.868), (53.0, 0.886), (60.0, 0.908), (72.0, 0.942), (82.0, 0.947), (90.0, 0.967), (91.0, 0.967), (104.0, 0.965), (113.0, 0.971), (132.0, 0.985), (134.0, 0.985), (153.0, 0.986), (153.0, 0.986), (202.0, 0.992)];
+        let y = |c: crate::Rgb| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        let mut rms = [0.0f32; 2];
+        for on in [false, true] {
+            let mut p = Palette::named_box("impressionist").unwrap();
+            p.engine = crate::PIGMENT_MIXER;
+            p.glaze_film = true;
+            p.tube_volume = on;
+            let lw = p.tubes.iter().position(|t| t.name == "lead white").unwrap();
+            let bruce = (68.3 / 6.81) / (68.3 / 6.81 + 30.6 / 0.93 * 0.95);
+            let paint = p.pile(vec![(lw, 1.0)]).paint(1.0 - bruce / (1.0 - p.pack[lw].2));
+            let mut sum = 0.0;
+            for &(um, measured) in &BRUCE {
+                let coats = um / crate::COAT_UM;
+                let cr = y(paint.over([0.053; 3], coats)) / y(paint.over([0.75; 3], coats));
+                sum += (cr - measured).powi(2);
+            }
+            rms[on as usize] = (sum / BRUCE.len() as f32).sqrt();
+            let hiding = y(paint.over([0.053; 3], 127.0 / crate::COAT_UM)) / y(paint.over([0.75; 3], 127.0 / crate::COAT_UM));
+            assert!(if on { hiding > 0.95 } else { hiding < 0.85 }, "contrast ratio at Bruce's hiding thickness, 127 um (measured 0.98): {hiding}, switch {on}");
+        }
+        assert!(rms[1] < 0.05 && rms[0] > 0.2, "rms against Bruce's films: {} with the switch, {} without", rms[1], rms[0]);
+    }
 
     /// Each box's tubes hold their own oil: the default box's lead white is
     /// bladder paint (0.14 oil: packed at 10·0.86/14 of it, drained to 0.6

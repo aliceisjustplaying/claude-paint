@@ -281,7 +281,12 @@ print(n, h, type(rag))"#;
     #[test]
     fn a_faint_mask_wipe_lifts_by_its_value() {
         let lift = |scale: f32| {
-            let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();
+            // (on films as fitted to Revigo's 100 µm gap: with the tube-volume switch a
+            // bone black film is 3.1× as thick optically, and a quarter wipe's thinner film is
+            // still near-opaque, lifting 0.06 of a full one's; lead_white_film.md)
+            let mut tubes = crate::session::box_for(None).unwrap();
+            tubes.tube_volume = false;
+            let mut s = Session::with_box(W, tubes).unwrap();
             run(&mut s, CANVAS);
             let lum = |s: &Session| {
                 let c = s.canvas().unwrap();

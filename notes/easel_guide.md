@@ -144,7 +144,30 @@ hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles. A 17th is an
 error that lists the piles on the palette, oldest first; nothing is scraped
 off to make room. (A painting whose log has no `--@ full-palette-refuses`
-line scrapes the oldest off instead.)
+line scrapes the oldest off instead.) The earths (burnt sienna, red earth,
+raw sienna, yellow ochre, raw umber), the Mars colours (red, yellow) and
+viridian are in oil as measured paints of them are: thick, burnt sienna is
+a deep orange-brown, raw umber a near-black brown, red earth a deep brick
+red and Mars red a strong oxide red, and they tint with white as strongly
+as measured tints of them do. (A painting whose log's head has no
+`--@ oil-earths` line keeps their older oil colors: thick burnt sienna a
+paler mid red-brown, Mars red a pink. Sources:
+notes/research/dry_pigment_optics.md §8.6, §9, §10.)
+
+A part of a tube is a part of its box's tube paint: pigment ground in as
+much oil as its colormen used, so a tube ground oily carries less pigment
+per part than a stiff one, and mixes accordingly. A paint film hides as
+much per micrometre as measured films of that paint do: tube lead white
+about 84% (contrast ratio) at 32 µm, 98% at 130 µm. (A painting whose
+log's head has no `--@ tube-volume` line mixes its tubes as measured
+paints of a fixed richness, and its films hide about a third as much per
+micrometre. Sources: notes/research/lead_white_film.md.) The earths in
+oil hold their own tube's pigment too: an earth ground in much oil (burnt
+sienna and raw sienna hold about an eighth of their volume in pigment,
+yellow ochre about a third, lead white about half) tints more weakly per
+part than its pigment alone would. (A painting whose log's head has no
+`--@ earth-tints` line tints each earth as if its tube held as much pigment
+as lead white's. Sources: notes/research/dry_pigment_optics.md §11.)
 
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
@@ -628,7 +651,14 @@ feel(x, y)                     -- what a fingertip feels there
 - **Color.** A stick is its pigments as they look dry: absorption as in oil,
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for
-  vermilion and the chromes). Dry blacks are a little grayer than in oil.
+  vermilion and the chromes). Bone black and vine black sticks are
+  near-blacks, as dark as their powders (their grains return only what
+  their facets reflect); with white they make neutral greys.
+  The earths and the Mars colours are as their measured pigments are dry: a
+  pure burnt sienna stick is a deep orange-brown, raw umber a dark brown, red
+  earth a deep brick red, Mars red an oxide red, raw sienna, yellow ochre and
+  Mars yellow their ochres, and viridian a deep blue-green; with white they
+  make their tints (burnt sienna's a salmon).
 - **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
@@ -690,7 +720,16 @@ head says `--@ paper`); an older painting replays as it was painted, and
 has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 `tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
 fast it wears, what dry pigment looks like) are estimates, not
-measurements (notes/pastel.md).
+measurements (notes/pastel.md). A painting begun before the earths' dry
+colors came (its head has no `--@ dry-earths`) replays its burnt sienna,
+red earth, raw sienna, yellow ochre, raw umber, Mars red, Mars yellow and
+viridian sticks, and paper tones given in those tubes, as it was painted
+(pure burnt sienna a light salmon, Mars red a pink), and its bone black and
+vine black sticks as they were (bone black a dead black, vine black a mid
+grey); a new painting's take measured films (burnt sienna, raw sienna, raw
+umber, the Mars colours) or are fitted to measured powders (red earth,
+yellow ochre, viridian), and its blacks follow from their grains
+(notes/research/dry_pigment_optics.md §7–10).
 
 ## The rag
 

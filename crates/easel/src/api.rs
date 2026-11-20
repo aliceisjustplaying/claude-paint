@@ -3156,3 +3156,97 @@ mod reload_finite_tests {
         old.run("assert(b:fullness() ~= b:fullness(), 'an older log no longer reloads a NaN')").unwrap();
     }
 }
+
+// a new painting's tubes are their box's tube paint (session.rs TUBE_VOLUME_MARK); an
+// older log's as they were
+#[cfg(test)]
+mod tube_volume_tests {
+    use crate::session::{Session, TUBE_VOLUME_MARK, box_for};
+
+    const HEAD: &str = "--@ box impressionist\n--@ engine 9\n--@ glaze-film\n";
+
+    /// The mean luminance of the middle of a canvas whose ground is `under`, then a film of
+    /// lead white as thick as the Revigo films were (`paint::mixer::REVIGO_FILM_UM`) knifed
+    /// over it.
+    fn lead_white_over(tubes: paint::Palette, under: &str) -> f32 {
+        let mut s = Session::with_box(64, tubes).unwrap();
+        s.run(&format!(r#"canvas{{size=100, aspect=1, linen=15, seed=1, ground={{{{pile={{{{"{under}", 1}}}}, um=300, apply="knife"}}, {{pile={{{{"lead white", 1}}}}, um={}, apply="knife"}}}}}}"#, paint::mixer::REVIGO_FILM_UM)).unwrap();
+        let c = s.canvas().unwrap();
+        let (f, seen) = (c.window(), c.seen());
+        let px: Vec<f32> = (0..f.w * f.h).filter(|i| (300.0..700.0).contains(&((i % f.w) as f32 / f.scale)) && (300.0..700.0).contains(&((i / f.w) as f32 / f.scale))).map(|i| 0.2126 * seen[i][0] + 0.7152 * seen[i][1] + 0.0722 * seen[i][2]).collect();
+        px.iter().sum::<f32>() / px.len() as f32
+    }
+
+    /// A new painting writes the switch, and its lead white hides as Revigo's measured film
+    /// did at that film's own thickness (32 µm, from Bruce's gauged films: paint's
+    /// `tube_volume_lead_white_hides_as_bruces_measured_films`): over black against over
+    /// white, contrast ratio 0.850 (08A, Y, specular excluded; Geldof et al. 2018), where an
+    /// older log's film hides as 32 µm of a 100 µm one. A log without the line, and
+    /// any log below engine 9, mixes as before; a save keeps the switch.
+    #[test]
+    fn a_new_paintings_lead_white_hides_as_its_measured_film() {
+        assert!(box_for(None).unwrap().tube_volume);
+        let cobalt = |b: paint::Palette| {
+            let (w, c) = (b.tubes.iter().position(|t| t.name == "lead white").unwrap(), b.tubes.iter().position(|t| t.name == "cobalt blue").unwrap());
+            let m = b.pile(vec![(w, 0.93), (c, 0.07)]);
+            (m.color, m.scatter)
+        };
+        let engine8 = "--@ box impressionist\n--@ engine 8\n";
+        assert_eq!(cobalt(box_for(Some(&format!("{engine8}{TUBE_VOLUME_MARK}\n"))).unwrap()), cobalt(box_for(Some(engine8)).unwrap()));
+        let mut cr = [0.0f32; 2];
+        for enabled in [false, true] {
+            let head = format!("{HEAD}{}", if enabled { format!("{TUBE_VOLUME_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.tube_volume, enabled);
+            cr[enabled as usize] = lead_white_over(tubes.clone(), "bone black") / lead_white_over(tubes.clone(), "zinc white");
+            let mut s = Session::with_box(16, tubes).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();
+            let program = s.program("tints");
+            assert_eq!(program.lines().any(|l| l == TUBE_VOLUME_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().tube_volume, enabled);
+            let path = std::env::temp_dir().join(format!("easel-tube-volume-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.tube_volume, enabled);
+        }
+        assert!((cr[1] - 0.850).abs() < 0.04 && cr[0] < 0.7, "lead white 32 um over black: contrast ratio {} with the switch, {} without", cr[1], cr[0]);
+    }
+
+    /// A new painting writes `--@ earth-tints`, and with its oil earths a tint of burnt
+    /// sienna in lead white carries the pigment the tube holds (paint's
+    /// `earth_tints_tubes_carry_their_own_pigment`): 7% by volume is lighter than an older
+    /// log's by more than 8 L*. A log without the line, or without `--@ oil-earths`, or below
+    /// engine 9, mixes as before; a save keeps the switch.
+    #[test]
+    fn a_new_paintings_earths_tint_with_their_tubes_pigment() {
+        use crate::session::{EARTH_TINTS_MARK, OIL_EARTHS_MARK};
+        assert!(box_for(None).unwrap().earth_tints);
+        let tint = |b: paint::Palette| {
+            let (w, e) = (b.tubes.iter().position(|t| t.name == "lead white").unwrap(), b.tubes.iter().position(|t| t.name == "burnt sienna").unwrap());
+            b.pile(vec![(w, 0.93), (e, 0.07)]).color
+        };
+        for head in ["--@ box impressionist\n--@ engine 8\n--@ oil-earths\n", "--@ box impressionist\n--@ engine 9\n"] {
+            assert_eq!(tint(box_for(Some(&format!("{head}{EARTH_TINTS_MARK}\n"))).unwrap()), tint(box_for(Some(head)).unwrap()), "{head}");
+        }
+        let mut l = [0.0f32; 2];
+        for enabled in [false, true] {
+            let head = format!("{HEAD}{OIL_EARTHS_MARK}\n{}", if enabled { format!("{EARTH_TINTS_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.earth_tints, enabled);
+            let c = tint(tubes.clone());
+            l[enabled as usize] = 116.0 * (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]).cbrt() - 16.0;
+            let mut s = Session::with_box(16, tubes).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();
+            let program = s.program("earths");
+            assert_eq!(program.lines().any(|l| l == EARTH_TINTS_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().earth_tints, enabled);
+            let path = std::env::temp_dir().join(format!("easel-earth-tints-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.earth_tints, enabled);
+        }
+        assert!(l[1] > l[0] + 8.0, "7% burnt sienna in lead white: L* {} with the switch, {} without", l[1], l[0]);
+    }
+}

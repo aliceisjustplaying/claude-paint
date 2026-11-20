@@ -154,9 +154,30 @@ pub(crate) struct Cell {
     /// lies, packed): loose, and bound by fixative (`crate::pastel`).
     pub(crate) loose: f32,
     pub(crate) bound: f32,
+    /// The share of the loose and of the bound pastel (by volume) that is a
+    /// bare bed of carbon: charcoal (`crate::charcoal`), seen with no
+    /// first-surface veil (`Cell::bare_carbon`). 0 for pastel.
+    pub(crate) carbon: f32,
+    pub(crate) carbon_bound: f32,
     pub(crate) non_pastel: f32,
     pub(crate) non_pastel_floor: f32,
     pub(crate) optics: Option<Optics>,
+    /// Water in the pastel's pores and standing on the paper here, µm
+    /// (`crate::wet_pastel`; only with drawing optics): while it lasts it
+    /// darkens the pastel, and as it dries the gum binds part of it.
+    pub(crate) water: f32,
+    /// The pastel's mean refractive index (`crate::wet_pastel::to_index`:
+    /// 0 not recorded), by volume: how much water in its pores darkens it.
+    pub(crate) index: u16,
+    /// The share of its sticks' gum the pastel here still holds once it
+    /// has been wet (`crate::wet_pastel::to_gum`: 0 never wet).
+    pub(crate) gum: u16,
+    /// The loose pastel's Kubelka–Munk scattering per µm of it as it lies,
+    /// gray, µm⁻¹ (the volume-weighted mean of what was laid: its sticks'
+    /// `Stick::scatter`), with the pastel K–M switch (`Canvas::
+    /// with_pastel_km_mix`): what mixes it with more by Kubelka–Munk
+    /// (`add_grains`). 0 not recorded.
+    pub(crate) s: f32,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -190,28 +211,157 @@ impl Cell {
         let base = (1.0 - b) * (1.0 - l);
         let total = self.non_pastel * base + b * (1.0 - l) + l;
         if total <= 0.0 { return [0.0; 3] }
-        [0, 1, 2].map(|k| ((optics.fixed * self.non_pastel_floor + optics.graphite * g) * base + optics.bound[k] * b * (1.0 - l) + self.r[k] * l) / total)
+        // (water in the pores darkens the pastel while it lasts, and the gum
+        // it left once dry, a little: wet_pastel.rs)
+        let (r, bound) = if self.water > 0.0 || self.gum > 0 {
+            (crate::wet_pastel::look(self, self.r), crate::wet_pastel::look(self, optics.bound))
+        } else {
+            (self.r, optics.bound)
+        };
+        [0, 1, 2].map(|k| ((optics.fixed * self.non_pastel_floor + optics.graphite * g) * base + bound[k] * b * (1.0 - l) + r[k] * l) / total)
     }
 
+    /// The water here has dried (`crate::wet_pastel`): the gum it held
+    /// in solution sets again at the particles' contacts, binding the share
+    /// `held` of the pastel here (`wet_pastel::binds`: all of it where the
+    /// gum it kept holds against a finger, none where it doesn't); what is
+    /// bound already (by fixative, or by the gum of an earlier wetting)
+    /// stays bound. Its coverage in that share raises the floor the eraser
+    /// stops at. Only with drawing optics.
+    pub(crate) fn gum_set(&mut self, held: f32) {
+        self.water = 0.0;
+        if self.optics.is_none() || self.loose <= 0.0 {
+            return;
+        }
+        let v = self.loose + self.bound;
+        let b = (held.clamp(0.0, 1.0) * v - self.bound).clamp(0.0, self.loose);
+        if b <= 0.0 {
+            return;
+        }
+        let Some(mut optics) = self.optics else { return };
+        let share = b / self.loose;
+        optics.bound = [0, 1, 2].map(|k| (optics.bound[k] * self.bound + self.r[k] * b) / (self.bound + b));
+        // (the carbon bound with it is bound carbon, as fixing makes it)
+        if self.carbon > 0.0 || self.carbon_bound > 0.0 {
+            self.carbon_bound = (self.carbon_bound * self.bound + self.carbon * b) / (self.bound + b);
+        }
+        let base = self.floor + self.non_pastel - self.non_pastel_floor;
+        self.floor = (self.floor + (self.a - base).max(0.0) * share).min(self.a);
+        self.bound += b;
+        self.loose -= b;
+        self.optics = Some(optics);
+    }
+
+    /// The share of the pastel here, loose and bound, that is bare carbon
+    /// (charcoal), by volume: it brought no gum (`crate::wet_pastel`).
+    pub(crate) fn carbon_share(&self) -> f32 {
+        let v = self.loose + self.bound;
+        if v <= 0.0 || (self.carbon <= 0.0 && self.carbon_bound <= 0.0) {
+            return 0.0;
+        }
+        ((self.carbon * self.loose + self.carbon_bound * self.bound) / v).clamp(0.0, 1.0)
+    }
+
+    /// `added` µm of pastel of index `n` lands here (`crate::wet_pastel`),
+    /// a share `carbon` of it bare carbon: the cell's mean index follows by
+    /// volume, and once it has been wet, its gum share too (the new pastel
+    /// brings all of its own, its carbon none: vine charcoal has no binder).
+    /// Call before adding it to `loose`. Nothing for `n` 0 (no switch).
+    pub(crate) fn note_pastel(&mut self, added: f32, n: f32, carbon: f32) {
+        if n <= 0.0 || added <= 0.0 {
+            return;
+        }
+        let old = (self.loose + self.bound).max(0.0);
+        let w = old + added;
+        let n0 = crate::wet_pastel::from_index(self.index);
+        self.index = crate::wet_pastel::to_index((n0 * old + n * added) / w);
+        if self.gum > 0 {
+            let g = crate::wet_pastel::from_gum(self.gum);
+            self.gum = crate::wet_pastel::to_gum((g * old + added * (1.0 - carbon.clamp(0.0, 1.0))) / w);
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn add_pastel(&mut self, q: f32, color: Rgb, volume: f32) {
+        self.add_grains(q, color, volume, crate::pastel::Grains::PASTEL);
+    }
+
+    /// `add_pastel` of a deposit of grains `g`: the eraser takes it as
+    /// readily as `g.lift`, and a share `g.carbon` of it is bare carbon.
+    pub(crate) fn add_grains(&mut self, q: f32, color: Rgb, volume: f32, g: crate::pastel::Grains) {
         let a1 = (self.a + (1.0 - self.a) * q).min(0.995);
         let old = if self.optics.is_some() { self.loose } else { self.a * (1.0 - q) };
         let added = if self.optics.is_some() { volume } else { q };
         let w = old + added;
         if w > 0.0 || self.optics.is_none() {
             let w = if self.optics.is_some() { w } else { w.max(1e-6) };
-            self.r = [0, 1, 2].map(|k| ((old * self.r[k] + added * color[k]) / w).clamp(0.0, 1.0));
+            if g.s > 0.0 && self.optics.is_some() {
+                // with the pastel K–M switch: particles, not paint films
+                let s_old = if self.s > 0.0 { self.s } else { g.s };
+                self.r = if g.layer {
+                    layered(self.r, self.loose, color, volume, g.s)
+                } else {
+                    crate::dry::km_mix(self.r, old * s_old, color, added * g.s)
+                };
+                self.s = (old * s_old + added * g.s) / w;
+            } else {
+                self.r = [0, 1, 2].map(|k| ((old * self.r[k] + added * color[k]) / w).clamp(0.0, 1.0));
+            }
+            if self.carbon > 0.0 || g.carbon > 0.0 {
+                self.carbon = ((old * self.carbon + added * g.carbon) / w).clamp(0.0, 1.0);
+            }
         }
-        self.lift = (self.a * (1.0 - q) * self.lift + q * 0.55) / (self.a * (1.0 - q) + q).max(1e-6);
+        self.lift = (self.a * (1.0 - q) * self.lift + q * g.lift) / (self.a * (1.0 - q) + q).max(1e-6);
         self.a = a1;
     }
 
+    /// The bare carbon at this cell (charcoal, loose or fixed: a bed of
+    /// particles, `carbon`): the share of the pixel it covers and its
+    /// reflectance. The picture's first-surface veil (`canvas::haze`) isn't
+    /// over it: Mie's scattering of each opaque particle already holds its
+    /// facets' reflection, and the bed's R∞ is all it returns (charcoal.md
+    /// §2). None where there is none.
+    pub(crate) fn bare_carbon(&self) -> Option<(f32, Rgb)> {
+        if (self.carbon <= 0.0 && self.carbon_bound <= 0.0) || self.a <= 0.0 {
+            return None;
+        }
+        let Some(optics) = self.optics else { return Some((self.a * self.carbon, self.r)) };
+        let b = 1.0 - (-self.bound / crate::pastel::PARTICLE_UM).exp();
+        let l = 1.0 - (-self.loose / crate::pastel::PARTICLE_UM).exp();
+        let base = (1.0 - b) * (1.0 - l);
+        let total = self.non_pastel * base + b * (1.0 - l) + l;
+        let (wb, wl) = (b * (1.0 - l) * self.carbon_bound, l * self.carbon);
+        if total <= 0.0 || wb + wl <= 0.0 {
+            return None;
+        }
+        Some((self.a * (wb + wl) / total, [0, 1, 2].map(|k| (optics.bound[k] * wb + self.r[k] * wl) / (wb + wl))))
+    }
+
     pub(crate) fn bind(&mut self, wet: f32) {
+        self.bind_resin(wet, None);
+    }
+
+    /// `bind`, a light spray laying `resin_um` µm of resin: where the
+    /// loose layer is carbon (`carbon`), the resin wets the share of its
+    /// pores it fills (`crate::charcoal::wet_share`) and darkens it as
+    /// carbon's facets do against resin (`crate::charcoal::WET_KS`),
+    /// not by pastel's rule. Pastel keeps `wet` and its rule.
+    pub(crate) fn bind_resin(&mut self, wet: f32, resin_um: Option<f32>) {
         let Some(mut optics) = self.optics else { return };
         let g = (self.non_pastel - self.non_pastel_floor).max(0.0);
         let b = self.bound;
         let l = self.loose;
-        let dark = self.r.map(|r| {
+        let carbon = if resin_um.is_some() { self.carbon } else { 0.0 };
+        let wc = resin_um.map_or(0.0, |t| crate::charcoal::wet_share(t, l));
+        let dark: Rgb = std::array::from_fn(|k| {
+            let r = self.r[k];
+            if carbon > 0.0 {
+                // pastel's share by its rule, carbon's by its own (K/S scales)
+                let r = r.clamp(1e-4, 0.9999);
+                let f = (1.0 - carbon) / (1.0 - wet + wet / 5.0) + carbon * (1.0 - wc + wc * crate::charcoal::WET_KS[k]);
+                let ks = (1.0 - r).powi(2) / (2.0 * r) * f;
+                return 1.0 + ks - (ks * ks + 2.0 * ks).sqrt();
+            }
             if wet == 0.0 { return r }
             let r = r.clamp(1e-4, 0.9999);
             let ks = (1.0 - r).powi(2) / (2.0 * r) / (1.0 - wet + wet / 5.0);
@@ -225,6 +375,9 @@ impl Cell {
                 optics.bound[k] = (optics.bound[k] * b + dark[k] * l) / (b + l);
             }
         }
+        if b + l > 0.0 && (self.carbon > 0.0 || self.carbon_bound > 0.0) {
+            self.carbon_bound = (self.carbon_bound * b + self.carbon * l) / (b + l);
+        }
         self.optics = Some(optics);
         self.floor = self.a;
         self.non_pastel_floor = self.non_pastel;
@@ -237,10 +390,33 @@ impl Cell {
             let l = self.loose;
             if l + freed > 0.0 {
                 self.r = [0, 1, 2].map(|k| (self.r[k] * l + optics.bound[k] * freed) / (l + freed));
+                if self.carbon > 0.0 || self.carbon_bound > 0.0 {
+                    self.carbon = (self.carbon * l + self.carbon_bound * freed) / (l + freed);
+                }
             }
         }
         self.floor = floor;
     }
+}
+
+/// The loose layer's color once `added` µm (as it lies) of particles of R∞
+/// `color` and scattering `s` (per µm as it lies) land on top of `loose` µm
+/// of loose pastel of color `under` (the pastel K–M switch's stroke,
+/// `Grains::layer`). The tooth's layers cover by area as `Cell::reflectance`
+/// counts them, 1 − e^(−v/`PARTICLE_UM`): where the new particles fall on the
+/// loose pastel they lie over it as a layer (Kubelka's two-layer formula,
+/// `dry::km_layer`, of their thickness where they cover); where they fall
+/// beside it, they lie side by side with it (an area mix).
+fn layered(under: Rgb, loose: f32, color: Rgb, added: f32, s: f32) -> Rgb {
+    let p = crate::pastel::PARTICLE_UM;
+    let l = 1.0 - (-loose.max(0.0) / p).exp();
+    let q = 1.0 - (-added.max(0.0) / p).exp();
+    let both = 1.0 - (1.0 - l) * (1.0 - q);
+    if !(both > 0.0) || !(q > 0.0) {
+        return under;
+    }
+    let over = crate::dry::km_layer(color, s * added / q, under);
+    [0, 1, 2].map(|k| ((l * (1.0 - q) * under[k] + l * q * over[k] + (1.0 - l) * q * color[k]) / both).clamp(0.0, 1.0))
 }
 
 /// The loose drawing on a canvas: what was laid where, so it can be lifted,
@@ -261,7 +437,16 @@ pub struct Drawing {
     /// finger has moved some): the cells are then serialized with their
     /// color and the pastel in the tooth (`to_f32s`).
     pub(crate) sticks: bool,
+    /// Whether charcoal has landed in the tooth (with `optics`): the cells
+    /// then carry their carbon shares (`Cell::carbon`, layout 5).
+    pub(crate) carbon: bool,
     optics: bool,
+    /// Whether any cell holds water (`crate::wet_pastel`): a `wait` dries
+    /// the drawing only then. Not written: read back from the cells.
+    pub(crate) damp: bool,
+    /// The water the sheet has taken in under each cell, µm (empty until
+    /// water first sinks into it: `crate::wet_pastel`).
+    pub(crate) sheet: Vec<f32>,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -450,6 +635,45 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
 /// point in proportion to the mask's value there, so a hatched passage
 /// fades into the next instead of stopping at a line.
 pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64) -> Vec<Mark> {
+    hatch_marks_swung(m, angle, spacing, length, pressure, graded, seed, None)
+}
+
+/// The hand that swings a mark: each stroke an arc about the wrist, or
+/// about the elbow when it sweeps further than the wrist turns, its middle
+/// bulging away from the pivot (`area_strokes`, with `p:hatch`'s
+/// `--@ pastel-area-strokes`). Lengths in units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pivot {
+    /// The wrist's radius: the hand's length.
+    pub wrist: f32,
+    /// How far the wrist sweeps the tip: its radius times its turn.
+    pub reach: f32,
+    /// The elbow's radius: forearm and hand.
+    pub elbow: f32,
+    /// The way to the pivot from the tip (a unit vector).
+    pub toward: (f32, f32),
+}
+
+impl Pivot {
+    /// The bow of a mark of length `len` along the unit direction `dir`:
+    /// its middle's offset from the chord along the normal (-dir.1, dir.0).
+    /// The share the wrist swings is the chord's part along the circle about
+    /// the pivot, `len·|c|` where c is the normal's cosine to the radius; a
+    /// sweep `len·|c|` on a radius R sags (len·c)²/(8R) along the radius,
+    /// |c| of it across the chord, away from the pivot: -c³·len²/(8R). A mark
+    /// along the radius (made by the fingers and arm, not the wrist's turn)
+    /// is straight.
+    pub fn bow(&self, dir: (f32, f32), len: f32) -> f32 {
+        let c = -dir.1 * self.toward.0 + dir.0 * self.toward.1;
+        let r = if len * c.abs() <= self.reach { self.wrist } else { self.elbow };
+        -c * c * c * len * len / (8.0 * r.max(1e-6))
+    }
+}
+
+/// `hatch_marks_graded`, each mark bowed by `pivot`'s swing instead of a
+/// random bow (the same draws placing the marks).
+#[allow(clippy::too_many_arguments)]
+pub fn hatch_marks_swung(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64, pivot: Option<&Pivot>) -> Vec<Mark> {
     let level = if graded { 0.04 } else { 0.5 };
     let f = m.f;
     let (w, h) = (f.width(), f.height());
@@ -517,6 +741,10 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
                     continue;
                 }
                 let bow = rng.range(-0.06, 0.06) * (sb - sa_);
+                let bow = match pivot {
+                    Some(pv) => pv.bow((ca, sa), sb - sa_),
+                    None => bow,
+                };
                 let k = ((sb - sa_) / 0.25).ceil() as usize + 1;
                 let pts: Vec<(f32, f32)> = (0..k)
                     .map(|i| {
@@ -548,29 +776,103 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
 }
 
 impl Drawing {
+    /// Every cell (with its carbon shares and wet pastel water, index and
+    /// gum), the guide and the sheet's water, bit for bit (a canvas put away packed keeps
+    /// its drawing on disk with it: checkpoint.rs `Aside::spill`), unlike the
+    /// checkpoint's layouts, which keep only what their reader needs.
+    pub(crate) fn spill(&self, w: &mut impl std::io::Write) -> std::io::Result<()> {
+        let mut b = Vec::with_capacity(1 << 16);
+        let put = |b: &mut Vec<u8>, v: f32| b.extend_from_slice(&v.to_bits().to_le_bytes());
+        b.extend_from_slice(&(self.cells.len() as u64).to_le_bytes());
+        b.extend_from_slice(&[self.sticks as u8, self.optics as u8, self.carbon as u8, self.damp as u8]);
+        for c in &self.cells {
+            for v in [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound, c.non_pastel, c.non_pastel_floor, c.carbon, c.carbon_bound, c.water] {
+                put(&mut b, v);
+            }
+            // (the wet pastel switch's index and gum, two u16s in a word; the
+            // K–M switch's scattering)
+            b.extend_from_slice(&(u32::from(c.index) | u32::from(c.gum) << 16).to_le_bytes());
+            put(&mut b, c.s);
+            b.push(c.optics.is_some() as u8);
+            if let Some(o) = c.optics {
+                for v in [o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]] {
+                    put(&mut b, v);
+                }
+            }
+            if b.len() >= 1 << 16 {
+                w.write_all(&b)?;
+                b.clear();
+            }
+        }
+        w.write_all(&b)?;
+        crate::checkpoint::spill_vec(w, Some(&self.guide))?;
+        crate::checkpoint::spill_vec(w, self.guide_floor.as_deref())?;
+        crate::checkpoint::spill_vec(w, Some(&self.sheet))
+    }
+
+    /// `spill` read back.
+    pub(crate) fn unspill(r: &mut impl std::io::Read) -> std::io::Result<Drawing> {
+        let mut u = [0u8; 8];
+        r.read_exact(&mut u)?;
+        let n = u64::from_le_bytes(u) as usize;
+        let mut flags = [0u8; 4];
+        r.read_exact(&mut flags)?;
+        let at = |b: &[u8], i: usize| f32::from_bits(u32::from_le_bytes([b[4 * i], b[4 * i + 1], b[4 * i + 2], b[4 * i + 3]]));
+        let mut cells = Vec::with_capacity(n);
+        let (mut q, mut o) = ([0u8; 65], [0u8; 32]);
+        for _ in 0..n {
+            r.read_exact(&mut q)?;
+            let optics = if q[64] == 1 {
+                r.read_exact(&mut o)?;
+                Some(Optics { fixed: at(&o, 0), graphite: at(&o, 1), bound: [at(&o, 2), at(&o, 3), at(&o, 4)], under: [at(&o, 5), at(&o, 6), at(&o, 7)] })
+            } else {
+                None
+            };
+            cells.push(Cell { a: at(&q, 0), r: [at(&q, 1), at(&q, 2), at(&q, 3)], lift: at(&q, 4), floor: at(&q, 5), film: at(&q, 6), loose: at(&q, 7), bound: at(&q, 8), non_pastel: at(&q, 9), non_pastel_floor: at(&q, 10), carbon: at(&q, 11), carbon_bound: at(&q, 12), water: at(&q, 13), index: u16::from_le_bytes([q[56], q[57]]), gum: u16::from_le_bytes([q[58], q[59]]), s: at(&q, 15), optics });
+        }
+        let guide = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its guide"))?;
+        let guide_floor = crate::checkpoint::unspill_vec(r)?;
+        let sheet = crate::checkpoint::unspill_vec(r)?.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "a spilled drawing without its sheet's water"))?;
+        Ok(Drawing { cells, guide, guide_floor, sticks: flags[0] == 1, optics: flags[1] == 1, carbon: flags[2] == 1, damp: flags[3] == 1, sheet })
+    }
+
+    /// The bytes its buffers hold (what a canvas put aside keeps of it in
+    /// memory: checkpoint.rs `Aside::heap_bytes`).
+    pub(crate) fn heap_bytes(&self) -> usize {
+        self.cells.capacity() * std::mem::size_of::<Cell>() + self.guide.capacity() * 4 + self.guide_floor.as_ref().map_or(0, |g| g.capacity() * 4) + self.sheet.capacity() * 4
+    }
+
     fn new(n: usize, whole: usize, optics: bool) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, optics }
+        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, carbon: false, optics, damp: false, sheet: Vec::new() }
     }
 
     /// The serialized layout (the checkpoint's drawing flag): 1 graphite
     /// and chalk only, 3 with pastel and the non-pastel coverage (`sticks`),
-    /// 4 with separate retained and removable reflectances (`optics`).
+    /// 4 with separate retained and removable reflectances (`optics`), 5
+    /// that with charcoal's carbon shares (`carbon`).
     pub(crate) fn layout(&self) -> u64 {
-        if self.optics { 4 } else if self.sticks { 3 } else { 1 }
+        if self.optics && self.carbon { 5 } else if self.optics { 4 } else if self.sticks { 3 } else { 1 }
+    }
+
+    /// Whether the drawing has optics (layout 4 or 5).
+    pub(crate) fn optics(&self) -> bool {
+        self.optics
     }
 
     /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
     /// stick pastel, layout 3: a, r, g, b, lift, floor, film, loose, bound,
     /// non_pastel and non_pastel_floor; layout 4 adds fixed and removable
-    /// graphite's gray means, bound pastel's RGB mean and the underlying RGB),
+    /// graphite's gray means, bound pastel's RGB mean and the underlying RGB;
+    /// layout 5 then the loose and bound carbon shares),
     /// the guide (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
         let sticks = self.sticks || self.optics;
         let optics = self.optics;
+        let carbon = self.optics && self.carbon;
         let cells = self.cells.iter().flat_map(move |c| {
             let q = if sticks { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound, c.non_pastel, c.non_pastel_floor] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
             let o = c.optics.unwrap_or_default();
-            q.into_iter().take(if sticks { 11 } else { 5 }).chain([o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]].into_iter().take(if optics { 8 } else { 0 }))
+            q.into_iter().take(if sticks { 11 } else { 5 }).chain([o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]].into_iter().take(if optics { 8 } else { 0 })).chain([c.carbon, c.carbon_bound].into_iter().take(if carbon { 2 } else { 0 }))
         });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
         cells.chain(self.guide.iter().copied()).chain(floor)
@@ -578,13 +880,15 @@ impl Drawing {
 
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
     /// pixels, `whole` canvas pixels, `layout` the serialized layout (1, 2
-    /// through 4; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
+    /// through 5; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
     /// Loose pastel may sit a rounding residue below zero (`LOOSE_RESIDUE_UM`):
     /// it is kept as written.
     pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
         let sticks = layout >= 2;
-        let cells: Vec<Cell> = if layout == 4 {
-            get(n * 19)?.as_chunks::<19>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }) }).collect()
+        let cells: Vec<Cell> = if layout == 5 {
+            get(n * 21)?.as_chunks::<21>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }), carbon: q[19], carbon_bound: q[20], water: 0.0, index: 0, gum: 0, s: 0.0 }).collect()
+        } else if layout == 4 {
+            get(n * 19)?.as_chunks::<19>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }), water: 0.0, index: 0, gum: 0, ..Cell::default()}).collect()
         } else if layout == 3 {
             get(n * 11)?.as_chunks::<11>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], ..Cell::default() }).collect()
         } else if sticks {
@@ -597,10 +901,10 @@ impl Drawing {
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0)
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0 && ok(c.carbon) && ok(c.carbon_bound))
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
         let valid = valid && cells.iter().all(|c| c.optics.is_none_or(|o| ok(o.fixed) && ok(o.graphite) && o.bound.into_iter().all(ok) && o.under.into_iter().all(f32::is_finite) && c.non_pastel_floor <= c.non_pastel && c.non_pastel_floor <= c.floor && c.floor + c.non_pastel - c.non_pastel_floor <= c.a + 1e-5));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, optics: layout == 4 }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, carbon: layout == 5, optics: layout >= 4, damp: false, sheet: Vec::new() }))
     }
 }
 
@@ -650,6 +954,21 @@ impl Canvas {
     /// Whether anything has been drawn on this canvas.
     pub fn has_drawing(&self) -> bool {
         self.drawing.is_some()
+    }
+
+    /// What the first-surface veil (`canvas::haze`, `k` of it) would add
+    /// over the bare carbon at window pixel `i`, per channel, to be taken
+    /// off again: charcoal open to the eye (drawn, not painted over, no
+    /// sheet on it) is a bed of particles, seen as its R∞ (`Cell::bare_carbon`).
+    /// None where there is none (all a painting without charcoal has).
+    pub(crate) fn unveiled(&self, i: usize, k: f32) -> Option<Rgb> {
+        let d = self.drawing.as_ref().filter(|d| d.carbon)?;
+        let c = &d.cells[i];
+        if c.film < 0.0 || self.film[i] > c.film + 1e-4 || self.sheet_over(i) {
+            return None;
+        }
+        let (share, r) = c.bare_carbon()?;
+        Some(r.map(|r| share * k * (1.0 - r)))
     }
 
     pub(crate) fn drawing_mut(&mut self) -> &mut Drawing {
@@ -1077,5 +1396,105 @@ mod tests {
         c.loose += c.bound;
         c.bound = 0.0;
         assert!(c.r[0] > c.r[1]);
+    }
+
+    /// With the pastel K–M switch two pastels mixed intimately in the tooth
+    /// mix as powders do: K and S add by volume. A yellow pastel (0.75,
+    /// 0.6, 0.1) whose particles scatter as chalk filler in air (S = 0.75 ×
+    /// 0.73 µm⁻¹: dry_pigment_optics.md table 2.2) with a share of vine
+    /// charcoal (`dry::VINE_CHARCOAL`) comes out as charcoal.md §6 tabulates
+    /// by Kubelka–Munk, not as the average of their reflectances: at 5 %
+    /// charcoal G 0.549, where the average is 0.571 (estimates-audit-2,
+    /// fault 1). Dark grains darken a powder well past their share (Clark
+    /// 1983): the KM loss from the yellow is more than 1.5× the average's in
+    /// red and green (1.7–3.1× over 2–10 % in the table), and about none in
+    /// blue, where the yellow already absorbs.
+    #[test]
+    fn pastel_mixed_in_the_tooth_darkens_as_powders_do() {
+        use crate::pastel::Grains;
+        let yellow = [0.75f32, 0.6, 0.1];
+        let s_y = 0.75 * 0.73;
+        let vine = crate::dry::VINE_CHARCOAL;
+        let (r_c, s_c) = (vine.color(0.0), crate::charcoal::bed_scatter(&vine));
+        // (charcoal.md §6: the Kubelka–Munk column, and the engine's average
+        // at 5 %; the table takes carbon's S per channel, the cell its gray
+        // mean, 2 % off in red and blue)
+        for (c, want) in [(0.02f32, [0.704f32, 0.578, 0.100]), (0.05, [0.649, 0.549, 0.099]), (0.10, [0.578, 0.504, 0.098])] {
+            let mut cell = Cell { optics: Some(Optics::default()), film: 0.0, ..Cell::default() };
+            cell.add_grains(0.9, yellow, 1.0 - c, Grains { s: s_y, ..Grains::PASTEL });
+            cell.loose += 1.0 - c;
+            cell.add_grains(0.5, r_c, c, Grains { s: s_c, carbon: 1.0, ..Grains::PASTEL });
+            for q in 0..3 {
+                assert!((cell.r[q] - want[q]).abs() < 2.5e-3, "{c}: {:?} against {want:?}", cell.r);
+            }
+            assert!((cell.s - ((1.0 - c) * s_y + c * s_c)).abs() < 1e-6, "S by volume");
+            let mut avg = Cell { optics: Some(Optics::default()), film: 0.0, ..Cell::default() };
+            avg.add_grains(0.9, yellow, 1.0 - c, Grains::PASTEL);
+            avg.loose += 1.0 - c;
+            avg.add_grains(0.5, r_c, c, Grains { carbon: 1.0, ..Grains::PASTEL });
+            if c == 0.05 {
+                assert!((avg.r[1] - 0.571).abs() < 1e-3, "{:?}", avg.r);
+            }
+            for q in 0..2 {
+                let (km, lin) = (yellow[q] - cell.r[q], yellow[q] - avg.r[q]);
+                assert!(km > 1.5 * lin, "{c} {q}: {km} against {lin}");
+            }
+            assert!((cell.r[2] - yellow[2]).abs() < 0.003, "blue barely moves: {:?}", cell.r);
+        }
+    }
+
+    /// Kubelka's layer over a ground, as `Cell::add_grains` lays a stroke
+    /// over loose pastel: it agrees with Kubelka's closed form, R = [(R₂ −
+    /// R∞)/R∞ − R∞(R₂ − 1/R∞) e^{SX(1/R∞ − R∞)}] / [(R₂ − R∞) − (R₂ −
+    /// 1/R∞) e^{SX(1/R∞ − R∞)}]; a layer that doesn't absorb returns [R₂ +
+    /// SX(1 − R₂)]/[1 + SX(1 − R₂)]; a thick layer its own R∞ and a thin one
+    /// the ground.
+    #[test]
+    fn a_layer_over_loose_pastel_is_kubelkas() {
+        let closed = |ri: f64, sx: f64, r2: f64| {
+            let e = (sx * (1.0 / ri - ri)).exp();
+            ((r2 - ri) / ri - ri * (r2 - 1.0 / ri) * e) / ((r2 - ri) - (r2 - 1.0 / ri) * e)
+        };
+        for (top, sx, under) in [(0.6f32, 0.5f32, 0.021f32), (0.6, 2.0, 0.021), (0.1, 1.0, 0.8), (0.3, 0.2, 0.5), (0.85, 3.0, 0.05)] {
+            let got = crate::dry::km_layer([top; 3], sx, [under; 3])[0];
+            let want = closed(top as f64, sx as f64, under as f64) as f32;
+            assert!((got - want).abs() < 2e-5, "{top} {sx} {under}: {got} against {want}");
+        }
+        for (sx, r2) in [(1.0f32, 0.0f32), (0.5, 0.3), (4.0, 0.1)] {
+            let got = crate::dry::km_layer([0.9999; 3], sx, [r2; 3])[0];
+            let want = (r2 + sx * (1.0 - r2)) / (1.0 + sx * (1.0 - r2));
+            assert!((got - want).abs() < 2e-3, "white {sx} {r2}: {got} against {want}");
+        }
+        assert!((crate::dry::km_layer([0.6; 3], 60.0, [0.02; 3])[0] - 0.6).abs() < 1e-5);
+        assert!((crate::dry::km_layer([0.6; 3], 1e-6, [0.02; 3])[0] - 0.02).abs() < 1e-5);
+    }
+
+    /// A stroke laid over loose charcoal lies over it (`Grains::layer`): it
+    /// keeps more of its own color than the same pastel mixed into the
+    /// charcoal (the finger's, crumbs'), and the more of it is laid the
+    /// nearer its own; where it falls beside the charcoal it is its own
+    /// color, an area mix.
+    #[test]
+    fn a_stroke_over_loose_charcoal_lies_over_it() {
+        use crate::pastel::Grains;
+        let yellow = [0.75f32, 0.6, 0.1];
+        let s_y = 0.75 * 0.73 * (1.0 - crate::wet_pastel::POROSITY);
+        let vine = crate::dry::VINE_CHARCOAL;
+        let s_c = crate::charcoal::bed_scatter(&vine) * crate::charcoal::VINE_SOLIDS * crate::charcoal::VINE_COVER_UM / crate::pastel::PARTICLE_UM;
+        let laid = |v: f32, layer: bool| {
+            let mut cell = Cell { optics: Some(Optics::default()), film: 0.0, ..Cell::default() };
+            cell.add_grains(0.5, vine.color(0.0), 6.0, Grains { s: s_c, carbon: 1.0, ..Grains::PASTEL });
+            cell.loose += 6.0;
+            cell.add_grains(0.5, yellow, v, Grains { s: s_y, layer, ..Grains::PASTEL });
+            cell.r[1]
+        };
+        for v in [2.0f32, 6.0, 18.0] {
+            assert!(laid(v, true) > laid(v, false) + 0.05, "{v}: layered {} mixed {}", laid(v, true), laid(v, false));
+        }
+        assert!(laid(2.0, true) < laid(6.0, true) && laid(6.0, true) < laid(18.0, true) && laid(18.0, true) < yellow[1]);
+        // (none loose to lie on: its own color)
+        let mut bare = Cell { optics: Some(Optics::default()), film: 0.0, ..Cell::default() };
+        bare.add_grains(0.5, yellow, 3.0, Grains { s: s_y, layer: true, ..Grains::PASTEL });
+        assert_eq!(bare.r, yellow);
     }
 }

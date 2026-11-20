@@ -365,7 +365,7 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) -> std::result::Result<
 }
 
 /// The pixels to a canvas unit a crop is shown at (the 2400 px canvas's own).
-const LOOK_SCALE: f32 = 2.4;
+pub(crate) const LOOK_SCALE: f32 = 2.4;
 
 /// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops fit 1200 px per side.
 pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usize), String> {

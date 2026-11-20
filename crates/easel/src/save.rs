@@ -10,7 +10,7 @@
 //! on the palette), the `canvas{}` setup and the style's relief (`relief()`
 //! reads it; the rest of the style is the box's oil style, which no finishing
 //! verb reads); and the chunk and call counters. The header also names the
-//! box and engine (and the drain switch, if on) and holds the log's FNV-1a hash and chunk count, so a save
+//! box and engine (and the drain and oils switches, if on) and holds the log's FNV-1a hash and chunk count, so a save
 //! is used only with the log it was written from.
 //!
 //! The header is plain `key=value` lines and holds no time or path: a replay
@@ -78,14 +78,50 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.pastel_current_heap {
         kv("pastel", "current-heap".to_string());
     }
+    if st.tubes.pastel_pencil_sharpen {
+        kv("pastel_pencil", "sharpen".to_string());
+    }
+    if st.tubes.grit {
+        kv("grit", "1".to_string());
+    }
     if st.tubes.calls_agree {
         kv("calls_agree", "1".to_string());
+    }
+    if st.tubes.dry_lakes {
+        kv("dry_lakes", "1".to_string());
+    }
+    if st.tubes.paper_presets {
+        kv("paper_presets", "1".to_string());
+    }
+    if st.tubes.pastel_area_strokes {
+        kv("area_strokes", "1".to_string());
     }
     if st.tubes.drain {
         kv("drain", "1".to_string());
     }
     if st.paper {
         kv("paper", "1".to_string());
+    }
+    if st.tubes.oils {
+        kv("oils", "1".to_string());
+    }
+    if st.tubes.charcoal {
+        kv("charcoal", "1".to_string());
+    }
+    if st.tubes.surfaces {
+        kv("surfaces", "1".to_string());
+    }
+    if st.tubes.plate {
+        kv("plate", "1".to_string());
+    }
+    if st.tubes.etch {
+        kv("etch", "1".to_string());
+    }
+    if st.tubes.damp_paper {
+        kv("damp_paper", "1".to_string());
+    }
+    if st.tubes.press {
+        kv("press", "1".to_string());
     }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
@@ -105,11 +141,21 @@ fn header(s: &Session, program: &str) -> String {
     h
 }
 
+/// The canvas with `header`, or, in a session that has named surfaces besides its painting
+/// (surfaces.rs), every surface in one multi-surface checkpoint with `header` as its own.
+fn write_canvases(_s: &Session, st: &crate::api::Studio, c: &paint::Canvas, header: &str, w: &mut impl Write) -> std::io::Result<()> {
+    if st.surfaces.named() {
+        crate::surfaces::write_all(st, header, w)
+    } else {
+        c.write_state(w, header)
+    }
+}
+
 #[cfg(feature = "state-store")]
 pub fn write_to(s: &Session, program: &str, writer: &mut impl Write) -> std::io::Result<bool> {
     let st = s.st.borrow();
     let Some(c) = st.canvas.as_ref() else { return Ok(false) };
-    c.write_state(writer, &header(s, program))?;
+    write_canvases(s, &st, c, &header(s, program), writer)?;
     Ok(true)
 }
 
@@ -143,7 +189,7 @@ pub fn write(s: &Session, program: &str, path: &std::path::Path) -> Result<bool,
     let (part, f) = opened.ok_or_else(|| format!("{}: couldn't create an exclusive save temporary file", path.display()))?;
     let result = (|| {
         let mut w = std::io::BufWriter::with_capacity(1 << 20, f);
-        c.write_state(&mut w, &header(s, program))?;
+        write_canvases(s, &st, c, &header(s, program), &mut w)?;
         w.flush()?;
         w.get_ref().sync_all()?;
         drop(w);
@@ -191,14 +237,25 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
 }
 
 pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Restored, String> {
-    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, PAPER_MARK};
+    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, OILS_MARK, PAPER_MARK};
     use std::rc::Rc;
     let mut r = std::io::BufReader::with_capacity(1 << 20, input);
-    let (canvas, head) = paint::Canvas::read_state(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut extra = [0];
-    if std::io::Read::read(&mut r, &mut extra).map_err(|e| format!("{}: {e}", path.display()))? != 0 {
-        return Err(format!("{}: trailing data after the canvas", path.display()));
-    }
+    // one canvas, or several surfaces (surfaces.rs: a session that named some)
+    let mut surfaces = None;
+    let (canvas, head) = if std::io::BufRead::fill_buf(&mut r).map(|b| paint::checkpoint::is_surfaces(b)).map_err(|e| format!("{}: {e}", path.display()))? {
+        let mut read = crate::surfaces::read_all(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
+        let canvas = read.canvas.take().ok_or_else(|| format!("{}: the save's current surface has no canvas", path.display()))?;
+        let head = read.header.clone();
+        surfaces = Some(read);
+        (canvas, head)
+    } else {
+        let (canvas, head) = paint::Canvas::read_state(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut extra = [0];
+        if std::io::Read::read(&mut r, &mut extra).map_err(|e| format!("{}: {e}", path.display()))? != 0 {
+            return Err(format!("{}: trailing data after the canvas", path.display()));
+        }
+        (canvas, head)
+    };
     let mut lines = head.lines();
     if lines.next() != Some(MAGIC) {
         return Err(format!("{}: not an easel save (its header doesn't start {MAGIC:?})", path.display()));
@@ -232,6 +289,17 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     if paper {
         logged.push_str(&format!("{PAPER_MARK}\n"));
     }
+    let oils = match h.get("oils") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's oils={v:?} isn't 1")),
+    };
+    if oils != canvas.oils() {
+        return Err(format!("{}: the save's header and its canvas disagree on the oils switch", path.display()));
+    }
+    if oils {
+        logged.push_str(&format!("{OILS_MARK}\n"));
+    }
     let mut tubes = crate::session::box_for(Some(&logged))?;
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
@@ -240,6 +308,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.liquid_film_levels = canvas.liquid_film_levels();
     tubes.sealed_drawing_guide = canvas.sealed_drawing_guide();
     tubes.drawing_optics = canvas.drawing_optics();
+    tubes.wet_pastel = canvas.wet_pastel();
     tubes.rag_lift = canvas.rag_lift();
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();
@@ -249,7 +318,45 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");
     tubes.reload_finite = h.get("reload") == Some(&"finite");
     tubes.pastel_current_heap = h.get("pastel") == Some(&"current-heap");
+    tubes.pastel_pencil_sharpen = h.get("pastel_pencil") == Some(&"sharpen");
+    tubes.grit = h.get("grit") == Some(&"1");
     tubes.calls_agree = h.get("calls_agree") == Some(&"1");
+    tubes.dry_lakes = h.get("dry_lakes") == Some(&"1");
+    tubes.paper_presets = h.get("paper_presets") == Some(&"1");
+    tubes.pastel_area_strokes = h.get("area_strokes") == Some(&"1");
+    tubes.charcoal = match h.get("charcoal") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's charcoal={v:?} isn't 1")),
+    };
+    tubes.surfaces = match h.get("surfaces") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's surfaces={v:?} isn't 1")),
+    };
+    tubes.plate = match h.get("plate") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's plate={v:?} isn't 1")),
+    };
+    tubes.etch = match h.get("etch") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's etch={v:?} isn't 1")),
+    };
+    tubes.damp_paper = match h.get("damp_paper") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's damp_paper={v:?} isn't 1")),
+    };
+    tubes.press = match h.get("press") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's press={v:?} isn't 1")),
+    };
+    if surfaces.is_some() && !(tubes.surfaces && paper) {
+        return Err(format!("{}: the save holds several surfaces, but its header has not the named-surfaces switch", path.display()));
+    }
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {
@@ -279,6 +386,10 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
             })
             .collect::<Result<_, _>>()?;
         st.canvas = Some(canvas);
+        // the surfaces besides the current one, and the current one's own fields
+        if let Some(read) = surfaces {
+            read.install(&mut st)?;
+        }
     }
     let chunks: usize = parse(&h, "chunks")?;
     s.chunks_before = chunks;

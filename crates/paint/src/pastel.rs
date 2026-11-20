@@ -156,6 +156,11 @@ impl Stick {
         Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color }
     }
 
+    /// Each facet's normal · `e` (`ray`'s `ne`).
+    fn facets_along(&self, e: [f32; 3]) -> Vec<f32> {
+        self.facets.iter().map(|f| f[0] * e[0] + f[1] * e[1] + f[2] * e[2]).collect()
+    }
+
     fn radius(&self) -> f32 {
         match self.section {
             Section::Round { d_mm } => 0.5 * d_mm,
@@ -166,8 +171,9 @@ impl Stick {
     /// The lowest point of the stick on the vertical line through `q0`
     /// (body coordinates of the line's foot) going along `e` (the world's
     /// up in body coordinates): the parameter t (mm up from the foot), or
-    /// None if the line misses it.
-    fn ray(&self, q0: [f32; 3], e: [f32; 3]) -> Option<f32> {
+    /// None if the line misses it. `ne` is each facet's normal · `e`, the
+    /// same for every line (`facets_along`).
+    fn ray(&self, q0: [f32; 3], e: [f32; 3], ne: &[f32]) -> Option<f32> {
         let (mut lo, mut hi) = (f32::NEG_INFINITY, f32::INFINITY);
         let mut half = |a: f32, b: f32| {
             // a·t ≤ b
@@ -181,8 +187,7 @@ impl Stick {
                 lo = lo.max(b / a);
             }
         };
-        for f in &self.facets {
-            let ne = f[0] * e[0] + f[1] * e[1] + f[2] * e[2];
+        for (f, &ne) in self.facets.iter().zip(ne) {
             let nq = f[0] * q0[0] + f[1] * q0[1] + f[2] * q0[2];
             half(ne, f[3] - nq);
         }
@@ -284,6 +289,10 @@ pub(crate) struct Seated {
     pub surf: Vec<(f32, f32, f32)>,
     pub delta: f32,
     pub nb: [f32; 3],
+    /// Each pixel's overlap left at its last solve, µm (`seat_fast`'s hint).
+    pub hints: Vec<f64>,
+    /// How far it sank past first touch, µm (the next step's start).
+    pub rise: f32,
 }
 
 /// What a stroke did.
@@ -360,12 +369,6 @@ fn bearing(o: f32, mu: f32) -> f32 {
     if o <= 0.0 { 0.0 } else { 1.0 - (-o / mu.max(1e-3)).exp() }
 }
 
-/// The overlap left in the micro-relief at a pixel once the surface has
-/// given (`seat`'s second value): above 0 the stick touches there.
-pub(crate) fn seat_overlap(o: f32, mu: f32, k: f32, hard: f32) -> f32 {
-    seat(o, mu, k, hard).1
-}
-
 /// A pixel where the stick overlaps the surface by `o` µm: the surface
 /// gives (a Winkler spring, `k` MPa/µm) by u while the stick yields on the
 /// micro-asperities it meets (pressure `hard` × the material ratio at the
@@ -390,7 +393,205 @@ fn seat(o: f32, mu: f32, k: f32, hard: f32) -> (f32, f32) {
     (k * u, o - u)
 }
 
+/// `seat`'s answer, the same bits, with a few exponentials instead of 18.
+///
+/// `seat` halves [0, min(o, hard/k)] 18 times, asking at each midpoint u
+/// whether k·u < hard·bearing(o − u) in f32. Exactly, that asks whether u
+/// lies below the root r of g(u) = k·u − hard·(1 − e^(−(o−u)/μ)), which
+/// rises (g′ = k + (hard/μ)·e^(−(o−u)/μ) > 0) and is convex. f32 rounding
+/// moves g by less than `E` (below), so it can flip the answer only within
+/// E/g′ of r. So: find r in f64 by Newton (from `hint`, the overlap left at
+/// this pixel's last solve, or from the top end), then halve exactly as
+/// `seat` does, asking f32 only at a midpoint that close to r. Anything
+/// outside the physical ranges (or a non-finite value) goes to `seat`.
+#[inline]
+fn seat_fast(o: f32, mu: f32, k: f32, hard: f32, hint: &mut f64) -> (f32, f32) {
+    if o <= 0.0 {
+        return (0.0, 0.0);
+    }
+    if !(o.is_finite() && k > 0.0 && k.is_finite() && hard > 0.0 && hard.is_finite() && mu.is_finite()) {
+        return seat(o, mu, k, hard);
+    }
+    let w = o.min(hard / k);
+    let (od, kd, hd, md) = (o as f64, k as f64, hard as f64, mu.max(1e-3) as f64);
+    let ga = hd / md;
+    // E bounds |f32's k·u − hard·bearing − g(u)| for u in [0, w]: k·u and
+    // the product hard·b round by 2⁻²⁴ of themselves; in b = 1 − e^(−x) the
+    // argument x (a difference and a division) by 2⁻²³ of x, which moves
+    // e^(−x) by at most x·e^(−x)·2⁻²³ ≤ 2⁻²⁴·⁴; expf by ≤ 1 ulp (glibc's:
+    // 0.502), ≤ 2⁻²⁴; 1 − e by ≤ 2⁻²⁵. In all ≤ 2⁻²⁴·k·w + 1.25·2⁻²²·hard;
+    // E is over six times that.
+    let big_e = (2f64).powi(-19) * (kd * w as f64 + hd) + 1e-30;
+    // Newton on g: from the right of r it falls to r without passing it
+    // (convex); from the left one step lands right of it (clamped to [0, o],
+    // where g(0) < 0 < g(o) = k·o). It stops once its step is well inside
+    // the band f32 may flip in (about E/g′): r needs no finer finding.
+    let mut u = if hint.is_finite() { (od - *hint).clamp(0.0, od) } else { w as f64 };
+    let (mut g, mut e, mut step);
+    let mut n = 0;
+    loop {
+        e = (-(od - u) / md).exp();
+        let gp = kd + ga * e;
+        g = kd * u - hd * (1.0 - e);
+        step = g / gp;
+        n += 1;
+        if !(step.abs() > 0.25 * big_e / gp && step.abs() > 1e-13 * od) || n == 30 {
+            break;
+        }
+        u = (u - step).clamp(0.0, od);
+    }
+    // where r is, from the last point: on its left, g′ ≥ g′(u) there; on its
+    // right, g′(r) ≥ k + (hard/μ)·e(u)·(1 − (u − r)/μ) (e falls by at most
+    // that over u − r), u − r ≤ g/k first
+    let (r_lo, r_hi) = if g >= 0.0 {
+        let s = kd + ga * e * (1.0 - g / kd / md).max(0.0);
+        (u - g / s, u)
+    } else {
+        (u, u - g / (kd + ga * e))
+    };
+    // (f64's own rounding in g, ~1e-16 of its terms, and in u)
+    let slack = 1e-12 * ((kd * od + hd) / kd + od);
+    let (r_lo, r_hi) = (r_lo - slack, r_hi + slack);
+    // the slope within D of r: ≥ k + (hard/μ)·e(r_lo)·(1 − D/μ), where
+    // e(r_lo) ≥ e(u)·(1 − (u − r_lo)/μ)
+    let e_lo = e * (1.0 - (u - r_lo).max(0.0) / md).max(0.0);
+    let d1 = big_e / (kd + ga * e_lo);
+    let d = if 2.0 * d1 / md <= 0.5 { big_e / (kd + ga * e_lo * (1.0 - 2.0 * d1 / md)) } else { big_e / kd };
+    let (zl, zh) = (r_lo - d, r_hi + d);
+    *hint = od - (u - step).clamp(0.0, od);
+    let (mut lo, mut hi) = (0.0f32, w);
+    for _ in 0..18 {
+        let m = 0.5 * (lo + hi);
+        let md32 = m as f64;
+        let below = if md32 < zl {
+            true
+        } else if md32 > zh {
+            false
+        } else {
+            k * m < hard * bearing(o - m, mu)
+        };
+        if below {
+            lo = m;
+        } else {
+            hi = m;
+        }
+    }
+    let m = 0.5 * (lo + hi);
+    (k * m, o - m)
+}
+
+/// `Canvas::seat_overlap`, by Newton (`newton`, the seat-solver switch) or
+/// with the bisection's bits.
+#[inline]
+fn overlap_left(newton: bool, o: f32, mu: f32, k: f32, hard: f32, hint: &mut f64) -> f32 {
+    if newton {
+        seat_newton(o as f64, mu, k, hard, hint).1 as f32
+    } else {
+        seat_fast(o, mu, k, hard, hint).1
+    }
+}
+
+/// The seat-solver switch's seat (`Canvas::with_seat_solver`): `seat`'s
+/// balance, its root found by Newton in f64 (g is convex and rising, so
+/// from the right Newton falls to the root without passing it, and from
+/// the left one step lands right of it) until a step is under 1e-7 of
+/// min(o, hard/k), finer than `seat`'s 18 halvings (2⁻¹⁹ of it). `hint` is
+/// the overlap left at this pixel's last solve. Returns (pressure MPa,
+/// overlap left µm, the pressure's rate with the overlap MPa/µm: the
+/// surface and the stick's yielding as springs in series).
+#[inline]
+fn seat_newton(o: f64, mu: f32, k: f32, hard: f32, hint: &mut f64) -> (f64, f64, f64) {
+    if !(o > 0.0) {
+        return (0.0, 0.0, 0.0);
+    }
+    if !(o.is_finite() && k > 0.0 && k.is_finite() && hard > 0.0 && hard.is_finite() && mu.is_finite()) {
+        let (p, left) = seat(o as f32, mu, k, hard);
+        return (p as f64, left as f64, 0.0);
+    }
+    let (kd, hd, md) = (k as f64, hard as f64, mu.max(1e-3) as f64);
+    let ga = hd / md;
+    let w = o.min(hd / kd);
+    let mut u = if hint.is_finite() { (o - *hint).clamp(0.0, o) } else { w };
+    let mut e = 0.0;
+    for _ in 0..60 {
+        e = (-(o - u) / md).exp();
+        let step = (kd * u - hd * (1.0 - e)) / (kd + ga * e);
+        u = (u - step).clamp(0.0, o);
+        if !(step.abs() > 1e-7 * w) {
+            break;
+        }
+    }
+    *hint = o - u;
+    (kd * u, o - u, kd * ga * e / (kd + ga * e))
+}
+
+/// The seat-solver switch's sink (`Canvas::seat_stick`): the δ at which the
+/// pixels' pressures (`seat_newton`, at overlaps gap + δ) times a pixel's
+/// area `a` carry `force`. The load rises with δ, its slope the pixels'
+/// series stiffnesses, so Newton from `rise` past first touch (or 50 µm),
+/// kept inside the bracket it has found (halving when a step leaves it,
+/// doubling outward until it has one), until the load is within 1e-6 of
+/// the force. As far down as the bisection reaches, first touch + 6400 µm;
+/// no force (or none at all), first touch.
+#[allow(clippy::too_many_arguments)]
+fn sink_newton(gaps: &[f32], surf: &[(f32, f32, f32)], hard: f32, a: f32, force: f32, first: f32, rise: Option<f32>, hints: &mut [f64]) -> f32 {
+    let (f, x0, a) = (force as f64, first as f64, a as f64);
+    if !(f > 0.0) || !x0.is_finite() {
+        return first;
+    }
+    let cap = x0 + 6400.0;
+    let mut load = |x: f64| -> (f64, f64) {
+        let (mut l, mut dl) = (0.0, 0.0);
+        for (j, &gap) in gaps.iter().enumerate() {
+            let o = gap as f64 + x;
+            if o > 0.0 {
+                let (_, mu, k) = surf[j];
+                let (p, _, dp) = seat_newton(o, mu, k, hard, &mut hints[j]);
+                l += p;
+                dl += dp;
+            }
+        }
+        (l * a, dl * a)
+    };
+    let (mut lo, mut hi) = (x0, f64::INFINITY);
+    let mut x = (x0 + rise.filter(|r| *r > 0.0 && r.is_finite()).map_or(50.0, |r| r as f64)).min(cap);
+    for _ in 0..100 {
+        let (l, dl) = load(x);
+        let r = l - f;
+        if r.abs() <= 1e-6 * f {
+            break;
+        }
+        if r < 0.0 {
+            lo = x;
+            if x >= cap {
+                break;
+            }
+        } else {
+            hi = x;
+        }
+        if hi - lo <= 1e-9 * (1.0 + x.abs()) {
+            break;
+        }
+        let newton = x - r / dl;
+        x = if newton > lo && newton < hi {
+            newton
+        } else if hi.is_finite() {
+            0.5 * (lo + hi)
+        } else {
+            (x0 + 2.0 * (x - x0).max(25.0)).min(cap)
+        };
+    }
+    x as f32
+}
+
 impl Canvas {
+    /// The overlap left in the micro-relief at a pixel once the surface has
+    /// given (`seat`'s second value, by this canvas's solver): above 0 the
+    /// stick touches there. `hint` is the pixel's from `Seated::hints`.
+    pub(crate) fn seat_overlap(&self, o: f32, mu: f32, k: f32, hard: f32, hint: &mut f64) -> f32 {
+        overlap_left(self.seat_solver, o, mu, k, hard, hint)
+    }
+
     /// Draw one stroke with `stick` along `pts` (resampled every pixel), the
     /// stick sinking into the tooth under each point's force, laying what
     /// it abrades and wearing. Returns what it laid and the hand time.
@@ -448,6 +649,23 @@ impl Canvas {
         let mut carried = 0.0f32;
         let mut last_bed: Vec<(usize, f32, bool)> = Vec::new();
         let mut last_sheet_bed: Vec<(usize, f32)> = Vec::new();
+        // (how far the last step sank past first touch: the next one's start)
+        let mut rise: Option<f32> = None;
+        // (the surface's give under the stroke, kept from step to step: the
+        // points' box widened by as far as the stick's low part reaches)
+        let mut gives = {
+            let f = self.f;
+            let sin_alt = pts.iter().map(|p| p.pose.alt.sin()).fold(1.0f32, f32::min);
+            let reach = if sin_alt < 1e-3 { stick.length_mm } else { (3.0 / sin_alt).min(stick.length_mm) };
+            let m = 1.5 * stick.radius() + reach + 2.0 * px;
+            let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+            for p in pts {
+                let (x, y) = (p.x * mmu, p.y * mmu);
+                (x0, y0, x1, y1) = (x0.min(x - m), y0.min(y - m), x1.max(x + m), y1.max(y + m));
+            }
+            let to = |v: f32, o: usize| ((v / px).floor() as isize - o as isize).max(0) as usize;
+            self.gives_over(to(x0, f.x0), to(y0, f.y0), to(x1, f.x0) + 1, to(y1, f.y0) + 1)
+        };
         let settle = 1.0 - (-ds / SETTLE_MM).exp();
         // the crumbs' sizes: a power law in area, P(A) ∝ A^(-3/2) (measured
         // over four decades), its upper cut-off larger for a softer stick
@@ -467,7 +685,8 @@ impl Canvas {
             if sp.pose.force <= 1e-4 {
                 continue;
             }
-            let Some(Seated { under, surf, delta, nb }) = self.seat_stick(stick, &sp) else { continue };
+            let Some(Seated { under, surf, delta, nb, mut hints, rise: r }) = self.seat_stick_near(stick, &sp, rise, &mut gives) else { continue };
+            rise = Some(r);
             // what it abrades where it touches, and lays there
             let ds_um = ds * 1000.0;
             self.drawing_mut();
@@ -477,6 +696,7 @@ impl Canvas {
             // where a sheet lies, what lands is the sheet's
             let onsheet: Vec<bool> = under.iter().map(|&(i, _)| self.sheet_over(i)).collect();
             let mut caught: Vec<(usize, f32)> = Vec::new();
+            let newton = self.seat_solver;
             let mut worn_um3 = 0.0f32;
             let mut wet_um3 = 0.0f32;
             {
@@ -487,7 +707,7 @@ impl Canvas {
                 for (j, &(i, b)) in under.iter().enumerate() {
                     let (hs, mu, k) = surf[j];
                     // the overlap left in the micro-relief once the surface has given
-                    let o = seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).1;
+                    let o = overlap_left(newton, hs - b * 1000.0 + delta, mu, k, stick.hardness, &mut hints[j]);
                     if o <= 0.0 {
                         continue;
                     }
@@ -614,6 +834,14 @@ impl Canvas {
     /// pore depth µm, give MPa/µm), how far it sank (µm) to carry the force,
     /// and its downward normal in its own frame. `None` off the canvas.
     pub(crate) fn seat_stick(&self, stick: &Stick, sp: &StrokePoint) -> Option<Seated> {
+        self.seat_stick_near(stick, sp, None, &mut None)
+    }
+
+    /// `seat_stick`, with the seat-solver switch starting its search from
+    /// `rise` (µm past first touch: the last step's `Seated::rise`). The
+    /// bisection ignores it. `gives` keeps the surface's give from step to
+    /// step (`Canvas::gives_over`).
+    pub(crate) fn seat_stick_near(&self, stick: &Stick, sp: &StrokePoint, rise: Option<f32>, gives: &mut Option<crate::canvas::Gives>) -> Option<Seated> {
         let f = self.f;
         let mmu = self.mm_per_unit;
         let px = self.px_mm();
@@ -643,6 +871,7 @@ impl Canvas {
         // the world's up, and the stick's downward normal, in its frame
         let e = [fr[0][2], fr[1][2], fr[2][2]];
         let nb = [-e[0], -e[1], -e[2]];
+        let ne = stick.facets_along(e);
         // the stick's underside over each pixel (mm above the tip's level)
         let mut under: Vec<(usize, f32)> = Vec::with_capacity((px1 - px0) * (py1 - py0));
         for py in py0..py1 {
@@ -650,7 +879,7 @@ impl Canvas {
             for pxx in px0..px1 {
                 let wx = (pxx + f.x0) as f32 * px + 0.5 * px - ox;
                 let q0 = [wx * fr[0][0] + wy * fr[0][1], wx * fr[1][0] + wy * fr[1][1], wx * fr[2][0] + wy * fr[2][1]];
-                if let Some(b) = stick.ray(q0, e) {
+                if let Some(b) = stick.ray(q0, e, &ne) {
                     under.push((py * f.w + pxx, b));
                 }
             }
@@ -660,18 +889,31 @@ impl Canvas {
         }
         // the surface it comes down on: µm, the pores' mean depth, and how
         // stiffly it gives
-        let surf: Vec<(f32, f32, f32)> = under.iter().map(|&(i, _)| self.surface_point(i)).collect();
+        let surf: Vec<(f32, f32, f32)> = under.iter().map(|&(i, _)| self.surface_point_memo(i, gives)).collect();
         // sink until the surface, giving, and the stick, yielding on what
         // it meets, carry the force between them
-        let load = |delta: f32| -> f32 {
+        // (each pixel's surface less the stick's underside, µm: the overlap
+        // at a sink δ is gap + δ; `seat_fast` gives `seat`'s bits, starting
+        // from the pixel's last root, and a pixel out of contact adds 0)
+        let gaps: Vec<f32> = under.iter().zip(&surf).map(|(&(_, b), &(hs, _, _))| hs - b * 1000.0).collect();
+        let mut hints = vec![f64::NAN; under.len()];
+        let first = under.iter().zip(&surf).map(|(&(_, b), &(hs, _, _))| b * 1000.0 - hs).fold(f32::MAX, f32::min);
+        if self.seat_solver {
+            let delta = sink_newton(&gaps, &surf, stick.hardness, a_px_mm2, sp.pose.force, first, rise, &mut hints);
+            return Some(Seated { under, surf, delta, nb, hints, rise: delta - first });
+        }
+        let mut load = |delta: f32| -> f32 {
             let mut p = 0.0;
-            for (j, &(_, b)) in under.iter().enumerate() {
-                let (hs, mu, k) = surf[j];
-                p += seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).0;
+            for (j, &gap) in gaps.iter().enumerate() {
+                let o = gap + delta;
+                // (NaN goes on to `seat`, as it did)
+                if !(o <= 0.0) {
+                    let (_, mu, k) = surf[j];
+                    p += seat_fast(o, mu, k, stick.hardness, &mut hints[j]).0;
+                }
             }
             p * a_px_mm2
         };
-        let first = under.iter().zip(&surf).map(|(&(_, b), &(hs, _, _))| b * 1000.0 - hs).fold(f32::MAX, f32::min);
         let (mut lo, mut hi) = (first, first + 50.0);
         while load(hi) < sp.pose.force && hi - first < 5000.0 {
             hi = first + 2.0 * (hi - first);
@@ -688,7 +930,7 @@ impl Canvas {
             }
         }
         let delta = 0.5 * (lo + hi);
-        Some(Seated { under, surf, delta, nb })
+        Some(Seated { under, surf, delta, nb, hints, rise: delta - first })
     }
 
     /// Fixative over `m` (coverage 0..1, or all): the loose
@@ -1393,6 +1635,175 @@ mod tests {
 
     fn pose(force: f32, alt_deg: f32) -> Pose {
         Pose { force, alt: alt_deg.to_radians(), az: 45f32.to_radians(), roll: 0.0 }
+    }
+
+    /// A sheet laid down on board gives a little more than one on a hard
+    /// drawing board, on canvas more, and on canvas over a strainer, in the
+    /// middle of the bay, most: the stick sinks further. Over the
+    /// strainer's bars the sheet is as firm as on canvas.
+    #[test]
+    fn a_stick_sinks_further_on_a_strainer_than_on_canvas_or_board() {
+        use crate::canvas::Crop;
+        use crate::paper::Mount;
+        let sink = |p: Paper, at: f32| {
+            // (a 300 mm sheet, only a few centimeters of it laid)
+            let crop = Crop { units: [at - 60.0, 440.0, at + 60.0, 560.0], margin: 0.0 };
+            let c = Canvas::new_window(800, 1.0, [0.55; 3], Some(crop)).with_size_mm(300.0).with_paper(p);
+            let sp = StrokePoint { x: at, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 };
+            c.seat_stick(&Stick::round([0.02; 3], 0.8, 12.0), &sp).unwrap().delta
+        };
+        let p = Paper::drawing(4);
+        let [free, board, canvas, strainer] = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::named("strainer").unwrap())].map(|q| sink(q, 500.0));
+        assert!(free < board && board < canvas && canvas < strainer, "sinks: free {free}, board {board}, canvas {canvas}, strainer {strainer}");
+        assert_eq!(sink(p.mounted(Mount::named("strainer").unwrap()), 70.0).to_bits(), sink(p.mounted(Mount::Canvas), 70.0).to_bits());
+    }
+
+    /// A softer bed lays more pastel, but never more than Archard's law
+    /// lets the stick wear (K·F·s/σp: the same on any bed, since the real
+    /// contact is F/σp however the load spreads): it spreads the stick's
+    /// contact wider, so less of it rides on pastel just laid in the
+    /// tooth. Board, then canvas; a strainer's bay more than a hard board.
+    /// (Past canvas the contact keeps spreading, but what is laid levels
+    /// off, within a few percent of canvas's with isolated dips: no order
+    /// between canvas and the bay is claimed. notes/research/
+    /// cassatt_papers.md §1.)
+    #[test]
+    fn a_softer_bed_lays_more_within_archards_wear() {
+        use crate::paper::Mount;
+        let p = Paper::drawing(4);
+        let laid: Vec<f32> = [p, p.mounted(Mount::Board), p.mounted(Mount::Canvas), p.mounted(Mount::named("strainer").unwrap())]
+            .iter()
+            .map(|&q| {
+                let mut c = Canvas::new_window(400, 1.0, [0.55; 3], None).with_size_mm(300.0).with_paper(q);
+                let u = c.mm_per_unit;
+                let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+                // 30 mm across the middle of the sheet, at 3 N and 60°
+                let pts: Vec<StrokePoint> = (0..=30).map(|i| StrokePoint { x: (135.0 + i as f32) / u, y: 150.0 / u, pose: pose(3.0, 60.0), speed: 50.0 }).collect();
+                c.stick_stroke(&mut st, &pts).volume_mm3
+            })
+            .collect();
+        let st = Stick::round([0.02; 3], 0.8, 12.0);
+        let archard = st.wear * 3.0 * 30.0 / st.hardness;
+        assert!(laid[0] < laid[1] && laid[1] < laid[2] && laid[0] < laid[3], "laid {laid:?}");
+        assert!(laid.iter().all(|&v| v <= archard), "laid {laid:?}, Archard {archard}");
+    }
+
+    #[test]
+    fn the_fast_seat_gives_the_bisections_bits() {
+        let mut rng = crate::rng::Rng::new(0x5ea7);
+        // log-uniform over many decades: overlaps 1e-6..1e4 µm, pores
+        // 1e-4..1e3 µm, beds 1e-7..1e3 MPa/µm, sticks 1e-3..1e3 MPa
+        let logu = |rng: &mut crate::rng::Rng, lo: f32, hi: f32| 10f32.powf(rng.range(lo, hi));
+        let check = |o: f32, mu: f32, k: f32, hard: f32, hint: &mut f64| {
+            let want = seat(o, mu, k, hard);
+            let got = seat_fast(o, mu, k, hard, hint);
+            assert_eq!((got.0.to_bits(), got.1.to_bits()), (want.0.to_bits(), want.1.to_bits()), "o {o:e}, mu {mu:e}, k {k:e}, hard {hard:e}");
+        };
+        for _ in 0..400_000 {
+            let (o, mu, k, hard) = (logu(&mut rng, -6.0, 4.0), logu(&mut rng, -4.0, 3.0), logu(&mut rng, -7.0, 3.0), logu(&mut rng, -3.0, 3.0));
+            check(o, mu, k, hard, &mut { f64::NAN });
+            // warm: the last root a little way off, then far off, then wrong
+            let mut h = f64::NAN;
+            check(o * 1.01, mu, k, hard, &mut h);
+            check(o, mu, k, hard, &mut h);
+            check(o * 1.0000001, mu, k, hard, &mut h);
+            check(o, mu, k, hard, &mut 1e6);
+            check(o, mu, k, hard, &mut -1e6);
+            check(o, mu, k, hard, &mut 0.0);
+        }
+        // a pixel's run of sinks, as the outer search walks them
+        for _ in 0..2_000 {
+            let (mu, k, hard) = (logu(&mut rng, -1.0, 2.0), logu(&mut rng, -5.0, 1.0), logu(&mut rng, -1.0, 2.0));
+            let (mut lo, mut hi) = (0.0f32, logu(&mut rng, 0.0, 3.0));
+            let mut h = f64::NAN;
+            for _ in 0..30 {
+                let m = 0.5 * (lo + hi);
+                check(m, mu, k, hard, &mut h);
+                if rng.f() < 0.5 { lo = m } else { hi = m }
+            }
+        }
+        let tiny = f32::from_bits(1);
+        let odd = [0.0, -0.0, tiny, 1e-30, 1e-3, 1.0, 1e30, f32::MAX, f32::INFINITY, -1.0, f32::NEG_INFINITY, f32::NAN];
+        for o in odd {
+            for mu in odd {
+                for k in odd {
+                    for hard in odd {
+                        check(o, mu, k, hard, &mut { f64::NAN });
+                        check(o, mu, k, hard, &mut 1.0);
+                    }
+                }
+            }
+        }
+    }
+
+    /// `seat`'s balance solved in f64 by 80 halvings: u, the surface's give.
+    fn exact_give(o: f64, mu: f32, k: f32, hard: f32) -> f64 {
+        let (k, hard, mu) = (k as f64, hard as f64, mu.max(1e-3) as f64);
+        let (mut lo, mut hi) = (0.0, o.min(hard / k));
+        for _ in 0..80 {
+            let u = 0.5 * (lo + hi);
+            if k * u < hard * (1.0 - (-(o - u) / mu).exp()) { lo = u } else { hi = u }
+        }
+        0.5 * (lo + hi)
+    }
+
+    #[test]
+    fn the_newton_seat_matches_the_bisection_within_its_tolerance() {
+        use crate::paper::Mount;
+        let paper = crate::paper::Paper::preset("blue wove").unwrap().paper(1);
+        // (worst share of min(o, hard/k) off the exact give, Newton and the
+        // bisection; worst sink off the exact one, µm; worst force off)
+        let (mut un, mut ub, mut dn, mut db, mut fnw, mut fb) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        for mount in [Mount::Board, Mount::named("strainer").unwrap()] {
+            let c = Canvas::new_window(800, 1.0, [0.55; 3], None).with_size_mm(540.0).with_paper(paper.mounted(mount));
+            let n = c.clone().with_seat_solver(true);
+            let stick = Stick::round([0.02; 3], 0.8, 12.0);
+            let u = c.mm_per_unit;
+            for (x, y) in [(270.0, 300.0), (100.0, 340.0), (20.0, 20.0)] {
+                for force in [0.05, 0.5, 2.75, 5.0] {
+                    for alt in [20.0, 55.0, 90.0] {
+                        let sp = StrokePoint { x: x / u, y: y / u, pose: pose(force, alt), speed: 50.0 };
+                        let (b, s) = (c.seat_stick(&stick, &sp).unwrap(), n.seat_stick(&stick, &sp).unwrap());
+                        assert_eq!(b.under, s.under);
+                        let gaps: Vec<f64> = b.under.iter().zip(&b.surf).map(|(&(_, bb), &(hs, _, _))| (hs - bb * 1000.0) as f64).collect();
+                        let a = (c.px_mm() * c.px_mm()) as f64;
+                        let load = |d: f64| -> f64 {
+                            gaps.iter().zip(&b.surf).map(|(&g, &(_, mu, k))| if g + d > 0.0 { k as f64 * exact_give(g + d, mu, k, stick.hardness) } else { 0.0 }).sum::<f64>() * a
+                        };
+                        // the exact sink, by halving in f64
+                        let first = -gaps.iter().cloned().fold(f64::MIN, f64::max);
+                        let (mut lo, mut hi) = (first, first + 6400.0);
+                        for _ in 0..70 {
+                            let m = 0.5 * (lo + hi);
+                            if load(m) < force as f64 { lo = m } else { hi = m }
+                        }
+                        let exact = 0.5 * (lo + hi);
+                        dn = dn.max((s.delta as f64 - exact).abs());
+                        db = db.max((b.delta as f64 - exact).abs());
+                        fnw = fnw.max((load(s.delta as f64) / force as f64 - 1.0).abs());
+                        fb = fb.max((load(b.delta as f64) / force as f64 - 1.0).abs());
+                        // each pixel's give at the Newton sink
+                        for (j, &g) in gaps.iter().enumerate() {
+                            let o = (b.under[j].1 * -1000.0 + b.surf[j].0 + s.delta) as f64;
+                            if o <= 0.0 { continue; }
+                            let (_, mu, k) = b.surf[j];
+                            let w = o.min(stick.hardness as f64 / k as f64);
+                            let ex = exact_give(o, mu, k, stick.hardness);
+                            let (pn, ..) = seat_newton(o, mu, k, stick.hardness, &mut { f64::NAN });
+                            let (pb, _) = seat(o as f32, mu, k, stick.hardness);
+                            un = un.max((pn / k as f64 - ex).abs() / w);
+                            ub = ub.max((pb as f64 / k as f64 - ex).abs() / w);
+                            let _ = g;
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("give off exact (share of min(o, hard/k)): newton {un:.2e}, bisection {ub:.2e}; sink off exact (µm): newton {dn:.2e}, bisection {db:.2e}; force off: newton {fnw:.2e}, bisection {fb:.2e}");
+        assert!(un <= 1e-6 && un <= ub, "newton {un:e}, bisection {ub:e}");
+        // (both sinks are f32: the force is carried as closely as that allows)
+        assert!(fnw <= fb.max(2e-6), "force off: newton {fnw:e}, bisection {fb:e}");
+        assert!(dn <= db.max(1e-3), "sink: newton {dn:e}, bisection {db:e}");
     }
 
     #[test]

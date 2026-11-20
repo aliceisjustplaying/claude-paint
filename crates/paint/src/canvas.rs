@@ -278,6 +278,10 @@ pub struct Canvas {
     /// The drain switch (`with_drain`): an absorbent ground drains paint as
     /// its pigment packs (`bristle::ground_drain`).
     pub(crate) drain: bool,
+    /// A strainer's bar holds the sheet beside it up (`with_strainer_edge`).
+    pub(crate) strainer_edge: bool,
+    /// A pastel stick's seat found by Newton (`with_seat_solver`).
+    pub(crate) seat_solver: bool,
     /// A sheet of paper laid over part of the picture (`sheet.rs`).
     pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
@@ -346,6 +350,8 @@ impl Canvas {
             receptive: None,
             soak: None,
             drain: false,
+            strainer_edge: false,
+            seat_solver: false,
             sheet: None,
         }
     }
@@ -388,6 +394,38 @@ impl Canvas {
     /// The drain switch (`with_drain`).
     pub fn drain(&self) -> bool {
         self.drain
+    }
+
+    /// On a sheet over a strainer, the bar holds the sheet beside it up:
+    /// the give falls from the bar's into the bay's over the few mm the
+    /// plate bends on its foundation (`Paper::give_at`), where before it
+    /// kept the bar's give 2.7 mm into the bay and then dropped, a hard line
+    /// along each bar (`Paper::give_at_unheld`). It does nothing off a
+    /// strainer. A checkpoint keeps it (a bit of the engine word).
+    pub fn with_strainer_edge(mut self, enabled: bool) -> Self {
+        self.strainer_edge = enabled;
+        self
+    }
+
+    pub fn strainer_edge(&self) -> bool {
+        self.strainer_edge
+    }
+
+    /// Where a pastel stick comes down (`Canvas::seat_stick`), found by
+    /// safeguarded Newton on the force balance and on each pixel's balance
+    /// of the surface's give against the stick's yielding, instead of a
+    /// bisection of bisections: the same balance, to 1e-6 of the force and
+    /// finer than the bisection in each pixel, several times faster. It
+    /// changes the last bits of where the stick sits, so a painting begun
+    /// before it keeps the bisection. A checkpoint keeps it (a bit of the
+    /// engine word).
+    pub fn with_seat_solver(mut self, enabled: bool) -> Self {
+        self.seat_solver = enabled;
+        self
+    }
+
+    pub fn seat_solver(&self) -> bool {
+        self.seat_solver
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {
@@ -518,6 +556,11 @@ impl Canvas {
         self
     }
 
+    /// The sheet of paper this canvas is, if it is one (its make and mount).
+    pub fn paper(&self) -> Option<&crate::paper::Paper> {
+        self.paper.as_ref()
+    }
+
     /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the
     /// paper's where paper is bare or only stained; over a paint film, the
     /// film's own, which follows its gloss (a glossy film is smooth, about
@@ -538,12 +581,49 @@ impl Canvas {
 
     /// How stiffly the surface at pixel `i` gives under a point load, MPa
     /// per µm (a Winkler foundation: the sheet's z modulus over its
-    /// caliper). A canvas on its stretcher, or a board, is all but rigid.
-    pub(crate) fn give_mpa_per_um(&self, _i: usize) -> f32 {
-        match self.paper {
+    /// caliper; a sheet on a strainer drums between the bars,
+    /// `Paper::give_at`). A canvas on its stretcher, or a board, is all but
+    /// rigid.
+    pub(crate) fn give_mpa_per_um(&self, i: usize) -> f32 {
+        match &self.paper {
+            Some(p) if p.drum.is_some() => {
+                let f = &self.f;
+                let px = self.px_mm();
+                let (x, y) = ((i % f.w + f.x0) as f32 + 0.5, (i / f.w + f.y0) as f32 + 0.5);
+                let (xm, ym, w, h) = (x * px, y * px, f.full_w as f32 * px, f.full_h as f32 * px);
+                if self.strainer_edge { p.give_at(xm, ym, w, h) } else { p.give_at_unheld(xm, ym, w, h) }
+            }
             Some(p) => p.z_mpa / p.caliper_um().max(10.0),
             None => 10.0,
         }
+    }
+
+    /// A memo of `give_mpa_per_um` over window pixels [x0, x1) × [y0, y1),
+    /// for a stroke that comes down on them step after step: on a drumming
+    /// sheet each give is a sum of Bessel functions. `None` where the give
+    /// is a constant (or the window too large to keep).
+    pub(crate) fn gives_over(&self, x0: usize, y0: usize, x1: usize, y1: usize) -> Option<Gives> {
+        let (x1, y1) = (x1.min(self.f.w), y1.min(self.f.h));
+        let drums = self.paper.as_ref().is_some_and(|p| p.drum.is_some());
+        let n = x1.saturating_sub(x0) * y1.saturating_sub(y0);
+        (drums && n > 0 && n <= 1 << 22).then(|| Gives { x0, y0, w: x1 - x0, h: y1 - y0, v: vec![f32::NAN; n] })
+    }
+
+    /// `give_mpa_per_um(i)`, kept in `memo` when it covers the pixel (the
+    /// same bits: a give depends only on where the pixel is).
+    #[inline]
+    pub(crate) fn give_memo(&self, i: usize, memo: &mut Option<Gives>) -> f32 {
+        if let Some(g) = memo {
+            let (x, y) = (i % self.f.w, i / self.f.w);
+            if x >= g.x0 && y >= g.y0 && x - g.x0 < g.w && y - g.y0 < g.h {
+                let v = &mut g.v[(y - g.y0) * g.w + (x - g.x0)];
+                if v.is_nan() {
+                    *v = self.give_mpa_per_um(i);
+                }
+                return *v;
+            }
+        }
+        self.give_mpa_per_um(i)
     }
 
     /// Use a woven linen support.
@@ -850,6 +930,16 @@ impl Canvas {
         image::save_buffer(path.as_ref(), &buf, w as u32, h as u32, image::ColorType::Rgb8)
             .map_err(std::io::Error::other)
     }
+}
+
+/// A stroke's memo of the surface's give over a window of pixels
+/// (`Canvas::gives_over`).
+pub(crate) struct Gives {
+    x0: usize,
+    y0: usize,
+    w: usize,
+    h: usize,
+    v: Vec<f32>,
 }
 
 #[cfg(test)]

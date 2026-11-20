@@ -94,6 +94,29 @@ pub const DRAIN_MARK: &str = "--@ drain";
 /// with none of it. It names no engine of its own: it rides on engine 5
 /// and later (`box_for`).
 pub const PAPER_MARK: &str = "--@ paper";
+/// The paper-presets switch, in the head of a session file: a painting whose
+/// log has it may name its sheet (`paper="tan wove"` or `paper={preset=...}`,
+/// paint's `paper::PRESETS`) and mount it (`paper={mount="board"|"canvas"|
+/// "strainer"}`, paint's `paper::Mount`). A new painting has it; a log
+/// without it refuses both keys as unknown, as it did before. It rides on
+/// engine 5 and later, as paper does.
+pub const PAPER_PRESETS_MARK: &str = "--@ paper-presets";
+/// The strainer-edge switch, in the head of a session file: on a sheet
+/// mounted over a strainer, the bar holds the sheet beside it up, so its
+/// give falls smoothly from the bar's into the bay's over a few mm (paint's
+/// `Canvas::with_strainer_edge`, `Paper::give_at`). A log without it keeps
+/// the give #319 had, the bar's for 2.7 mm into the bay and then a drop: a
+/// hard line along each bar's inner edge, replayed as it was painted. A new
+/// painting has it; off a strainer it changes nothing.
+pub const STRAINER_EDGE_MARK: &str = "--@ strainer-edge";
+/// The seat-solver switch, in the head of a session file: a pastel stick's
+/// seat (how far it sinks into the tooth, and each pixel's pressure) found
+/// by safeguarded Newton instead of a bisection of bisections (paint's
+/// `Canvas::with_seat_solver`): the same balance to within its tolerance,
+/// several times faster, most on a soft bed such as a sheet on a strainer.
+/// A log without it keeps the bisection's bits and replays as it was
+/// painted. A new painting has it.
+pub const SEAT_SOLVER_MARK: &str = "--@ seat-solver";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
 /// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
@@ -789,6 +812,15 @@ impl Session {
         }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.paper_presets {
+            let _ = writeln!(s, "{PAPER_PRESETS_MARK}");
+        }
+        if self.st.borrow().tubes.strainer_edge {
+            let _ = writeln!(s, "{STRAINER_EDGE_MARK}");
+        }
+        if self.st.borrow().tubes.seat_solver {
+            let _ = writeln!(s, "{SEAT_SOLVER_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1565,6 +1597,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
         b.calls_agree = true;
+        b.paper_presets = true;
+        b.strainer_edge = true;
+        b.seat_solver = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1633,6 +1668,12 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.calls_agree = head(CALLS_AGREE_MARK);
+    b.paper_presets = head(PAPER_PRESETS_MARK);
+    b.strainer_edge = head(STRAINER_EDGE_MARK);
+    b.seat_solver = head(SEAT_SOLVER_MARK);
+    if b.paper_presets && engine < 5 {
+        return Err(format!("the log's {PAPER_PRESETS_MARK} line (the paper-presets switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

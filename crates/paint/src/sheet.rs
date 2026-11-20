@@ -345,11 +345,13 @@ impl Canvas {
     /// The surface a stick comes down on at window pixel `i`: its height (µm),
     /// its pores' mean depth (µm) and how stiffly it gives (MPa/µm). The
     /// sheet, where it lies, is that much higher, with its own pores.
+    /// Its give is kept in `memo` (`Canvas::give_memo`; `&mut None` keeps
+    /// nothing).
     #[inline]
-    pub(crate) fn surface_point(&self, i: usize) -> (f32, f32, f32) {
+    pub(crate) fn surface_point_memo(&self, i: usize, memo: &mut Option<crate::canvas::Gives>) -> (f32, f32, f32) {
         match &self.sheet {
-            Some(s) if s.over[i] => (self.height[i] + s.caliper_um, s.micro_um, self.give_mpa_per_um(i)),
-            _ => (self.height[i], self.micro_um(i), self.give_mpa_per_um(i)),
+            Some(s) if s.over[i] => (self.height[i] + s.caliper_um, s.micro_um, self.give_memo(i, memo)),
+            _ => (self.height[i], self.micro_um(i), self.give_memo(i, memo)),
         }
     }
 
@@ -1102,11 +1104,11 @@ impl Canvas {
     /// part. Reads only (the hold look).
     pub fn stick_contact(&self, stick: &crate::pastel::Stick, x: f32, y: f32, pose: crate::pastel::Pose) -> Vec<(usize, u8)> {
         let sp = crate::pastel::StrokePoint { x, y, pose, speed: 50.0 };
-        let Some(st) = self.seat_stick(stick, &sp) else { return Vec::new() };
+        let Some(mut st) = self.seat_stick(stick, &sp) else { return Vec::new() };
         let mut out = Vec::new();
         for (j, &(i, b)) in st.under.iter().enumerate() {
             let (hs, mu, k) = st.surf[j];
-            let o = crate::pastel::seat_overlap(hs - b * 1000.0 + st.delta, mu, k, stick.hardness);
+            let o = self.seat_overlap(hs - b * 1000.0 + st.delta, mu, k, stick.hardness, &mut st.hints[j]);
             if o > 0.0 {
                 out.push((i, 2));
             } else if b * 1000.0 - st.delta - hs < crate::pastel::CRUMB_UM {

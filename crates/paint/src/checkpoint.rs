@@ -1133,6 +1133,10 @@ impl Canvas {
 /// allocated, the five packing lanes of the paint's properties that only
 /// the drain section writes, the values `read_state` clamps, a pass under
 /// way, and the drawing, cloth, paper and sheet, which are cheap to copy.
+/// (Cloned to put one packed canvas back more than once: the easel's
+/// resting surfaces, whose packed state also serves a failed chunk's
+/// rollback.)
+#[derive(Clone)]
 pub struct Aside {
     absorb_any: bool,
     ground_um: f32,
@@ -1149,6 +1153,361 @@ pub struct Aside {
     paper: Option<crate::paper::Paper>,
     micro: Vec<f32>,
     sheet: Option<crate::sheet::Sheet>,
+}
+
+/// A buffer written bit for bit after its length (u64; `u64::MAX`: none), for
+/// what `Aside::spill` moves to disk.
+pub(crate) fn spill_vec<T: Copy + SpillWord>(w: &mut impl Write, v: Option<&[T]>) -> io::Result<()> {
+    let Some(v) = v else { return put_u64(w, u64::MAX) };
+    put_u64(w, v.len() as u64)?;
+    let mut buf = Vec::with_capacity(1 << 16);
+    for x in v {
+        buf.extend_from_slice(&x.word().to_le_bytes());
+        if buf.len() >= 1 << 16 {
+            w.write_all(&buf)?;
+            buf.clear();
+        }
+    }
+    w.write_all(&buf)
+}
+
+/// `spill_vec` read back.
+pub(crate) fn unspill_vec<T: SpillWord>(r: &mut impl Read) -> io::Result<Option<Vec<T>>> {
+    let n = get_u64(r)?;
+    if n == u64::MAX {
+        return Ok(None);
+    }
+    let mut v = Vec::with_capacity(n as usize);
+    let mut b = [0u8; 4];
+    for _ in 0..n {
+        r.read_exact(&mut b)?;
+        v.push(T::of(u32::from_le_bytes(b)));
+    }
+    Ok(Some(v))
+}
+
+/// A 32-bit value `spill_vec` writes as its bits.
+pub(crate) trait SpillWord: Copy {
+    fn word(self) -> u32;
+    fn of(w: u32) -> Self;
+}
+
+impl SpillWord for f32 {
+    fn word(self) -> u32 {
+        self.to_bits()
+    }
+    fn of(w: u32) -> Self {
+        f32::from_bits(w)
+    }
+}
+
+impl SpillWord for u32 {
+    fn word(self) -> u32 {
+        self
+    }
+    fn of(w: u32) -> Self {
+        w
+    }
+}
+
+impl Aside {
+    /// Move its large buffers (the film floors, the solvent buffers, the
+    /// laid lanes, the receptive map, the paper's pores and the drawing) out
+    /// to `w`, bit for bit, keeping the rest: what a canvas put away for a
+    /// while keeps in memory beside its packed state is then a few scalars
+    /// (the easel's resting surfaces). `unspill` puts them back.
+    pub fn spill(&mut self, w: &mut impl Write) -> io::Result<()> {
+        spill_vec(w, self.receptive.as_deref())?;
+        for v in [&self.floor, &self.solv, &self.laid, &self.micro] {
+            spill_vec(w, Some(v.as_slice()))?;
+        }
+        spill_vec(w, Some(self.laid_id.as_slice()))?;
+        // (the paint's packing lanes, kept only without the drain switch: ten words a pixel)
+        let hide: Option<Vec<f32>> = self.hide.as_ref().map(|h| h.iter().flatten().copied().collect());
+        spill_vec(w, hide.as_deref())?;
+        drop(hide);
+        put_u64(w, self.drawing.is_some() as u64)?;
+        if let Some(d) = &self.drawing {
+            d.spill(w)?;
+        }
+        self.receptive = None;
+        self.floor = Vec::new();
+        self.solv = Vec::new();
+        self.laid = Vec::new();
+        self.micro = Vec::new();
+        self.laid_id = Vec::new();
+        self.hide = self.hide.as_ref().map(|_| Vec::new());
+        self.drawing = None;
+        Ok(())
+    }
+
+    /// The buffers `spill` moved to `r`, back in place.
+    pub fn unspill(&mut self, r: &mut impl Read) -> io::Result<()> {
+        let short = || bad("a spilled canvas buffer is missing");
+        self.receptive = unspill_vec(r)?;
+        self.floor = unspill_vec(r)?.ok_or_else(short)?;
+        self.solv = unspill_vec(r)?.ok_or_else(short)?;
+        self.laid = unspill_vec(r)?.ok_or_else(short)?;
+        self.micro = unspill_vec(r)?.ok_or_else(short)?;
+        self.laid_id = unspill_vec(r)?.ok_or_else(short)?;
+        let hide: Option<Vec<f32>> = unspill_vec(r)?;
+        if hide.is_some() != self.hide.is_some() || hide.as_ref().is_some_and(|h| h.len() % 10 != 0) {
+            return Err(bad("a spilled canvas's packing lanes don't fit it"));
+        }
+        self.hide = hide.map(|h| h.as_chunks::<10>().0.to_vec());
+        self.drawing = match get_u64(r)? {
+            0 => None,
+            1 => Some(Box::new(crate::graphite::Drawing::unspill(r)?)),
+            _ => return Err(bad("a spilled drawing's flag is invalid")),
+        };
+        Ok(())
+    }
+
+    /// The bytes it keeps in memory beside the packed state (its buffers;
+    /// the few scalars and a laid sheet's mask aside): what a canvas put
+    /// away costs in memory besides its compressed file (the easel's
+    /// resting surfaces).
+    pub fn heap_bytes(&self) -> usize {
+        let f = |v: &Vec<f32>| v.capacity() * 4;
+        self.receptive.as_ref().map_or(0, f) + f(&self.floor) + f(&self.solv) + f(&self.laid) + self.laid_id.capacity() * 4
+            + self.hide.as_ref().map_or(0, |h| h.capacity() * std::mem::size_of::<crate::wet::Prop>())
+            + self.drawing.as_ref().map_or(0, |d| d.heap_bytes())
+            + f(&self.micro)
+    }
+}
+
+// ---------------------------------------------------------------- surfaces
+
+/// A checkpoint of several named surfaces (the easel's `--@ surfaces`: a
+/// painting with a study sheet beside it, and later a plate), version 1:
+/// `SURFACES_MAGIC`, the section's version (`SURFACES_V`, one u64), the
+/// caller's header (length-prefixed UTF-8, as a canvas's), the name of the
+/// surface that is current, the number of surfaces, then each surface: its
+/// name, its kind (one u64, the caller's), its fields (length-prefixed
+/// UTF-8, the caller's `key=value` lines) and its canvas, a whole canvas
+/// checkpoint (`write_state`, empty header) with its own magic and
+/// version, framed: chunks of at most `FRAME` bytes, each after its length
+/// (u64), ended by a chunk of length 0. The frame is what lets a canvas
+/// whose own format must end its file (the skin section of version 22)
+/// stand before the next surface: its reader sees the frame's end as the
+/// file's.
+///
+/// Version 2 (the easel's `--@ plate`) is version 1 with each surface's
+/// payload after its canvas: its length (u64) and its bytes, the caller's
+/// (a plate's state, `plate::Plate::write`). A checkpoint whose surfaces
+/// have no payload is written as version 1, byte for byte as before.
+///
+/// Only a session that has named a surface writes one: a session with the
+/// painting alone writes its canvas checkpoint exactly as before. A reader
+/// that doesn't know this magic refuses the file (as one that doesn't know
+/// version 22 refuses a material canvas) instead of loading the painting
+/// without its other sheets, and a section of another version is refused.
+const SURFACES_MAGIC: &[u8; 8] = b"PAINTSRF";
+pub const SURFACES_V: u64 = 2;
+/// The longest payload of a surface (bytes).
+const PAYLOAD_MAX: u64 = 1 << 32;
+/// The longest chunk of a framed canvas (bytes).
+const FRAME: usize = 1 << 20;
+/// The most surfaces a checkpoint holds, and the longest name (bytes).
+pub const SURFACES_MAX: usize = 64;
+pub const SURFACE_NAME_MAX: usize = 64;
+
+/// One surface of a multi-surface checkpoint, but its canvas.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct SurfaceEntry {
+    pub name: String,
+    pub kind: u64,
+    pub fields: String,
+    /// What the surface keeps besides its canvas (a plate's state; version
+    /// 2): empty for most.
+    pub payload: Vec<u8>,
+}
+
+/// Whether a checkpoint starting with these 8 bytes holds several surfaces
+/// (`write_surfaces`) rather than one canvas.
+pub fn is_surfaces(magic: &[u8]) -> bool {
+    magic.len() >= 8 && &magic[..8] == SURFACES_MAGIC
+}
+
+fn put_str(w: &mut impl Write, s: &str) -> io::Result<()> {
+    put_u64(w, s.len() as u64)?;
+    w.write_all(s.as_bytes())
+}
+
+fn get_str(r: &mut impl Read, limit: usize, what: &str) -> io::Result<String> {
+    let n = get_u64(r)?;
+    if n > limit as u64 {
+        return Err(bad(&format!("surfaces checkpoint: {what} too long")));
+    }
+    let mut b = vec![0u8; n as usize];
+    r.read_exact(&mut b)?;
+    String::from_utf8(b).map_err(|_| bad(&format!("surfaces checkpoint: {what} is not UTF-8")))
+}
+
+/// Writes what it is given as length-prefixed chunks (`write_surfaces`).
+struct Framed<'a, W: Write> {
+    w: &'a mut W,
+    buf: Vec<u8>,
+}
+
+impl<W: Write> Framed<'_, W> {
+    fn flush_chunk(&mut self) -> io::Result<()> {
+        if !self.buf.is_empty() {
+            put_u64(self.w, self.buf.len() as u64)?;
+            self.w.write_all(&self.buf)?;
+            self.buf.clear();
+        }
+        Ok(())
+    }
+}
+
+impl<W: Write> Write for Framed<'_, W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let take = bytes.len().min(FRAME - self.buf.len());
+        self.buf.extend_from_slice(&bytes[..take]);
+        if self.buf.len() == FRAME {
+            self.flush_chunk()?;
+        }
+        Ok(take)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Reads a framed canvas, and ends where its frame does.
+struct Unframed<'a, R: Read> {
+    r: &'a mut R,
+    left: u64,
+    done: bool,
+}
+
+impl<R: Read> Read for Unframed<'_, R> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        while self.left == 0 {
+            if self.done || out.is_empty() {
+                return Ok(0);
+            }
+            self.left = get_u64(self.r)?;
+            if self.left == 0 {
+                self.done = true;
+                return Ok(0);
+            }
+            if self.left > FRAME as u64 {
+                return Err(bad("surfaces checkpoint: a canvas's chunk is too long"));
+            }
+        }
+        let take = (self.left as usize).min(out.len());
+        let n = self.r.read(&mut out[..take])?;
+        if n == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "surfaces checkpoint: a canvas ends early"));
+        }
+        self.left -= n as u64;
+        Ok(n)
+    }
+}
+
+/// Write a checkpoint of several surfaces (`SURFACES_MAGIC`): `header`, the
+/// current surface's name, and each surface of `entries` with the canvas
+/// `canvas(i, w)` writes for it, which must be a whole canvas checkpoint
+/// with an empty header (`Canvas::write_state(w, "")`, or the bytes of a
+/// packed canvas, `Canvas::pack`, copied as they are).
+pub fn write_surfaces(w: &mut impl Write, header: &str, current: &str, entries: &[SurfaceEntry], mut canvas: impl FnMut(usize, &mut dyn Write) -> io::Result<()>) -> io::Result<()> {
+    let invalid = |m: &str| io::Error::new(io::ErrorKind::InvalidInput, format!("surfaces checkpoint: {m}"));
+    if entries.is_empty() || entries.len() > SURFACES_MAX {
+        return Err(invalid("1 to 64 surfaces"));
+    }
+    for (i, e) in entries.iter().enumerate() {
+        if e.name.is_empty() || e.name.len() > SURFACE_NAME_MAX || entries[..i].iter().any(|o| o.name == e.name) {
+            return Err(invalid("each surface has a name of its own, 1 to 64 bytes"));
+        }
+    }
+    if !entries.iter().any(|e| e.name == current) {
+        return Err(invalid("the current surface is one of them"));
+    }
+    // (version 1 while no surface has a payload: such a file is as it was)
+    let v = if entries.iter().any(|e| !e.payload.is_empty()) { 2 } else { 1 };
+    w.write_all(SURFACES_MAGIC)?;
+    put_u64(w, v)?;
+    put_str(w, header)?;
+    put_str(w, current)?;
+    put_u64(w, entries.len() as u64)?;
+    for (i, e) in entries.iter().enumerate() {
+        put_str(w, &e.name)?;
+        put_u64(w, e.kind)?;
+        put_str(w, &e.fields)?;
+        let mut f = Framed { w: &mut *w, buf: Vec::with_capacity(FRAME) };
+        canvas(i, &mut f)?;
+        f.flush_chunk()?;
+        put_u64(w, 0)?;
+        if v == 2 {
+            put_u64(w, e.payload.len() as u64)?;
+            w.write_all(&e.payload)?;
+        }
+    }
+    Ok(())
+}
+
+/// Read a checkpoint of several surfaces (`write_surfaces`), handing each
+/// surface's entry and canvas to `each` in turn as it is read (so the
+/// caller can put one away before the next is read). Returns the header
+/// and the name of the current surface. Refuses another version of the
+/// section, a damaged frame, a canvas that doesn't end where its frame
+/// does, and data after the last surface.
+pub fn read_surfaces(r: &mut impl Read, mut each: impl FnMut(SurfaceEntry, Canvas) -> io::Result<()>) -> io::Result<(String, String)> {
+    let mut m = [0u8; 8];
+    r.read_exact(&mut m)?;
+    if !is_surfaces(&m) {
+        return Err(bad("not a surfaces checkpoint"));
+    }
+    let v = get_u64(r)?;
+    if !(1..=SURFACES_V).contains(&v) {
+        return Err(bad(&format!("surfaces checkpoint of version {v}: this build reads versions 1 to {SURFACES_V}")));
+    }
+    let header = get_str(r, 1 << 20, "header")?;
+    let current = get_str(r, SURFACE_NAME_MAX, "current surface's name")?;
+    let n = get_u64(r)?;
+    if n == 0 || n > SURFACES_MAX as u64 {
+        return Err(bad("surfaces checkpoint: 1 to 64 surfaces"));
+    }
+    let mut names: Vec<String> = Vec::new();
+    for _ in 0..n {
+        let name = get_str(r, SURFACE_NAME_MAX, "surface name")?;
+        if name.is_empty() || names.contains(&name) {
+            return Err(bad("surfaces checkpoint: a surface without a name of its own"));
+        }
+        let kind = get_u64(r)?;
+        let fields = get_str(r, 1 << 20, "surface fields")?;
+        let mut u = Unframed { r: &mut *r, left: 0, done: false };
+        let (canvas, head) = Canvas::read_state(&mut u)?;
+        if !head.is_empty() || u.read(&mut [0u8; 1])? != 0 || !u.done {
+            return Err(bad("surfaces checkpoint: a surface's canvas doesn't end with its frame"));
+        }
+        let payload = if v >= 2 {
+            let n = get_u64(r)?;
+            if n > PAYLOAD_MAX {
+                return Err(bad("surfaces checkpoint: a surface's payload is too long"));
+            }
+            let mut b = Vec::new();
+            r.take(n).read_to_end(&mut b)?;
+            if b.len() as u64 != n {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "surfaces checkpoint: a surface's payload ends early"));
+            }
+            b
+        } else {
+            Vec::new()
+        };
+        names.push(name.clone());
+        each(SurfaceEntry { name, kind, fields, payload }, canvas)?;
+    }
+    if !names.contains(&current) {
+        return Err(bad("surfaces checkpoint: the current surface isn't among them"));
+    }
+    if r.read(&mut [0u8; 1])? != 0 {
+        return Err(bad("surfaces checkpoint has trailing data"));
+    }
+    Ok((header, current))
 }
 
 #[cfg(test)]
@@ -1537,5 +1896,148 @@ mod tests {
         rejected(half, "a mask of 0.5");
         assert!(c.lift_sheet());
         assert_eq!(base_format(&bytes(&c)), 13);
+    }
+
+    fn state(c: &Canvas) -> Vec<u8> {
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        b
+    }
+
+    /// The canvases of a multi-surface checkpoint (the easel's `--@ surfaces`).
+    fn three_surfaces() -> Vec<(SurfaceEntry, Canvas)> {
+        // the painting: an engine-9 material canvas, whose skin section ends its own
+        // format; a sheet of paper with pastel on it; a bare sheet
+        let painting = Canvas::new(24, 1.5, [0.8; 3]).with_engine(9).with_size_mm(6.0).with_material(1);
+        let mut study = Canvas::new_window(64, 1.25, [0.9; 3], None).with_size_mm(80.0).with_paper(crate::paper::Paper::drawing(4));
+        let mut st = crate::pastel::Stick::round([0.2, 0.3, 0.6], 0.8, 12.0);
+        let pose = crate::pastel::Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        study.stick_stroke(&mut st, &[crate::pastel::StrokePoint { x: 100.0, y: 300.0, pose, speed: 60.0 }, crate::pastel::StrokePoint { x: 800.0, y: 400.0, pose, speed: 60.0 }]);
+        let japan = Canvas::new_window(40, 0.8, [0.95; 3], None).with_size_mm(50.0).with_paper(crate::paper::Paper::drawing(9));
+        let e = |name: &str, kind: u64, fields: &str| SurfaceEntry { name: name.into(), kind, fields: fields.into(), payload: Vec::new() };
+        vec![(e("painting", 0, ""), painting), (e("study", 1, "since=1\n"), study), (e("japan", 1, "since=2\n"), japan)]
+    }
+
+    fn surfaces_bytes(all: &[(SurfaceEntry, Canvas)], current: &str) -> Vec<u8> {
+        let entries: Vec<SurfaceEntry> = all.iter().map(|(e, _)| e.clone()).collect();
+        let mut b = Vec::new();
+        write_surfaces(&mut b, "easel save 1\nx=1\n", current, &entries, |i, w| all[i].1.write_state(&mut &mut *w, "")).unwrap();
+        b
+    }
+
+    /// Three surfaces go into one checkpoint and come back as they were, each
+    /// canvas rewritten as it was read, with the header, the entries and the
+    /// current surface; a canvas that needs its file's end (version 22's skin
+    /// section) reads within its frame.
+    #[test]
+    fn several_surfaces_survive_a_checkpoint() {
+        let all = three_surfaces();
+        let b = surfaces_bytes(&all, "study");
+        assert!(is_surfaces(&b) && !is_surfaces(&state(&all[0].1)));
+        let mut back = Vec::new();
+        let (header, current) = read_surfaces(&mut Cursor::new(b.clone()), |e, c| {
+            back.push((e, c));
+            Ok(())
+        }).unwrap();
+        assert_eq!((header.as_str(), current.as_str()), ("easel save 1\nx=1\n", "study"));
+        assert_eq!(back.len(), 3);
+        assert_eq!(&state(&all[0].1)[..8], MAGIC22);
+        for ((e0, c0), (e1, c1)) in all.iter().zip(&back) {
+            assert_eq!(e0, e1);
+            assert!(state(c0) == state(c1), "{}: rewritten as it was read", e0.name);
+        }
+        assert!(surfaces_bytes(&back, "study") == b, "the checkpoint rewritten as it was read");
+    }
+
+    /// A surface's payload (version 2: a plate's state) comes back with it,
+    /// and a checkpoint with one is version 2; cut short, it is refused.
+    #[test]
+    fn a_surfaces_payload_survives_a_checkpoint() {
+        let mut all = three_surfaces();
+        all[2].0.payload = (0..=255u8).cycle().take(5000).collect();
+        let b = surfaces_bytes(&all, "japan");
+        assert_eq!(u64::from_le_bytes(b[8..16].try_into().unwrap()), 2);
+        let mut back = Vec::new();
+        read_surfaces(&mut Cursor::new(b.clone()), |e, c| {
+            back.push((e, c));
+            Ok(())
+        }).unwrap();
+        for ((e0, c0), (e1, c1)) in all.iter().zip(&back) {
+            assert_eq!(e0, e1);
+            assert!(state(c0) == state(c1));
+        }
+        assert!(surfaces_bytes(&back, "japan") == b);
+        assert!(read_surfaces(&mut Cursor::new(b[..b.len() - 10].to_vec()), |_, _| Ok(())).is_err());
+    }
+
+    /// A packed canvas's buffers spilled to disk come back bit for bit: the
+    /// same buffers, and the same canvas unpacked with them (the easel's
+    /// resting surfaces keep them on disk, not in memory).
+    #[test]
+    fn spilled_aside_comes_back_bit_for_bit() {
+        let all = three_surfaces();
+        for (e, c) in &all {
+            let mut packed = Vec::new();
+            let aside = c.pack(&mut packed).unwrap();
+            let mut spilled = aside.clone();
+            let mut disk = Vec::new();
+            spilled.spill(&mut disk).unwrap();
+            assert!(spilled.heap_bytes() == 0, "{}: nothing large kept in memory", e.name);
+            let mut back = spilled.clone();
+            back.unspill(&mut Cursor::new(&disk)).unwrap();
+            let mut again = Vec::new();
+            back.clone().spill(&mut again).unwrap();
+            assert!(again == disk, "{}: the same buffers", e.name);
+            assert_eq!((back.receptive.clone(), back.floor.clone(), back.solv.clone(), back.laid.clone(), back.laid_id.clone(), back.micro.clone()), (aside.receptive.clone(), aside.floor.clone(), aside.solv.clone(), aside.laid.clone(), aside.laid_id.clone(), aside.micro.clone()));
+            assert_eq!(back.drawing.is_some(), aside.drawing.is_some());
+            let a = Canvas::unpack(&mut Cursor::new(&packed), aside).unwrap();
+            let b = Canvas::unpack(&mut Cursor::new(&packed), back).unwrap();
+            assert!(state(&a) == state(&b), "{}", e.name);
+            assert!(a.drawing_guide().data == b.drawing_guide().data);
+        }
+        assert!(all[1].1.has_drawing(), "the study has a drawing to spill");
+    }
+
+    /// Another version of the section, a damaged frame, a canvas cut short, a
+    /// current surface that isn't there, two surfaces of one name and trailing
+    /// data are refused.
+    #[test]
+    fn a_damaged_surfaces_checkpoint_is_refused() {
+        let all = three_surfaces();
+        let b = surfaces_bytes(&all, "painting");
+        let refused = |b: Vec<u8>, what: &str| {
+            let r = read_surfaces(&mut Cursor::new(b), |_, _| Ok(()));
+            assert!(r.is_err(), "{what} was read");
+            r.unwrap_err().to_string()
+        };
+        let mut v9 = b.clone();
+        set(&mut v9, 8, 9);
+        assert!(refused(v9, "version 9").contains("version 9"));
+        // a file without payloads is version 1, as before; read as version 2 it is damaged
+        assert_eq!(u64::from_le_bytes(b[8..16].try_into().unwrap()), 1);
+        let mut v2 = b.clone();
+        set(&mut v2, 8, 2);
+        refused(v2, "version 1 read as 2");
+        refused(b[..b.len() - 9].to_vec(), "a truncated checkpoint");
+        let mut longer = b.clone();
+        longer.push(0);
+        assert!(refused(longer, "trailing data").contains("trailing"));
+        // the first canvas's first chunk said to be longer than it is
+        let head = 8 + 8 + (8 + "easel save 1\nx=1\n".len()) + (8 + "painting".len()) + 8 + (8 + "painting".len()) + 8;
+        let first = u64::from_le_bytes(b[head..head + 8].try_into().unwrap());
+        let mut frame = b.clone();
+        set(&mut frame, head, first + 1);
+        refused(frame, "a damaged frame");
+        let entries: Vec<SurfaceEntry> = all.iter().map(|(e, _)| e.clone()).collect();
+        let mut w = Vec::new();
+        assert!(write_surfaces(&mut w, "", "nowhere", &entries, |i, w| all[i].1.write_state(&mut &mut *w, "")).is_err());
+        let mut twice = entries.clone();
+        twice[2].name = "study".into();
+        assert!(write_surfaces(&mut Vec::new(), "", "study", &twice, |i, w| all[i].1.write_state(&mut &mut *w, "")).is_err());
+        // written by hand: the third surface takes the second's name
+        let mut dup = b.clone();
+        let at = dup.windows(5).rposition(|x| x == b"japan").unwrap();
+        dup[at..at + 5].copy_from_slice(b"study");
+        refused(dup, "two surfaces of one name");
     }
 }

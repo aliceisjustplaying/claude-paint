@@ -970,6 +970,149 @@ with `scratch: true`; without it they work on the painting.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
 
+## Surfaces: sheets beside the painting
+
+A painting begun with named surfaces (its log's head says `--@ surfaces`, beside
+`--@ paper`) may keep sheets of paper beside its canvas, in the same session: a study to
+trace from, a proof to print on. An older painting replays as it was painted, and none of
+this is there: `sheet`, `use`, `surfaces`, `handoff` and `receive` don't exist in it.
+
+```lua
+st = sheet{name="study", size=300, aspect=4/3, paper={grammage=60, calender=0.6}}
+use(st)                       -- draw on the study: every drawing verb acts on it now
+h = pencil("2B"); h:line({{100,100},{800,700}})
+use("painting")               -- back to the canvas canvas{} made
+names, current = surfaces()   -- the names, the painting first, and the current one's
+```
+
+- **`sheet{name=, size=, aspect=, paper={...}, ground=, seed=}`** takes a sheet from the
+  drawer: a surface of its own, with its own paper (the keys `canvas{paper=}` takes) and
+  size in mm. It is laid out at the painting's pixel pitch, so a line keeps its width from
+  one sheet to another. Its width is 1000 units, as the painting's is (`st.H` is its
+  height). It is not in hand until `use(st)`.
+- **One surface is current.** Every drawing verb (pencil, pastel, brushes, knives, the rag,
+  `wait`'s ageing, `drying`) acts on it. `use(s)` or `use("name")` takes another up and
+  returns the name of the one put down. A sheet laid on the picture is lifted first.
+- **What each keeps.** A surface keeps its own paint, drawing, pastel and paper. The hand
+  is shared: the same brushes, knives, rags, palette and piles go from one to the other,
+  carrying what is on them.
+- **One clock.** Time passes for every sheet: hand time spent on the study and `wait`
+  there age the painting's paint too. A surface put down is aged all at once when it is
+  taken up, or looked at, to exactly what it would be had the painter waited beside it.
+- **A failed chunk** puts back every surface it touched, and which one was current.
+- **Looking.** `look`, `probe`, `save` and `status` take `--surface <name>`. Without it
+  `look`, `probe` and `save` show the painting, as before, and `status` the current
+  surface (its line names them all). A look changes nothing.
+- **Saves and checkpoints** keep every surface. A painting that never takes a sheet saves
+  exactly as before.
+
+**Handing a surface to another session.** An artist and a printer are two sessions, each
+seeing only what it is handed. A surface goes from one to the other as a file in the
+studio:
+
+```lua
+-- the artist's session
+sha = handoff(pl, "handoff/key.surface")   -- pl leaves this session; the reply gives its sha256
+-- the printer's session
+k = receive("handoff/key.surface", {after=90, sha256="<the hash handoff gave>"})
+use(k)
+```
+
+- **`handoff(s, path)`** takes the surface out of the session, with its whole state and
+  the session's clock, into a `.surface` file in the studio (never outside it, never over
+  a file already there). The painting itself stays. It happens only if the chunk is kept.
+- **`receive(path, {after=, sha256=, name=})`** takes it in. `after=` is the minutes it
+  spent on the way (the log names them: the wall clock can't be replayed), and it arrives
+  aged by exactly that, through the same drying as `wait`: ink on a plate keeps drying,
+  paint keeps setting. `after=0` brings it as it left. `sha256=` names the file's content:
+  a receive without it says the hash, and a replay that finds another file there refuses
+  it. `name=` renames it on arrival.
+
+## Plates: copper and zinc beside the painting
+
+A painting whose log's head also says `--@ plate` (new paintings do; it needs
+`--@ surfaces`) may keep intaglio plates among its surfaces and work them as a drypoint
+artist does. Without the switch none of this exists (`plate`, `needle` and the plate's tools
+are not there), and a painting with named surfaces that makes no plate saves and replays as
+before. No ink, wiping or press yet: those come with `--@ press`.
+
+```lua
+k = plate{name="key", metal="copper", temper="half-hard", size={346, 211}, thickness=1.3, bevel=45}
+n = needle{tip=25, cone=30}       -- point radius µm, half-angle of its cone, degrees
+use(k)                            -- in hand: only the plate's tools mark it
+r = k:drypoint(n, {{100,200},{800,260}}, {force=2, alt=55, azimuth=0, speed=30})
+k:burnish({{300,300},{600,300}}, {force=30, radius=10, passes=3})
+k:scrape({{650,400},{800,400}}, {force=5, width=8, passes=1})
+k:roulette({{100,500},{900,500}}, {pitch=0.2, tooth=30, force=3})
+print(k:feel(450, 230).words)     -- "a line about … µm wide and … µm deep, burr standing … µm"
+use("painting")
+```
+
+- **`plate{name=, metal=, temper=, size={w, h}, thickness=, bevel=}`.** The period box
+  (an 1890s Paris print box) has `"copper"` and `"zinc"`; another metal is refused.
+  - Copper comes `"annealed"` (45 HV), `"eighth-hard"` (65 HV, an estimate between the two
+    measured tempers) or `"half-hard"` (90 HV, the default). Zinc is `"rolled"` (45 HV).
+  - Size is in mm; thickness (default 1.3 mm) and bevel (45°) are for the plate mark later.
+  - It is laid out at the painting's pitch, as the sheet it prints on will be. Its width is
+    1000 units (`k.H` its height).
+  - Steel facing comes later (`--@ edition`); the plate keeps the hook.
+- **A statistical plate.** A pixel is wider than a drypoint line. So each cell keeps its
+  openings binned by width, each bin's share, depth and width, and its burr's volume,
+  height and side, not a picture of the lines. Those are what wiping and the press will
+  read.
+  - The tools' paths are kept too, so a crop look draws the lines again at its own scale.
+- **`needle{tip=, cone=}`** and **`k:drypoint(n, pts, {force=, alt=, azimuth=, speed=})`.**
+  Each option is a number or a list along the points, as for a pastel stroke: force in N
+  (a hand: 0.5–5), alt and azimuth as pastel takes them, speed in mm/s.
+  - **Width from scratch hardness:** w = √(8F/πH). Four times the force gives twice the
+    width, and zinc is √2 wider than half-hard copper.
+  - **Depth** follows the point: its rounded tip, then its cone.
+  - **Plough or cut.** The needle's lean toward the way it goes (pulled, top ahead) lowers
+    its attack angle, 90° − cone − lean.
+    - Below copper's critical 60° (measured 45–85°) it ploughs: all of the groove's metal
+      goes into burr, 0.75 × the depth high (an estimate: no burr has been measured).
+    - Pushed or held upright, it cuts a chip and leaves a clean line with no burr. The verb
+      says so.
+  - **The burr's side.** Leaning to one side throws the burr to the other; leaning past
+    its half-angle, all of it.
+  - **The result** is a table: `width`, `depth`, `burr`, `beta`, `cut`, `ploughed`,
+    volumes in µm³ (`groove`, `burr_volume`, `chip`), `length`, `seconds`.
+- **`k:burnish(pts, {force=, radius=, passes=, speed=})`.** A steel burnisher (a sphere of
+  `radius` mm).
+  - **Burr first.** It sits on the burr and presses it flat where the burr can't bear its
+    force at the metal's hardness. The fin folds onto the land beside the line.
+  - **Then the line's rims.** Once no burr holds it off, the rims flow into the line where
+    its Hertz pressure passes what a rim bears, by the contact's elastic give each pass.
+  - A drypoint line goes after a dozen passes or so. Metal is conserved (`flattened`,
+    `pressure` in MPa).
+- **`k:scrape(pts, {force=, width=, passes=, speed=})`.** A three-sided scraper held to cut.
+  - It takes the burr off, then shaves t = F/(H·width·tan 30°) a stroke (about 1 µm for
+    5 N on 8 mm of copper).
+  - The lines go with it, and it leaves a shallow dish (`scraped`, `chip`).
+- **`k:roulette(pts, {pitch=, tooth=, cone=, force=, speed=})`.** A toothed wheel: a pit
+  every `pitch` mm, each indented at the hardness, with a ring of burr.
+- **`k:feel(x, y)`** answers as a fingernail would: `words` ("a line about 50 µm wide and
+  40 µm deep, burr standing 30 µm", "a shallow dish 4 µm down", "smooth") and the numbers
+  (`depth`, `width`, `open`, `burr`, `level`).
+- **Hand time.** A tool's path at its speed (default 30 mm/s, an estimate: drypoint is hard
+  work) goes on the clock, which every surface shares.
+- **Only its tools mark it.** Paint, pencil and pastel are refused while a plate is in hand.
+- **Looking at it.** `look --surface key` shows polished metal.
+  - **The colour** is Fresnel reflection from the metal's measured optical constants:
+    Johnson & Christy for copper, Werner et al. for zinc.
+  - **Lines read dark** because a V-groove sends the light from wall to wall before it
+    climbs out. The burr catches light at its faces' slope.
+  - **Light.** `--mode relief` or `--light az,el` lights the relief (lines, burr, a scraped
+    dish) with the canvas's own raking light; `--mode mirror` previews the print's way
+    round.
+  - **A crop** is drawn again from the tools' paths at the crop's scale.
+  - `probe --surface key --at x,y` (or `--crop`) gives the open share, the lines' width
+    and depth, the burr and the level. `save` refuses a plate.
+- **Saves, checkpoints, replay and handoff** keep the plate's whole state (its cells and
+  its tools' paths) in its surface's entry. A plate handed off arrives exactly as it left,
+  and a session without the switch refuses to receive one.
+- **Physics and estimates:** notes/research/intaglio_physics.md, notes/research/plate_physics.md.
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

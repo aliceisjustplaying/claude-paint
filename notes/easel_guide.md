@@ -604,6 +604,14 @@ feel(x, y)                     -- what a fingertip feels there
   under its face and settle into the tooth along and beside the stroke, the
   hollows taking more: a mark covers several times what the stick touches,
   as discrete specks. Crumbs that fall on wet paint are lost in it.
+- **Keeping pastel inside a shape.** A stick has no `clip=`: it lays where
+  it touches, and its crumbs land beside the stroke, so pastel worked up to
+  a shape's edge spills past it. To keep a passage clean, cover it first:
+  `lay_sheet(mask)` lays a sheet of paper over the mask, you work the
+  neighbouring area up to and over its edge, and `lift_sheet()` takes it
+  away with what landed on it, leaving an edge as sharp as the stick's angle
+  and force make it. Lay and lift it in the same chunk (see **The sheet**
+  below).
 - **The tooth fills.** Loose pastel in the pores is a third body the stick
   slides on: the more there is, the less a stroke lays, until the paper
   refuses it. Fixative binds it into a rough crust that files the stick again,

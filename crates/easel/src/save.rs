@@ -240,6 +240,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.liquid_film_levels = canvas.liquid_film_levels();
     tubes.sealed_drawing_guide = canvas.sealed_drawing_guide();
     tubes.drawing_optics = canvas.drawing_optics();
+    tubes.wet_pastel = canvas.wet_pastel();
     tubes.rag_lift = canvas.rag_lift();
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();

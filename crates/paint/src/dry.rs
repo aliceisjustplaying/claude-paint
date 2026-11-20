@@ -83,6 +83,136 @@ fn mie_air(n: f32) -> (f32, f32) {
     (T[11].1, T[11].2)
 }
 
+/// The indices of the media `scatter_in` is tabled for: air to water.
+const MEDIA: [f32; 10] = [1.0, 1.01, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.333];
+
+/// A particle's transport scattering with its pores full of a medium of
+/// index `n_med` (1 air .. 1.333 water), as a share of its scattering in
+/// air: Mie, size-averaged (lognormal σ_ln 0.5, λ 550 nm) at a pastel's
+/// particle size, whiting's Sauter mean d₃₂ = 1.7 µm (`wet_pastel::
+/// PARTICLE_D_UM`), its contrast m = n/n_med and its size parameter
+/// π d n_med/λ both moving with the medium (notes/research/
+/// dry_pigment_mie.py `media`; wet_pastel.md §2). Interpolated in both; at
+/// most 1 (the table's Mie ripples aside). Only the wet pastel switch
+/// reads it.
+pub fn scatter_in(n: f32, n_med: f32) -> f32 {
+    // (n, the share at each of MEDIA)
+    const T: [(f32, [f32; 10]); 13] = [
+        (1.50, [1.0, 0.9798, 0.9549, 0.8859, 0.8111, 0.7263, 0.5850, 0.4734, 0.3136, 0.2140]),
+        (1.56, [1.0, 0.9743, 0.9614, 0.9193, 0.8575, 0.7671, 0.6789, 0.5621, 0.4442, 0.3593]),
+        (1.59, [1.0, 0.9873, 0.9717, 0.9530, 0.8839, 0.7858, 0.6996, 0.6107, 0.4989, 0.4139]),
+        (1.65, [1.0, 0.9753, 0.9583, 0.9667, 0.8444, 0.7349, 0.6747, 0.6265, 0.5723, 0.4955]),
+        (1.70, [1.0, 0.9780, 0.9613, 0.9070, 0.8773, 0.7833, 0.7242, 0.6741, 0.5848, 0.5453]),
+        (1.74, [1.0, 0.9704, 0.9461, 0.9155, 0.8497, 0.7933, 0.7152, 0.6408, 0.6024, 0.5797]),
+        (1.84, [1.0, 0.9898, 0.9961, 0.9635, 0.8997, 0.8756, 0.7677, 0.7258, 0.6931, 0.6564]),
+        (2.00, [1.0, 0.9811, 0.9687, 0.9214, 0.8819, 0.8348, 0.7653, 0.7196, 0.6677, 0.6592]),
+        (2.15, [1.0, 0.9717, 0.9712, 0.9355, 0.8813, 0.8280, 0.7945, 0.7648, 0.6926, 0.6639]),
+        (2.30, [1.0, 0.9755, 0.9728, 0.9914, 0.9215, 0.8682, 0.8335, 0.7580, 0.7315, 0.7055]),
+        (2.40, [1.0, 0.9876, 0.9822, 0.9561, 0.9161, 0.8604, 0.8138, 0.7729, 0.7390, 0.7199]),
+        (2.45, [1.0, 0.9954, 0.9839, 0.9676, 0.8801, 0.8438, 0.8263, 0.8198, 0.7664, 0.7662]),
+        (3.00, [1.0, 0.9956, 0.9924, 0.9946, 0.9753, 0.9418, 0.9327, 0.8732, 0.8301, 0.8166]),
+    ];
+    let m = n_med.clamp(MEDIA[0], MEDIA[9]);
+    let j = MEDIA.windows(2).position(|w| m <= w[1]).unwrap_or(8);
+    let v = (m - MEDIA[j]) / (MEDIA[j + 1] - MEDIA[j]);
+    let at = |row: &[f32; 10]| row[j] + (row[j + 1] - row[j]) * v;
+    let n = n.clamp(T[0].0, T[12].0);
+    let i = T.windows(2).position(|w| n <= w[1].0).unwrap_or(11);
+    let u = (n - T[i].0) / (T[i + 1].0 - T[i].0);
+    (at(&T[i].1) + (at(&T[i + 1].1) - at(&T[i].1)) * u).min(1.0)
+}
+
+/// Whiting (Champagne or Meudon chalk, ground calcite), the filler a pastel
+/// tint is let down with: its refractive index, 1.59 (ground calcite; its
+/// ω 1.658 and ε 1.486 average 1.60) [M]; its dry color, linear RGB of
+/// L* 94, a* 0.6, b* 4.1 (Omya Blanc de Meudon, DIN 6174) [M]; and its
+/// transport scattering per volume dry over lead white's, 0.376: Mie,
+/// σ'_air 0.331 µm⁻¹ at d₃₂ 1.7 µm (n 1.59) against 0.879 at lead white's
+/// 1 µm (n 2.0), the size `mie_air` is tabled at [D].
+pub const WHITING_INDEX: f32 = 1.59;
+const WHITING: Rgb = [0.892, 0.847, 0.790];
+const WHITING_S_REL: f32 = 0.376;
+
+/// A part's dry scattering per volume (as `dry_color`).
+fn s_dry(s_oil: f32, n: f32, s_dry_white: f32, sigma_white: f32) -> f32 {
+    if n < 0.0 {
+        -n * s_oil
+    } else {
+        let (sigma, ratio) = mie_air(n);
+        if n >= 1.9 { ratio * s_oil } else { s_dry_white * sigma / sigma_white }
+    }
+}
+
+/// The particle index of a pastel stick, for how water in its pores darkens
+/// it (`crate::wet_pastel`): its pigments' and its filler's, weighted by
+/// scattering × volume (each part scatters in water by its own contrast).
+/// A pile's whites stand for the whiting a pastel tint is let down with: a
+/// stick whose pile holds a white is its other pigments with the share of
+/// whiting that gives the stick's dry color (`dry_color`) its luminance by
+/// Kubelka–Munk, whiting at its own scattering and color (`WHITING`).
+/// Parts as `dry_color`'s with each one's refractive index and whether it
+/// is a white. A pile of whites alone is whiting; one without is its
+/// pigments.
+pub fn particle_index(parts: &[(Rgb, f32, f32, f32, f32, bool)], s_oil_white: f32) -> f32 {
+    let (sigma_white, r_white) = mie_air(2.0);
+    let s_dry_white = r_white * s_oil_white;
+    let s_w = WHITING_S_REL * s_dry_white;
+    let weighted = |list: &mut dyn Iterator<Item = (f32, f32)>| {
+        let (mut sn, mut ss) = (0.0f32, 0.0f32);
+        for (s, n) in list {
+            sn += s * n;
+            ss += s;
+        }
+        if ss > 0.0 { sn / ss } else { WHITING_INDEX }
+    };
+    let pigments: Vec<_> = parts.iter().filter(|p| !p.5 && p.4 > 0.0).collect();
+    let total: f32 = parts.iter().map(|p| p.4.max(0.0)).sum();
+    if total <= 0.0 {
+        return WHITING_INDEX;
+    }
+    if pigments.len() == parts.iter().filter(|p| p.4 > 0.0).count() {
+        return weighted(&mut parts.iter().map(|p| (p.4.max(0.0) * s_dry(p.1, p.2, s_dry_white, sigma_white), p.3)));
+    }
+    if pigments.is_empty() {
+        return WHITING_INDEX;
+    }
+    let lum = |r: Rgb| 0.2126 * r[0] + 0.7152 * r[1] + 0.0722 * r[2];
+    let target = lum(dry_color(&parts.iter().map(|p| (p.0, p.1, p.2, p.4)).collect::<Vec<_>>(), s_oil_white));
+    let vp: f32 = pigments.iter().map(|p| p.4).sum();
+    // KM of the pigments and x of whiting per volume of pigment
+    let mix = |x: f32| -> f32 {
+        let mut r = [0.0f32; 3];
+        for (q, o) in r.iter_mut().enumerate() {
+            let (mut k, mut s) = (0.0f32, 0.0f32);
+            for p in &pigments {
+                let m = p.0[q].clamp(1e-4, 0.9999);
+                k += p.4 / vp * (1.0 - m) * (1.0 - m) / (2.0 * m) * p.1;
+                s += p.4 / vp * s_dry(p.1, p.2, s_dry_white, sigma_white);
+            }
+            let wq = WHITING[q];
+            k += x * (1.0 - wq) * (1.0 - wq) / (2.0 * wq) * s_w;
+            s += x * s_w;
+            let ks = k / s.max(1e-9);
+            *o = 1.0 + ks - (ks * ks + 2.0 * ks).sqrt();
+        }
+        lum(r)
+    };
+    // (luminance rises with the whiting: bisect its log)
+    let (mut lo, mut hi) = ((1e-4f32).ln(), (1e4f32).ln());
+    let x = if mix(hi.exp()) < target {
+        hi.exp()
+    } else if mix(lo.exp()) > target {
+        lo.exp()
+    } else {
+        for _ in 0..60 {
+            let m = 0.5 * (lo + hi);
+            if mix(m.exp()) < target { lo = m } else { hi = m }
+        }
+        (0.5 * (lo + hi)).exp()
+    };
+    weighted(&mut pigments.iter().map(|p| (p.4 / vp * s_dry(p.1, p.2, s_dry_white, sigma_white), p.3)).chain(std::iter::once((x * s_w, WHITING_INDEX))))
+}
+
 /// The air/oil scattering ratio of a carbon black, whose
 /// absorption comes from carbon on (or in) its particles: bone black's
 /// apatite matrix ×9 at 1 µm (dry_pigment_optics.md, table 2.2), a carbon

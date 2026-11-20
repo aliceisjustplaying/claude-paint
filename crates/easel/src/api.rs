@@ -850,6 +850,118 @@ fn add_dust<M: UserDataMethods<Brush>>(m: &mut M) {
     });
 }
 
+/// `b:dip(share, {pastel=p, amount=})` and `b:wash(pts, {pressure=0.5})`:
+/// a brush that carries water (paint's wet_pastel.rs, the wet pastel
+/// switch). `b:dip` takes up water, `share` of what its belly holds (a
+/// clean brush only: no oil paint on it), and with `pastel=` a stick, ground
+/// pastel of its color too, `amount` (0..1, default 0.5) of the paste the
+/// brush can hold (a paste at the stick's own packing filling the space
+/// between its hairs, the water it displaces dripping off), worn off the
+/// stick's length: a paste, or with little of it, a wash. `b:wash` draws the brush through the picture: it lays water
+/// along its path, and the loose pastel it wets turns to a paste it carries
+/// on and lays further along, with the paste it held. Returns the pastel
+/// it laid, mm³. Only with the switch (`install_paper`).
+fn add_wash<M: UserDataMethods<Brush>>(m: &mut M) {
+    m.add_method("dip", |_, b, (share, o): (f32, Option<Table>)| {
+        if !(0.0..=1.0).contains(&share) {
+            return err("b:dip: share is how full of water the brush is, 0 to 1");
+        }
+        if b.held.borrow().fullness() > 0.02 {
+            return err("b:dip: the brush has oil paint on it; wipe it first (b:wipe(1))");
+        }
+        let mut amount = 0.0f32;
+        let mut stick = None;
+        if let Some(o) = &o {
+            check_keys(o, &["pastel", "amount"], "b:dip")?;
+            match o.get::<Value>("pastel")? {
+                Value::Nil => {}
+                Value::Table(t) if t.get::<Option<String>>("kind")?.as_deref() == Some("stick") => stick = Some(t),
+                _ => return err("b:dip: pastel= is a pastel stick (pastel(pile)), ground into the water"),
+            }
+            if let Some(a) = num(o, "amount")? {
+                if stick.is_none() || !(0.0..=1.0).contains(&a) {
+                    return err("b:dip: amount is how much of the paste the brush can hold it takes up, 0 to 1, with pastel=");
+                }
+                amount = a;
+            } else if stick.is_some() {
+                amount = 0.5;
+            }
+        }
+        let mmu = b.st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.mm_per_unit();
+        let cap = b.held.borrow().capacity_mm3(mmu);
+        let mut h = b.held.borrow_mut();
+        let eps = paint::wet_pastel::POROSITY;
+        h.water_mm3 = h.water_mm3.max(share * cap);
+        if let Some(t) = stick {
+            // ground off the stick: its length shortens by the volume over
+            // its section. A paste at the stick's packing fills the space
+            // between the hairs: at most `cap` of stick volume, its solids
+            // (1 − ε of it) displacing water
+            let st = draw_pencil::stick_of(&t)?;
+            let area = match st.section {
+                paint::pastel::Section::Round { d_mm } => std::f32::consts::FRAC_PI_4 * d_mm * d_mm,
+                paint::pastel::Section::Square { side_mm } => side_mm * side_mm,
+            };
+            let room = (cap - h.paste_mm3).max(0.0);
+            let v = (amount * cap).min(room).min((st.length_mm - 5.0).max(0.0) * area);
+            if v > 0.0 {
+                let total = h.paste_mm3 + v;
+                h.paste = [0, 1, 2].map(|k| (h.paste[k] * h.paste_mm3 + st.color[k] * v) / total);
+                h.paste_n = (h.paste_n * h.paste_mm3 + st.index * v) / total;
+                h.paste_mm3 = total;
+                t.set("length", st.length_mm - v / area)?;
+            }
+        }
+        // (what the solids leave room for)
+        h.water_mm3 = h.water_mm3.min(cap - (1.0 - eps) * h.paste_mm3).max(0.0);
+        // (dipping: a reach to the jar, as to the palette; grinding pastel
+        // into the water: mixing a pile)
+        drop(h);
+        if let Some(c) = b.st.borrow_mut().canvas.as_mut() {
+            c.tally_mut().secs += if amount > 0.0 { paint::tally::pace::RELOAD + paint::tally::pace::REMIX } else { paint::tally::pace::RELOAD };
+        }
+        let h = b.held.borrow();
+        Ok((h.water_mm3 / cap, h.paste_mm3))
+    });
+    m.add_method("wash", |_, b, (pts, o): (Value, Option<Table>)| {
+        let pts = points(&pts)?;
+        if pts.len() < 2 {
+            return err("b:wash: needs at least two points");
+        }
+        let mut p = 0.5f32;
+        if let Some(o) = &o {
+            check_keys(o, &["pressure"], "b:wash")?;
+            if let Some(v) = num(o, "pressure")? {
+                if !(0.0..=1.0).contains(&v) {
+                    return err("b:wash: pressure is a number, 0 to 1");
+                }
+                p = v;
+            }
+        }
+        if b.held.borrow().fullness() > 0.02 {
+            return err("b:wash: the brush has oil paint on it; a wet brush is clean (b:wipe(1), then b:dip(share))");
+        }
+        if b.held.borrow().water_mm3 <= 0.0 && b.held.borrow().paste_mm3 <= 0.0 {
+            return err("b:wash: the brush is dry; dip it in water first (b:dip(share))");
+        }
+        let width = b.held.borrow().tool.mark_width(p);
+        time::verb(&b.st, Verb::Pass, |s| {
+            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+            if let Err(e) = paint::Knife::check_path(&pts, c.frame().scale) {
+                return err(format!("b:wash: {e}"));
+            }
+            let mmu = c.mm_per_unit();
+            let mut h = b.held.borrow_mut();
+            let cap = h.capacity_mm3(mmu);
+            let mut load = paint::wet_pastel::WashLoad { water_mm3: h.water_mm3, paste_mm3: h.paste_mm3, paste: h.paste, paste_n: h.paste_n, ..paint::wet_pastel::WashLoad::for_tool(&h.tool, mmu, cap) };
+            let (v, secs) = c.wash_pastel(width, p, &pts, &mut load);
+            (h.water_mm3, h.paste_mm3, h.paste, h.paste_n) = (load.water_mm3, load.paste_mm3, load.paste, load.paste_n);
+            c.tally_mut().secs += secs as f64;
+            Ok(v)
+        })
+    });
+}
+
 pub(crate) fn no_canvas() -> mlua::Error {
     mlua::Error::runtime("no canvas yet: the first chunk is canvas{size=, aspect=, linen=, ground=}")
 }
@@ -2544,9 +2656,14 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     // a brush's methods are its type's: brushes made with the switch
     // (`create_any_userdata`) take these, main's and `dust`; brushes made
     // without it keep exactly main's (`UserData for Brush`)
+    let wet = st.borrow().tubes.wet_pastel && st.borrow().tubes.drawing_optics;
     lua.register_userdata_type::<Brush>(|reg| {
         <Brush as UserData>::register(reg);
         add_dust(reg);
+        // (and with the wet pastel switch, a brush that carries water)
+        if wet {
+            add_wash(reg);
+        }
     })?;
     draw_pencil::install_paper(lua, st)
 }
@@ -2562,8 +2679,29 @@ const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<thr
 /// (`Paper::drawing`).
 fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
     use paint::paper::{Felt, Laid, Paper};
-    check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    // (cobb=: the sheet's sizing against water, only with the wet pastel
+    // switch, which alone reads it)
+    let wet = tubes.wet_pastel && tubes.drawing_optics;
+    if wet {
+        check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "cobb", "stiffness", "tone"], "paper")?;
+    } else {
+        check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    }
     let d = Paper::drawing(seed);
+    // cobb=: g/m² of water the sheet takes up in a minute (a sized sheet,
+    // 5 to 200), or false for an unsized one
+    let cobb = match t.get::<Value>("cobb")? {
+        Value::Nil => d.cobb60,
+        Value::Boolean(false) => None,
+        Value::Integer(_) | Value::Number(_) => {
+            let v = num(t, "cobb")?.unwrap_or(0.0);
+            if !(5.0..=200.0).contains(&v) {
+                return err("paper: cobb is the g/m² of water the sheet takes up in a minute (its sizing), 5 to 200, or false for an unsized sheet");
+            }
+            Some(v)
+        }
+        _ => return err("paper: cobb is the g/m² of water the sheet takes up in a minute (its sizing), 5 to 200, or false for an unsized sheet"),
+    };
     let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
         let v = num(t, k)?.unwrap_or(def);
         if !(lo..=hi).contains(&v) {
@@ -2609,6 +2747,7 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         press: get("press", d.press, 0.3, 1.0)?,
         calender: get("calender", d.calender, 0.0, 1.0)?,
         absorbent: get("absorbent", d.absorbent, 0.0, 1.0)?,
+        cobb60: cobb,
         z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
         felt,
         laid,

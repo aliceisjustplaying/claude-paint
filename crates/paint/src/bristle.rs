@@ -381,6 +381,19 @@ pub struct Held {
     /// Printed only when there is some, so a brush that never brushed pastel
     /// prints (and digests) as it did before.
     pub pastel_mg: f32,
+    /// Water in the brush, mm³, and the paste of ground pastel in it (mm³
+    /// and its dry color): `b:dip` and `b:wash` (`crate::wet_pastel`, the
+    /// wet pastel switch). A wipe takes their share off. Printed only when
+    /// there is some, as `pastel_mg`.
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub water_mm3: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_mm3: f32,
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste: [f32; 3],
+    /// The paste's mean particle index (`crate::wet_pastel::WashLoad::paste_n`).
+    #[cfg_attr(feature = "replay-effects", serde(default))]
+    pub paste_n: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
@@ -438,6 +451,12 @@ impl std::fmt::Debug for Held {
         d.field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing));
         if self.pastel_mg > 0.0 {
             d.field("pastel_mg", &self.pastel_mg);
+        }
+        if self.water_mm3 > 0.0 {
+            d.field("water_mm3", &self.water_mm3);
+        }
+        if self.paste_mm3 > 0.0 {
+            d.field("paste_mm3", &self.paste_mm3).field("paste", &self.paste).field("paste_n", &self.paste_n);
         }
         d.finish()
     }
@@ -508,7 +527,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0 }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0, water_mm3: 0.0, paste_mm3: 0.0, paste: [0.0; 3], paste_n: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -533,6 +552,22 @@ impl Held {
         // neighboring bristles overlap by ~hair², so each lays lay / hair²
         let track = 2.0 * self.tool.hair_radius();
         self.tool.lay.max(0.3) * track * self.tool.run / (self.tool.hair * self.tool.hair)
+    }
+
+    /// The water the brush holds between its hairs, mm³, on a canvas of
+    /// `mm_per_unit` (`crate::wet_pastel`). A round's belly is a cone of its
+    /// width and a hair length 4.7 times that (Rosemary & Co Series 33
+    /// sable rounds: 15.7/3.4, 20/3.9 and 24.2/5.2 mm for sizes 4, 6, 8
+    /// [M]), the liquid filling 0.6 of it [E: the hairs' packing in a wet
+    /// bundle; no gravimetric measurement of a sable's load was found]:
+    /// about 0.16 mL for a 6 mm round. Other shapes hold a full load of
+    /// paint on every bristle (`full`, coats × square units).
+    pub fn capacity_mm3(&self, mm_per_unit: f32) -> f32 {
+        if self.tool.kind == Kind::Round {
+            let d = self.tool.width * mm_per_unit;
+            return 0.6 * std::f32::consts::PI / 12.0 * d * d * (4.7 * d);
+        }
+        self.full() * self.bristles.len() as f32 * crate::surface::COAT_UM * 1e-3 * mm_per_unit * mm_per_unit
     }
 
     /// Whether any bristle holds solvent (a thinned load, or solvent
@@ -604,6 +639,8 @@ impl Held {
     /// dry pastel it holds).
     pub fn wipe(&mut self, frac: f32) {
         self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
+        self.water_mm3 *= 1.0 - frac.clamp(0.0, 1.0);
+        self.paste_mm3 *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);

@@ -102,6 +102,15 @@ pub const PAPER_MARK: &str = "--@ paper";
 /// paints the single-cure film engine 9 was released with. It requires
 /// engine 9.
 pub const MATERIAL_MARK: &str = "--@ material";
+/// The wet pastel switch, in the head of a session file: pastel takes
+/// water (paint's `wet_pastel`): `p:wet(share)` dips a stick, `b:dip` and
+/// `b:wash` draw a wet brush (with ground pastel in it, a paste) through
+/// pastel, and the water dries on the painting's clock. A new painting
+/// has it; a log without it replays as it was painted, with none of it.
+/// It rides on the paper-and-pastel switch (`PAPER_MARK`), whose verbs it
+/// adds to, and the drawing's optics (`DRAWING_OPTICS_MARK`): without
+/// either it does nothing (paint's `Canvas::with_wet_pastel`).
+pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -790,6 +799,10 @@ impl Session {
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
         }
+        if self.st.borrow().tubes.wet_pastel {
+            let _ = writeln!(s, "{WET_PASTEL_MARK}");
+        }
+        // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
         if material != 0 {
             let _ = writeln!(s, "{MATERIAL_MARK} {material}");
@@ -1570,6 +1583,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.brush_skim = true;
         b.rag_lift = true;
         b.drain = true;
+        b.wet_pastel = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1642,6 +1656,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.drain = drain;
     b.material = material;
+    b.wet_pastel = head(WET_PASTEL_MARK);
     Ok(b)
 }
 

@@ -14,7 +14,41 @@ mod researched;
 mod calibration;
 
 pub const LEGACY_LATENT_SIZE: usize = 21;
-pub const LATENT_SIZE: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
+/// Engine 9's latent before the oil-K slots (`OIL_K`): a checkpoint written
+/// then holds this many floats per latent (`identity9_before_oil_k`).
+pub const LATENT_SIZE_BEFORE_OIL_K: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
+pub const LATENT_SIZE: usize = LATENT_SIZE_BEFORE_OIL_K + OIL_K.len();
+
+/// The oil-K switch (`crate::Palette::oil_k`, the easel's `--@ oil-k`): three
+/// researched tubes whose engine-9 oil table, fitted to a non-oil swatch read
+/// as an assumed 100 µm oil film, holds far too little absorption per volume,
+/// so that their oil color and their dry color can't both be right
+/// (dry_pigment_optics.md §6.5–6.6, notes/research/oil_k_fit.py). Each is a
+/// latent slot of its own, after the researched tubes: its K is the table's
+/// times a factor fitted to its measured dry powder (Cosentino 2014, corrected
+/// as for the lakes, with the measured black floor 0.022) with its scattering
+/// from its grain size, the same K in oil and dry, as absorption per volume is
+/// the pigment's in any medium; its oil S is the table's, or that dry S over
+/// Mie's air/oil ratio at its index and size, as a multiple of lead white's
+/// oil S spectrum (the dry rule's shape); and its dry S is the dry rule's
+/// times the Mie size factor σ′(d)/σ′(1 µm).
+/// - rose madder: K × the dry-lakes loading, `dry::ROSE_MADDER_LOADING`
+///   (its dye's, checked against dye chemistry: §6.3), read from there so the
+///   two stay one number; its alumina is fine, and the table's oil S is Mie's
+///   to 1.5×, so S stays.
+/// - green earth: grains of about 10 µm (Natural Pigments' 10–12 µm means), n
+///   1.62: σ′ 0.0521 of 1 µm's, air/oil 5.57; K ×1.816 (1.61–2.06 over the
+///   powder's correction; 0.85–3.98 over 5–20 µm).
+/// - copper green (verdigris): grains of about 100 µm (Kremer 44450's main
+///   peak, 102.5 µm, Reichert et al. 2025), n 1.545: σ′ 0.00433, air/oil 17.9;
+///   K ×0.8666 (0.81–0.91): its K was about right, its S 270× too high.
+/// Tuple: (tube, K factor, oil S as a multiple of lead white's oil S, or None
+/// for the table's, dry S size factor).
+pub const OIL_K: [(&str, f32, Option<f32>, f32); 3] = [
+    ("rose madder", crate::dry::ROSE_MADDER_LOADING, None, 1.0),
+    ("green earth", 1.816, Some(0.01463), 0.05215),
+    ("copper green", 0.8666, Some(0.0003667), 0.004325),
+];
 const PRIMARIES: usize = 5;
 const PIGMENTS: usize = 18;
 const INVERSE_SIZE: usize = 33;
@@ -70,6 +104,19 @@ pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> {
     Some(lat)
 }
 
+/// With the oil-K switch: tube `name`'s own slot (`OIL_K`), if it has one.
+pub fn tube9_oil_k(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    let j = OIL_K.iter().position(|o| o.0 == name)?;
+    let mut lat = [0.0; LATENT_SIZE];
+    lat[LATENT_SIZE_BEFORE_OIL_K + j] = 1.0;
+    Some(lat)
+}
+
+/// The dry S size factor of tube `name`'s oil-K slot (`OIL_K`).
+pub fn oil_k_dry_size(name: &str) -> Option<f32> {
+    OIL_K.iter().find(|o| o.0 == name).map(|o| o.3)
+}
+
 pub fn tube_strength(name: &str) -> Option<f32> {
     let name = tube_pigment(name)?;
     let p = NAMES.iter().position(|&n| n == name)?;
@@ -92,9 +139,13 @@ pub fn identity() -> u64 {
 
 /// Checkpoint identity for spectral film optics and their physical wet S.
 pub fn film_identity() -> u64 {
+    film_identity_of(identity9())
+}
+
+fn film_identity_of(identity9: u64) -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
-    hash.update(identity9().to_le_bytes());
+    hash.update(identity9.to_le_bytes());
     hash.update(b"film25um/spectral-backing/transmitted-residual/v2");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
@@ -114,6 +165,33 @@ pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
 pub fn identity9() -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
+    hash.update(identity9_of(LATENT_SIZE).to_le_bytes());
+    hash.update(b"oil-k-slots/table-k-times-factor/size-aware-s/v1");
+    for (name, k, s, dry) in OIL_K {
+        hash.update((name.len() as u64).to_le_bytes());
+        hash.update(name.as_bytes());
+        hash.update(k.to_le_bytes());
+        hash.update(s.unwrap_or(-1.0).to_le_bytes());
+        hash.update(dry.to_le_bytes());
+    }
+    u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
+}
+
+/// Engine 9's identity before the oil-K slots (`OIL_K`): its latents were
+/// `LATENT_SIZE_BEFORE_OIL_K` wide. A checkpoint that has it reads its
+/// latents widened with zeros.
+pub fn identity9_before_oil_k() -> u64 {
+    identity9_of(LATENT_SIZE_BEFORE_OIL_K)
+}
+
+/// And `film_identity`'s before them.
+pub fn film_identity_before_oil_k() -> u64 {
+    film_identity_of(identity9_before_oil_k())
+}
+
+fn identity9_of(width: usize) -> u64 {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
     hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
     hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/catalog-inputs/v4");
@@ -121,7 +199,7 @@ pub fn identity9() -> u64 {
     hash.update(CALIBRATED);
     hash.update(DENSITIES);
     hash.update(b"independent-researched-ks/legacy18-residual3-extension/tuple-f32/v1");
-    hash.update((LATENT_SIZE as u64).to_le_bytes());
+    hash.update((width as u64).to_le_bytes());
     for name in researched::RESEARCHED_TUBES {
         hash.update((name.len() as u64).to_le_bytes());
         hash.update(name.as_bytes());
@@ -201,6 +279,16 @@ pub fn pigment9(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
         for w in 0..crate::spectral::N {
             absorption[w] += c * coefficients[0][w];
             scattering[w] += c * coefficients[1][w];
+        }
+    }
+    for (j, &(name, kf, sf, _)) in OIL_K.iter().enumerate() {
+        let c = lat[LATENT_SIZE_BEFORE_OIL_K + j].max(0.0);
+        if c == 0.0 { continue; }
+        let base = &extra[researched::RESEARCHED_TUBES.iter().position(|&n| n == name).expect("an oil-K tube is a researched one")];
+        let white = &coefficients[NAMES.iter().position(|&n| n == "LeadWhite").unwrap()][1];
+        for w in 0..crate::spectral::N {
+            absorption[w] += c * kf * base[0][w];
+            scattering[w] += c * sf.map_or(base[1][w], |f| f * white[w]);
         }
     }
     crate::spectral::SpectralPigment { k: absorption, s: scattering }
@@ -429,6 +517,38 @@ fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
 mod tests {
     use super::*;
     use crate::color::{hex, to_oklab};
+
+    /// Engine 9's identity before the oil-K slots is the one checkpoints
+    /// written then carry: computed from the tables' bytes by the old
+    /// recipe outside this code (Python's hashlib over mixer/*.bin and the 27
+    /// researched names, width 48), 0x5ecc0e8c41eb7ada, and its film
+    /// identity 0x8e4aed0cc0f1a3d2. The current ones differ.
+    #[test]
+    fn the_identity_before_the_oil_k_slots_is_the_old_one() {
+        assert_eq!(identity9_before_oil_k(), 0x5ecc_0e8c_41eb_7ada);
+        assert_eq!(film_identity_before_oil_k(), 0x8e4a_ed0c_c0f1_a3d2);
+        assert_ne!(identity9(), identity9_before_oil_k());
+        assert_ne!(film_identity(), film_identity_before_oil_k());
+        assert_eq!(LATENT_SIZE, LATENT_SIZE_BEFORE_OIL_K + 3);
+    }
+
+    /// An oil-K slot is its researched tube's K times its factor, and its S
+    /// the table's (madder) or a multiple of lead white's (`OIL_K`); the
+    /// researched slot itself is unchanged.
+    #[test]
+    fn an_oil_k_slot_is_its_tubes_k_times_its_factor() {
+        let white = pigment9(&measured("LeadWhite").unwrap()).s;
+        for (name, kf, sf, _) in OIL_K {
+            let (old, new) = (pigment9(&tube9(name).unwrap()), pigment9(&tube9_oil_k(name).unwrap()));
+            for w in 0..crate::spectral::N {
+                assert_eq!(new.k[w], kf * old.k[w], "{name}");
+                assert_eq!(new.s[w], sf.map_or(old.s[w], |f| f * white[w]), "{name}");
+            }
+        }
+        assert!(tube9_oil_k("vermilion").is_none());
+        // madder's factor is the dry-lakes loading itself, not a copy of it
+        assert_eq!(Some(OIL_K[0].1), crate::dry::dye_loading("rose madder"));
+    }
 
     #[test]
     fn splitting_measured_films_preserves_the_backing_spectrum() {

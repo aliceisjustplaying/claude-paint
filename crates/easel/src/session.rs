@@ -72,6 +72,17 @@ pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// now, added to and dirtied (draw_pencil.rs): every new painting. A log without it
 /// replays its sticks in the colors of the piles as first knifed.
 pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
+/// Marks a painting whose pastel pencil (`pastel(pile, {kind="pencil"})`) is sharpened by
+/// `p:sharpen()`: a fresh point cut, the core shorter by the cut (paint's
+/// `pastel::Stick::sharpen`): every new painting. A log without it replays its pencils'
+/// sharpen as it was painted (refused in a painting whose calls agree).
+pub const PASTEL_SHARPEN_MARK: &str = "--@ pastel-pencil-sharpen";
+/// A log's head line: its sheet of paper may have a gritted ground, a sanded
+/// pastel paper's coat or pumice in glue or gesso (`canvas{paper={grit=}}`,
+/// paint's `paper::Grit`): every new painting. A log without it replays as
+/// it was painted, and `grit=` in it is refused. It rides on the
+/// paper-and-pastel switch's engines, 5 and later.
+pub const GRIT_MARK: &str = "--@ grit";
 /// Marks a painting whose calls agree with each other: a brush table refuses an option it
 /// doesn't know, a brush's load refuses an amount outside 0..1 as a knife's does, a recipe or
 /// mix whose parts overflow is refused, a pastel stick's side strokes keep its strokes' upper
@@ -79,6 +90,25 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// pass's `behind=` does, and a rag wipes a faint mask as it wipes a full one, lifting by
 /// the mask's value: every new painting. A log without it replays as it was painted.
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
+/// Marks a painting whose dye lakes (rose madder, carmine, yellow lake, magenta) look
+/// dry, as a pastel stick or a sheet's tone, as their measured powders do: their dye at its
+/// loading over their alumina's scattering, and a pigment the index table had wrong
+/// scatters by its measured index (`paint::Palette::dry_lakes`): every new painting. Only engine 9's dry colors have it (below, the line changes nothing). A log
+/// without it replays its lakes' dry colors as painted.
+pub const DRY_LAKES_MARK: &str = "--@ dry-lakes";
+/// Marks a painting whose rose madder, green earth and copper green have the absorption
+/// per volume their measured powders show, and green earth's and copper green's the
+/// scattering of their grain size, in oil and dry alike (`paint::mixer::OIL_K`,
+/// `paint::Palette::oil_k`): every new painting. Only engine 9's oil tables have it (below,
+/// the line changes nothing). A log without it replays those tubes as painted: madder a pale
+/// pink in oil, green earth and copper green pale and chalky.
+pub const OIL_K_MARK: &str = "--@ oil-k";
+/// Marks a painting whose pastel sticks' `p:hatch` covers an area as a
+/// pastellist does: its `angle` may be a direction field (a function(x, y) or
+/// a form's field), and it takes `zigzag=`, `jitter=`, `open=`, `alt=`,
+/// `azimuth=` and `speed=` (paint's `area_strokes`): every new painting. A
+/// log without it refuses them, as it was painted.
+pub const PASTEL_AREA_STROKES_MARK: &str = "--@ pastel-area-strokes";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -94,6 +124,22 @@ pub const DRAIN_MARK: &str = "--@ drain";
 /// with none of it. It names no engine of its own: it rides on engine 5
 /// and later (`box_for`).
 pub const PAPER_MARK: &str = "--@ paper";
+/// The paper-presets switch, in the head of a session file: a painting whose
+/// log has it may name its sheet (`paper="tan wove"` or `paper={preset=...}`,
+/// paint's `paper::PRESETS`) and mount it (`paper={mount="board"|"canvas"|
+/// "strainer"}`, paint's `paper::Mount`). A new painting has it; a log
+/// without it refuses both keys as unknown, as it did before. It rides on
+/// engine 5 and later, as paper does.
+pub const PAPER_PRESETS_MARK: &str = "--@ paper-presets";
+/// The charcoal switch, in the head of a session file: a painting whose log
+/// has it has `charcoal()`, vine and compressed charcoal sticks
+/// (draw_pencil.rs, paint's `charcoal`). A new painting has it; a log
+/// without it was painted before charcoal and replays as it was painted,
+/// with no `charcoal` global. Charcoal is a stick in the tooth, so
+/// `charcoal` comes with the paper-and-pastel switch's verbs
+/// (`PAPER_MARK`, `api::install_paper`): with the line and no paper there is
+/// none. The box carries it (`Palette::charcoal`).
+pub const CHARCOAL_MARK: &str = "--@ charcoal";
 /// A log's head line, `--@ material 1`: engine 9's material revision
 /// (`paint::Canvas::with_material`). Its baked films keep curing from the
 /// top down, and a skin over soft paint wrinkles (paint's `skin`). It is
@@ -102,6 +148,31 @@ pub const PAPER_MARK: &str = "--@ paper";
 /// paints the single-cure film engine 9 was released with. It requires
 /// engine 9.
 pub const MATERIAL_MARK: &str = "--@ material";
+/// The oils switch, in the head of a session file: a painting whose log has
+/// it is painted with each box's tubes in their colormen's oils, some with
+/// wax (paint's `palette::grind_of`), which set how fast its piles dry and
+/// how matte their wax dries, and `pile{oil=}` regrinds relative to them. A
+/// new painting has it; a log without it was painted before the oils and
+/// replays as it was painted. Like the drain switch it names no engine of
+/// its own: it rides on engine 5 and later (`box_for`), and the box carries
+/// it (`Palette::oils`).
+pub const OILS_MARK: &str = "--@ oils";
+/// The wet pastel switch, in the head of a session file: pastel takes
+/// water (paint's `wet_pastel`): `p:wet(share)` dips a stick, `b:dip` and
+/// `b:wash` draw a wet brush (with ground pastel in it, a paste) through
+/// pastel, and the water dries on the painting's clock. A new painting
+/// has it; a log without it replays as it was painted, with none of it.
+/// It rides on the paper-and-pastel switch (`PAPER_MARK`), whose verbs it
+/// adds to, and the drawing's optics (`DRAWING_OPTICS_MARK`): without
+/// either it does nothing (paint's `Canvas::with_wet_pastel`).
+pub const WET_PASTEL_MARK: &str = "--@ wet-pastel";
+/// The named-surfaces switch, in the head of a session file (notes/plan-intaglio.md §1,
+/// phase P1; surfaces.rs): a painting whose log has it may make sheets of paper beside its
+/// canvas (`sheet{}`), each a surface of its own on the one clock, and draw on whichever is
+/// current (`use`). A new painting has it; a log without it replays as it was painted, with
+/// none of it. Its verbs are a sheet of paper's, so it installs them only beside the
+/// paper-and-pastel switch (`PAPER_MARK`): without that it is accepted and installs nothing.
+pub const SURFACES_MARK: &str = "--@ surfaces";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -231,39 +302,9 @@ pub struct Chunk {
     pub mark_effects: u64,
 }
 
-/// The canvas as it was before a chunk, to put back if the chunk fails: its
-/// state packed (`Canvas::pack`) and compressed into an anonymous temporary
-/// file, not a copy of the canvas in memory. A copy of a painted 2400 px
-/// engine-9 canvas is some 4 GiB beside the canvas itself; packed and
-/// compressed it is a few hundred MiB, in the page cache, which the kernel
-/// writes out under memory pressure instead of swapping the painting.
-struct CanvasSnapshot {
-    file: std::fs::File,
-    aside: paint::checkpoint::Aside,
-}
-
-impl CanvasSnapshot {
-    fn take(canvas: &Canvas) -> std::io::Result<Self> {
-        let t0 = Instant::now();
-        let mut packer = zstd::stream::write::Encoder::new(tempfile::tempfile()?, 1)?;
-        // (a painted 2400 px canvas packs to a gigabyte: compressed on every core the
-        // painting has, it is a second or two before each chunk, not six)
-        packer.multithread(rayon::current_num_threads() as u32)?;
-        let aside = canvas.pack(&mut packer)?;
-        let file = packer.finish()?;
-        eprintln!("canvas put aside: {} bytes, {:.2}s", file.metadata()?.len(), t0.elapsed().as_secs_f64());
-        Ok(Self { file, aside })
-    }
-
-    fn restore(mut self) -> std::io::Result<Canvas> {
-        use std::io::Seek;
-        let t0 = Instant::now();
-        self.file.rewind()?;
-        let c = Canvas::unpack(&mut zstd::stream::read::Decoder::new(&self.file)?, self.aside)?;
-        eprintln!("canvas put back: {:.2}s", t0.elapsed().as_secs_f64());
-        Ok(c)
-    }
-}
+/// The canvas as it was before a chunk, to put back if the chunk fails: packed
+/// (`surfaces::Packed`), not a copy of it in memory.
+type CanvasSnapshot = crate::surfaces::Packed;
 
 /// Everything a failed chunk could have changed, taken before it runs.
 struct Snap {
@@ -285,6 +326,9 @@ struct Snap {
     knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
     /// The rags in the hand, as the brushes.
     rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
+    /// The surfaces besides the current one (surfaces.rs): each resting one's packed canvas
+    /// is shared, not copied, so a surface the chunk takes up is put back from where it rested.
+    surfaces: crate::surfaces::Surfaces,
 }
 
 pub struct Session {
@@ -331,6 +375,12 @@ pub struct Session {
     resting: Option<CanvasSnapshot>,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
+}
+
+/// What `Session::show` set aside.
+pub struct Shown {
+    own: crate::surfaces::Own,
+    name: String,
 }
 
 #[derive(Debug)]
@@ -434,6 +484,16 @@ impl Session {
         self
     }
 
+    /// Set the oils switch (`OILS_MARK`) on the box this session paints
+    /// from (tests: a new painting's is on and a replay's is its log's,
+    /// both set by `box_for`). Set before the first chunk runs.
+    #[cfg(test)]
+    pub fn with_oils(self, on: bool) -> Self {
+        debug_assert!(self.log.is_empty(), "the oils switch is set before the first chunk");
+        Rc::make_mut(&mut self.st.borrow_mut().tubes).oils = on;
+        self
+    }
+
     /// The box this session paints from.
     pub fn tube_box(&self) -> Palette {
         (*self.st.borrow().tubes).clone()
@@ -459,6 +519,10 @@ impl Session {
             (false, true) => {
                 self.st.borrow_mut().paper = true;
                 api::install_paper(&self.lua, self.st.clone())?;
+                // the named-surfaces switch's verbs make sheets of paper: only beside this one
+                if self.st.borrow().tubes.surfaces {
+                    crate::surfaces::install(&self.lua, self.st.clone())?;
+                }
                 // (no chunk has run: every global is the easel's own)
                 self.own = global_values(&self.lua)?;
                 self.globals = self.own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
@@ -500,7 +564,7 @@ impl Session {
             (r, v)
         }).collect();
         let canvas = s.canvas.as_ref().map(CanvasSnapshot::take).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put aside before the chunk: {e}")))?;
-        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags, surfaces: s.surfaces.clone() })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -524,7 +588,9 @@ impl Session {
         let mut s = self.st.borrow_mut();
         // the failed chunk's canvas goes before the snapshot's is unpacked: one canvas in memory, not two
         s.canvas = None;
-        s.canvas = snap.canvas.map(CanvasSnapshot::restore).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put back from where it was put aside: {e}")))?;
+        s.canvas = snap.canvas.map(|c| c.restore()).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put back from where it was put aside: {e}")))?;
+        // every other surface as it rested before the chunk (the chunk's own packs go)
+        s.surfaces = snap.surfaces;
         s.style = snap.style;
         s.setup = snap.setup;
         s.canvas_src = snap.canvas_src;
@@ -551,7 +617,8 @@ impl Session {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
         };
-        let mut fresh = Session::with_box(width, tubes).and_then(|s| s.with_paper(self.st.borrow().paper)).map_err(|e| e.to_string())?;
+        let paper = self.st.borrow().paper;
+        let mut fresh = Session::with_box(width, tubes).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -590,6 +657,8 @@ impl Session {
             PROGRESS.begin(src.lines().count(), &self.st.borrow());
         }
         let t0 = Instant::now();
+        // masks are checked against this session's current surface (api.rs `mask_of`)
+        let _running = api::Running::begin(&self.st);
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
         let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
@@ -630,6 +699,14 @@ impl Session {
         let globals = if self._serials.capped.get() { None } else { globals };
         if fail.is_none() && self._serials.capped.get() {
             fail = Some(format!("the chunk asked for more memory than a painting may hold ({} GiB), so nothing it did was kept", LUA_MAX_BYTES >> 30));
+        }
+        // the surfaces the chunk handed off leave once it is kept (surfaces.rs), and never if not
+        if fail.is_none() {
+            if let Err(e) = crate::surfaces::commit(&self.st, self.replay) {
+                fail = Some(format!("{e}\n(the surfaces the chunk handed off couldn't be put in their files, so nothing it did was kept)"));
+            }
+        } else {
+            crate::surfaces::discard(&self.st);
         }
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
@@ -682,6 +759,13 @@ impl Session {
         std::cell::Ref::filter_map(self.st.borrow(), |s| s.canvas.as_ref()).ok()
     }
 
+    /// The painting's canvas while it is the current surface (surfaces.rs), for what records
+    /// the painting (its hand-time frames and timelapse): None while a sheet beside it is in
+    /// hand.
+    pub fn painting(&self) -> Option<std::cell::Ref<'_, Canvas>> {
+        std::cell::Ref::filter_map(self.st.borrow(), |s| s.canvas.as_ref().filter(|_| s.surfaces.main_current())).ok()
+    }
+
     /// Pack the canvas away on disk (`CanvasSnapshot`) while the sitting's other canvas
     /// is used, so that the painting and the scratch canvas are never both in memory.
     /// Nothing reads a resting session's canvas until `wake` (`run` wakes it).
@@ -709,6 +793,57 @@ impl Session {
             }
         }
         Ok(())
+    }
+
+    /// Show the surface `name` for a look (main.rs: `look`, `probe`, `status`, `save` with
+    /// `--surface`): the current surface rests packed (`rest`) and a copy of `name`'s canvas,
+    /// waited up to the studio clock, stands in for it with its own fields, until `unshow`.
+    /// The surface itself stays as it rests, so a look changes nothing a replay of the log
+    /// wouldn't. None: `name` is current, and is shown as it is.
+    pub fn show(&mut self, name: &str) -> Result<Option<Shown>, String> {
+        let (i, r, clock) = {
+            let st = self.st.borrow();
+            let sf = &st.surfaces;
+            if name == sf.current_name() {
+                return Ok(None);
+            }
+            let Some(i) = sf.find(name) else {
+                return Err(format!("--surface {name}: there is no surface of that name (there are: {})", sf.names().join(", ")));
+            };
+            (i, sf.slots[i].rest.clone().expect("a surface not current rests"), st.clock)
+        };
+        self.rest().map_err(|e| format!("the current surface couldn't be put aside: {e}"))?;
+        let canvas = r.canvas.as_ref().map(|p| p.restore()).transpose();
+        let mut canvas = match canvas {
+            Ok(c) => c,
+            Err(e) => {
+                self.wake().map_err(|e| format!("the current surface couldn't be brought back: {e}"))?;
+                return Err(format!("the surface {name:?} couldn't be brought back: {e}"));
+            }
+        };
+        if let Some(c) = canvas.as_mut() && clock > r.since {
+            c.wait((clock - r.since) as f32);
+        }
+        let mut st = self.st.borrow_mut();
+        let own = crate::surfaces::Own::take(&mut st);
+        r.own.put(&mut st);
+        // (its clock read against the studio's, as a surface taken up has it: surfaces.rs `wake_up`)
+        if let Some(c) = canvas.as_ref() {
+            st.clock0 = c.clock() - clock;
+        }
+        st.canvas = canvas;
+        Ok(Some(Shown { own, name: st.surfaces.slots[i].name.clone() }))
+    }
+
+    /// Put back what `show` showed: the current surface again, as it was.
+    pub fn unshow(&mut self, shown: Option<Shown>) -> Result<(), String> {
+        let Some(shown) = shown else { return Ok(()) };
+        {
+            let mut st = self.st.borrow_mut();
+            st.canvas = None;
+            shown.own.put(&mut st);
+        }
+        self.wake().map_err(|e| format!("the current surface couldn't be brought back after showing {:?}: {e}", shown.name))
     }
 
     /// The session as a replayable program.
@@ -772,8 +907,23 @@ impl Session {
         if self.st.borrow().tubes.pastel_current_heap {
             let _ = writeln!(s, "{PASTEL_HEAP_MARK}");
         }
+        if self.st.borrow().tubes.pastel_pencil_sharpen {
+            let _ = writeln!(s, "{PASTEL_SHARPEN_MARK}");
+        }
+        if self.st.borrow().tubes.grit {
+            let _ = writeln!(s, "{GRIT_MARK}");
+        }
         if self.st.borrow().tubes.calls_agree {
             let _ = writeln!(s, "{CALLS_AGREE_MARK}");
+        }
+        if self.st.borrow().tubes.dry_lakes {
+            let _ = writeln!(s, "{DRY_LAKES_MARK}");
+        }
+        if self.st.borrow().tubes.oil_k {
+            let _ = writeln!(s, "{OIL_K_MARK}");
+        }
+        if self.st.borrow().tubes.pastel_area_strokes {
+            let _ = writeln!(s, "{PASTEL_AREA_STROKES_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -787,9 +937,25 @@ impl Session {
         if self.st.borrow().tubes.drain {
             let _ = writeln!(s, "{DRAIN_MARK}");
         }
+        if self.st.borrow().tubes.oils {
+            let _ = writeln!(s, "{OILS_MARK}");
+        }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
         }
+        if self.st.borrow().tubes.paper_presets {
+            let _ = writeln!(s, "{PAPER_PRESETS_MARK}");
+        }
+        if self.st.borrow().tubes.charcoal {
+            let _ = writeln!(s, "{CHARCOAL_MARK}");
+        }
+        if self.st.borrow().tubes.surfaces {
+            let _ = writeln!(s, "{SURFACES_MARK}");
+        }
+        if self.st.borrow().tubes.wet_pastel {
+            let _ = writeln!(s, "{WET_PASTEL_MARK}");
+        }
+        // (the material line last: a log of material 1 names it at the head's end)
         let material = self.st.borrow().tubes.material;
         if material != 0 {
             let _ = writeln!(s, "{MATERIAL_MARK} {material}");
@@ -874,9 +1040,7 @@ impl Session {
                 let _ = board.visit(p.heap, 0.0);
                 let mut projected = p.clone();
                 if let Some(h) = board.heap(p.heap).filter(|h| h.changed) {
-                    projected.mix = st.tubes.pile(h.fractions());
-                    projected.mix.solvent = h.solvent;
-                    projected.mix.oil_rate = h.oil_rate;
+                    projected.mix = h.mixture(&st.tubes);
                     projected.medium = h.medium;
                     projected.thinner = projected.thinner.map(|_| h.thinner);
                 }
@@ -929,7 +1093,7 @@ impl Session {
 
     pub fn status(&self) -> String {
         let s = self.st.borrow();
-        format!("{} chunks · {}px · {}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"))
+        format!("{} chunks · {}px · {}{}", self.log.len(), s.width, s.setup.as_deref().unwrap_or("no canvas yet"), s.surfaces.status())
     }
 }
 
@@ -1490,6 +1654,12 @@ pub fn logged_drain(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == DRAIN_MARK)
 }
 
+/// Whether a session file's head has the oils switch (an `OILS_MARK` line
+/// before the first chunk).
+pub fn logged_oils(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == OILS_MARK)
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`, in developer mode. Painter mode
@@ -1546,9 +1716,13 @@ fn box_list() -> String {
 /// blends and glazes at masks (`BLEND_MARK`).
 /// New paintings' full palette refuses a new heap, and their pastels take the color of
 /// their pile's heap as it is now; an existing one's as its log says
-/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
+/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`), and likewise for sharpening a pastel
+/// pencil (`PASTEL_SHARPEN_MARK`), their lakes' dry colors (`DRY_LAKES_MARK`), three tubes' oil absorption (`OIL_K_MARK`), a
+/// gritted ground on paper (`GRIT_MARK`) and a stick's hatching over an area
+/// (`PASTEL_AREA_STROKES_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
-/// (`MATERIAL_MARK`).
+/// (`MATERIAL_MARK`). The drain and oils switches (`DRAIN_MARK`,
+/// `OILS_MARK`): a new one's on, an existing one's its log's.
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1564,12 +1738,22 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.drawing_optics = true;
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
+        b.pastel_pencil_sharpen = true;
+        b.grit = true;
         b.calls_agree = true;
+        b.dry_lakes = true;
+        b.oil_k = true;
+        b.paper_presets = true;
+        b.pastel_area_strokes = true;
+        b.surfaces = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
         b.rag_lift = true;
         b.drain = true;
+        b.oils = true;
+        b.charcoal = true;
+        b.wet_pastel = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1597,6 +1781,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let drain = logged_drain(text);
     if drain && engine < 5 {
         return Err(format!("the log's {DRAIN_MARK} line (the drain switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
+    let oils = logged_oils(text);
+    if oils && engine < 5 {
+        return Err(format!("the log's {OILS_MARK} line (the oils switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }
     let logged = logged_box(text)?;
     let name = logged.as_deref().unwrap_or(paint::palette::DEFAULT_BOX);
@@ -1632,7 +1820,20 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
+    b.pastel_pencil_sharpen = head(PASTEL_SHARPEN_MARK);
+    b.grit = head(GRIT_MARK);
+    if b.grit && engine < 5 {
+        return Err(format!("the log's {GRIT_MARK} line (a gritted ground on paper) is engine 5's and later's, as paper is; this log names engine {engine}; nothing ran"));
+    }
     b.calls_agree = head(CALLS_AGREE_MARK);
+    b.dry_lakes = head(DRY_LAKES_MARK);
+    b.oil_k = head(OIL_K_MARK);
+    b.paper_presets = head(PAPER_PRESETS_MARK);
+    if b.paper_presets && engine < 5 {
+        return Err(format!("the log's {PAPER_PRESETS_MARK} line (the paper-presets switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
+    b.pastel_area_strokes = head(PASTEL_AREA_STROKES_MARK);
+    b.surfaces = head(SURFACES_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
@@ -1642,6 +1843,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.drain = drain;
     b.material = material;
+    b.oils = oils;
+    b.charcoal = head(CHARCOAL_MARK);
+    b.wet_pastel = head(WET_PASTEL_MARK);
     Ok(b)
 }
 
@@ -1839,7 +2043,7 @@ mod tests {
         for engine in [1, 3, 4, 5, paint::engine7::ENGINE, paint::PIGMENT_MIXER] {
             let log: String = head.iter().filter(|l| {
                 let l = l.trim();
-                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK)
+                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK && l != CHARCOAL_MARK)
             }).map(|l| format!("{l}\n")).chain([format!("{ENGINE_MARK} {engine}\n")]).collect();
             let tubes = box_for(Some(&log)).unwrap();
             assert_eq!(tubes.engine, engine);
@@ -1878,7 +2082,7 @@ mod tests {
         let before = bits(&s);
         s.rest().unwrap();
         assert!(s.canvas().is_none());
-        s.resting.as_ref().unwrap().file.set_len(0).unwrap();
+        s.resting.as_ref().unwrap().damage();
         assert!(s.wake().is_err());
         assert!(s.stale && s.canvas().is_none(), "a session without its canvas must be stale");
         s.run("x = 1").unwrap();
@@ -1975,6 +2179,171 @@ mod tests {
             live.rebuild().unwrap();
             assert_canvas_close(&live.canvas().unwrap(), &original);
             assert_eq!(live.program("drain"), log);
+        }
+    }
+
+    const W: usize = 160;
+
+    /// The oils switch is read from a log's head only, needs engine 5, and
+    /// rides on the box, apart from the drain switch: a log with it replays,
+    /// rebuilds and checkpoints the same canvas (its oils section), its piles
+    /// drying at their tubes' oils and wax and its brushes printing the
+    /// paint's packing and wax; a log without it is as before (no mark,
+    /// no oils section). A new painting's box has it.
+    #[test]
+    fn the_oils_switch_comes_from_the_log_s_head() {
+        assert!(logged_oils(&format!("{ENGINE_MARK} 5\n  {OILS_MARK}  \n{MARK} 1\n")));
+        assert!(!logged_oils(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{OILS_MARK}\n")));
+        assert!(!logged_oils(&format!("{ENGINE_MARK} 5\n{DRAIN_MARK}\n{MARK} 1\n")));
+        let e = box_for(Some(&format!("{ENGINE_MARK} 4\n{OILS_MARK}\n{MARK} 1\n"))).unwrap_err();
+        assert!(e.contains(OILS_MARK), "{e}");
+        let b = box_for(Some(&format!("{ENGINE_MARK} 5\n{OILS_MARK}\n{MARK} 1\n"))).unwrap();
+        assert!(b.oils && !b.drain);
+        let b = box_for(Some(&format!("{ENGINE_MARK} 5\n{DRAIN_MARK}\n{MARK} 1\n"))).unwrap();
+        assert!(!b.oils && b.drain);
+        assert!(box_for(None).map(|b| b.oils).unwrap_or(true), "a new painting's box has its oils");
+        let strokes = r#"p = pile{{"raw umber", 1}}
+            b = brush("flat", 24)
+            b:load(p, 0.8)
+            b:stroke({{100, 200}, {900, 200}})
+            wait(30)"#;
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let mut drying = Vec::new();
+        for (oils, drain) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut live = Session::new(96).unwrap().with_oils(oils).with_drain(drain);
+            live.run(CANVAS).unwrap();
+            live.run(strokes).unwrap();
+            assert_eq!((live.canvas().unwrap().oils(), live.canvas().unwrap().drain()), (oils, drain));
+            let log = live.program("oils");
+            let head = format!("{ENGINE_MARK} {}\n{}{}\n{MARK} 1\n", paint::ENGINE, if drain { format!("{DRAIN_MARK}\n") } else { String::new() }, if oils { format!("{OILS_MARK}\n") } else { String::new() });
+            assert!(log.contains(&head), "{log}");
+            assert_eq!((logged_oils(&log), logged_drain(&log)), (oils, drain));
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let bytes = state(&live);
+            assert_eq!(checkpoint_base_format(&bytes), if drain { 14 } else { 11 });
+            assert_eq!(Canvas::read_state(&mut &bytes[..]).unwrap().0.oils(), oils);
+            assert!(state(&replay) == bytes && replay.program("oils") == log, "oils {oils} drain {drain}: the replay is the painting");
+            let brushes = live.st.borrow_mut().live_brushes();
+            let held = format!("{:?}", brushes[0].borrow());
+            let hide = held.split("hide: [").nth(1).and_then(|h| h.split(']').next()).unwrap();
+            assert_eq!(hide.matches(',').count(), if oils || drain { 9 } else { 4 }, "oils {oils} drain {drain}: {hide}");
+            let p = match &live.globals["p"].0 {
+                Value::UserData(u) => u.borrow::<api::PileU>().unwrap().mix.clone(),
+                o => panic!("p is {o:?}"),
+            };
+            drying.push(p.drying);
+            live.rebuild().unwrap();
+            assert!(state(&live) == bytes && live.program("oils") == log, "oils {oils} drain {drain}: the rebuild is the painting");
+        }
+        // (the default box's raw umber is walnut-ground: it dries at 0.70 of
+        // its pigment's rate with the switch, whatever the drain)
+        let w = paint::palette::WALNUT_RATE;
+        assert!(drying[0] == drying[2] && drying[1] == drying[3] && (drying[1] - drying[0] * w).abs() < 1e-6, "{drying:?}");
+    }
+
+    /// With the oils switch, paint reground in an oil (`pile{oil=}`) has every
+    /// pigment in that oil, without wax, and keeps it however the piles are
+    /// knifed: Sargent's lead white (his tubes' in poppy) and vermilion (in
+    /// linseed) reground in linseed dry at the mean of the two pigments' own
+    /// rates, in poppy at that times POPPY_RATE, and as they come at their
+    /// tubes' own; tube paint knifed into a reground pile (`p:add`) comes in
+    /// its tube's oil, and piles in different oils knifed together (`mix{}`)
+    /// each dry in their own; the Impressionists' waxed tubes reground carry
+    /// no wax, and a waxed tube added brings its own.
+    #[test]
+    fn a_regrind_keeps_each_pigment_in_its_oil() {
+        use paint::palette::{POPPY_RATE, WALNUT_RATE, WAX_RATE};
+        let get = |s: &Session, n: &str| match &s.globals[n].0 {
+            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().current(),
+            o => panic!("{n} is {o:?}"),
+        };
+        let own = |s: &Session, n: &str| {
+            let st = s.st.borrow();
+            let i = st.tubes.tubes.iter().position(|t| t.name == n).unwrap();
+            st.tubes.pile(vec![(i, 1.0)])
+        };
+        let close = |p: &api::PileU, want: f32| assert!((p.mix.rate() - want).abs() < 1e-5 && (p.mix.laid(0.0).drying - want).abs() < 1e-5, "{}: {} for {want}", p.recipe(), p.mix.rate());
+        let mut s = Session::with_box(W, find_box("sargent").unwrap()).unwrap().with_oils(true);
+        s.run(CANVAS).unwrap();
+        s.run(r#"pn = pile{{"lead white", 1}, {"vermilion", 1}}
+                 pl = pile{{"lead white", 1}, {"vermilion", 1}, oil="linseed"}
+                 pp = pile{{"lead white", 1}, {"vermilion", 1}, oil="poppy"}
+                 pa = pile{{"vermilion", 1}, oil="walnut"}; pa = pa:add{{"zinc white", 1}}
+                 a = pile{{"lead white", 1}, oil="linseed"}; b = pile{{"vermilion", 1}, oil="poppy"}; c = pile{{"zinc white", 1}}
+                 m = mix{{a, 1}, {b, 3}}; mc = mix{{a, 1}, {c, 1}}; mn = mix{{pn, 1}, {c, 1}}"#)
+            .unwrap();
+        let (dw, dv, dz) = (own(&s, "lead white").pigment_drying, own(&s, "vermilion").pigment_drying, own(&s, "zinc white").pigment_drying);
+        eprintln!("sargent: lead white {dw}, vermilion {dv}: as they come {}, in linseed {}, in poppy {}", get(&s, "pn").mix.rate(), get(&s, "pl").mix.rate(), get(&s, "pp").mix.rate());
+        let pn = get(&s, "pn");
+        close(&pn, (dw * POPPY_RATE + dv) / 2.0);
+        assert!(pn.mix.oil_rate == 1.0 && pn.recipe().ends_with("medium 0)"), "{}", pn.recipe());
+        let pl = get(&s, "pl");
+        close(&pl, (dw + dv) / 2.0);
+        assert!(pl.recipe().ends_with(", in linseed oil)"), "{}", pl.recipe());
+        let pp = get(&s, "pp");
+        close(&pp, (dw + dv) / 2.0 * POPPY_RATE);
+        assert!(pp.recipe().ends_with(", in poppy oil)"), "{}", pp.recipe());
+        close(&get(&s, "pa"), (dv * WALNUT_RATE + dz * POPPY_RATE) / 2.0);
+        close(&get(&s, "m"), (dw + 3.0 * dv * POPPY_RATE) / 4.0);
+        close(&get(&s, "mc"), (dw + dz * POPPY_RATE) / 2.0);
+        let mn = get(&s, "mn");
+        close(&mn, ((dw * POPPY_RATE + dv) / 2.0 + dz * POPPY_RATE) / 2.0);
+        assert!(mn.mix.tubes_come, "{}", mn.recipe());
+        // (wax: the Impressionists' cobalt comes in poppy with wax, their
+        // vermilion in linseed with wax)
+        let mut s = Session::with_box(W, find_box("impressionist").unwrap()).unwrap().with_oils(true);
+        s.run(CANVAS).unwrap();
+        s.run(r#"w = pile{{"cobalt blue", 1}, oil="poppy"}; t = pile{{"cobalt blue", 1}}"#).unwrap();
+        let (co, ve) = (own(&s, "cobalt blue"), own(&s, "vermilion"));
+        let (w0, t) = (get(&s, "w"), get(&s, "t"));
+        close(&w0, co.pigment_drying * POPPY_RATE);
+        close(&t, co.pigment_drying * POPPY_RATE * WAX_RATE);
+        assert!(w0.mix.laid(0.0).wax == 0.0 && t.mix.laid(0.0).wax == 1.0, "{} {}", w0.mix.laid(0.0).wax, t.mix.laid(0.0).wax);
+        s.run(r#"w = w:add{{"vermilion", 1}}"#).unwrap();
+        let w = get(&s, "w");
+        close(&w, (co.pigment_drying * POPPY_RATE + ve.pigment_drying * WAX_RATE) / 2.0);
+        let wax = ve.oil_volume / (co.oil_volume + ve.oil_volume);
+        assert!((w.mix.laid(0.0).wax - wax).abs() < 1e-5, "{} for {wax}", w.mix.laid(0.0).wax);
+    }
+
+    /// With the oils switch a dip jittered from a mix of piles in different
+    /// oils (`Palette::remix`, as each brush load, stipple and work pass
+    /// takes one) keeps each part in the oil it is in and dries at the dip's
+    /// own proportions: Sargent's lead white reground in linseed knifed with
+    /// his vermilion reground in poppy and his zinc white as it comes (in
+    /// poppy).
+    #[test]
+    fn a_dip_from_a_mix_keeps_each_part_in_its_oil() {
+        use paint::palette::POPPY_RATE;
+        let mut s = Session::with_box(W, find_box("sargent").unwrap()).unwrap().with_oils(true);
+        s.run(CANVAS).unwrap();
+        s.run(r#"a = pile{{"lead white", 1}, oil="linseed"}; b = pile{{"vermilion", 1}, oil="poppy"}; c = pile{{"zinc white", 1}}
+                 m = mix{{a, 1}, {b, 2}, {c, 1}}"#)
+            .unwrap();
+        let m = match &s.globals["m"].0 {
+            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().current(),
+            o => panic!("m is {o:?}"),
+        };
+        let tubes = s.st.borrow().tubes.clone();
+        let own = |n: &str| {
+            let i = tubes.tubes.iter().position(|t| t.name == n).unwrap();
+            (i, tubes.pile(vec![(i, 1.0)]).pigment_drying)
+        };
+        let ((lw, dw), (v, dv), (zw, dz)) = (own("lead white"), own("vermilion"), own("zinc white"));
+        let want = |f: &dyn Fn(usize) -> f32| (f(lw) * dw + f(v) * dv * POPPY_RATE + f(zw) * dz * POPPY_RATE) / (f(lw) + f(v) + f(zw));
+        let f0 = |i: usize| m.mix.parts.iter().find(|p| p.0 == i).map_or(0.0, |p| p.1);
+        assert!((m.mix.laid(0.0).drying - want(&f0)).abs() < 1e-5, "{}: {} for {}", m.recipe(), m.mix.laid(0.0).drying, want(&f0));
+        for seed in 0..60 {
+            let dip = tubes.remix(&m.mix, 1.0, &mut paint::Rng::new(seed));
+            let f = |i: usize| dip.parts.iter().find(|p| p.0 == i).map_or(0.0, |p| p.1);
+            assert!((dip.laid(0.0).drying - want(&f)).abs() < 1e-5, "seed {seed}: {} for {}", dip.laid(0.0).drying, want(&f));
         }
     }
     /// Paintings from before the engine version was recorded (no `--@ engine`

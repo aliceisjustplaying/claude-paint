@@ -182,10 +182,35 @@ def main():
     parser.add_argument("--painter", type=model_spec, metavar="PROVIDER/MODEL:THINKING")
     parser.add_argument("--critic-model", type=model_spec, metavar="PROVIDER/MODEL:THINKING")
     parser.add_argument("--die-roll", action="store_true", help="write sixteen concepts in sitting 0, then roll among the six least common")
+    parser.add_argument("--agy", action="store_true", help="configure a hand-started agy die-roll studio instead of launching the house runner")
+    parser.add_argument("--sessions-root", type=Path)
+    parser.add_argument("--pi-black", type=Path, help="pi-black extension file for an agy studio's Anthropic critic")
     args = parser.parse_args()
     if args.critic_model is not None and not args.critic:
         parser.error("--critic-model requires --critic")
+    if args.agy and (not args.die_roll or args.sessions_root is None or args.painter):
+        parser.error("--agy requires --die-roll and --sessions-root, without a pi painter option")
+    if args.pi_black is not None and not (args.agy and args.critic):
+        parser.error("--pi-black requires --agy and --critic")
+    if args.sessions_root is not None and not args.agy:
+        parser.error("--sessions-root requires --agy")
+    if args.agy:
+        agy = runpy.run_path(str(Path(__file__).with_name("prepare_agy_studio")))
+        try:
+            agy["validate"](args.studio)
+        except (ValueError, OSError) as error:
+            parser.error(str(error))
     prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None, args.critic, args.die_roll, args.painter, args.critic_model)
+    if args.agy:
+        critic_config = ""
+        if args.critic:
+            provider, rest = (args.critic_model or "anthropic/claude-opus-5-5:xhigh").split("/", 1)
+            model, thinking = rest.rsplit(":", 1)
+            black = (args.pi_black or Path.home() / ".pi/agent/git/github.com/aliceisjustplaying/pi-black/extensions/pi-black.ts").expanduser().resolve()
+            run = (args.run_dir or args.runner_dir / "run").resolve()
+            critic_config = json.dumps({"args": (["-e", str(black)] if provider == "anthropic" else []) +
+                                        ["--provider", provider, "--model", model, "--thinking", thinking], "dir": str(run / "critic")})
+        agy["prepare"](args.studio, args.sessions_root, concepts_only=True, critic_config=critic_config)
 
 
 if __name__ == "__main__":

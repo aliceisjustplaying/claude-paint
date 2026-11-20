@@ -1,0 +1,102 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import runpy
+import sys
+import tempfile
+
+
+REPO = Path(__file__).resolve().parent.parent
+DIE = runpy.run_path(str(REPO / "harness/painter/die_roll.py"))
+
+
+def atomic_json(path, value):
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as staged:
+        temporary = Path(staged.name)
+        try:
+            staged.write(json.dumps(value, indent=2) + "\n")
+            staged.close()
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+class InvalidConcepts(ValueError):
+    def __init__(self, message, retry):
+        super().__init__(message)
+        self.retry = retry
+
+
+def roll_studio(studio, run_dir):
+    studio = studio.resolve(strict=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with (run_dir / ".die_roll.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        record = run_dir / "die_roll.json"
+        if os.path.lexists(record):
+            raise ValueError(f"{record} already exists; no die was rolled again")
+        for name in ("paintings/lua/painting.lua", "out/easel/painting/committed.lua"):
+            log = studio / name
+            if log.exists() and any(line.startswith("--@ chunk") for line in log.read_text().splitlines()):
+                raise ValueError("sitting 0 requires a pristine painting; no die was rolled")
+        config_path = studio / ".agents/mcp_config.json"
+        config = json.loads(config_path.read_text())
+        args = config["mcpServers"]["easel"]["args"]
+        if args.count("--concepts-only") != 1 or "--sittings" in args:
+            raise ValueError("expected the concepts-only agy configuration")
+        launch = [line.removeprefix("> ") for line in (studio / "LAUNCH.md").read_text().splitlines()
+                  if line.startswith("> Your brief is in BRIEF.md in this folder.")]
+        if len(launch) != 1:
+            raise ValueError("expected one house launch message in LAUNCH.md")
+        state = run_dir / "sitting_0.json"
+        attempts = json.loads(state.read_text()) if state.exists() else []
+        if len(attempts) >= 2:
+            raise ValueError("notes/concepts.md did not parse after two sitting-0 attempts; no die was rolled")
+        try:
+            concepts = DIE["parse_concepts"]((studio / "notes/concepts.md").read_text())
+        except (ValueError, FileNotFoundError) as error:
+            attempts.append({"sitting": 0, "attempt": len(attempts) + 1, "status": "invalid", "error": str(error)})
+            atomic_json(state, attempts)
+            raise InvalidConcepts(str(error), retry=len(attempts) == 1) from error
+        result = DIE["roll"](concepts)
+        atomic_json(record, result)
+        args[args.index("--concepts-only")] = "--sittings"
+        atomic_json(config_path, config)
+        attempts.append({"sitting": 0, "attempt": len(attempts) + 1, "status": "completed"})
+        atomic_json(state, attempts)
+        return DIE["opening"](result) + "\n\n" + launch[0]
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Hand off an agy concepts-only sitting to the painting session, without starting a model.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("message")
+    roll = commands.add_parser("roll")
+    roll.add_argument("studio", type=Path)
+    roll.add_argument("--run-dir", type=Path, required=True)
+    args = parser.parse_args()
+    if args.command == "message":
+        print(DIE["SITTING_ZERO"])
+        return
+    try:
+        message = roll_studio(args.studio, args.run_dir.expanduser().resolve())
+    except InvalidConcepts as error:
+        print(str(error), file=sys.stderr)
+        if error.retry:
+            print(DIE["RETRY"])
+        else:
+            print("notes/concepts.md did not parse after two sitting-0 attempts; no die was rolled", file=sys.stderr)
+        raise SystemExit(1)
+    except (ValueError, OSError) as error:
+        parser.error(str(error))
+    print(message)
+
+
+if __name__ == "__main__":
+    main()

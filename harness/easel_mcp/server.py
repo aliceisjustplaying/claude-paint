@@ -492,7 +492,7 @@ class Easel:
         return [types.TextContent(type="text", text=said)]
 
 
-def tool_definitions(studio, sittings=False, agy=False):
+def tool_definitions(studio, sittings=False, agy=False, concepts_only=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
     if critic_cli(studio):
         definitions += json.loads(Path(__file__).with_name("critic-tools.json").read_text())
@@ -510,6 +510,9 @@ def tool_definitions(studio, sittings=False, agy=False):
     if sittings:
         definitions += json.loads(Path(__file__).with_name("sitting-tools.json").read_text())
         next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left. While a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done."
+    if concepts_only:
+        from concepts import TOOL
+        definitions = [tool for tool in json.loads(Path(__file__).with_name("sitting-tools.json").read_text()) if tool["name"] == "read"] + [TOOL]
     if agy:
         for definition in definitions:
             name = definition["name"]
@@ -544,6 +547,7 @@ async def main():
     parser.add_argument("--studio", default=os.environ.get("EASEL_ROOT"))
     parser.add_argument("--sessions-root", type=Path, help="opt in to durable viewer session recording")
     parser.add_argument("--sittings", action="store_true")
+    parser.add_argument("--concepts-only", action="store_true")
     parser.add_argument("--break-seconds", type=float, default=0)
     parser.add_argument("--sitting-seconds", type=float)
     parser.add_argument("--agy", action="store_true", help="agy client: mark every tool alwaysLoad and page text replies over 8,000 bytes")
@@ -552,9 +556,15 @@ async def main():
         parser.error("set --studio or EASEL_ROOT to an exported studio")
     if any(value is not None and (not math.isfinite(value) or value < 0) for value in (args.break_seconds, args.sitting_seconds)):
         parser.error("sitting and break durations must be finite and nonnegative")
-    if args.agy and not args.sittings:
-        parser.error("--agy goes with --sittings")
-    if args.sittings:
+    if args.sittings and args.concepts_only:
+        parser.error("--concepts-only and --sittings are separate sessions")
+    if args.agy and not (args.sittings or args.concepts_only):
+        parser.error("--agy goes with --sittings or --concepts-only")
+    if args.concepts_only:
+        os.environ["PAINTER_CRITIC"] = ""
+        from concepts import ConceptsEasel
+        easel = ConceptsEasel(Path(args.studio))
+    elif args.sittings:
         from sittings import SittingEasel
         easel = SittingEasel(Path(args.studio), args.break_seconds, args.sitting_seconds)
     else:
@@ -566,7 +576,7 @@ async def main():
     if args.agy:
         easel.page_bytes = PAGE_BYTES
     server = Server("easel")
-    definitions = tool_definitions(easel.studio, args.sittings, args.agy)
+    definitions = tool_definitions(easel.studio, args.sittings, args.agy, args.concepts_only)
     meta = {"_meta": {"antigravity/alwaysLoad": True}} if args.agy else {}
 
     @server.list_tools()

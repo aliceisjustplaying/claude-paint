@@ -108,6 +108,45 @@ pub(crate) const CRUMB_MIN_UM: f32 = 5.0;
 /// How far a crumb rides under the face before it settles, mm (an
 /// estimate; the finger's smear runs 1–10 mm).
 const SETTLE_MM: f32 = 3.0;
+/// A pastel pencil point's cuts: their angle to the axis, radians (11.5°).
+/// A blade bares "a little over a centimetre" of core all round (Derwent,
+/// Martin Aveling), about 11 mm: on a 4.4 mm core, atan(2.2 / 11) = 0.197
+/// (notes/research/pastel_stick_tribology.md §1). A wear facet lying
+/// flatter than this along the core (`p:side`) is left by the blade: see
+/// `Stick::sharpen_cut_mm`.
+const PENCIL_TAPER: f32 = 0.20;
+/// The lightest touch a pencil point bears, N: the bottom of a feather
+/// scumble's 0.1–0.5 N (notes/research/pastel_stick_tribology.md §5). A cut
+/// point crumbles under it until its flat bears it at the core's hardness.
+const PENCIL_LIGHT_N: f32 = 0.1;
+/// A pastel pencil as it comes (`Stick::pencil`), mm: Faber-Castell's Pitt
+/// Pastel is 17.5 cm (Jerry's Artarama listings).
+const PENCIL_LENGTH_MM: f32 = 175.0;
+
+/// How a blade cuts a pastel pencil's point: eight cuts through it at
+/// `taper` (the angle between a cut and the axis, radians), the very point
+/// blunted flat `blunt_mm` up the axis.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PencilPoint {
+    taper: f32,
+    blunt_mm: f32,
+}
+
+impl PencilPoint {
+    /// The point of a pencil as `Stick::pencil_as_before` cuts it (a log
+    /// without the easel's `--@ pastel-pencil-sharpen`): 0.22 rad, 0.15 mm.
+    const BEFORE: PencilPoint = PencilPoint { taper: 0.22, blunt_mm: 0.15 };
+
+    /// The point a blade cuts in a core of hardness `hardness_mpa`: at
+    /// `PENCIL_TAPER`, its tip crushed back until the octagonal flat the cuts
+    /// leave (area 8 tan(π/8) a² for an apothem a) bears the lightest touch
+    /// at the core's hardness, a = √(F / (8 tan(π/8) H)), which sits a / tan τ
+    /// up the axis (0.25 mm at the default 11.6 MPa).
+    fn cut(hardness_mpa: f32) -> PencilPoint {
+        let apothem = (PENCIL_LIGHT_N / (8.0 * (std::f32::consts::PI / 8.0).tan() * hardness_mpa)).sqrt();
+        PencilPoint { taper: PENCIL_TAPER, blunt_mm: apothem / PENCIL_TAPER.tan() }
+    }
+}
 
 impl Stick {
     /// Hardness (MPa) and wear coefficient of a stick of softness `soft`
@@ -140,20 +179,116 @@ impl Stick {
         Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color }
     }
 
-    /// A pastel pencil's core, Ø `d_mm` (4.3–4.7), sharpened by a blade to a
-    /// point: eight cuts at `taper` (the angle between a cut and the axis,
-    /// radians), the very point a little blunt.
+    /// A pastel pencil's core, Ø `d_mm` (4.3–4.7; Stabilo's CarbOthello is
+    /// 4.4), `PENCIL_LENGTH_MM` long, sharpened by a blade to a point
+    /// (`PencilPoint::cut`): the pencil that `Stick::sharpen` sharpens.
     pub fn pencil(color: Rgb, soft: f32, d_mm: f32) -> Stick {
-        let taper: f32 = 0.22;
-        let mut facets = vec![[0.0, 0.0, -1.0, -0.15]];
-        let (s, c) = (taper.cos(), taper.sin());
+        let (hardness, wear) = Stick::mechanics(soft);
+        Stick { section: Section::Round { d_mm }, length_mm: PENCIL_LENGTH_MM, facets: Stick::pencil_point(PencilPoint::cut(hardness)), hardness, wear, color }
+    }
+
+    /// A pastel pencil as a log without the easel's `--@ pastel-pencil-sharpen`
+    /// paints it: 120 mm long, its point cut at 0.22 rad and blunted 0.15 mm
+    /// up (`PencilPoint::BEFORE`). Such a log never sharpens it.
+    pub fn pencil_as_before(color: Rgb, soft: f32, d_mm: f32) -> Stick {
+        let (hardness, wear) = Stick::mechanics(soft);
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets: Stick::pencil_point(PencilPoint::BEFORE), hardness, wear, color }
+    }
+
+    /// The blade's cuts of a pastel pencil's point: the blunt end
+    /// `p.blunt_mm` up, then eight cuts through the point at `p.taper`.
+    fn pencil_point(p: PencilPoint) -> Vec<[f32; 4]> {
+        let mut facets = vec![[0.0, 0.0, -1.0, -p.blunt_mm]];
+        let (s, c) = (p.taper.cos(), p.taper.sin());
         for k in 0..8 {
-            let a = k as f32 * std::f32::consts::TAU / 8.0 + 0.2;
+            let a = Stick::pencil_cut(k);
             // a plane through the point, leaning `taper` off the axis
             facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
         }
-        let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color }
+        facets
+    }
+
+    /// The direction of the pencil point's `k`th cut about the axis, radians.
+    fn pencil_cut(k: usize) -> f32 {
+        k as f32 * std::f32::consts::TAU / 8.0 + 0.2
+    }
+
+    /// The highest n·x over a freshly cut pencil point `p` of radius `r`
+    /// (`pencil_point`) for a direction `n` pointing down toward its end
+    /// (n_z < 0): the most of it that lies past a plane of normal `n`. Its
+    /// extreme points that way are the blunt end's octagon and the rim where
+    /// the cuts meet the core's round side (sampled every 1/4°, within
+    /// ~1e-5 mm).
+    fn pencil_point_support(p: PencilPoint, r: f32, n: [f32; 3]) -> f32 {
+        let tan = p.taper.tan();
+        let dot = |x: f32, y: f32, z: f32| n[0] * x + n[1] * y + n[2] * z;
+        // the blunt end: an octagon of apothem (blunt × tan), its corners between the cuts
+        let corner = p.blunt_mm * tan / (std::f32::consts::PI / 8.0).cos();
+        let mut h = f32::NEG_INFINITY;
+        for k in 0..8 {
+            let a = Stick::pencil_cut(k) + std::f32::consts::PI / 8.0;
+            h = h.max(dot(corner * a.cos(), corner * a.sin(), p.blunt_mm));
+        }
+        // the rim: on the side's line at angle θ, the lowest point all the cuts leave
+        for i in 0..1440 {
+            let th = i as f32 * std::f32::consts::TAU / 1440.0;
+            let up = (0..8).map(|k| (th - Stick::pencil_cut(k)).cos()).fold(f32::NEG_INFINITY, f32::max);
+            h = h.max(dot(r * th.cos(), r * th.sin(), r * up / tan));
+        }
+        h
+    }
+
+    /// How much of the core (mm) a sharpening cuts off this pencil's
+    /// drawing end: the least the point must move back up the axis for a
+    /// fresh point (`pencil_point`, as `Stick::pencil` cuts it) to lie inside
+    /// the core as it has worn, i.e. how far back of the fresh point its
+    /// deepest wear facet sits, measured along the axis through the taper
+    /// (geometry, not a typical loss: a blade only takes off what it must).
+    ///
+    /// A facet lying flatter along the core than the blade's cuts (closer
+    /// than `PENCIL_TAPER` to the axis: the core laid on its side, `p:side`)
+    /// is left where it is. A facet blunter than a cut meets the fresh cone
+    /// near its tip, so moving the point back clears it. A flatter one meets
+    /// the cone far up its side, if at all: clearing it would take a cut of
+    /// (h − d)/sin φ, unbounded as φ → 0 and past the bared cone, so the
+    /// blade reshapes the point and leaves the flat on the round side.
+    pub fn sharpen_cut_mm(&self) -> f32 {
+        let point = PencilPoint::cut(self.hardness);
+        let r = self.radius();
+        let flat = point.taper.sin();
+        let mut cut = 0.0f32;
+        for f in &self.facets {
+            if -f[2] < flat {
+                continue;
+            }
+            let h = Stick::pencil_point_support(point, r, [f[0], f[1], f[2]]);
+            cut = cut.max((h - f[3]) / -f[2]);
+        }
+        // (a fresh point's own cuts meet it to rounding)
+        if cut < 1e-4 { 0.0 } else { cut }
+    }
+
+    /// Sharpen a pastel pencil's core (`Stick::pencil`) as a blade does: its
+    /// point cut fresh again (`PencilPoint::cut`) and the core
+    /// `sharpen_cut_mm` shorter. A facet worn along the core's side (see
+    /// `sharpen_cut_mm`) that still cuts into the fresh point stays, moved to
+    /// the new end's frame. Returns the mm cut off.
+    pub fn sharpen(&mut self) -> f32 {
+        let cut = self.sharpen_cut_mm();
+        let point = PencilPoint::cut(self.hardness);
+        let r = self.radius();
+        let flat = point.taper.sin();
+        let mut facets = Stick::pencil_point(point);
+        for f in &self.facets {
+            // (the new end's frame is the old one moved `cut` up the axis)
+            let d = f[3] - f[2] * cut;
+            if -f[2] < flat && Stick::pencil_point_support(point, r, [f[0], f[1], f[2]]) > d + 1e-4 {
+                facets.push([f[0], f[1], f[2], d]);
+            }
+        }
+        self.facets = facets;
+        self.length_mm -= cut;
+        cut
     }
 
     fn radius(&self) -> f32 {
@@ -1487,6 +1622,108 @@ mod tests {
             }
         }
         s
+    }
+
+    /// A fresh pencil needs no cut; a worn one is cut back to a fresh point
+    /// and is shorter by about how far its worn end sits back of the point.
+    #[test]
+    fn sharpening_a_pencil_cuts_a_fresh_point_and_shortens_it() {
+        let fresh = Stick::pencil([0.02; 3], 0.35, 4.4);
+        assert_eq!(fresh.length_mm, 175.0);
+        assert_eq!(fresh.sharpen_cut_mm(), 0.0);
+        let mut s = fresh.clone();
+        assert_eq!(s.sharpen(), 0.0);
+        assert_eq!(s, fresh);
+        // the cuts meet the round side "a little over a centimetre" up (the core a
+        // blade bares): 2.2 / tan 0.20 = 10.85 mm
+        let a = Stick::pencil_cut(0);
+        let rim = fresh.ray([2.1999 * a.cos(), 2.1999 * a.sin(), 0.0], [0.0, 0.0, 1.0]).unwrap();
+        assert!((rim - 10.85).abs() < 0.02, "{rim}");
+
+        let mut c = Canvas::new_window(24, 1.0, [0.55; 3], None).with_size_mm(40.0).with_paper(Paper::drawing(4));
+        let mut worn = fresh.clone();
+        for i in 0..20 {
+            line(&mut c, &mut worn, 100.0 + 40.0 * i as f32, 2.5, 60.0);
+        }
+        // how far up the axis the worn end now lies, back of the fresh one
+        let end = |s: &Stick| s.ray([0.0; 3], [0.0, 0.0, 1.0]).unwrap();
+        let back = end(&worn) - end(&fresh);
+        assert!(back > 0.05, "20 lines wear the point back {back} mm");
+        let cut = worn.sharpen_cut_mm();
+        assert!(cut >= back - 1e-4 && cut < 15.0, "the cut {cut} reaches the worn end {back}");
+        let mut sharpened = worn.clone();
+        assert_eq!(sharpened.sharpen(), cut);
+        assert_eq!(sharpened.facets, fresh.facets);
+        assert_eq!(sharpened.length_mm, worn.length_mm - cut);
+        assert_eq!((sharpened.hardness, sharpened.wear, sharpened.section), (worn.hardness, worn.wear, worn.section));
+    }
+
+    /// An older log's pencil is the one it was painted with: 120 mm, its
+    /// eight cuts at 0.22 rad and the point blunted 0.15 mm up.
+    #[test]
+    fn a_pencil_as_before_keeps_its_old_point() {
+        let old = Stick::pencil_as_before([0.02; 3], 0.35, 4.5);
+        let taper: f32 = 0.22;
+        let mut facets = vec![[0.0, 0.0, -1.0, -0.15]];
+        let (s, c) = (taper.cos(), taper.sin());
+        for k in 0..8 {
+            let a = k as f32 * std::f32::consts::TAU / 8.0 + 0.2;
+            facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
+        }
+        assert_eq!(old.facets, facets);
+        assert_eq!((old.length_mm, old.section), (120.0, Section::Round { d_mm: 4.5 }));
+    }
+
+    /// A fresh pencil's point is crushed back until its flat bears the
+    /// lightest touch, 0.1 N, at the core's hardness. At soft 0.35, H =
+    /// 10^(1.4771 − 0.35 × 1.1761) = 11.63 MPa; the octagon's apothem is
+    /// √(0.1 / (8 tan(π/8) × 11.63)) = 0.0509 mm, 0.0509 / tan 0.20 = 0.251 mm
+    /// up the axis.
+    #[test]
+    fn a_fresh_pencil_points_flat_bears_the_lightest_touch() {
+        let fresh = Stick::pencil([0.02; 3], 0.35, 4.4);
+        assert!((fresh.hardness - 11.63).abs() < 0.01, "{}", fresh.hardness);
+        let up = |x: f32| {
+            let a = Stick::pencil_cut(0);
+            fresh.ray([x * a.cos(), x * a.sin(), 0.0], [0.0, 0.0, 1.0]).unwrap()
+        };
+        let blunt = up(0.0);
+        assert!((blunt - 0.251).abs() < 0.002, "{blunt}");
+        // the flat's edge toward a cut, found from the shape itself
+        let (mut lo, mut hi) = (0.0f32, 1.0f32);
+        for _ in 0..40 {
+            let m = 0.5 * (lo + hi);
+            if up(m) <= blunt + 1e-5 { lo = m } else { hi = m }
+        }
+        assert!((lo - 0.0509).abs() < 0.0005, "apothem {lo}");
+        let area = 8.0 * (std::f32::consts::PI / 8.0).tan() * lo * lo;
+        assert!((0.1 / area / fresh.hardness - 1.0).abs() < 0.02, "{} MPa", 0.1 / area);
+    }
+
+    /// The blade leaves a flat lying closer to the axis than its cuts (the
+    /// core laid on its side), and clears one blunter than a cut by moving
+    /// the point back as far as the flat cuts into it, along the flat's normal.
+    #[test]
+    fn sharpening_leaves_a_flat_flatter_than_the_taper() {
+        let fresh = Stick::pencil([0.02; 3], 0.35, 4.4);
+        let point = PencilPoint::cut(fresh.hardness);
+        let r = fresh.radius();
+        // (a direction between two cuts, so the flat meets the rim where it reaches furthest)
+        let a = Stick::pencil_cut(0) + std::f32::consts::PI / 8.0;
+        for (phi, kept) in [(0.185f32, true), (0.23, false)] {
+            let n = [phi.cos() * a.cos(), phi.cos() * a.sin(), -phi.sin()];
+            let mut s = fresh.clone();
+            // 0.05 mm into the fresh point along the flat's normal
+            s.facets.push([n[0], n[1], n[2], Stick::pencil_point_support(point, r, n) - 0.05]);
+            let cut = s.sharpen();
+            if kept {
+                assert_eq!(cut, 0.0, "φ {phi}");
+                assert_eq!(s.facets.len(), fresh.facets.len() + 1, "φ {phi}: the flat stays");
+            } else {
+                assert!((cut - 0.05 / phi.sin()).abs() < 1e-3, "φ {phi}: cut {cut}");
+                assert_eq!(s.facets, fresh.facets, "φ {phi}: the flat is cut away");
+            }
+        }
     }
 
     #[test]

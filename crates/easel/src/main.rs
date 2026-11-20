@@ -19,6 +19,8 @@ mod pass_feedback;
 mod ground_cache;
 mod board;
 mod check;
+mod damp;
+mod steam;
 mod depth;
 mod display;
 mod draw_edges;
@@ -40,6 +42,7 @@ mod palette_look;
 mod session;
 mod state_dump;
 mod studio;
+mod surfaces;
 mod time;
 mod world;
 
@@ -1188,7 +1191,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let f = c.frame();
     let (len, wide) = (2.0 * blade, blade + 12.0);
     let board_h = wide + 20.0;
-    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine()).with_drain(c.drain()).with_glaze_film(c.engine() >= paint::PIGMENT_MIXER && c.glaze_film());
+    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine()).with_drain(c.drain()).with_oils(c.oils()).with_glaze_film(c.engine() >= paint::PIGMENT_MIXER && c.glaze_film());
     let mut knife = paint::Knife::new(blade).with_engine(c.engine());
     knife.load(paint, full);
     let cy = board_h / 2.0;
@@ -1567,7 +1570,7 @@ impl Server {
         let width = self.s.st.borrow().width;
         let source = self.s.program(&self.name);
         let identity = self.replay.identity(&source, width)?;
-        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), n, &identity))?;
+        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.painting().as_deref(), n, &identity))?;
         self.replay.completed(&session_dir(&self.name).join("replay.ckpt"), &self.s, &source, width)
     }
 
@@ -1576,7 +1579,8 @@ impl Server {
         let n = self.s.log.len();
         session::PROGRESS.keep(n);
         let st = self.s.st.borrow();
-        let Some(c) = st.canvas.as_ref() else { return };
+        // (the painting's timelapse: not of a sheet beside it, surfaces.rs)
+        let Some(c) = st.canvas.as_ref().filter(|_| st.surfaces.main_current()) else { return };
         if let Err(e) = live_frames::write(c, st.recording_ground, &session_dir(&self.name).join("frames"), n) {
             eprintln!("timelapse: chunk {n} committed, frame not saved: {e}");
         }
@@ -1587,17 +1591,20 @@ impl Server {
     /// and in `live.txt` how many chunks they hold and how many of them were replayed: the
     /// runner's check (scripts/check_painting) compares a replay of the log with them, and
     /// scripts/finish_painting finishes from the save instead of replaying the log.
-    fn save_live(&self) -> Result<String, String> {
+    fn save_live(&mut self) -> Result<String, String> {
         let dir = session_dir(&self.name);
         let (png, txt, ckpt) = (dir.join("live.png"), dir.join("live.txt"), dir.join("live.ckpt"));
         let _ = std::fs::remove_file(&txt);
-        let Some(c) = self.s.canvas() else {
+        if self.s.canvas().is_none() {
             let _ = std::fs::remove_file(&png);
             let _ = std::fs::remove_file(&ckpt);
             return Ok(String::new());
-        };
-        deliver(&c, &png)?;
-        drop(c);
+        }
+        // the painting, whichever surface is in hand (surfaces.rs)
+        let shown = self.s.show(surfaces::MAIN)?;
+        let delivered = self.s.canvas().ok_or_else(|| "no canvas".to_string()).and_then(|c| deliver(&c, &png));
+        self.s.unshow(shown)?;
+        delivered?;
         if let Err(e) = save::write(&self.s, &self.s.program(&self.name), &ckpt) {
             let _ = std::fs::remove_file(&ckpt);
             return Err(format!("the save file couldn't be written: {e}"));
@@ -2017,12 +2024,30 @@ impl Server {
     fn check_input(&mut self) -> Result<check::Input, String> {
         self.ready()?;
         self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
+        let live = self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um())));
+        // the other surfaces as they rest (surfaces.rs), with the current one put aside meanwhile:
+        // one canvas in memory at a time
+        let packed: Vec<_> = self.s.st.borrow().surfaces.slots.iter().filter_map(|s| s.rest.as_ref().map(|r| (s.name.clone(), r.canvas.clone()))).collect();
+        let mut resting = Vec::new();
+        if !packed.is_empty() {
+            self.s.rest().map_err(|e| format!("the current surface couldn't be put aside: {e}"))?;
+            let read: Result<(), String> = packed.into_iter().try_for_each(|(name, p)| {
+                let p = p.ok_or_else(|| format!("the surface {name:?} has no canvas"))?;
+                let c = p.restore().map_err(|e| format!("the surface {name:?} couldn't be brought back: {e}"))?;
+                resting.push((name, check::bits_of(&c)));
+                Ok(())
+            });
+            self.s.wake().map_err(|e| format!("the current surface couldn't be brought back: {e}"))?;
+            read?;
+        }
         Ok(check::Input {
             width: self.s.st.borrow().width,
             paper: self.s.st.borrow().paper,
             tubes: self.s.tube_box(),
             chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
-            live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
+            live,
+            current: self.s.st.borrow().surfaces.current_name().to_string(),
+            resting,
         })
     }
 
@@ -2104,7 +2129,8 @@ impl Server {
     /// A fresh scratch canvas: the old one's log is put aside, and the new one is set up as
     /// the painting's canvas was (its `canvas{...}`, the easel's first chunk there).
     fn new_scratch(&mut self) -> Result<String, String> {
-        let src = self.s.st.borrow().canvas_src.clone().ok_or(
+        // (the painting's canvas{}, whichever surface is in hand: surfaces.rs)
+        let src = { let st = self.s.st.borrow(); if st.surfaces.main_current() { st.canvas_src.clone() } else { st.surfaces.slots[0].rest.as_ref().and_then(|r| r.own.canvas_src.clone()) } }.ok_or(
             "the scratch canvas is set up as a copy of the painting's canvas, and the painting has none yet: its first chunk is canvas{...}",
         )?;
         let name = scratch_name(&self.name);
@@ -2121,6 +2147,27 @@ impl Server {
 
     fn serve_cmd(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
         self.ready()?;
+        // look, probe, save and status on a surface (surfaces.rs): `--surface <name>`, or the
+        // painting, as before there were surfaces
+        if matches!(cmd, "look" | "probe" | "save" | "status") {
+            let (surface, rest) = surface_arg(args)?;
+            if surface.is_some() && !self.s.st.borrow().tubes.surfaces {
+                return Err(format!("{cmd} --surface: this painting has no named surfaces (its log's head has no {:?} line)", session::SURFACES_MARK));
+            }
+            let name = match surface {
+                Some(n) => n,
+                None if cmd == "status" => self.s.st.borrow().surfaces.current_name().to_string(),
+                None => surfaces::MAIN.to_string(),
+            };
+            let shown = self.s.show(&name)?;
+            let r = self.serve_shown(cmd, &rest, payload);
+            self.s.unshow(shown)?;
+            return r;
+        }
+        self.serve_shown(cmd, args, payload)
+    }
+
+    fn serve_shown(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
         match cmd {
             "note" => append_note(self.s.st.borrow().clock, payload),
             "status" => Ok(format!("{}\n", self.s.status())),
@@ -2135,10 +2182,13 @@ impl Server {
                     out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
                     if args.iter().any(|a| a == "--look") {
+                        // (the painting, as a look without --surface shows it)
+                        let shown = self.s.show(surfaces::MAIN)?;
                         match self.look(&[], None) {
                             Ok(l) => out.push_str(&l),
                             Err(e) => out.push_str(&format!("(no look: {e})\n")),
                         }
+                        self.s.unshow(shown)?;
                     }
                     Ok(out)
                 }
@@ -2202,11 +2252,11 @@ impl Server {
                     frames::retry(&mut self.hand_frames)?;
                     if self.hand_frames.as_ref().is_some_and(|r| r.chunk != self.s.log.len()) {
                         let identity = self.replay.identity(&self.s.program(&self.name), self.s.st.borrow().width)?;
-                        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), self.s.log.len(), &identity))?;
+                        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.painting().as_deref(), self.s.log.len(), &identity))?;
                     }
                 }
                 frames::with(&mut self.hand_frames, || {
-                    if let Some(c) = self.s.canvas() { frames::finish(&c); }
+                    if let Some(c) = self.s.painting() { frames::finish(&c); }
                 });
                 if let Some(e) = self.hand_frames.as_ref().and_then(|r| r.err.as_ref()) {
                     return Err(format!("final hand-time frame not saved: {e}"));
@@ -2230,6 +2280,24 @@ fn bits_f(v: &[f32]) -> Vec<u32> {
 /// A gallery's light: from above and in front, high (55°) and a little from
 /// the left, as a picture hangs on a wall: impasto models softly.
 pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
+
+/// `--surface <name>` taken out of a command's arguments.
+fn surface_arg(args: &[String]) -> Result<(Option<String>, Vec<String>), String> {
+    let mut name = None;
+    let mut rest = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if a == "--surface" {
+            if name.is_some() {
+                return Err("--surface names one surface".into());
+            }
+            name = Some(it.next().ok_or("--surface needs a surface's name")?.clone());
+        } else {
+            rest.push(a.clone());
+        }
+    }
+    Ok((name, rest))
+}
 
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
@@ -2269,15 +2337,22 @@ fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), S
 /// plain names (no `..`), and the file itself, if it is there, is no link:
 /// so stable paths cannot lead outside the studio.
 fn in_studio_png(path: &Path) -> Result<PathBuf, String> {
+    in_studio_file(path, "save", "png", "a picture")
+}
+
+/// `in_studio_png` for a file of another kind: `ext` its extension, `verb` what writes it
+/// (for the messages) and `noun` what it holds. A surface handed to another session
+/// (surfaces.rs `handoff`) goes through it as a picture does.
+pub(crate) fn in_studio_file(path: &Path, verb: &str, ext: &str, noun: &str) -> Result<PathBuf, String> {
     use std::path::Component;
-    let refuse = |why: &str| Err(format!("save {}: {why}", path.display()));
-    if path.extension().and_then(|e| e.to_str()).is_none_or(|e| !e.eq_ignore_ascii_case("png")) {
-        return refuse("a picture is saved as a .png");
+    let refuse = |why: &str| Err(format!("{verb} {}: {why}", path.display()));
+    if path.extension().and_then(|e| e.to_str()).is_none_or(|e| !e.eq_ignore_ascii_case(ext)) {
+        return refuse(&format!("{noun} is saved as a .{ext}"));
     }
-    let studio = root().canonicalize().map_err(|e| format!("save: the studio {}: {e}", root().display()))?;
+    let studio = root().canonicalize().map_err(|e| format!("{verb}: the studio {}: {e}", root().display()))?;
     let p = if path.is_absolute() { path.to_path_buf() } else { studio.join(path) };
     // the deepest folder that exists, and the plain names below it
-    let mut base = p.parent().ok_or("save: no folder")?.to_path_buf();
+    let mut base = p.parent().ok_or_else(|| format!("{verb}: no folder"))?.to_path_buf();
     let mut tail = Vec::new();
     while !base.exists() {
         let name = base.file_name().map(|n| n.to_os_string());
@@ -2285,24 +2360,24 @@ fn in_studio_png(path: &Path) -> Result<PathBuf, String> {
             Some(n) => tail.push(n),
             None => return refuse("no folder of it exists"),
         }
-        base = base.parent().ok_or("save: no folder")?.to_path_buf();
+        base = base.parent().ok_or_else(|| format!("{verb}: no folder"))?.to_path_buf();
     }
     if p.components().any(|c| matches!(c, Component::ParentDir)) && !tail.is_empty() {
         return refuse("`..` in a folder that doesn't exist yet");
     }
-    let real = base.canonicalize().map_err(|e| format!("save {}: {e}", path.display()))?;
+    let real = base.canonicalize().map_err(|e| format!("{verb} {}: {e}", path.display()))?;
     if !real.starts_with(&studio) {
-        return Err(format!("save {}: a picture is saved in this studio ({})", path.display(), studio.display()));
+        return Err(format!("{verb} {}: {noun} is saved in this studio ({})", path.display(), studio.display()));
     }
     let mut out = real;
     for n in tail.into_iter().rev() {
         out.push(n);
     }
-    let out = out.join(p.file_name().ok_or("save: no file name")?);
+    let out = out.join(p.file_name().ok_or_else(|| format!("{verb}: no file name"))?);
     // Check the path we will actually write: a trailing slash or `/.` may
     // have kept symlink_metadata on the original spelling from seeing a link.
     if std::fs::symlink_metadata(&out).is_ok_and(|m| m.file_type().is_symlink()) {
-        return refuse("that is a link: save to a picture in this studio");
+        return refuse(&format!("that is a link: {verb} to {noun} in this studio"));
     }
     Ok(out)
 }
@@ -2558,7 +2633,7 @@ fn run(args: &[String]) -> Result<(), String> {
             state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
         }
         if frames {
-            frames::chunk_end(s.canvas().as_deref(), i + 1, batch.identity())?;
+            frames::chunk_end(s.painting().as_deref(), i + 1, batch.identity())?;
         }
         if batch.completed(&s, i + 1)? { break; }
     }
@@ -2567,7 +2642,11 @@ fn run(args: &[String]) -> Result<(), String> {
     if let Some(d) = flag(args, "--dump-state") {
         state_dump::write_save(&s, &text, Path::new(&d))?;
     }
+    // the painting, whichever surface the program left in hand (surfaces.rs); the session
+    // as it was again before its save
+    let shown = s.show(surfaces::MAIN)?;
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
+    s.unshow(shown)?;
     if frames {
         frames::finish(&c);
         let rec = frames::stop().ok_or("frames: the recorder went away")?;
@@ -2659,7 +2738,9 @@ fn render_checkpoint_from(args: &[String], read: impl FnOnce(&Path) -> Result<sa
             return Err(format!("{checkpoint} is not a save of {l} (chunk count or text differs)"));
         }
     }
-    let c = r.session.canvas().ok_or("the save holds no canvas")?;
+    let mut session = r.session;
+    session.show(surfaces::MAIN)?;
+    let c = session.canvas().ok_or("the save holds no canvas")?;
     if bounded {
         look::look(&c, &look::View { light, ..look::View::default() }, Path::new(out))?;
     } else {
@@ -2759,6 +2840,7 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
         print!("{}", ran.out);
         finish_secs = ran.secs;
     }
+    s.show(surfaces::MAIN)?;
     let c = s.canvas().ok_or("the save holds no canvas")?;
     deliver(&c, Path::new(out))?;
     eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, finish_secs, t0.elapsed().as_secs_f64());

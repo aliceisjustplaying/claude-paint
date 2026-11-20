@@ -93,13 +93,19 @@ pub const BRUSH_HOLDS_MG_MM3: f32 = 0.06;
 const PASTEL_MG_MM3: f32 = 1.3;
 /// Adhesion of a loose pastel grain or crumb to what it lies on, N: 10–150
 /// nN per contact, about the same for every size [M, D] (pastel_brushing.md §1).
-const ADHESION_N: f32 = 5e-8;
+pub(crate) const ADHESION_N: f32 = 5e-8;
 /// A crumb's density, kg/m³ (pigment and chalk ~2500, crumbs about half
 /// porous: pastel_removal_air_blade.md §A2).
 const CRUMB_KG_M3: f32 = 1250.0;
 /// The largest loose crumb lying on the tooth, µm (crumbs from soft pastel
 /// run to 100–300 µm: pastel_stick_tribology.md §3).
 const CRUMB_MAX_UM: f32 = 300.0;
+
+/// The largest dry loose crumb a tap at `g` gravities leaves on the tooth,
+/// µm: its weight m·a passes `ADHESION_N` (a crumb of d_c = (6F/πρa)^⅓).
+pub(crate) fn dry_fall_um(g: f32) -> f32 {
+    (6.0 * ADHESION_N / (std::f32::consts::PI * CRUMB_KG_M3 * 9.81 * g)).cbrt() * 1e6
+}
 /// Air: density kg/m³ and kinematic viscosity m²/s.
 const AIR_KG_M3: f32 = 1.2;
 const AIR_NU: f32 = 1.5e-5;
@@ -197,8 +203,97 @@ fn fines_reach_paper(diff: f32, tau_p: f32, vs: f32, us: f32) -> f32 {
 /// Shao & Lu (2000): the friction velocity that sets loose grains of `d_um`
 /// and density `rho` (kg/m³) moving on a bed, m/s (A_N = 0.0123, γ = 3e-4 N/m).
 fn shao_lu(d_um: f32, rho: f32) -> f32 {
+    shao_lu_held(d_um, rho, SHAO_LU_GAMMA)
+}
+
+/// Shao & Lu's balance with the grains held by `gamma` N/m: the moments of
+/// drag and lift, ∝ ρ_a u*² d³, against the weight's (π/6) ρ_p g d⁴ and an
+/// interparticle force βd's, give u*² = A_N (σ_p g d + γ/(ρ_a d)) with
+/// γ = (6/π)(a_i/a_l) β, a_i/a_l the ratio of their moment arms (their eqs.
+/// 20–22).
+fn shao_lu_held(d_um: f32, rho: f32, gamma: f32) -> f32 {
     let d = d_um * 1e-6;
-    (0.0123 * (rho / AIR_KG_M3 * 9.81 * d + 3e-4 / (AIR_KG_M3 * d))).sqrt()
+    (0.0123 * (rho / AIR_KG_M3 * 9.81 * d + gamma / (AIR_KG_M3 * d))).sqrt()
+}
+
+/// Shao & Lu's dry cohesion, N/m (their fit to wind-tunnel thresholds).
+const SHAO_LU_GAMMA: f32 = 3e-4;
+
+/// A wet crumb's hold in Shao & Lu's balance, N/m (the steam-and-sift
+/// switch, notes/research/steam_sift.md §5): a liquid bridge to the wetted
+/// sheet holds a sphere with 4πγ_w R = 2πγ_w d (cos θ ≈ 1 on both faces;
+/// Israelachvili; Butt & Kappl 2009), whatever the water in it while the
+/// bridge is small against the crumb (its force doesn't depend on its
+/// volume): the tap's law (`steam::wet_fall_um`). It pulls at the same
+/// contact as the dry hold, so on the same arm, and adds to γ as it adds to
+/// the force: γ (1 + 2πγ_w d/F_dry), with the dry hold `ADHESION_N` at the
+/// 100 µm crumb where both are set (`HEAP_CRUMB_UM`; Shao & Lu fit 50–1800
+/// µm). With the pores' gum water (γ_w = 50 mN/m) the bridge is 31 µN, 630
+/// times the dry 50 nN: 0.19 N/m (0.06–0.9 over the dry hold's 10–150 nN).
+/// That is a film's (`Wet::Film`); where the water is only in the pores
+/// the bridge holds at the touching grain (`steam::pore_bridge_n`, 0.53 µN,
+/// size-independent as the dry hold is): 3.5e-3 N/m.
+fn wet_hold(w: crate::steam::Wet) -> f32 {
+    match w {
+        crate::steam::Wet::Dry => SHAO_LU_GAMMA,
+        crate::steam::Wet::Pores => SHAO_LU_GAMMA * (1.0 + crate::steam::pore_bridge_n() as f32 / ADHESION_N),
+        crate::steam::Wet::Film => {
+            let bridge_n = std::f32::consts::TAU * crate::steam::GAMMA as f32 * HEAP_CRUMB_UM * 1e-6;
+            SHAO_LU_GAMMA * (1.0 + bridge_n / ADHESION_N)
+        }
+    }
+}
+
+/// The size bins a puff weighs wet crumbs over (log-spaced, crumb to the
+/// largest): their thresholds differ a hundredfold.
+const WET_BINS: usize = 12;
+
+/// Wet crumbs from `lo` to `hi` µm, `finer(d)` the share of their mass finer
+/// than d, under a shear of friction velocity `us`: per bin, its threshold
+/// (m/s, `shao_lu_held` at the hold `g`, `wet_hold`, the crumb full of
+/// water) and the share of all their mass it sets going (through the
+/// 0.8–1.25 ramp of the threshold that `blow_pastel_with` gives the heap).
+fn wet_set_going(us: f32, lo: f32, hi: f32, g: f32, finer: impl Fn(f32) -> f32, out: &mut Vec<(f32, f32)>) {
+    out.clear();
+    if hi <= lo {
+        return;
+    }
+    let rho = crate::steam::WET_CRUMB_KG_M3 as f32;
+    let k = (hi / lo).powf(1.0 / WET_BINS as f32);
+    let total = finer(hi) - finer(lo);
+    if total <= 0.0 {
+        return;
+    }
+    for b in 0..WET_BINS {
+        let (a, c) = (lo * k.powi(b as i32), lo * k.powi(b as i32 + 1));
+        let ut = shao_lu_held((a * c).sqrt(), rho, g);
+        let share = (finer(c) - finer(a)) / total * crate::smoothstep(0.8, 1.25, us / ut);
+        out.push((ut, share));
+    }
+}
+
+/// The largest of wet crumbs `lo` to `hi` µm (hold `g`, `wet_hold`) a shear
+/// of friction velocity `us` leaves: it sets every one going whose
+/// threshold is under us/1.25 (the top of the ramp `wet_set_going` uses).
+/// u*² = A_N (σ_p g d + γ/(ρ_a d)) is convex in d, so those are one range
+/// of sizes about the least threshold's, d_m = √(γ/ρ_p g): if it holds the
+/// largest, what is left ends at its lower edge; else the largest stays.
+fn wet_largest_left(us: f32, lo: f32, hi: f32, g: f32) -> f32 {
+    let rho = crate::steam::WET_CRUMB_KG_M3 as f32;
+    let (x, ut) = (us / 1.25, |d: f32| shao_lu_held(d, rho, g));
+    if hi <= lo || ut(hi) > x {
+        return hi;
+    }
+    if ut(lo) <= x {
+        return lo;
+    }
+    // (falling from lo to d_m: the edge where it crosses us/1.25)
+    let (mut a, mut b) = (lo, ((g / (rho * 9.81)).sqrt() * 1e6).clamp(lo, hi));
+    for _ in 0..40 {
+        let m = 0.5 * (a + b);
+        if ut(m) > x { a = m } else { b = m }
+    }
+    b
 }
 
 /// Through-thickness shear modulus of a drawing paper, MPa: 16–127 measured
@@ -356,8 +451,15 @@ impl Canvas {
     /// Pastel landed on the sheet: `(pixel, µm)` of `color`, kept there
     /// (coverage by volume, as on paper) until the sheet is lifted.
     pub(crate) fn sheet_catch(&mut self, caught: &[(usize, f32)], color: Rgb) {
+        self.sheet_catch_lying(caught, color, 1.0);
+    }
+
+    /// `sheet_catch` of a volume that lies at `lies` of itself (a stick's
+    /// worn volume, `crate::pastel::Grains::lies`).
+    pub(crate) fn sheet_catch_lying(&mut self, caught: &[(usize, f32)], color: Rgb, lies: f32) {
         let Some(s) = self.sheet.as_mut() else { return };
         for &(i, dv) in caught {
+            let dv = dv * lies;
             let q = 1.0 - (-dv / PARTICLE_UM).exp();
             let old = s.a[i] * (1.0 - q);
             let w = old + q;
@@ -378,7 +480,7 @@ impl Canvas {
     }
 
     /// (pixels of the whole canvas) and direction.
-    fn walk(&self, pts: &[(f32, f32)]) -> Vec<((f32, f32), (f32, f32))> {
+    pub(crate) fn walk(&self, pts: &[(f32, f32)]) -> Vec<((f32, f32), (f32, f32))> {
         let s = self.f.scale;
         let p: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
         let path = if p.len() >= 2 { crate::path::densify(&p) } else { vec![p[0], p[0]] };
@@ -409,7 +511,7 @@ impl Canvas {
     }
 
     /// Window pixel at whole-canvas pixel (x, y).
-    fn win_px(&self, x: f32, y: f32) -> Option<usize> {
+    pub(crate) fn win_px(&self, x: f32, y: f32) -> Option<usize> {
         let f = self.f;
         let (xi, yi) = (x.floor() as isize - f.x0 as isize, y.floor() as isize - f.y0 as isize);
         if xi < 0 || yi < 0 || xi >= f.w as isize || yi >= f.h as isize {
@@ -428,7 +530,7 @@ impl Canvas {
     /// Take loose pastel off cell `i` down to `keep` µm of it (the fixed stays):
     /// its coverage falls as a deposit's builds (Poisson, PARTICLE_UM).
     /// Returns what came off, µm.
-    fn take_loose(c: &mut crate::graphite::Cell, px: &mut Rgb, keep: f32) -> f32 {
+    pub(crate) fn take_loose(c: &mut crate::graphite::Cell, px: &mut Rgb, keep: f32) -> f32 {
         let v = c.loose + c.bound;
         let keep = keep.max(c.bound).min(v);
         let ex = if c.optics.is_some() { c.loose - (keep - c.bound).max(0.0) } else { v - keep };
@@ -489,6 +591,7 @@ impl Canvas {
         let mut heights = std::mem::take(&mut self.height);
         let (mut taken, mut pushed) = (0.0f32, 0.0f32);
         let mut col = [0.0f32; 3];
+        let mut carry = crate::pastel::Carried::default();
         let mut last_band: Vec<usize> = Vec::new();
         let mut dent: Vec<(usize, f32)> = Vec::new();
         let mut napped: Vec<(usize, f32)> = Vec::new();
@@ -514,11 +617,13 @@ impl Canvas {
             // the edge cuts fiber walls past q = H·2R (a scalpel's 1 µm edge
             // at 0.15–0.85 N/mm; a knife's never at a hand's load), shaving
             // about a fiber layer
-            let shave = if q * 1000.0 > FIBER_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
+            // (on a gritted ground no fiber is bare: the blade rides the hard
+            // grains, cuts none and tears none loose)
+            let shave = if paper.grit.is_none() && q * 1000.0 > FIBER_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
             // its drag on each fiber it crosses tears the fiber's joints past
             // their strength: the torn ends stand proud (nap)
             let drag = STEEL_PAPER_MU * q * paper.fiber_um * 1e-3;
-            let nap = ((drag - FIBER_JOINT_N) / FIBER_JOINT_N).clamp(0.0, 1.0);
+            let nap = if paper.grit.is_some() { 0.0 } else { ((drag - FIBER_JOINT_N) / FIBER_JOINT_N).clamp(0.0, 1.0) };
             let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
             let mut blade: Vec<usize> = Vec::with_capacity(nb + 1);
             for k in 0..=nb {
@@ -565,6 +670,7 @@ impl Canvas {
                     let r = cl.r;
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
+                        carry.take(pushed, ex * 0.35, cl);
                         let tot = pushed + ex * 0.35;
                         col = [0, 1, 2].map(|j| (col[j] * pushed + r[j] * ex * 0.35) / tot.max(1e-9));
                         pushed = tot;
@@ -587,9 +693,12 @@ impl Canvas {
         // closed by what the dent took), once per pixel, by the deepest press
         dent.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.partial_cmp(&a.1).unwrap()));
         dent.dedup_by_key(|d| d.0);
+        // (a gritted ground's hollows are between hard grains a blade doesn't
+        // flatten: the sheet under them gives, the tooth stays)
+        let gritted = self.paper.is_some_and(|p| p.grit.is_some());
         for &(i, r) in &dent {
             heights[i] -= r;
-            if let Some(m) = self.micro.get_mut(i) {
+            if let Some(m) = self.micro.get_mut(i).filter(|_| !gritted) {
                 *m = (*m - r).max(0.5);
             }
         }
@@ -611,7 +720,7 @@ impl Canvas {
         if pushed > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
             let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0x5C2A);
-            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, pushed, col, &mut rng, CRUMB_MAX_UM, px_um2);
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, pushed, col, carry.grains(), &mut rng, CRUMB_MAX_UM, px_um2);
             self.film = film;
         }
         self.drawing = Some(dr);
@@ -649,6 +758,7 @@ impl Canvas {
         let total_px = (steps.len().max(1) - 1) as f32 * 0.7;
         let mut kept_um = 0.0f32;
         let (mut ahead, mut col) = (0.0f32, [0.0f32; 3]);
+        let mut carry = crate::pastel::Carried::default();
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
@@ -693,6 +803,7 @@ impl Canvas {
                 let kept = ex * room;
                 *held_mg += kept * um_to_mg;
                 kept_um += kept;
+                carry.take(ahead, ex - kept, cl);
                 let tot = ahead + (ex - kept);
                 col = [0, 1, 2].map(|j| (col[j] * ahead + r[j] * (ex - kept)) / tot.max(1e-9));
                 ahead = tot;
@@ -701,7 +812,7 @@ impl Canvas {
                 let hmax = front.iter().map(|&i| self.height[i]).fold(f32::MIN, f32::max);
                 let bed: Vec<(usize, f32, bool)> = front.iter().map(|&i| (i, 1.0 + (hmax - self.height[i]), false)).collect();
                 let film = std::mem::take(&mut self.film);
-                crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+                crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
                 self.film = film;
                 ahead = 0.0;
             }
@@ -714,7 +825,7 @@ impl Canvas {
         let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
         if ahead > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
-            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+            crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, ahead, col, carry.grains(), &mut rng, BRUSH_CRUMB_UM, px_um2);
             self.film = film;
         }
         self.drawing = Some(dr);
@@ -741,6 +852,21 @@ impl Canvas {
     /// on the paper mask goes with it; what falls on wet paint is lost in it,
     /// on the picture).
     pub fn blow_pastel(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32) -> f32 {
+        self.blow_pastel_with(x, y, h_mm, u, d_mm, false)
+    }
+
+    /// `blow_pastel`, and with `bridges` (the steam-and-sift switch) a liquid
+    /// bridge holds the loose pastel of a cell that holds water to the sheet
+    /// (`wet_hold`): each crumb's threshold is Shao & Lu's with the bridge
+    /// beside its weight, over the crumbs' sizes (a sift's, crushed to its
+    /// sieve; a stroke's, their mass even in area up to `CRUMB_MAX_UM`).
+    /// A hard blow (12 m/s, u* at most 1.4 m/s) moves none (a 0.5 mm wet
+    /// crumb's threshold is 2.0 m/s); a bulb's 60 m/s close in only the
+    /// larger ones, on a ring a few mm across. What the shear sets going rolls out to where it
+    /// no longer keeps each moving, as the dry heap does, at its own
+    /// threshold; it doesn't hop (the hops are a dry 100 µm crumb's
+    /// entrainment). The pores' fine grains are held the same way.
+    pub fn blow_pastel_with(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32, bridges: bool) -> f32 {
         if self.drawing.is_none() || !(h_mm > 0.0 && u > 0.0 && d_mm > 0.0) {
             return 0.0;
         }
@@ -753,6 +879,14 @@ impl Canvas {
         let r_peak = 0.09 * h_mm;
         let w_um = self.paper.as_ref().map_or(30.0, |p| p.fiber_um);
         let (ut_heap, ut_fine) = (shao_lu(HEAP_CRUMB_UM, CRUMB_KG_M3), shao_lu(5.0, 2500.0));
+        // (a wet pore's fine grains: a solid grain bridged as a crumb is,
+        // by a film or at its touching grain, `wet_hold`)
+        let (hold_film, hold_pores) = (wet_hold(crate::steam::Wet::Film), wet_hold(crate::steam::Wet::Pores));
+        let (ut_fine_film, ut_fine_pores) = (shao_lu_held(5.0, 2500.0, hold_film), shao_lu_held(5.0, 2500.0, hold_pores));
+        // (the water in the sheet beneath a cell feeds its bridges: a damp sheet's own)
+        let damp_free = if bridges { self.damp_free() } else { 0.0 };
+        let (mut wet_sift, mut wet_stroke) = (Vec::new(), Vec::new());
+        let (amin, amax) = (crate::pastel::CRUMB_MIN_UM.powi(2), CRUMB_MAX_UM * CRUMB_MAX_UM);
         let tau_at = |r: f32| -> f32 {
             if r <= r_peak { tau_max * r / r_peak.max(1e-6) } else { tau_max * (r_peak / r).powf(2.3) }
         };
@@ -825,6 +959,8 @@ impl Canvas {
         let mut fines_from = vec![vec![0.0f32; nb]; nsec];
         let mut ccol = vec![(0.0f32, [0.0f32; 3]); nsec];
         let mut fcol = vec![(0.0f32, [0.0f32; 3]); nsec];
+        // (and what of them is charcoal)
+        let (mut ccarry, mut fcarry) = (vec![crate::pastel::Carried::default(); nsec], vec![crate::pastel::Carried::default(); nsec]);
         let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb| {
             let t = acc.0 + v;
             acc.1 = [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9));
@@ -846,18 +982,93 @@ impl Canvas {
                 let v = cl.loose + cl.bound;
                 // the heap goes past its threshold (shear fluctuates: a ramp, not a cut)
                 let heap_goes = ramp(us / ut_heap);
-                let heap = (v - mu).max(0.0).min(cl.loose);
+                let mut heap = (v - mu).max(0.0).min(cl.loose);
+                // (water bridges hold it to the sheet: `wet_hold`, as the
+                // water lies, `steam::wetness`)
+                let bridged = bridges && cl.water > 0.0;
+                let under = if bridged { dr.sheet.get(i).copied().unwrap_or(0.0) + damp_free } else { 0.0 };
+                let mut in_pores = v.min(mu);
+                // (sifted crumbs lie on the tooth, `crate::steam`: they are
+                // heaped whatever the pores hold; dry ones only, unless the
+                // bridges are weighed)
+                let perch = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH);
+                let (lp, top, held) = match perch {
+                    Some(p) if bridged => crate::steam::loose_perched(p, cl, under),
+                    Some(p) => (crate::steam::blowable(p, cl), 0.0, crate::steam::Wet::Dry),
+                    None if bridged => (0.0, 0.0, crate::steam::wetness(cl, None, under)),
+                    None => (0.0, 0.0, crate::steam::Wet::Dry),
+                };
+                let wet = held != crate::steam::Wet::Dry;
+                let (hold, ut_f) = match held {
+                    crate::steam::Wet::Film => (hold_film, ut_fine_film),
+                    crate::steam::Wet::Pores => (hold_pores, ut_fine_pores),
+                    crate::steam::Wet::Dry => (SHAO_LU_GAMMA, ut_fine),
+                };
                 // and the pores' fine grains as deep as the flow keeps the shear
-                let z = if us > ut_fine { w_um / 2.105 * (us / ut_fine).ln() } else { 0.0 };
-                let in_pores = v.min(mu);
+                let z = if us > ut_f { w_um / 2.105 * (us / ut_f).ln() } else { 0.0 };
+                let lp = lp.min(cl.loose);
+                if lp > heap {
+                    heap = lp;
+                    in_pores = (v - lp).min(mu);
+                }
+                // what of the heap the shear sets going: wet, the sifted crumbs
+                // by their crushing's sizes to the sieve's, the rest by a
+                // stroke's (`tap_pastel`), each size at its bridged threshold
+                let (heap_take, lp_take) = if wet {
+                    let sift_part = lp.min(heap);
+                    wet_set_going(us, crate::pastel::CRUMB_MIN_UM, top, hold, |d| crate::steam::ggs_finer(d as f64, top as f64) as f32, &mut wet_sift);
+                    wet_set_going(us, crate::pastel::CRUMB_MIN_UM, CRUMB_MAX_UM, hold, |d| ((d * d).clamp(amin, amax) - amin) / (amax - amin), &mut wet_stroke);
+                    let ls: f32 = sift_part * wet_sift.iter().map(|e| e.1).sum::<f32>();
+                    (ls + (heap - sift_part) * wet_stroke.iter().map(|e| e.1).sum::<f32>(), ls)
+                } else {
+                    (heap * heap_goes, lp * heap_goes)
+                };
+                if wet && heap_take <= 0.0 && z <= 0.0 {
+                    // (held: nothing goes, not even a rounding's worth)
+                    continue;
+                }
                 let keep_pores = if z > 0.0 { Self::below(in_pores, mu, z) } else { in_pores };
-                let keep = keep_pores + (v - in_pores) - heap * heap_goes;
+                let keep = keep_pores + (v - in_pores) - heap_take;
                 let r = cl.r;
                 let ex = Self::take_loose(cl, &mut pxs[i], keep);
+                if lp > 0.0 {
+                    if let Some(p) = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
+                        crate::steam::blown(p, lp_take.min(ex));
+                        if wet {
+                            // (it took the larger crumbs: the record's largest
+                            // falls to what it left)
+                            crate::steam::blown_to(p, wet_largest_left(us, crate::pastel::CRUMB_MIN_UM, top, hold));
+                        }
+                    }
+                }
                 if ex > 0.0 {
                     let k = sector(wx, wy);
-                    let crumbs = (heap * heap_goes).min(ex);
-                    if crumbs > 0.0 {
+                    let crumbs = heap_take.min(ex);
+                    if crumbs > 0.0 && wet {
+                        ccarry[k].take(ccol[k].0, crumbs, cl);
+                        mix(&mut ccol[k], crumbs, r);
+                        // each size rolls out to where the shear falls to its
+                        // stopping ratio (0.6–0.85) of its own threshold
+                        let sift_part = lp.min(heap);
+                        let scale = crumbs / heap_take.max(1e-9);
+                        for (part, bins) in [(sift_part, &wet_sift), (heap - sift_part, &wet_stroke)] {
+                            for &(ut, share) in bins.iter() {
+                                let v = part * share * scale;
+                                if v <= 0.0 {
+                                    continue;
+                                }
+                                const NC: usize = 8;
+                                for m in 0..NC {
+                                    let c = 0.6 + (m as f32 + 0.5) / NC as f32 * 0.25;
+                                    let stop = (r_peak * (ustar_max / (c * ut)).max(1.0).powf(1.0 / 1.15)).max(rr);
+                                    if bin(stop) < nb {
+                                        dep[k][bin(stop)] += v / NC as f32;
+                                    }
+                                }
+                            }
+                        }
+                    } else if crumbs > 0.0 {
+                        ccarry[k].take(ccol[k].0, crumbs, cl);
                         mix(&mut ccol[k], crumbs, r);
                         let flights = hop_at(rr);
                         for (j, roll) in rolled[k].iter_mut().enumerate() {
@@ -884,6 +1095,7 @@ impl Canvas {
                     }
                     let fv = ex - crumbs;
                     if fv > 0.0 {
+                        fcarry[k].take(fcol[k].0, fv, cl);
                         mix(&mut fcol[k], fv, r);
                         fines_from[k][bin(rr).min(nb - 1)] += fv;
                     }
@@ -1024,22 +1236,22 @@ impl Canvas {
         let (mut laid, mut caught) = (0.0f32, Vec::new());
         for k in 0..nsec {
             let share = |b: usize| per_px[k][b];
-            let mut lay = |amount: &[f32], col: Rgb, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
+            let mut lay = |amount: &[f32], col: Rgb, grains: crate::pastel::Grains, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
                 let bed: Vec<(usize, f32, bool)> = beds[k].iter().map(|&(i, b, wet)| (i, amount[b] * share(b), wet)).filter(|e| e.1 > 0.0).collect();
                 let v: f32 = bed.iter().map(|e| e.1).sum();
                 if v > 0.0 {
                     // (what falls on wet paint is lost in it: still on the picture)
-                    crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, v, col, &mut rng, dmax, px_um2);
+                    crate::pastel::lay_crumbs_of(&mut dr, &film, &mut pxs, &bed, v, col, grains, &mut rng, dmax, px_um2);
                     *laid += v;
                 }
                 caught.extend(on_mask[k].iter().map(|&(i, b)| (i, amount[b] * share(b), col)).filter(|e| e.1 > 0.0));
             };
             if ccol[k].0 > 0.0 {
-                lay(&dep[k], ccol[k].1, CRUMB_MAX_UM, &mut laid, &mut caught);
+                lay(&dep[k], ccol[k].1, ccarry[k].grains(), CRUMB_MAX_UM, &mut laid, &mut caught);
             }
             if fcol[k].0 > 0.0 {
                 for (sz, &(_, hi)) in FINE_SIZES.iter().enumerate() {
-                    lay(&depf[k][sz], fcol[k].1, hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
+                    lay(&depf[k][sz], fcol[k].1, fcarry[k].grains(), hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
                 }
             }
         }
@@ -1065,35 +1277,80 @@ impl Canvas {
     /// in the pores never go. Tapping a board edge gives some 50–400 g; an
     /// upright sheet, 1 g. Returns the volume shed, mm³.
     pub fn tap_pastel(&mut self, g: f32) -> f32 {
+        self.tap_pastel_with(g, false)
+    }
+
+    /// `tap_pastel`, and with `bridges` (the steam-and-sift switch) water
+    /// holds the loose pastel of a cell as it lies (`steam::wetness`): a
+    /// film standing, or water in the sheet beneath, makes a bridge at each
+    /// crumb's radius (`steam::wet_fall_um`: none of a stroke's crumbs, up
+    /// to 0.3 mm, falls under some 400 g); water only in the pores, a
+    /// bridge at the grain it touches (`steam::pore_fall_um`: 87 µm at
+    /// 100 g, against a dry crumb's 43). The stroke's heap and the sifted
+    /// crumbs alike.
+    pub fn tap_pastel_with(&mut self, g: f32, bridges: bool) -> f32 {
         if self.drawing.is_none() || !(g > 0.0) {
             return 0.0;
         }
         let s_mm = self.px_mm();
         let px_um2 = (s_mm * 1000.0).powi(2);
-        let d_c = (6.0 * ADHESION_N / (std::f32::consts::PI * CRUMB_KG_M3 * 9.81 * g)).cbrt() * 1e6;
+        let d_c = dry_fall_um(g);
         let (amin, amax, ac) = (25.0f32, CRUMB_MAX_UM * CRUMB_MAX_UM, (d_c * d_c).max(25.0));
         let share = ((amax - ac) / (amax - amin)).clamp(0.0, 1.0);
         if share <= 0.0 {
             return 0.0;
         }
+        // (wet crumbs: their share by the bridge's fall; held harder than
+        // their extra weight, a wet crumb falls only larger than a dry one,
+        // so nothing falls wet where nothing falls dry)
+        let share_of = |d_c: f32| ((amax - (d_c * d_c).max(25.0)) / (amax - amin)).clamp(0.0, 1.0);
+        let (share_pores, share_film) = (share_of(crate::steam::pore_fall_um(g as f64) as f32), share_of(crate::steam::wet_fall_um(g as f64) as f32));
+        let damp_free = if bridges { self.damp_free() } else { 0.0 };
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut gone = 0.0f32;
+        // (sifted crumbs lying on the tooth, `crate::steam`: shed by their
+        // own sizes and hold, counted as crushed)
+        let mut sifted = 0.0f32;
         for i in 0..pxs.len() {
             if !self.open_pastel(&dr, i) {
                 continue;
             }
             let mu = self.micro_um(i);
             let cl = &mut dr.cells[i];
+            let mut perched = 0.0f32;
+            let under = if bridges { Some(dr.sheet.get(i).copied().unwrap_or(0.0) + damp_free) } else { None };
+            let mut wet = match under {
+                Some(u) if cl.water > 0.0 => crate::steam::wetness(cl, None, u),
+                _ => crate::steam::Wet::Dry,
+            };
+            if let Some(p) = dr.perched.get_mut(i * crate::steam::PERCH..(i + 1) * crate::steam::PERCH) {
+                let (dv, dl, left) = crate::steam::tap(p, cl, g, under);
+                if dl > 0.0 {
+                    let v = cl.loose + cl.bound;
+                    Self::take_loose(cl, &mut pxs[i], v - dl);
+                    sifted += dv;
+                }
+                perched = left;
+                if bridges && cl.water > 0.0 {
+                    // (the crumbs left: their pores count as crushed)
+                    wet = crate::steam::wetness(cl, Some(p), under.unwrap_or(0.0));
+                }
+            }
             let v = cl.loose + cl.bound;
-            let heap = (v - mu).max(0.0).min(cl.loose);
-            if heap > 0.0 {
+            let heap = (v - mu - perched).max(0.0).min(cl.loose - perched);
+            let share = match wet {
+                crate::steam::Wet::Dry => share,
+                crate::steam::Wet::Pores => share_pores,
+                crate::steam::Wet::Film => share_film,
+            };
+            if heap > 0.0 && share > 0.0 {
                 gone += Self::take_loose(cl, &mut pxs[i], v - heap * share);
             }
         }
         self.drawing = Some(dr);
         self.px = pxs;
-        gone * px_um2 * 1e-9
+        gone * px_um2 * 1e-9 + sifted * px_um2 * 1e-9
     }
 
     /// A stick held at `pose` with its tip at (x, y) (units), over the window's
@@ -1655,6 +1912,32 @@ mod tests {
         assert!(shaved > 0, "the scalpel shaved the surface");
         assert!(c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() < b0, "and took fixed pastel");
         assert!((k.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() - b0).abs() < 1e-3 * b0, "the knife left the fixed");
+    }
+
+    /// On a gritted ground the blade rides hard grains: pressed hard on a
+    /// short edge or cutting as a scalpel, it neither flattens the tooth nor
+    /// tears fibers loose there (no fiber is bare), and still takes loose
+    /// pastel; on the same sheet without grit the same scrapes change the
+    /// tooth.
+    #[test]
+    fn a_knife_leaves_the_grit_its_tooth() {
+        use crate::paper::{Binder, Grit, Paper};
+        let scraped = |grit: Option<Grit>| {
+            let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper { grit, ..Paper::drawing(4) });
+            let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+            for y in [300.0, 320.0, 340.0] {
+                let p = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+                c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y, pose: p, speed: 50.0 }, StrokePoint { x: 900.0, y, pose: p, speed: 50.0 }]);
+            }
+            let m0 = c.micro.clone();
+            let took = c.scrape_pastel(20.0, 100.0, &[(300.0, 200.0), (300.0, 450.0)], (1.0, 1.0), Some(0.0))
+                + c.scrape_pastel(10.0, 1.0, &[(600.0, 200.0), (600.0, 450.0)], (1.0, 1.0), Some(0.0));
+            (took, (0..m0.len()).filter(|&i| c.micro[i] != m0[i]).count())
+        };
+        let (took, changed) = scraped(Some(Grit { size_um: 35.0, cover: 0.6, binder: Binder::Acrylic }));
+        assert!(took > 0.0 && changed == 0, "took {took}, the tooth changed at {changed} pixels");
+        let (_, plain) = scraped(None);
+        assert!(plain > 0, "on plain paper the scrapes change the tooth");
     }
 
     /// The fines a puff lifts settle from the wall jet as the research's

@@ -509,13 +509,19 @@ impl Canvas {
         self.linen = None;
         self.paper = Some(p);
         self.build_support();
-        // the pores take oil: the sheet's pore volume, in coats
-        let cap = p.absorbent.clamp(0.0, 1.0) * p.porosity * p.caliper_um() / crate::surface::COAT_UM;
+        // the pores take oil: the sheet's pore volume, in coats (on a gritted
+        // ground, the coat's, and the sheet's only through a glue binder)
+        let cap = p.oil_capacity(crate::surface::COAT_UM);
         self.absorb.iter_mut().for_each(|v| *v = cap);
         self.absorb_any = cap > 0.0;
         // bare paper is matte
         self.gloss.iter_mut().for_each(|v| *v = 0.05);
         self
+    }
+
+    /// The sheet of paper the canvas is, if it is one.
+    pub fn paper(&self) -> Option<crate::paper::Paper> {
+        self.paper
     }
 
     /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the

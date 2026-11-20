@@ -1014,6 +1014,48 @@ mod tests {
         }
     }
 
+    /// A gritted ground comes with the switch in the log's head: a new painting's sheet takes
+    /// `grit=` (a sanded paper whose tooth holds more pastel) and its log says so, replays and
+    /// saves the same sheet; an older log's paper refuses `grit=` as an unknown key, as it did,
+    /// and replays without it.
+    #[test]
+    fn a_gritted_ground_comes_with_its_switch() {
+        use crate::session::{GRIT_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n";
+        let mut old = Session::with_box(64, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        let e = old.run("canvas{size=64, aspect=1, seed=4, paper={grit={size=46}}}").unwrap_err();
+        assert!(e.contains("unknown option \"grit\""), "{e}");
+        assert!(!old.program("old").lines().any(|l| l == GRIT_MARK));
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        for bad in ["{size=5}", "{cover=0.1}", "{binder='wax'}", "{grade=400}", "3"] {
+            assert!(s.run(&format!("canvas{{size=64, aspect=1, seed=4, paper={{grit={bad}}}}}")).is_err(), "{bad}");
+        }
+        run(&mut s, r#"canvas{size=64, aspect=1, seed=4, paper={grit={size=46, cover=0.5, binder="glue"}}}"#);
+        let grit = s.canvas().unwrap().paper().unwrap().grit.unwrap();
+        assert_eq!((grit.size_um, grit.cover, grit.binder), (46.0, 0.5, paint::paper::Binder::Glue));
+        assert!(run(&mut s, "print(feel(500, 500))").starts_with("sanded paper"));
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"}) for i = 1, 3 do p:stroke({{100, 500}, {900, 500}}, {force=1, alt=55}) end"#);
+        let program = s.program("grit");
+        assert!(program.lines().any(|l| l == GRIT_MARK));
+        assert!(box_for(Some(&program)).unwrap().grit);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{GRIT_MARK}\n"))).unwrap().grit, "only the head says");
+        assert!(box_for(Some(&format!("--@ engine 4\n{GRIT_MARK}\n"))).unwrap_err().contains(GRIT_MARK));
+        let bytes = |s: &Session| {
+            let mut b = Vec::new();
+            s.canvas().unwrap().write_state(&mut b, "").unwrap();
+            b
+        };
+        let mut replay = Session::replay_with(64, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) { run(&mut replay, &chunk); }
+        assert!(bytes(&replay) == bytes(&s), "replays the same sheet and strokes");
+        let path = std::env::temp_dir().join(format!("easel-grit-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.grit);
+        assert!(bytes(&restored) == bytes(&s), "a save keeps the grit");
+    }
+
     #[test]
     fn erasing_a_sealed_drawing_keeps_its_guide() {
         let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();

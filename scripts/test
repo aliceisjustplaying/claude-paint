@@ -331,6 +331,7 @@ check painter-visit-lifecycle 'node --test --test-reporter=tap harness/painter/t
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"
 check agy-critic-prepare 'uv run --no-project --script harness/easel_mcp/test_critic_prepare.py -v' "$unittest"
+check agy-concepts 'uv run --no-project --script harness/easel_mcp/test_concepts.py -v' "$unittest"
 check die-roll 'uv run --no-project python -m unittest discover -s harness/painter/test -p test_die_roll.py -v' "$unittest"
 check friedrich-models 'uv run --no-project python harness/painter/test/friedrich_models_test.py -v' "$unittest"
 check painter-finalize "EASEL_BIN=$easel uv run --no-project --with pillow --with websockets python harness/painter/test/finalize_test.py -v" "$unittest"

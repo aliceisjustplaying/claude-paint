@@ -18,6 +18,44 @@ The launch message below, sent second, is the house runner's `PAINTER_MSG`, copi
 
 > Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting's title if you give it one and a few sentences about the picture. At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, practical lessons to carry forward from what you observed and recipes that failed. Before retrying a failed recipe, identify what has changed and why that could address the observed failure. Carry forward the conditions of material trials and repairs: substrate and wetness, recipe ratios, medium or thinner, load, coverage and viewed result; label broader rules as hypotheses. Record what you observed and what remains uncertain.
 
+## Friedrich die roll
+
+From a main checkout, export a new empty studio and reuse the Friedrich house preparation with agy configuration:
+
+```sh
+STUDIO=/path/to/paint-studio-abcdef
+RUNNER=/path/to/friedrich-agy-runner
+scripts/export_r16_studio friedrich "$STUDIO"
+scripts/prepare_friedrich_studio "$STUDIO" \
+  --house notes/round29/runner --runner-dir "$RUNNER" \
+  --studio-notes notes/round29/runner/studio_notes.md \
+  --die-roll --agy --sessions-root ~/.pi/agent/sessions \
+  --critic --critic-model anthropic/claude-fable-5-2:xhigh \
+  --pi-black ~/.pi/agent/pi-black/extensions/pi-black.ts
+scripts/agy_die_roll message
+cd "$STUDIO"
+agy --agent easel-painter --model gemini-4-neon-high --effort high
+```
+
+The critic options reuse the Friedrich critic reading and guide row. `--pi-black` names the installed extension file; without it, preparation uses the house runner's default path. Omitting `--critic`, `--critic-model` and `--pi-black` prepares a studio without a critic.
+
+Sitting 0 uses the configured `server.py --concepts-only --agy`, which exposes only `read` and `write_concepts`, with no easel commands, critic or sitting timer. The critic configuration stays in the MCP config for the painting session, but the concepts-only server clears it from its environment. Send the greeting above first, then the exact output of `scripts/agy_die_roll message`. Exit agy after the concepts are saved. From the source checkout:
+
+```sh
+scripts/agy_die_roll roll "$STUDIO" --run-dir "$RUNNER/run"
+```
+
+On the first parse failure this prints the unchanged retry message and exits nonzero without rolling or changing the server mode. Restart the same concepts-only session, send the greeting first and that retry message second, then exit and run the roll command once more. A second parse failure stops the flow. A successful command records `die_roll.json` in the run folder, switches the studio configuration to the normal `server.py --sittings --agy` and prints the exact painting message: the chosen concept, a blank line and the house launch message above. It refuses an existing roll record or any chunk in either painting log. Keep the run folder for this studio.
+
+For the painting session:
+
+```sh
+cd "$STUDIO"
+agy --agent easel-painter --model gemini-4-neon-high --effort high
+```
+
+Send the greeting first and the successful roll command's full output second. This is a new agy conversation so it loads the normal tools rather than the sitting-0 tool list. Neither preparation nor the roll command starts a painter.
+
 ## Sittings
 
 `end_sitting` holds the tool call open through the configured break, then returns the house runner's `SITTING_MESSAGE` (word for word, from `sitting-message.txt`), the next sitting's number, the painting clock, the journal and a fresh whole-canvas PNG. The house runner has no scheduled break or sitting timer, so the defaults are a zero-second break and an untimed sitting. Setup accepts `--break-seconds` and `--sitting-seconds`. `--sitting-seconds` sets a time budget that `status` reports; painting continues past it. The painting is complete when `end_sitting` closes a sitting that added no paint and had a whole-canvas look and a detail crop in normal color. `out/easel/sittings.json` records completion; quota errors and CLI exits leave it unset.

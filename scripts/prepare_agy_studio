@@ -23,12 +23,10 @@ CRITIC_READING = (
 )
 
 
-def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
+def validate(studio, break_seconds=0, sitting_seconds=None):
     studio = studio.expanduser().resolve(strict=True)
     if not re.fullmatch(r"paint-studio-[0-9a-f]+", studio.name):
         raise ValueError("the studio folder must be named paint-studio-<hex> for the viewer")
-    if not (studio / "BRIEF.md").is_file():
-        raise ValueError("the prepared studio is missing BRIEF.md")
     if not ((studio / "bin/easel").is_file() or (studio / "bin/watercolor-studio").is_file()):
         raise ValueError("the prepared studio is missing bin/easel or bin/watercolor-studio")
     if any(value is not None and (not math.isfinite(value) or value < 0) for value in (break_seconds, sitting_seconds)):
@@ -36,27 +34,41 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
     uv = shutil.which("uv")
     if not uv:
         raise ValueError("uv is not installed")
+    if (studio / ".agents/mcp_config.json").exists() or (studio / ".agents/agents/easel-painter.md").exists():
+        raise ValueError("the studio already has agy configuration")
+    return studio, uv
+
+
+def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None, concepts_only=False, critic_config=None):
+    studio, uv = validate(studio, break_seconds, sitting_seconds)
+    if not (studio / "BRIEF.md").is_file():
+        raise ValueError("the prepared studio is missing BRIEF.md")
     repo = Path(__file__).resolve().parent.parent
     runtime = studio / "bin/mcp"
     agents = studio / ".agents/agents"
-    if (studio / ".agents/mcp_config.json").exists() or (agents / "easel-painter.md").exists():
-        raise ValueError("the studio already has agy configuration")
     outputs = {}
     for name in ("server.py", "remote.py", "references.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py", "critic.py", "critic-tools.json"):
         source = repo / "harness/easel_mcp" / name
         outputs[runtime / name] = (source.read_bytes(), source.stat().st_mode & 0o777)
+    if concepts_only:
+        source = repo / "harness/easel_mcp/concepts.py"
+        outputs[runtime / source.name] = (source.read_bytes(), source.stat().st_mode & 0o777)
     for source, target in ((repo / "harness/agy/painter.md", agents / "easel-painter.md"),
                            (repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")):
         outputs[target] = (source.read_bytes(), source.stat().st_mode & 0o777)
     sessions_root = sessions_root.expanduser().resolve()
     args = ["run", "--no-project", "--script", str(runtime / "server.py"), "--studio", str(studio),
-            "--sittings", "--agy", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
+            "--concepts-only" if concepts_only else "--sittings", "--agy", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
     if sitting_seconds is not None:
         args += ["--sitting-seconds", str(sitting_seconds)]
     env = {"PAINTER_CRITIC_CLI": str(repo / "harness/painter/visit-cli.ts")}
-    if "PAINTER_CRITIC" in os.environ:
+    if critic_config is not None:
+        env["PAINTER_CRITIC"] = critic_config
+    elif concepts_only:
+        env["PAINTER_CRITIC"] = ""
+    elif "PAINTER_CRITIC" in os.environ:
         env["PAINTER_CRITIC"] = os.environ["PAINTER_CRITIC"]
-    if env.get("PAINTER_CRITIC") and (studio / "bin/easel").is_file() and not (studio / "bin/watercolor-studio").is_file():
+    if not concepts_only and env.get("PAINTER_CRITIC") and (studio / "bin/easel").is_file() and not (studio / "bin/watercolor-studio").is_file():
         for name in ("easel_guide.md", "watercolor_easel_guide.md"):
             guide = studio / "notes" / name
             if guide.is_file():
@@ -112,9 +124,10 @@ def main():
     parser.add_argument("--sessions-root", required=True, type=Path)
     parser.add_argument("--break-seconds", type=float, default=0)
     parser.add_argument("--sitting-seconds", type=float)
+    parser.add_argument("--concepts-only", action="store_true")
     args = parser.parse_args()
     try:
-        config = prepare(args.studio, args.sessions_root, args.break_seconds, args.sitting_seconds)
+        config = prepare(args.studio, args.sessions_root, args.break_seconds, args.sitting_seconds, args.concepts_only)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     print(json.dumps(config, indent=2))

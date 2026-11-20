@@ -50,7 +50,29 @@ def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
         width, height = max(1, math.floor(width * 0.75)), max(1, math.floor(height * 0.75))
 
 
-class SittingEasel(Easel):
+class ReadingEasel(Easel):
+    async def call(self, name, params):
+        if name != "read":
+            return await super().call(name, params)
+        path = studio_path(self.studio, params["path"])
+        folder = path is not None and path.is_dir()
+        if path is None or not (folder or path.is_file()):
+            raise ValueError("read: the path must be a file or a folder in this studio")
+        if not folder and path.suffix.lower() == ".png":
+            if self.page_bytes:
+                return pi_image(path.read_bytes())
+            return [types.ImageContent(type="image", mimeType="image/png", data=base64.b64encode(path.read_bytes()).decode())]
+        if folder:
+            text = "\n".join(sorted(entry.name + ("/" if entry.is_dir() else "") for entry in path.iterdir())) or "empty folder"
+        else:
+            text = path.read_text()
+        if self.page_bytes:
+            shown = str(path.relative_to(self.studio))
+            text = page_of(text, params.get("page"), lambda n, total: READ_PAGE.format(n=n, total=total, path=json.dumps(shown), next=n + 1), "read", self.page_bytes)
+        return [types.TextContent(type="text", text=text)]
+
+
+class SittingEasel(ReadingEasel):
     def __init__(self, studio, break_seconds=0, sitting_seconds=None):
         super().__init__(studio)
         self.watercolor = (self.studio / "bin/watercolor-studio").is_file()
@@ -76,23 +98,6 @@ class SittingEasel(Easel):
         tmp.replace(self.state_path)
 
     async def call(self, name, params):
-        if name == "read":
-            path = studio_path(self.studio, params["path"])
-            folder = path is not None and path.is_dir()
-            if path is None or not (folder or path.is_file()):
-                raise ValueError("read: the path must be a file or a folder in this studio")
-            if not folder and path.suffix.lower() == ".png":
-                if self.page_bytes:
-                    return pi_image(path.read_bytes())
-                return [types.ImageContent(type="image", mimeType="image/png", data=base64.b64encode(path.read_bytes()).decode())]
-            if folder:
-                text = "\n".join(sorted(entry.name + ("/" if entry.is_dir() else "") for entry in path.iterdir())) or "empty folder"
-            else:
-                text = path.read_text()
-            if self.page_bytes:
-                shown = str(path.relative_to(self.studio))
-                text = page_of(text, params.get("page"), lambda n, total: READ_PAGE.format(n=n, total=total, path=json.dumps(shown), next=n + 1), "read", self.page_bytes)
-            return [types.TextContent(type="text", text=text)]
         if name == "end_sitting":
             if self.state["complete"]:
                 await self.visit_critic()

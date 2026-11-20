@@ -2800,7 +2800,7 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let canvas = match st.canvas.as_ref() {
         Some(c) => {
             let mut hash = save::Fnv1a::new();
-            c.write_state(&mut hash, "").expect("checkpoint hashing");
+            c.write_state_as_is(&mut hash, "").expect("checkpoint hashing");
             hash.finish()
         }
         None => 0,

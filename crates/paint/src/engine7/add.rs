@@ -61,6 +61,24 @@ impl<'a> Paint7<'a> {
     }
 }
 
+/// A pixel left bare by a lay of nothing (`Film::add`, `bristle::Surf::add`):
+/// no paint, so no cure.
+#[inline(always)]
+pub(crate) unsafe fn bare(dry: *mut Px, i: usize, vol: &mut f32) {
+    *vol = 0.0;
+    if !dry.is_null() {
+        unsafe { (*dry.add(i)).cure = 0.0 };
+    }
+}
+
+/// Whether a pixel's wet film is paint: a volume neither negative nor
+/// infinite, and its color and properties numbers. (Debug builds assert
+/// that paint laid from paint onto paint is paint, and so for what a hair
+/// carries after an exchange and a mix: a bad value fails where it is made.)
+pub(crate) fn laid_ok(vol: f32, color: &[f32], hide: &Prop) -> bool {
+    vol.is_finite() && vol >= 0.0 && color.iter().chain(hide).all(|x| x.is_finite())
+}
+
 #[inline(always)]
 fn lerp4(p: [f32; 4], q: [f32; 4], a: f32) -> [f32; 4] {
     [p[0] + (q[0] - p[0]) * a, p[1] + (q[1] - p[1]) * a, p[2] + (q[2] - p[2]) * a, p[3] + (q[3] - p[3]) * a]
@@ -116,7 +134,18 @@ impl Film {
         unsafe {
             let vol = &mut *self.vol.add(i);
             let t = *vol + v;
+            // Paint that rounds to nothing once its solvent is gone (`v` the
+            // smallest float or two, times `keep`) on a bare pixel lays
+            // nothing: mixed by its share of nothing (0/0), the pixel's paint
+            // would be NaN, and so would every hair that touched it after
+            // (a hair run dry gives such crumbs: `tests` below).
+            if t == 0.0 {
+                return bare(self.dry, i, vol);
+            }
             let a = v / t;
+            // (debug builds: paint laid from paint onto paint is paint)
+            #[cfg(debug_assertions)]
+            let was_ok = laid_ok(*vol, &(*self.lat.add(i)).color, &*self.hide.add(i)) && v.is_finite() && p.parts.color.iter().chain(p.hide.iter().flatten()).all(|x| x.is_finite());
             // every row is read before any is written: the shared property
             // lanes (3 and 6) blend once from the old value and are written
             // twice with the same result
@@ -136,6 +165,8 @@ impl Film {
                 d.cure = if t < 1e-5 { 0.0 } else { d.cure + (p.cure - d.cure) * a };
             }
             *vol = t;
+            #[cfg(debug_assertions)]
+            debug_assert!(!was_ok || laid_ok(t, &(*self.lat.add(i)).color, &*self.hide.add(i)), "engine 7 laid paint into an invalid film at {i}: {t} of {:?}", *self.hide.add(i));
             if self.absorb.is_null() {
                 return;
             }
@@ -146,5 +177,64 @@ impl Film {
             *vol = if self.drain { ground_drain(cap, t, hd) } else { ground_draw(cap, v, t, hd) };
             if self.surf.volume_latent && scatter > 0.0 { (*self.lat.add(i)).concentrate(hd[0] / scatter); }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canvas::Canvas;
+    use crate::color::hex;
+
+    /// The cassatt7 scratch canvas's lay-in (a turps wash, 2400 px): under
+    /// the stroke film's slide a hair that had run dry gave 95% of what it
+    /// still held every step, until it held the smallest float or two. Laid
+    /// on a bare pixel, half of that (the turps gone) is no float at all,
+    /// and the pixel's paint, mixed by its share of nothing (0/0), was NaN:
+    /// every hair that touched it after came away black, reloads and all,
+    /// and the canvas's checkpoint would not read ("paint wax is invalid").
+    /// Paint that rounds to nothing lays nothing, by engine 7's lay and by
+    /// engine 5's.
+    #[test]
+    fn a_lay_that_rounds_to_nothing_lays_nothing() {
+        let mut c = Canvas::new(16, 1.0, hex("#e8e0d0")).with_engine(9);
+        let sf = c.surf();
+        assert!(sf.lean);
+        // a turps wash's properties: half its volume turps
+        let paint = crate::wet::Paint::new(hex("#d89060"), 0.5, 0.6);
+        let mut hide = paint.prop();
+        hide[3] = 0.5;
+        let lat = paint.latent();
+        let crumb = f32::from_bits(1);
+        let laid = Paint7::new(true, false, &lat, hide, 0.0);
+        assert_eq!(crumb * laid.keep, 0.0);
+        unsafe {
+            Film::of(&sf).add(0, crumb, &laid);
+            Film::of(&sf).lay(1, crumb, &laid, 0.6);
+            sf.add(2, crumb, &lat, hide, 0.0);
+        }
+        for i in 0..3 {
+            assert_eq!(c.wet.vol[i], 0.0, "pixel {i}");
+            assert!(laid_ok(c.wet.vol[i], &c.wet.lat[i].color, &c.wet.hide[i]), "pixel {i}: {:?}", c.wet.hide[i]);
+        }
+        // and paint laid there after is the paint laid
+        let sf = c.surf();
+        unsafe { Film::of(&sf).add(0, 0.5, &laid) };
+        assert!(laid_ok(c.wet.vol[0], &c.wet.lat[0].color, &c.wet.hide[0]));
+        assert!((c.wet.vol[0] - 0.25).abs() < 1e-6 && c.wet.lat[0].color.iter().zip(&lat.color).all(|(a, b)| (a - b).abs() < 1e-5), "{} {:?}", c.wet.vol[0], c.wet.hide[0]);
+    }
+
+    /// A canvas whose wet paint holds a NaN is refused by the checkpoint
+    /// writer, not written for the reader to refuse.
+    #[test]
+    fn no_checkpoint_of_invalid_paint() {
+        let mut c = Canvas::new(16, 1.0, hex("#e8e0d0")).with_engine(9);
+        let mut ok = Vec::new();
+        c.write_state(&mut ok, "ok").unwrap();
+        c.wet.vol[3] = 0.1;
+        c.wet.hide[3][9] = f32::NAN;
+        let mut bad = Vec::new();
+        let e = c.write_state(&mut bad, "bad").unwrap_err();
+        assert!(e.to_string().contains("properties") && e.to_string().contains("pixel 3"), "{e}");
     }
 }

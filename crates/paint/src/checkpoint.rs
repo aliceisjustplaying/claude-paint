@@ -453,6 +453,20 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
+        // (never a state that can't be read back: a number that isn't one
+        // anywhere in the wet paint is refused here, where it is written,
+        // not when the canvas is next opened)
+        if let Some(e) = self.invalid_wet() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("the canvas's wet paint is invalid ({e}); no checkpoint written")));
+        }
+        self.write_state_as_is(w, header)
+    }
+
+    /// `write_state` without refusing invalid paint: the bytes of the state
+    /// whatever it holds, for a digest of it (`easel run --state-digest`
+    /// hashes them, and an old painting's digests are fixed, NaN or not).
+    /// Never for a checkpoint.
+    pub fn write_state_as_is(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
         let layers = self.wet.lat.iter().any(|p| !p.layers.is_empty());
         let pigments = layers || self.wet.lat.iter().any(|p| !p.parts.is_empty());
         let backing = self.spectral_films() && !self.backing.is_empty();
@@ -653,6 +667,31 @@ impl Canvas {
             }
         }
         Ok(())
+    }
+
+    /// What in the wet paint isn't a number (a volume, color or property,
+    /// or a solvent, which may not be negative either), first found: None
+    /// when it is all paint.
+    pub(crate) fn invalid_wet(&self) -> Option<String> {
+        fn lat_ok(l: &crate::wet::Latent) -> bool {
+            l.color.iter().all(|x| x.is_finite())
+                && l.parts.iter().all(|p| p.1.is_finite())
+                && l.layers.iter().all(|y| y.share.is_finite() && y.hide.iter().all(|x| x.is_finite()) && lat_ok(&y.lat))
+        }
+        let w = &self.wet;
+        if let Some(i) = w.vol.iter().position(|v| !(v.is_finite())) {
+            return Some(format!("volume {} at pixel {i}", w.vol[i]));
+        }
+        if let Some(i) = w.lat.iter().position(|l| !lat_ok(l)) {
+            return Some(format!("pigment at pixel {i}"));
+        }
+        if let Some(i) = w.hide.iter().position(|h| !h.iter().all(|x| x.is_finite())) {
+            return Some(format!("properties {:?} at pixel {i}", w.hide[i]));
+        }
+        if let Some(i) = w.solv.iter().position(|v| !(v.is_finite() && *v >= 0.0)) {
+            return Some(format!("solvent {} at pixel {i}", w.solv[i]));
+        }
+        None
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.

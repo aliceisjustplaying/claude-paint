@@ -768,6 +768,10 @@ impl Canvas {
     /// paint does (`bristle::Surf::add`).
     fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
         let t = self.wet.vol[i] + v;
+        // (nothing on a bare pixel lays nothing, as `Surf::add`)
+        if t == 0.0 {
+            return;
+        }
         let a = v / t;
         let l = &mut self.wet.lat[i];
         for k in 0..l.len() {

@@ -450,6 +450,45 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
 /// point in proportion to the mask's value there, so a hatched passage
 /// fades into the next instead of stopping at a line.
 pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64) -> Vec<Mark> {
+    hatch_marks_swung(m, angle, spacing, length, pressure, graded, seed, None)
+}
+
+/// The hand that swings a mark: each stroke an arc about the wrist, or
+/// about the elbow when it sweeps further than the wrist turns, its middle
+/// bulging away from the pivot (`area_strokes`, with `p:hatch`'s
+/// `--@ pastel-area-strokes`). Lengths in units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pivot {
+    /// The wrist's radius: the hand's length.
+    pub wrist: f32,
+    /// How far the wrist sweeps the tip: its radius times its turn.
+    pub reach: f32,
+    /// The elbow's radius: forearm and hand.
+    pub elbow: f32,
+    /// The way to the pivot from the tip (a unit vector).
+    pub toward: (f32, f32),
+}
+
+impl Pivot {
+    /// The bow of a mark of length `len` along the unit direction `dir`:
+    /// its middle's offset from the chord along the normal (-dir.1, dir.0).
+    /// The share the wrist swings is the chord's part along the circle about
+    /// the pivot, `len·|c|` where c is the normal's cosine to the radius; a
+    /// sweep `len·|c|` on a radius R sags (len·c)²/(8R) along the radius,
+    /// |c| of it across the chord, away from the pivot: -c³·len²/(8R). A mark
+    /// along the radius (made by the fingers and arm, not the wrist's turn)
+    /// is straight.
+    pub fn bow(&self, dir: (f32, f32), len: f32) -> f32 {
+        let c = -dir.1 * self.toward.0 + dir.0 * self.toward.1;
+        let r = if len * c.abs() <= self.reach { self.wrist } else { self.elbow };
+        -c * c * c * len * len / (8.0 * r.max(1e-6))
+    }
+}
+
+/// `hatch_marks_graded`, each mark bowed by `pivot`'s swing instead of a
+/// random bow (the same draws placing the marks).
+#[allow(clippy::too_many_arguments)]
+pub fn hatch_marks_swung(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64, pivot: Option<&Pivot>) -> Vec<Mark> {
     let level = if graded { 0.04 } else { 0.5 };
     let f = m.f;
     let (w, h) = (f.width(), f.height());
@@ -517,6 +556,10 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
                     continue;
                 }
                 let bow = rng.range(-0.06, 0.06) * (sb - sa_);
+                let bow = match pivot {
+                    Some(pv) => pv.bow((ca, sa), sb - sa_),
+                    None => bow,
+                };
                 let k = ((sb - sa_) / 0.25).ceil() as usize + 1;
                 let pts: Vec<(f32, f32)> = (0..k)
                     .map(|i| {

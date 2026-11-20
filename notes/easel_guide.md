@@ -295,6 +295,36 @@ pressure or `{start, end}`. A touch's `pressure` takes a number.
 `ramps` gives the press-down and lift-off fractions, `swell` pressure factors
 along the stroke, `orient` `"across"`, `"along"` or a fixed angle.
 
+A touch presses the tip down and lifts it; `drag` moves the hand while the
+hairs are down. It lays the film a stroke lays where it starts, about as
+much of the load as a stroke lays moving the length of the pressed patch,
+and a dragged touch also what a stroke of its drag lays. On wet paint it
+lifts some of the paint under it into the brush, as a stroke does. (A
+painting whose log's head has no `--@ touch-split` line keeps the touch it
+was painted with: a thin coat whatever the load, which on wet paint lays
+less than it lifts.)
+
+A stroke's hairs never lift back the paint the same stroke has just laid:
+the paint between the brush and the canvas parts once, where the brush
+leaves it. Over wet paint a stroke lifts some of what was there (at most
+its brush's `pickup` share), and the brush comes away dirtied with it.
+In stiff paint a bristle brush's hairs gather into clumps, which lay the
+stroke in ridges and furrows. Each stroke has its own clumps. They move
+paint across the width but don't change how much the stroke lays. A
+clump is as wide as the paint's surface tension can pull the brush's
+hairs together against their stiffness: about 1.7 mm on an 8 mm hog flat
+or filbert (some 50 hairs to a clump), wider on a bigger brush with
+longer hair. A sable round's soft, fine hair gathers into one or two
+clumps across the brush (a wet round draws to a point), so it lays
+almost no clump bands. How wide a clump is doesn't depend on how stiff
+the paint is. Whether its ridges last depends on how the paint levels.
+(A painting whose log's head has no `--@ stroke-split` line keeps the
+stroke it was painted with. There, the hairs behind lifted back part of
+what the hairs ahead laid, about a fifth on bare canvas, and more on wet
+paint and with more hairs. Its clumps also changed how much a stroke
+laid: on a narrow brush, up to a third more or less from one stroke to
+the next. They were a few hairs wide, wider the stiffer the paint.)
+
 Brushes are blunt unless given a `point` (0 blunt, 1 a full point). A
 pointed round or rigger lays a hairline at light pressure and spreads to
 its belly when pressed, so its width follows the pressure and a stroke

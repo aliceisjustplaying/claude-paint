@@ -229,7 +229,10 @@ mod tests {
         while probe.drying_at(150.0, 150.0) != paint::Stage::Tacky {
             probe.wait(10.0);
             minutes += 10;
-            assert!(minutes < 1440);
+            // (a guard against a film that never sets: a week. With the
+            // stroke split the fill keeps its strokes' paint, about 60 µm,
+            // and goes tacky in about two days)
+            assert!(minutes < 7 * 1440);
         }
         let src = format!(r#"assert(drying(150,150)=="open"); wait({minutes}); work(m,{{pile=p,coverage=0}})"#);
         let out = on.run(&src).unwrap().out;

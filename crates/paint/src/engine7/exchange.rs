@@ -33,7 +33,7 @@
 use super::Rect;
 use super::add::{Film, Paint7};
 use super::window::{self, COVER, CURE, HIDE0, Hit, LAT0, PACK, SOLV, VOL, Window};
-use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, fine_cover, grow, mix_cure};
+use crate::bristle::{Bounds, Bristle, Clip, GHOST_TOUCH, Surf, Tool, WET_REACH, capsule_cover, clump_factor, clump_span, clump_stiffen, fine_cover, grow, mix_cure};
 use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Prop, mix_into};
@@ -190,14 +190,19 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let seg = seg2.sqrt();
         let fine = tool.point > 0.0 && dep.is_none();
         // the brush side of the plough, fixed for the contact
-        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
-        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
+        let stiffen = clump_stiffen(&br.hide);
         let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
         let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
         let off = if dep.is_some() {
             rb + 1.0
         } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
-            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
+            // (with the stroke split, the clumps are as wide as `coalesce`
+            // gathers)
+            match (sf.clump_mm(), clump_span(tool, sf.clump_mm())) {
+                (None, _) => (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0),
+                (Some(_), Some(span)) => (span * s).max(2.0 * hair).min(3.0),
+                (Some(_), None) => 2.0 * hair,
+            }
         } else {
             2.0 * hair
         };
@@ -368,15 +373,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             dep_total
         };
         let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
-            let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
-            let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
-            let u = (br.rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
-            let b0 = floor(u);
-            let f = u - b0;
-            let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
-            let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
-            let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
-            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(liquid * 0.95)
+            // (with the stroke split, over the brush's width the clumps
+            // average to 1: `Surf::clump_mean`)
+            let k = clump_factor(tool, br.rx, stiffen, id, sf.clump_mm());
+            let k = if sf.stroke_split { k / sf.clump_mean } else { k };
+            (dep_total * k).min(liquid * 0.95)
         } else {
             dep_total
         };
@@ -409,7 +410,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let tk = if exch {
                     (v * pickup * wt * fl).min(v)
                 } else {
-                    let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                    // (with the stroke split the floor holds this stroke's
+                    // own paint, so no rate needs to spare it)
+                    let own = if !sf.stroke_split && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
                     (v * pickup * wt * own * fl).min((v - *sf.floor.add(i)).max(0.0))
                 };
                 if tk > 0.0 {
@@ -433,7 +436,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                 let cv = &mut *sf.cover.add(i);
                 *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                let before = *sf.vol.add(i);
                 film.lay(i, dep_per_w * wt * takes, &laying, sf.skim);
+                if sf.stroke_split {
+                    *sf.floor.add(i) += *sf.vol.add(i) - before;
+                }
                 *sf.stroke.add(i) = id;
             } else if dep_per_w > 0.0 {
                 let mut d = dep_per_w * wt * takes;
@@ -448,7 +455,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 if d > 0.0 {
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
+                    let before = *sf.vol.add(i);
                     film.lay(i, d * (1.0 - phi), &laying, sf.skim);
+                    if sf.stroke_split {
+                        *sf.floor.add(i) += *sf.vol.add(i) - before;
+                    }
                     if !sf.solv.is_null() {
                         *sf.solv.add(i) += d * phi * COAT_UM;
                     }
@@ -517,6 +528,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 // cure it had, the cover it brings (fine tools) and its
                 // solvent (µm), in the film's proportions (m ≤ v, so these
                 // never move more than is there)
+                let own = crate::bristle::split_floor_take(sf, i, v, out_m) / out_m;
                 let (hp, picked) = sf.take_with_lat(i, out_m);
                 let mut src = packed(sf, i, &hp, cure, picked.as_ref());
                 src[COVER] = src_cover;
@@ -524,6 +536,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 for &(tx, ty, j, mm) in &moves[..n_moves] {
                     let cell = win.cell(tx, ty, j, || unreachable!("a plough cell is started before its paint lands"));
                     accumulate(&mut cell.a, &src, mm);
+                    cell.own += own * mm;
                     cell.parts.add_parts(picked.as_ref().unwrap_or(&*sf.lat.add(i)), mm);
                 }
                 ploughed += out_m * px_area;
@@ -557,6 +570,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
             let cj = &mut *sf.cover.add(j);
             *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + c.a[COVER]).min(1.0) } else { 1.0 };
+            crate::bristle::split_floor_land(sf, tool, j, id, c.own);
             film.add(j, m, &Paint7::new(sf.lean, sf.drain, &lat, hide, c.a[CURE] * inv));
         }
         let had = br.vol + br.solvent;

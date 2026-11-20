@@ -337,6 +337,15 @@ the share `lift` of the bead (0.1) stays where it lifts.
 `k:scrape(points, {pressure=, angle=, lift=})` scrapes wet paint off down
 to the blade (at full pressure, down to the dry paint) and keeps it on the
 blade, but for the share `lift` (0) it leaves where it lifts.
+A blade holds one full load: `k:load` on a knife still carrying paint tops
+it up to a full load and no more. What a pull leaves standing taller than
+its paint's yield stress holds up (its ridges, the bead where it lifts)
+slumps onto the paint beside it, so a stiff paint keeps a ridge a few
+millimetres high and a soft one spreads lower. (A painting whose log's head
+has no `--@ knife-slump` line loads on top of what the blade carries and
+leaves its ridges as laid, a pixel or three wide whatever the resolution:
+knife ridges there stand tens of millimetres tall, and cast long shadows in
+gallery light.)
 
 **Spatter.** `b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}`
 flicks the loaded brush: the paint its hairs can't hold flies off in droplets

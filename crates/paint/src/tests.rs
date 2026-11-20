@@ -326,6 +326,30 @@ fn a_packed_film_follows_the_relief() {
     image_tolerance::assert_fields_close([full.0, full.1], [fluid.0, fluid.1]);
 }
 
+/// The oils switch: a waxed paint dries less glossy than the same paint
+/// without wax (`palette::WAX_MATTE`), on an oil ground where nothing drains
+/// it; without the switch the wax is not read.
+#[test]
+fn wax_dries_more_matte() {
+    let gloss = |wax: f32, oils: bool| {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_oils(oils);
+        assert!(c.engine >= 4);
+        let p = Paint { wax, ..Paint::body(hex("#556677")) };
+        for _ in 0..4 {
+            let mut h = Held::new(Tool::filbert(60.0), 3);
+            h.load(p.clone(), 1.0);
+            c.drag(&mut h, &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(0.9, 0.9), None);
+        }
+        let i = c.f.index(500.0, 500.0);
+        c.dry();
+        c.gloss[i]
+    };
+    let (plain, waxed) = (gloss(0.0, true), gloss(1.0, true));
+    assert!(plain > 0.3 && (waxed / plain - (1.0 - crate::palette::WAX_MATTE)).abs() < 0.05, "plain {plain} waxed {waxed}");
+    assert_eq!(gloss(0.0, false), plain);
+    assert_eq!(gloss(1.0, false), plain, "without the switch");
+}
+
 /// The drain switch: a stroke baked with packed edges beside a still-fluid
 /// center (`settle_for`'s `fluid`, as `bake` passes it, `1 − Prop[7]`): the
 /// packed edges keep the thickness they packed at, however the fluid

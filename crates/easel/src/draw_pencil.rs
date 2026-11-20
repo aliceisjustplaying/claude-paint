@@ -1014,6 +1014,45 @@ mod tests {
         }
     }
 
+    /// A new painting's rose madder stick is a rose, as madder lake powder is
+    /// (`DRY_LAKES_MARK`); an older engine-9 log's replays in the color it was painted
+    /// with (main's bits at 4bbbbec3). The log and a save keep the switch; below engine 9
+    /// the line changes nothing.
+    #[test]
+    fn a_new_paintings_madder_stick_is_a_rose() {
+        use crate::session::{DRY_LAKES_MARK, box_for};
+        assert!(box_for(None).unwrap().dry_lakes);
+        let madder = |b: paint::Palette| {
+            let i = b.tubes.iter().position(|t| t.name == "rose madder").unwrap();
+            b.dry_color(&[(i, 1.0)])
+        };
+        let engine8 = "--@ box impressionist\n--@ engine 8\n--@ paper\n";
+        assert_eq!(madder(box_for(Some(&format!("{engine8}{DRY_LAKES_MARK}\n"))).unwrap()), madder(box_for(Some(engine8)).unwrap()));
+        for enabled in [false, true] {
+            let head = format!("--@ box impressionist\n--@ engine 9\n--@ paper\n{}", if enabled { format!("{DRY_LAKES_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.dry_lakes, enabled);
+            let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            let out = run(&mut s, r#"p = pastel(pile{{"rose madder", 1}}) print(p.r, p.g, p.b)"#);
+            let c: Vec<f32> = out.split_whitespace().map(|v| v.parse::<f64>().unwrap() as f32).collect();
+            if enabled {
+                let srgb: Vec<f32> = c.iter().map(|&v| paint::color::linear_to_srgb(v) * 255.0).collect();
+                assert!(srgb[0] - srgb[1] > 40.0 && srgb[1] < 160.0, "a rose, not a near-white: {srgb:?}");
+            } else {
+                assert_eq!(c.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), [0x3f640755, 0x3f3442f8, 0x3f3dc997], "{out}");
+            }
+            let program = s.program("lakes");
+            assert_eq!(program.lines().any(|l| l == DRY_LAKES_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().dry_lakes, enabled);
+            let path = std::env::temp_dir().join(format!("easel-dry-lakes-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.dry_lakes, enabled);
+        }
+    }
+
     #[test]
     fn erasing_a_sealed_drawing_keeps_its_guide() {
         let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();

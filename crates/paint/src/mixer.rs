@@ -259,11 +259,11 @@ pub fn pigment(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
     crate::spectral::SpectralPigment { k: absorption, s: scattering }
 }
 
-fn outside(r: f32) -> f32 {
+pub(crate) fn outside(r: f32) -> f32 {
     (1.0 - 0.04) * (1.0 - 0.49) * r / (1.0 - 0.49 * r)
 }
 
-fn inside(r: f32) -> f32 {
+pub(crate) fn inside(r: f32) -> f32 {
     r / ((1.0 - 0.04) * (1.0 - 0.49) + 0.49 * r)
 }
 
@@ -359,6 +359,64 @@ impl Backing {
         }
         over
     }
+}
+
+/// A wet film's own internal reflectance and its diffuse transmittance, one
+/// way through it, as linear RGB: the film as `Backing::over_wet` lays it
+/// (each of its layers by its share, bottom first), but alone, before the
+/// substrate under it is counted. A print's lateral light (`print_optics`)
+/// needs what the film reflects itself and what it lets through apart.
+pub(crate) fn film_rt(lat: &crate::wet::Latent, scatter: f32, coats: f32) -> (Rgb, Rgb) {
+    let one = |lat: &[f32; LATENT_SIZE], scatter: f32, coats: f32| -> (crate::spectral::Spectrum, crate::spectral::Spectrum) {
+        if coats <= 0.0 || scatter <= 0.0 {
+            return ([0.0; crate::spectral::N], [1.0; crate::spectral::N]);
+        }
+        let p = pigment9(lat);
+        let mean_s = p.s.iter().sum::<f32>() / crate::spectral::N as f32;
+        let x = (coats.min(1e4) * scatter / mean_s.max(1e-12)) as f64;
+        let mut r = [0.0; crate::spectral::N];
+        let mut t = [0.0; crate::spectral::N];
+        for w in 0..crate::spectral::N {
+            let (k, s) = (p.k[w] as f64, p.s[w] as f64);
+            let (rw, tw) = if s < 1e-6 {
+                (0.0, (-k * x).exp())
+            } else {
+                let a = 1.0 + k / s;
+                let b = (a * a - 1.0).max(0.0).sqrt();
+                if b < 1e-3 {
+                    let sx = s * x;
+                    (sx / (1.0 + a * sx), 1.0 / (1.0 + a * sx))
+                } else {
+                    let bsx = (b * s * x).min(40.0);
+                    let (sh, ch) = (bsx.sinh(), bsx.cosh());
+                    let c = a * sh + b * ch;
+                    (sh / c, b / c)
+                }
+            };
+            r[w] = rw as f32;
+            t[w] = tw as f32;
+        }
+        (r, t)
+    };
+    let (r, t) = if lat.layers.is_empty() {
+        one(&normalized9(lat), scatter, coats)
+    } else {
+        let mean: f32 = lat.layers.iter().map(|l| l.share * l.hide[0]).sum();
+        let scale = if mean > 0.0 { scatter / mean } else { 1.0 };
+        lat.layers.iter().fold(([0.0; crate::spectral::N], [1.0; crate::spectral::N]), |(rb, tb), l| {
+            let (ru, tu) = one(&normalized9(&l.lat), l.hide[0] * scale, coats * l.share);
+            // (the layer over what is under it: Kubelka's sum of two layers)
+            let mut r = [0.0; crate::spectral::N];
+            let mut t = [0.0; crate::spectral::N];
+            for w in 0..crate::spectral::N {
+                let d = (1.0 - ru[w] * rb[w]).max(1e-6);
+                r[w] = ru[w] + tu[w] * tu[w] * rb[w] / d;
+                t[w] = tu[w] * tb[w] / d;
+            }
+            (r, t)
+        })
+    };
+    (crate::spectral::to_rgb(&r), crate::spectral::to_rgb(&t))
 }
 
 /// Mean scattering per engine coat (25 µm), carried with the wet paint.

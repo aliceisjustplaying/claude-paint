@@ -229,7 +229,9 @@ mod tests {
         while probe.drying_at(150.0, 150.0) != paint::Stage::Tacky {
             probe.wait(10.0);
             minutes += 10;
-            assert!(minutes < 1440);
+            // (a new painting's tubes are in their colormen's oils: the
+            // tube box's lead white is in walnut, about 32 hours to set)
+            assert!(minutes < 3 * 1440);
         }
         let src = format!(r#"assert(drying(150,150)=="open"); wait({minutes}); work(m,{{pile=p,coverage=0}})"#);
         let out = on.run(&src).unwrap().out;

@@ -25,6 +25,9 @@ struct State {
     brushes: Vec<paint::Held>,
     knives: Vec<paint::Knife>,
     rags: Vec<paint::rag::Rag>,
+    /// The named surfaces and which is current (surfaces.rs `Surfaces::identity`): None while
+    /// the painting is the only one.
+    surfaces: Option<Vec<u8>>,
 }
 
 impl State {
@@ -36,6 +39,7 @@ impl State {
             brushes: s.live_brushes().iter().map(|b| b.borrow().clone()).collect(),
             knives: s.live_knives().iter().map(|b| b.borrow().clone()).collect(),
             rags: s.live_rags().iter().map(|b| b.borrow().clone()).collect(),
+            surfaces: s.surfaces.identity(),
         }
     }
 
@@ -46,6 +50,9 @@ impl State {
         let rags = s.live_rags();
         if (brushes.len(), knives.len(), rags.len()) != (self.brushes.len(), self.knives.len(), self.rags.len()) {
             return Err("replay checkpoint: tool registry differs; refusing reconstruction".into());
+        }
+        if s.surfaces.identity() != self.surfaces {
+            return Err("replay checkpoint: the surfaces differ; refusing reconstruction".into());
         }
         for (b, value) in brushes.iter().zip(self.brushes) { *b.borrow_mut() = value.with_engine(s.tubes.engine); }
         for (b, value) in knives.iter().zip(self.knives) { *b.borrow_mut() = value; }
@@ -369,7 +376,16 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
                 bincode::serialize_into(&mut writer, &SavedRef { identity, done, events: &t.borrow().events, state: &state, digests }).map_err(|e| e.to_string())
             })?;
             bincode::serialize_into(&mut writer, &s.canvas().is_some()).map_err(|e| e.to_string())?;
-            if let Some(c) = s.canvas() { c.write_state(&mut writer, "").map_err(|e| e.to_string())?; }
+            // every surface, in a session that named some (surfaces.rs); else the canvas
+            let st = s.st.borrow();
+            if let Some(c) = st.canvas.as_ref() {
+                if st.surfaces.named() {
+                    crate::surfaces::write_all(&st, "", &mut writer).map_err(|e| e.to_string())?;
+                } else {
+                    c.write_state(&mut writer, "").map_err(|e| e.to_string())?;
+                }
+            }
+            drop(st);
             writer.finish().map_err(|e| e.to_string())?;
         }
         bytes = f.stream_position().map_err(|e| e.to_string())?;
@@ -382,7 +398,7 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
     Ok(())
 }
 
-fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Option<paint::Canvas>, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Option<paint::Canvas>, surfaces: Option<crate::surfaces::ReadBack>, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
     TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, playback: true, events: std::mem::take(&mut saved.events), ..Trace::default() });
     for (i, chunk) in chunks.iter().take(saved.done).enumerate() {
         s.run(chunk).map_err(|e| format!("replay checkpoint: prefix chunk {} failed: {e}", i + 1))?;
@@ -395,6 +411,20 @@ fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Op
     }
     if s.canvas().is_some() != canvas.is_some() {
         return Err("replay checkpoint: reconstructed canvas differs".into());
+    }
+    // the surfaces put aside as the checkpoint kept them (the reconstruction's own, made by
+    // verbs whose effects it took from the trace, are only their outlines)
+    {
+        let mut st = s.st.borrow_mut();
+        match surfaces {
+            None if st.surfaces.named() => return Err("replay checkpoint: the session has named surfaces the checkpoint doesn't hold".into()),
+            None => {}
+            Some(rb) => {
+                // the current surface's plate, as its canvas, from the checkpoint (plate.rs)
+                st.plate = rb.current_plate().map_err(|e| format!("replay checkpoint: {e}"))?;
+                rb.canvases_into(&mut st.surfaces).map_err(|e| format!("replay checkpoint: {e}"))?
+            }
+        }
     }
     s.st.borrow_mut().canvas = canvas;
     TRACE.with(|t| t.borrow_mut().playback = false);
@@ -458,7 +488,7 @@ impl Live {
                 format!("replay checkpoint {}: {e}; refusing resume", path.display())
             }
         })?;
-        let (mut saved, canvas, elapsed) = load(path)?;
+        let (mut saved, canvas, surfaces, elapsed) = load(path)?;
         if saved.done == 0 || saved.done > chunks.len() || !elapsed.is_finite() || elapsed < 0.0 {
             return Err("replay checkpoint: invalid chunk cursor or elapsed time".into());
         }
@@ -467,7 +497,7 @@ impl Live {
             return Err("replay checkpoint: source prefix, executable, width or engine environment differs; refusing resume".into());
         }
         self.with(|| -> Result<(), String> {
-            reconstruct(s, chunks, &mut saved, canvas, progress)?;
+            reconstruct(s, chunks, &mut saved, canvas, surfaces, progress)?;
             let prefix: [u8; 32] = Sha256::digest(s.program(name).as_bytes()).into();
             if prefix != saved.identity.source {
                 return Err("replay checkpoint: reconstructed source prefix differs; refusing resume".into());
@@ -529,7 +559,7 @@ impl Batch {
         let identity = (checkpoint.is_some() || crate::flag(args, "--frames-every").is_some()).then(|| Identity::new(source, width)).transpose()?;
         let mut batch = Self { checkpoint, at, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
         if let Some(path) = batch.checkpoint.as_ref().filter(|p| required || p.exists()) {
-            let (mut saved, canvas, elapsed_secs) = load(path)?;
+            let (mut saved, canvas, surfaces, elapsed_secs) = load(path)?;
             if saved.done == 0 || saved.done > chunks.len() || saved.done > until || !elapsed_secs.is_finite() || elapsed_secs < 0.0 {
                 return Err("replay checkpoint: invalid chunk cursor or elapsed time".into());
             }
@@ -543,7 +573,7 @@ impl Batch {
             if saved.digests.is_some() != batch.digests.is_some() || saved.digests.as_ref().is_some_and(|d| d.len() != saved.done) {
                 return Err("replay checkpoint: --state-digest must be kept consistently across batches".into());
             }
-            reconstruct(s, chunks, &mut saved, canvas, &|_, _| {})?;
+            reconstruct(s, chunks, &mut saved, canvas, surfaces, &|_, _| {})?;
             batch.done = saved.done;
             batch.elapsed_before = elapsed_secs;
             batch.digests = saved.digests;
@@ -614,7 +644,9 @@ fn read_saved(reader: &mut impl Read, limit: u64) -> Result<Saved, String> {
     Ok(Saved { identity, done, events, state, digests })
 }
 
-fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
+type Loaded = (Saved, Option<paint::Canvas>, Option<crate::surfaces::ReadBack>, f64);
+
+fn load(path: &Path) -> Result<Loaded, String> {
     let result = (|| {
         let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
         let mut magic = [0; 8];
@@ -634,13 +666,20 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         }
         let saved = read_saved(&mut reader, 4 << 30)?;
         let has_canvas: bool = bincode::deserialize_from(&mut reader).map_err(|e| e.to_string())?;
-        let (canvas, header) = if has_canvas {
+        let mut reader = std::io::BufReader::new(reader);
+        let several = has_canvas && std::io::BufRead::fill_buf(&mut reader).map(paint::checkpoint::is_surfaces).map_err(|e| e.to_string())?;
+        let (canvas, surfaces, header) = if several {
+            // a session that named surfaces: all of them (surfaces.rs)
+            let mut rb = crate::surfaces::read_all(&mut reader).map_err(|e| e.to_string())?;
+            let header = std::mem::take(&mut rb.header);
+            (rb.canvas.take(), Some(rb), header)
+        } else if has_canvas {
             let (canvas, header) = paint::Canvas::read_state(&mut reader).map_err(|e| e.to_string())?;
-            (Some(canvas), header)
-        } else { (None, String::new()) };
+            (Some(canvas), None, header)
+        } else { (None, None, String::new()) };
         let mut extra = [0];
         if !header.is_empty() || reader.read(&mut extra).map_err(|e| e.to_string())? != 0 { return Err("trailing or unexpected checkpoint data".into()); }
-        Ok((saved, canvas, f64::from_le_bytes(elapsed)))
+        Ok((saved, canvas, surfaces, f64::from_le_bytes(elapsed)))
     })();
     result.map_err(|e: String| format!("replay checkpoint {}: {e}; refusing resume", path.display()))
 }
@@ -876,6 +915,42 @@ print(counter,rand(),drying(300,300))
                 assert_eq!(s.held_stick("p").unwrap(), plain.held_stick("p").unwrap());
                 assert_eq!(s.program("pastel"), source);
                 assert_eq!(s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(), plain.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>());
+            }
+        }
+    }
+
+    /// A charcoal stick's table (its lift with its wear) and the
+    /// charcoal in the tooth come back from a replay checkpoint as they were.
+    #[test]
+    fn charcoal_checkpoints_reconstruct_its_sticks() {
+        let dir = Temp::new();
+        let mut plain = Session::replay_with(64, crate::session::box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in [
+            "canvas{size=200, aspect=1.25, seed=3, paper={grammage=200}}",
+            r#"v=charcoal(); c=charcoal("compressed")"#,
+            "v:stroke({{100,400},{900,400}}, {force=2}); c:line({{100,600},{900,600}}, {pressure=0.5})",
+            "smudge({{500,300},{500,700}}); erase({{300,350},{300,650}}); blow(700,400)",
+            "fix(rect(0,0,500,800)); c:side({{100,500},{900,500}}); print(v, c)",
+        ] { plain.run(chunk).unwrap(); }
+        let source = plain.program("charcoal");
+        assert!(source.lines().any(|l| l == crate::session::CHARCOAL_MARK));
+        let chunks = crate::session::parse_program(&source);
+        for until in [3, chunks.len()] {
+            let mut s = Session::replay_with(64, crate::session::box_for(Some(&source)).unwrap()).unwrap().with_paper(true).unwrap();
+            let mut batch = Batch::open(&args(&dir.0, until), &source, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            for (i, chunk) in chunks.iter().enumerate().skip(batch.done) {
+                s.run(chunk).unwrap();
+                if batch.completed(&s, i + 1).unwrap() { break; }
+            }
+            drop(batch);
+            if until == chunks.len() {
+                assert_eq!(canvas(&s), canvas(&plain));
+                assert_eq!(encode(&State::capture(&s.st)).unwrap(), encode(&State::capture(&plain.st)).unwrap());
+                for name in ["v", "c"] {
+                    assert_eq!(s.held_stick(name).unwrap(), plain.held_stick(name).unwrap());
+                }
+                assert_eq!(s.held_stick("c").unwrap().0.lift, paint::charcoal::COMPRESSED_LIFT);
+                assert_eq!(s.program("charcoal"), source);
             }
         }
     }
@@ -1224,7 +1299,7 @@ print(counter,rand(),drying(300,300))
         s.run(source).unwrap();
         let identity = Identity::new(source, 64).unwrap();
         write_checkpoint(&path, &s, &identity, 1, &None, 0.0).unwrap();
-        let (saved, canvas, _) = load(&path).unwrap();
+        let (saved, canvas, _, _) = load(&path).unwrap();
         assert!(canvas.is_none());
         assert_eq!(saved.state.brushes.len(), 1);
         let bytes = std::fs::read(&path).unwrap();

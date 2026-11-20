@@ -20,13 +20,18 @@ pub mod edge;
 pub mod fence;
 pub mod form;
 pub mod graphite;
+pub mod area_strokes;
 pub mod rag;
 pub mod scene;
 pub mod palette;
 pub mod paper;
+pub mod charcoal;
 pub mod pastel;
+pub mod plate;
+pub mod etch;
 pub mod pigment;
 pub mod prepared_optics;
+pub mod print_optics;
 pub mod rng;
 #[cfg(feature = "render-snapshot")]
 pub mod render_snapshot;
@@ -36,6 +41,9 @@ pub mod sheet;
 pub mod soak;
 pub mod spectral;
 pub mod wet;
+pub mod wet_pastel;
+pub mod climate;
+pub mod damp;
 pub mod bristle;
 pub mod engine7;
 pub mod handling;
@@ -108,8 +116,9 @@ pub use shape::Shape;
 ///   (`REACH_END`, `bristle::drag_on`).
 /// - 9: engine 8 with the crate's pigment mixer as the new painting default.
 ///
-/// A switch rides on engine 5 and 7 without a number of its own (an easel
-/// log's head names it; a log without it replays as it was painted):
+/// Switches ride on engines 5 and 7 without a number of their own (an
+/// easel log's head names each; a log without one replays as it was painted
+/// without it):
 /// - the drain switch (`Canvas::with_drain`, `--@ drain`): an absorbent
 ///   ground drains paint as its pigment allows (`bristle::ground_drain`): to
 ///   the oil left when the pigment packs, and below it only for pigments
@@ -117,6 +126,11 @@ pub use shape::Shape;
 ///   ground while the surface keeps its oil, flow and gloss; a rag's smear
 ///   is drained as a brush's paint is, and blotting stops at the drained
 ///   floor (notes/research/pigment_oil.md).
+/// - the oils switch (`Canvas::with_oils`, `Palette::oils`, `--@ oils`): each
+///   box's tubes come in the oils their colormen ground them in, some with
+///   wax (`palette::grind_of`): walnut and poppy dry slower than linseed, wax
+///   slower still and more matte, and `pile{oil=}` regrinds relative to the
+///   tubes' own oils (notes/research/pigment_oil.md §5).
 pub const ENGINE: u32 = 5;
 
 /// Engine 8: a brush stroke's mark reaches the end of its path. Before it

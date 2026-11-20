@@ -233,7 +233,7 @@ impl Pace {
     }
 
     /// The cure of an open film of cure `c` and rate `r` after `dt` minutes.
-    fn age(self, c: f32, dt: f32, r: f32) -> f32 {
+    pub(crate) fn age(self, c: f32, dt: f32, r: f32) -> f32 {
         if self == Pace::EVEN {
             return c + dt * r;
         }
@@ -406,12 +406,18 @@ impl Canvas {
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_on_grid(dt);
+            self.dry_pastel_water(dt);
+            self.dry_damp(dt);
             return;
         }
         let start = self.wet.clock.now;
         self.age_from(dt, false, start + dt as f64);
         self.wet.clock.now += dt as f64;
         self.skin_advance(start, self.wet.clock.now);
+        // (and the water in pastel: wet_pastel.rs)
+        self.dry_pastel_water(dt);
+        // (and a damp sheet's own water: damp.rs)
+        self.dry_damp(dt);
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,
@@ -710,10 +716,19 @@ impl Canvas {
                 }
             }
         }
+        // (and until the water in pastel is gone: wet_pastel.rs)
+        let water = self.pastel_water_minutes();
+        let left = left.max(water);
         let start = self.wet.clock.now;
         self.bake(true, start);
         self.wet.clock.now += left as f64;
         self.skin_advance(start, self.wet.clock.now);
+        if water > 0.0 {
+            self.dry_pastel_water(left);
+        }
+        // (a damp sheet dries over the time too, but isn't waited for: it
+        // comes to the room's moisture only by and by, damp.rs)
+        self.dry_damp(left);
     }
 
     /// Fold what was painted since the last `wait` into the drying state: a
@@ -972,7 +987,9 @@ impl Canvas {
         };
         // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
-        // an absorbent ground's pores
+        // an absorbent ground's pores; with the oils switch its wax dulls it
+        // (`palette::WAX_MATTE`: the wet paint is as it was when it set)
+        let oils = self.oils;
         if self.engine >= 4 {
             for y in 0..ex.3 - ex.1 {
                 for x in 0..ew {
@@ -981,8 +998,15 @@ impl Canvas {
                         let i = (ex.1 + y) * w + ex.0 + x;
                         // (the film as it settled here, not as it was laid)
                         let coats = t[k].max(0.0) / COAT_UM;
-                        let g = smoothstep(0.15, 1.3, oil[k]);
-                        self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
+                        let mut g = smoothstep(0.15, 1.3, oil[k]);
+                        if oils {
+                            g *= 1.0 - crate::palette::WAX_MATTE * self.wet.hide[i][9].clamp(0.0, 1.0);
+                        }
+                        // (a print's ink is matte: its surface is the film split
+                        // from the plate, which its yield stress keeps: `print_optics`)
+                        if !self.print_optics {
+                            self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
+                        }
                         self.absorb[i] *= (-coats / 0.4).exp();
                     }
                 }
@@ -1018,6 +1042,8 @@ impl Canvas {
         let px_um = self.px_mm() * 1000.0;
         let spectral = self.spectral_films();
         let volume_latent = self.engine >= crate::PIGMENT_MIXER;
+        // (a print: the films as they bake, alone, and the picture under them: `print_optics`)
+        let print = self.print_films(ex, &add, &t, &cover, px_um);
         if spectral && self.backing.is_empty() {
             self.backing.resize(self.px.len(), Default::default());
         }
@@ -1064,6 +1090,9 @@ impl Canvas {
                     cv[x] = 1.0;
                 }
             });
+        if let Some((films, under)) = print {
+            self.print_bake(&films, &under);
+        }
         self.clear_bare_solvent(ex);
         // (the new material keeps each baked film curing from the top down)
         if self.skins() {

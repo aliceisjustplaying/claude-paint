@@ -56,6 +56,21 @@ pub enum Verb {
 thread_local! {
     /// Set while a dry verb runs (`verb_dry`): one the sheet is modeled for.
     static DRY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Set while a plate's tool runs (`verb_plate`): the only marks a plate takes.
+    static PLATE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `verb`, for a plate's tool (plate.rs): a plate takes no other marks (no paint, pencil or
+/// pastel in this phase), and a plate's tool marks nothing else.
+pub fn verb_plate<R: EffectValue>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PLATE.with(|d| d.set(self.0));
+        }
+    }
+    let _restore = Restore(PLATE.with(|d| d.replace(true)));
+    verb(st, kind, f)
 }
 
 /// `verb`, for a tool a paper mask is modeled for (paint's `sheet.rs`): a
@@ -103,6 +118,9 @@ fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result
     if matches!(kind, Verb::Marks | Verb::Pass) && !DRY.with(|d| d.get()) && st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
         return Err(mlua::Error::runtime("a sheet of paper lies on the picture: only pastel, the finger, a dry brush (b:dust), a puff (blow), a tap (tap), the eraser and fixative are modeled with one down; lift it first (lift_sheet())"));
     }
+    if matches!(kind, Verb::Marks | Verb::Pass) && !PLATE.with(|d| d.get()) && st.borrow().plate.is_some() {
+        return Err(mlua::Error::runtime(format!("{:?} is a plate: it is worked with its own tools (needle{{}} and k:drypoint, k:burnish, k:scrape, k:roulette); use(\"painting\") or a sheet to draw or paint", st.borrow().surfaces.current_name())));
+    }
     let r = {
         let mut g = st.borrow_mut();
         let s = &mut *g;
@@ -117,7 +135,8 @@ fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result
         Verb::Pass | Verb::Wait => flush(st, true),
         Verb::Query => {}
     }
-    if let Some(c) = st.borrow().canvas.as_ref() {
+    // (the hand-time frames are the painting's: not of a sheet beside it, surfaces.rs)
+    if let Some(c) = st.borrow().canvas.as_ref().filter(|_| st.borrow().surfaces.main_current()) {
         crate::frames::after_verb(c);
     }
     if st.borrow().live {

@@ -970,6 +970,317 @@ with `scratch: true`; without it they work on the painting.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
 
+## Surfaces: sheets beside the painting
+
+A painting begun with named surfaces (its log's head says `--@ surfaces`, beside
+`--@ paper`) may keep sheets of paper beside its canvas, in the same session: a study to
+trace from, a proof to print on. An older painting replays as it was painted, and none of
+this is there: `sheet`, `use`, `surfaces`, `handoff` and `receive` don't exist in it.
+
+```lua
+st = sheet{name="study", size=300, aspect=4/3, paper={grammage=60, calender=0.6}}
+use(st)                       -- draw on the study: every drawing verb acts on it now
+h = pencil("2B"); h:line({{100,100},{800,700}})
+use("painting")               -- back to the canvas canvas{} made
+names, current = surfaces()   -- the names, the painting first, and the current one's
+```
+
+- **`sheet{name=, size=, aspect=, paper={...}, ground=, seed=}`** takes a sheet from the
+  drawer: a surface of its own, with its own paper (the keys `canvas{paper=}` takes) and
+  size in mm. It is laid out at the painting's pixel pitch, so a line keeps its width from
+  one sheet to another. Its width is 1000 units, as the painting's is (`st.H` is its
+  height). It is not in hand until `use(st)`.
+- **One surface is current.** Every drawing verb (pencil, pastel, brushes, knives, the rag,
+  `wait`'s ageing, `drying`) acts on it. `use(s)` or `use("name")` takes another up and
+  returns the name of the one put down. A sheet laid on the picture is lifted first.
+- **What each keeps.** A surface keeps its own paint, drawing, pastel and paper. The hand
+  is shared: the same brushes, knives, rags, palette and piles go from one to the other,
+  carrying what is on them.
+- **One clock.** Time passes for every sheet: hand time spent on the study and `wait`
+  there age the painting's paint too. A surface put down is aged all at once when it is
+  taken up, or looked at, to exactly what it would be had the painter waited beside it.
+- **A failed chunk** puts back every surface it touched, and which one was current.
+- **Looking.** `look`, `probe`, `save` and `status` take `--surface <name>`. Without it
+  `look`, `probe` and `save` show the painting, as before, and `status` the current
+  surface (its line names them all). A look changes nothing.
+- **Saves and checkpoints** keep every surface. A painting that never takes a sheet saves
+  exactly as before.
+
+**Handing a surface to another session.** An artist and a printer are two sessions, each
+seeing only what it is handed. A surface goes from one to the other as a file in the
+studio:
+
+```lua
+-- the artist's session
+sha = handoff(pl, "handoff/key.surface")   -- pl leaves this session; the reply gives its sha256
+-- the printer's session
+k = receive("handoff/key.surface", {after=90, sha256="<the hash handoff gave>"})
+use(k)
+```
+
+- **`handoff(s, path)`** takes the surface out of the session, with its whole state and
+  the session's clock, into a `.surface` file in the studio (never outside it, never over
+  a file already there). The painting itself stays. It happens only if the chunk is kept.
+- **`receive(path, {after=, sha256=, name=})`** takes it in. `after=` is the minutes it
+  spent on the way (the log names them: the wall clock can't be replayed), and it arrives
+  aged by exactly that, through the same drying as `wait`: ink on a plate keeps drying,
+  paint keeps setting. `after=0` brings it as it left. `sha256=` names the file's content:
+  a receive without it says the hash, and a replay that finds another file there refuses
+  it. `name=` renames it on arrival.
+
+## Plates: copper and zinc beside the painting
+
+A painting whose log's head also says `--@ plate` (new paintings do; it needs
+`--@ surfaces`) may keep intaglio plates among its surfaces and work them as a drypoint
+artist does. Without the switch none of this exists (`plate`, `needle` and the plate's tools
+are not there), and a painting with named surfaces that makes no plate saves and replays as
+before. No ink, wiping or press yet: those come with `--@ press`.
+
+```lua
+k = plate{name="key", metal="copper", temper="half-hard", size={346, 211}, thickness=1.3, bevel=45}
+n = needle{tip=25, cone=30}       -- point radius µm, half-angle of its cone, degrees
+use(k)                            -- in hand: only the plate's tools mark it
+r = k:drypoint(n, {{100,200},{800,260}}, {force=2, alt=55, azimuth=0, speed=30})
+k:burnish({{300,300},{600,300}}, {force=30, radius=10, passes=3})
+k:scrape({{650,400},{800,400}}, {force=5, width=8, passes=1})
+k:roulette({{100,500},{900,500}}, {pitch=0.2, tooth=30, force=3})
+print(k:feel(450, 230).words)     -- "a line about … µm wide and … µm deep, burr standing … µm"
+use("painting")
+```
+
+- **`plate{name=, metal=, temper=, size={w, h}, thickness=, bevel=}`.** The period box
+  (an 1890s Paris print box) has `"copper"` and `"zinc"`; another metal is refused.
+  - Copper comes `"annealed"` (45 HV), `"eighth-hard"` (65 HV, an estimate between the two
+    measured tempers) or `"half-hard"` (90 HV, the default). Zinc is `"rolled"` (45 HV).
+  - Size is in mm; thickness (default 1.3 mm) and bevel (45°) are for the plate mark later.
+  - It is laid out at the painting's pitch, as the sheet it prints on will be. Its width is
+    1000 units (`k.H` its height).
+  - Steel facing comes later (`--@ edition`); the plate keeps the hook.
+- **A statistical plate.** A pixel is wider than a drypoint line. So each cell keeps its
+  openings binned by width, each bin's share, depth and width, and its burr's volume,
+  height and side, not a picture of the lines. Those are what wiping and the press will
+  read.
+  - The tools' paths are kept too, so a crop look draws the lines again at its own scale.
+- **`needle{tip=, cone=}`** and **`k:drypoint(n, pts, {force=, alt=, azimuth=, speed=})`.**
+  Each option is a number or a list along the points, as for a pastel stroke: force in N
+  (a hand: 0.5–5), alt and azimuth as pastel takes them, speed in mm/s.
+  - **Width from scratch hardness:** w = √(8F/πH). Four times the force gives twice the
+    width, and zinc is √2 wider than half-hard copper.
+  - **Depth** follows the point: its rounded tip, then its cone.
+  - **Plough or cut.** The needle's lean toward the way it goes (pulled, top ahead) lowers
+    its attack angle, 90° − cone − lean.
+    - Below copper's critical 60° (measured 45–85°) it ploughs: all of the groove's metal
+      goes into burr, 0.75 × the depth high (an estimate: no burr has been measured).
+    - Pushed or held upright, it cuts a chip and leaves a clean line with no burr. The verb
+      says so.
+  - **The burr's side.** Leaning to one side throws the burr to the other; leaning past
+    its half-angle, all of it.
+  - **The result** is a table: `width`, `depth`, `burr`, `beta`, `cut`, `ploughed`,
+    volumes in µm³ (`groove`, `burr_volume`, `chip`), `length`, `seconds`.
+- **`k:burnish(pts, {force=, radius=, passes=, speed=})`.** A steel burnisher (a sphere of
+  `radius` mm).
+  - **Burr first.** It sits on the burr and presses it flat where the burr can't bear its
+    force at the metal's hardness. The fin folds onto the land beside the line.
+  - **Then the line's rims.** Once no burr holds it off, the rims flow into the line where
+    its Hertz pressure passes what a rim bears, by the contact's elastic give each pass.
+  - A drypoint line goes after a dozen passes or so. Metal is conserved (`flattened`,
+    `pressure` in MPa).
+- **`k:scrape(pts, {force=, width=, passes=, speed=})`.** A three-sided scraper held to cut.
+  - It takes the burr off, then shaves t = F/(H·width·tan 30°) a stroke (about 1 µm for
+    5 N on 8 mm of copper).
+  - The lines go with it, and it leaves a shallow dish (`scraped`, `chip`).
+- **`k:roulette(pts, {pitch=, tooth=, cone=, force=, speed=})`.** A toothed wheel: a pit
+  every `pitch` mm, each indented at the hardness, with a ring of burr.
+- **`k:feel(x, y)`** answers as a fingernail would: `words` ("a line about 50 µm wide and
+  40 µm deep, burr standing 30 µm", "a shallow dish 4 µm down", "smooth") and the numbers
+  (`depth`, `width`, `open`, `burr`, `level`).
+- **Hand time.** A tool's path at its speed (default 30 mm/s, an estimate: drypoint is hard
+  work) goes on the clock, which every surface shares.
+- **Only its tools mark it.** Paint, pencil and pastel are refused while a plate is in hand.
+- **Looking at it.** `look --surface key` shows polished metal.
+  - **The colour** is Fresnel reflection from the metal's measured optical constants:
+    Johnson & Christy for copper, Werner et al. for zinc.
+  - **Lines read dark** because a V-groove sends the light from wall to wall before it
+    climbs out. The burr catches light at its faces' slope.
+  - **Light.** `--mode relief` or `--light az,el` lights the relief (lines, burr, a scraped
+    dish) with the canvas's own raking light; `--mode mirror` previews the print's way
+    round.
+  - **A crop** is drawn again from the tools' paths at the crop's scale.
+  - `probe --surface key --at x,y` (or `--crop`) gives the open share, the lines' width
+    and depth, the burr and the level. `save` refuses a plate.
+- **Saves, checkpoints, replay and handoff** keep the plate's whole state (its cells and
+  its tools' paths) in its surface's entry. A plate handed off arrives exactly as it left,
+  and a session without the switch refuses to receive one.
+- **Physics and estimates:** notes/research/intaglio_physics.md, notes/research/plate_physics.md.
+
+### Etching: grounds, acid and aquatint
+
+A painting whose log's head also says `--@ etch` (new paintings do; it needs `--@ plate`) may
+ground its plates, draw through the ground, bite them in acid and lay an aquatint. Without the
+switch these tools refuse ("this painting doesn't etch"), and a plate no etching tool has
+touched saves and replays byte for byte as before. Still no ink or press: those come with
+`--@ press`.
+
+```lua
+use(k)
+k:ground("hard", {{0,100},{1000,100},{1000,300},{0,300},{0,500},{1000,500}}, {um=4})  -- rolled where the roller goes
+n = needle{tip=40, cone=30}
+r = k:needle(n, {{100,200},{900,200}}, {force=0.3})   -- through the ground: r.touched, r.width (the window)
+k:immerse{acid="ferric", baume=36}             -- into the bath (face down by default): it bites on the clock
+use(study)                                      -- ... while you draw on another surface, or wait
+use(k)
+r = k:lift()                                    -- out, rinsed and dried: r.minutes it lay there, r.depth
+k:stop_out({{120,420},{480,430},{860,410}}, {brush=3.9, load=1, pressure=0.6})  -- a brushstroke of varnish: no acid there
+k:bite{acid="ferric", baume=36, minutes=30, rock=true}   -- in, 30 minutes, out, in one
+k:clean()                                       -- solvent: ground, varnish, rosin off
+k:aquatint{box=0.6, wait=30, minutes=1}         -- the dust box: wait s after stirring, minutes in it
+k:melt()
+k:bite{acid="nitric", parts=8, minutes=2, feather=true}   -- on zinc: sweep the bubbles
+print(k:feel(500, 200).words)
+use("painting")
+```
+
+- **`k:ground("hard", pts, {um=, roller=, speed=})`.** A hard ground (beeswax, bitumen,
+  rosin) rolled on with a leather roller moved along the points (plate units, as a needle's
+  path). It lies only where the roller's line of contact went: a cell it crossed over half of.
+  - **The roller** is `roller` mm long (150, the size printmakers' manuals give; makers sell
+    100–200). Roll overlapping strokes to cover the plate; `covered` says how much of it the
+    ground lies on, and `probe` gives the share under the ground.
+  - **Where the roller didn't go the plate is bare,** and the acid bites it as an open face.
+  - **Thickness:** 4 µm by default (an estimate: 2–8). It covers whatever lines are already
+    there. More of the same ground can be rolled onto a plate that holds only ground;
+    another thickness, or ground over varnish, rosin or needle lines, wants `k:clean()` first.
+  - **Hand time:** the roller's path at `speed` (100 mm/s), and 8 minutes to warm the plate
+    and let it cool (estimates).
+  - Points alone are needed: `k:ground("hard", {um=4})` is refused ("options but no
+    points"), as is a mask or a function.
+  - Soft ground is `--@ soft-ground`, later.
+- **`k:needle(n, pts, {force=, alt=, azimuth=, speed=})`** draws an etching needle
+  (`needle{}`) through the ground.
+  - **The window.** It parts the ground where its point is wider than the ground is thick.
+    The window it leaves (`width`) is the point's width at the ground's top.
+  - **The metal.** The rest of the force falls on the metal, which it marks lightly by the
+    same scratch law as drypoint. The default 0.3 N with a 40 µm point is about 3 µm.
+  - **A line too light** to get through the ground (the ground carries a few mN) bares
+    nothing, and the verb says so (`touched`).
+  - The default speed is 40 mm/s. An etching needle needs a ground: without one, use
+    `k:drypoint`.
+- **`k:stop_out(pts, {brush=, load=, pressure=, speed=})`.** Stopping-out varnish
+  (asphaltum in turpentine) brushed along the points with a round brush. No acid reaches
+  the cells the strip covers over half of until `k:clean()`. It takes no mask, function or
+  region: brush where the varnish should go.
+  - **The brush:** `brush` is the round's width in mm (3.9, a size 6 sable); `load` how full
+    its belly is (1). Its belly holds a cone of liquid 4.7 times as long as it is wide, 0.6
+    full: 44 mm³ for a size 6.
+  - **The strip's width** is what the wet tuft presses out at `pressure` (0 to 1, a number or
+    a list along the points): it widens with the pressure until the whole belly is down at
+    0.85, the bristle model's law.
+  - **It runs dry.** The brush lays a film 20 µm thick (an estimate) until its belly is
+    spent. Then it lays nothing more; the verb says how far it got (`dry`, `length`, `left`
+    mm³): dip it again with another `k:stop_out` for the rest.
+  - **The edge** creeps out as the liquid spreads before it sets (Tanner's law for a ridge,
+    over the 10 minutes it flows): some 25 µm for a size 6 (`edge`, µm), so the edge is the brush's.
+    Where the brush comes down and lifts it leaves the disc of its tuft.
+  - **Hand time** is the stroke at `speed` (20 mm/s).
+  - Reports `area` (mm² newly stopped), `length`, `width` (mm), `edge`, `left`, `seconds`,
+    `dry`.
+- **`k:immerse{acid=, …}`** puts the plate into its tray, and **`k:lift()`** takes it out.
+  - **The bath is on the session's clock.** While the plate lies in it, it bites through
+    whatever the session does meanwhile: work on another surface, `wait`, paint drying.
+  - **The bite** is worked out when the plate comes out, from the minutes it lay there, on
+    the plate's own clock (the session's clock, which a resting surface, a save and a
+    handoff keep). The minutes are read to the millisecond.
+  - **Hand time.** Lowering the plate in takes seconds, which count as bath time. Lifting it
+    out, rinsing and drying it takes 2 minutes of hand time, after the bite.
+  - **While it is in,** the plate can't be worked or felt: its tools refuse with "the plate
+    "key" is in its ferric bath (12 min so far): lift it out first (k:lift())".
+    - A second `k:immerse` is refused the same way: lift it out first, even to change
+      baths. `k:lift()` on a plate that isn't in a bath is refused too.
+    - `look` and `probe` show the plate as it would come out now, and leave it in. `probe`
+      adds the bath and its minutes so far. `status` lists every plate in a bath.
+  - **Rocking and feathering** are not counted as hand time: a rocked tray stands for a
+    rocker, and the feather's sweeps are short. Working elsewhere during a feathered bite
+    is allowed.
+  - **Out, stopped out, back in.** Taken out, stopped out and put back into the same acid at
+    the same strength, the plate goes back into the tray it came out of, still loaded with
+    metal. Lines under the varnish keep the depth of the first bath.
+  - **A plate left in.** A plate left in its bath keeps biting for as long as the session's
+    clock runs, through saves, replays and handoffs. A session's log can always be taken up
+    again, so the plate stays in until it is lifted out, and then it has bitten the whole
+    time, as a plate forgotten in a tray has.
+    - Past a day the steps lengthen. A bath stops biting once its oxidant is spent (under a
+      thousandth of what it was made up with), and the lift says so.
+    - A bite past the plate's thickness is reported as holed: the model doesn't open the
+      back.
+  - **`k:bite{…, minutes=}`** is in, `minutes`, out, in one. It is the same as
+    `k:immerse{…}`, `wait(minutes)`, `k:lift()`, bit for bit, and at most a day; for longer,
+    use immerse and lift. It is refused while the plate is in a bath.
+  - **`acid`:**
+    - `"ferric"`: ferric chloride, strength `baume=` (default 38 °Bé) or `molar=`
+    - `"nitric"`: nitric acid, `parts=` of water to one of acid (default 8) or `molar=`
+    - `"dutch"`: Dutch mordant, by the 1911 Britannica's recipe
+  - **`temp=`** °C (default 20).
+  - **`face=`:** `"down"` (held off the tray's floor, ferric's default), `"upright"` (in
+    a tank) or `"up"` (in a tray, nitric's and Dutch's default).
+  - **`rock=true`** or `{tilt=, period=}` rocks the tray. **`feather=true`** or seconds
+    between sweeps (nitric only, face up) sweeps the bubbles.
+  - **`fresh=true`** makes a fresh bath. Otherwise, going back into the same acid at the
+    same strength, the plate's tray keeps its acid between bites and slows as it takes up
+    metal.
+  - `k:immerse` returns `molar` (the oxidant left in the tray), `loaded` (g/L), `litres`,
+    `since` (the plate's clock), `fresh` and `washed`.
+  - **The rate** is the oxidant's mass transfer, worked out from the CRC viscosities and
+    standard convection correlations, with no fitted constant.
+    - Ferric chloride face down at 20 °C bites about 1 µm/min. It is fastest near 2 M and
+      1.4× faster per 10 °C (its measured 24.9 kJ/mol).
+    - Face up and still, the spent acid lies on the plate and the bite slows as √t.
+    - Nitric acid on zinc is several times faster, slowed where its bubbles sit.
+    - Dutch mordant is slow and even (its rate is an estimate).
+  - **Lines** bite down and sideways under the ground (etch factor 1.2 for ferric), so a
+    line widens by 2·depth/K. A narrow line bites slower as it deepens.
+  - **Bitten lines have no burr:** the acid takes the needle's.
+  - Loose (unmelted) rosin floats off as the plate goes in.
+  - **The result** of `k:lift()` and `k:bite`: `rate` (µm/min at the start), `layer` (µm),
+    `bubbles`, `depth`, `metal` (µm³ taken), `loaded` (g/L of metal in the bath), `molar`,
+    `minutes` (in the bath), `washed`, `spent`.
+- **`k:aquatint{box=, wait=, minutes=}`** puts the plate in the rosin dust box: `box` m
+  tall (0.6), `wait` s after the cloud was stirred (30), `minutes` in it (1).
+  - **Grain size.** Grains settle at their Stokes speed, so the largest still falling
+    after the wait is √(18µH/ρgt): 61 µm after 5 s, 18 µm after 60 s.
+  - **Cover** comes from the cloud's density (an estimate, set to give the workshops' 50 %
+    on these defaults).
+  - **Speckle.** Each cell takes its own random share of grains.
+  - The wait and the minutes pass on the clock. The verb returns `largest` and `cover`.
+- **`k:melt()`** heats the plate until the grains melt on, each spreading to 1.3 times its
+  width.
+  - A bite then eats the bare metal between the dots and under them. The pits deepen and
+    the tone rises.
+  - When the undercut reaches a dot's radius the dot is lost. The pits merge into an open
+    bite and the tone falls: an over-bitten aquatint prints lighter.
+  - Stop out between bites for stepped tones.
+- **`k:clean()`** takes ground, varnish and rosin off with solvent (5 minutes). What the acid
+  opened stays as the plate's lines and pits. The drypoint tools want a clean plate.
+- **What the acid opens joins the plate's cells,** in the same width bins as drypoint lines,
+  so wiping and the press will read a bitten line as they read a drypoint one. The metal the
+  acid takes is counted, and the tray holds it.
+- **The look.**
+  - A grounded plate is dark brown: a film of bitumen over the metal, from its optics.
+  - Needle lines show bright metal through it, and bitten lines their walls.
+  - Varnish is near black. Rosin speckles the face.
+  - `k:feel` adds the ground, the varnish and the rosin (`ground`, `rosin`). `probe` adds the
+    coats, the deepest bite, the ink a wipe's yarns would leave (a guide to the tone), and
+    the tray.
+- **Saves, checkpoints, replay and handoff** keep the coats and the tray in the plate's
+  section (`PLAT` version 2; version 1 plates still read). They also keep the bath a plate
+  lies in and when it went in, so a plate saved or handed off in its bath comes out with
+  the bite it would have had without the save.
+  - A plate handed off in its bath travels in its tray. It bites through the `after=`
+    minutes on the way, and `receive` says so.
+  - A save keeps no Lua heap. After `easel finish` reads one, take the plate up by name
+    (`use("key")`).
+  - A session that doesn't etch refuses to receive an etched plate.
+- **Physics and estimates:** notes/research/etch_physics.md.
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

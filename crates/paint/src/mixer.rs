@@ -14,7 +14,30 @@ mod researched;
 mod calibration;
 
 pub const LEGACY_LATENT_SIZE: usize = 21;
-pub const LATENT_SIZE: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
+/// Engine 9's latent before bone black's own slot (`BONE_BLACK_K`): a
+/// checkpoint written then holds this many floats per latent
+/// (`identity9_before_bone_black`).
+pub const LATENT_SIZE_BEFORE_BONE_BLACK: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
+pub const LATENT_SIZE: usize = LATENT_SIZE_BEFORE_BONE_BLACK + 1;
+
+/// The bone-black switch (`crate::Palette::bone_black`, the easel's
+/// `--@ bone-black`): bone black's latent slot of its own, after the
+/// researched tubes, with K per volume (per 100 µm of tube paint)
+/// K550 · (λ / 550 nm)^−α. Its S is the table's (`BoneBlack` in
+/// calibrated.bin, about 1e-4: the measured spectra don't resolve it).
+///
+/// Engine 9's bone black K (calibrated.bin, fitted to OkLab colour with the
+/// spectra weighted 0.05) dips 4× at 500–520 nm and peaks at 550 nm, traded
+/// against a matching S spike in zinc and lead white. Its tints keep their
+/// colour, but a thin film transmits the dip and reads teal. Carbon's complex
+/// index is nearly flat across the visible (Bond and Bergstrom 2006), so its
+/// small particles absorb as 1/λ. K550 and α are fitted to the measured
+/// Revigo reflectance of the bone-black ladders with zinc white (07C–07F) and
+/// lead white (08B, 08C), the whites kept as engine 9's: α 1.132 ± 0.081
+/// (zinc alone 1.26, lead alone 1.02). Thin films over white turn warm brown
+/// (3 µm: a* −4.5 → +2.6), and zinc tints stay blue-grey as measured
+/// (notes/research/bone_black.md, bone_black_fit.py).
+pub const BONE_BLACK_K: (f32, f32) = (26.2769, 1.1324);
 const PRIMARIES: usize = 5;
 const PIGMENTS: usize = 18;
 const INVERSE_SIZE: usize = 33;
@@ -70,6 +93,25 @@ pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> {
     Some(lat)
 }
 
+/// With the bone-black switch: tube `name`'s own slot (`BONE_BLACK_K`), if
+/// it has one.
+pub fn tube9_bone_black(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    (name == "bone black").then(|| {
+        let mut lat = [0.0; LATENT_SIZE];
+        lat[LATENT_SIZE_BEFORE_BONE_BLACK] = 1.0;
+        lat
+    })
+}
+
+/// Bone black's own K per 100 µm at each wavelength (`BONE_BLACK_K`).
+pub fn bone_black_k() -> &'static crate::spectral::Spectrum {
+    static K: std::sync::OnceLock<crate::spectral::Spectrum> = std::sync::OnceLock::new();
+    K.get_or_init(|| {
+        let (k550, alpha) = (BONE_BLACK_K.0 as f64, BONE_BLACK_K.1 as f64);
+        std::array::from_fn(|w| (k550 * (crate::spectral::wavelength(w) as f64 / 550.0).powf(-alpha)) as f32)
+    })
+}
+
 pub fn tube_strength(name: &str) -> Option<f32> {
     let name = tube_pigment(name)?;
     let p = NAMES.iter().position(|&n| n == name)?;
@@ -92,9 +134,13 @@ pub fn identity() -> u64 {
 
 /// Checkpoint identity for spectral film optics and their physical wet S.
 pub fn film_identity() -> u64 {
+    film_identity_of(identity9())
+}
+
+fn film_identity_of(identity9: u64) -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
-    hash.update(identity9().to_le_bytes());
+    hash.update(identity9.to_le_bytes());
     hash.update(b"film25um/spectral-backing/transmitted-residual/v2");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
@@ -114,6 +160,28 @@ pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
 pub fn identity9() -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
+    hash.update(identity9_of(LATENT_SIZE).to_le_bytes());
+    hash.update(b"bone-black-slot/power-law-k/table-s/v1");
+    hash.update(BONE_BLACK_K.0.to_le_bytes());
+    hash.update(BONE_BLACK_K.1.to_le_bytes());
+    u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
+}
+
+/// Engine 9's identity before bone black's own slot (`BONE_BLACK_K`): its
+/// latents were `LATENT_SIZE_BEFORE_BONE_BLACK` wide. A checkpoint that has
+/// it reads its latents widened with zeros.
+pub fn identity9_before_bone_black() -> u64 {
+    identity9_of(LATENT_SIZE_BEFORE_BONE_BLACK)
+}
+
+/// And `film_identity`'s before it.
+pub fn film_identity_before_bone_black() -> u64 {
+    film_identity_of(identity9_before_bone_black())
+}
+
+fn identity9_of(width: usize) -> u64 {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
     hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
     hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/catalog-inputs/v4");
@@ -121,7 +189,7 @@ pub fn identity9() -> u64 {
     hash.update(CALIBRATED);
     hash.update(DENSITIES);
     hash.update(b"independent-researched-ks/legacy18-residual3-extension/tuple-f32/v1");
-    hash.update((LATENT_SIZE as u64).to_le_bytes());
+    hash.update((width as u64).to_le_bytes());
     for name in researched::RESEARCHED_TUBES {
         hash.update((name.len() as u64).to_le_bytes());
         hash.update(name.as_bytes());
@@ -201,6 +269,14 @@ pub fn pigment9(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
         for w in 0..crate::spectral::N {
             absorption[w] += c * coefficients[0][w];
             scattering[w] += c * coefficients[1][w];
+        }
+    }
+    let c = lat[LATENT_SIZE_BEFORE_BONE_BLACK].max(0.0);
+    if c > 0.0 {
+        let (k, s) = (bone_black_k(), &coefficients[NAMES.iter().position(|&n| n == "BoneBlack").unwrap()][1]);
+        for w in 0..crate::spectral::N {
+            absorption[w] += c * k[w];
+            scattering[w] += c * s[w];
         }
     }
     crate::spectral::SpectralPigment { k: absorption, s: scattering }
@@ -429,6 +505,59 @@ fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
 mod tests {
     use super::*;
     use crate::color::{hex, to_oklab};
+
+    /// Engine 9's identity before bone black's own slot is the one
+    /// checkpoints written then carry: computed from the tables' bytes by the
+    /// old recipe outside this code (Python's hashlib over mixer/*.bin and the
+    /// 27 researched names, width 48), 0x5ecc0e8c41eb7ada, and its film
+    /// identity 0x8e4aed0cc0f1a3d2. The current ones differ.
+    #[test]
+    fn the_identity_before_the_bone_black_slot_is_the_old_one() {
+        assert_eq!(identity9_before_bone_black(), 0x5ecc_0e8c_41eb_7ada);
+        assert_eq!(film_identity_before_bone_black(), 0x8e4a_ed0c_c0f1_a3d2);
+        assert_ne!(identity9(), identity9_before_bone_black());
+        assert_ne!(film_identity(), film_identity_before_bone_black());
+        assert_eq!(LATENT_SIZE, LATENT_SIZE_BEFORE_BONE_BLACK + 1);
+    }
+
+    /// Bone black's own slot is K550 (λ/550)^−α with the table's S; its
+    /// table slot is unchanged.
+    #[test]
+    fn the_bone_black_slot_is_a_power_law_over_the_tables_s() {
+        let (old, new) = (pigment9(&measured("BoneBlack").unwrap()), pigment9(&tube9_bone_black("bone black").unwrap()));
+        let (k550, alpha) = BONE_BLACK_K;
+        for w in 0..crate::spectral::N {
+            let expected = k550 * (crate::spectral::wavelength(w) / 550.0).powf(-alpha);
+            assert!((new.k[w] - expected).abs() < 1e-4 * expected, "{w}: {} {expected}", new.k[w]);
+            assert_eq!(new.s[w], old.s[w]);
+        }
+        let i = NAMES.iter().position(|&n| n == "BoneBlack").unwrap();
+        let table = f32::from_le_bytes(CALIBRATED[(i * 2 * crate::spectral::N + 17) * 4..][..4].try_into().unwrap());
+        assert_eq!(old.k[17], table, "the table's slot is as it was");
+        assert!(tube9_bone_black("vine black").is_none());
+    }
+
+    /// A thin film of bone black over white was teal with the table's K (its
+    /// 500–520 nm dip), and with its own slot is a warm, brownish grey: carbon
+    /// absorbs blue most. Tinted with zinc white it stays the blue-grey
+    /// Revigo measured (07C, 07D: CIELAB a* 0.0 and 0.3, b* −5.8 and −7.2).
+    #[test]
+    fn a_thin_bone_black_film_is_warm_and_its_tint_blue_grey() {
+        let (old, new) = (measured("BoneBlack").unwrap(), tube9_bone_black("bone black").unwrap());
+        let film = |lat: &[f32; LATENT_SIZE], um: f32| to_oklab(over9(lat, scattering9(lat), [0.9; 3], um / crate::COAT_UM));
+        let teal = film(&old, 10.0);
+        assert!(teal[1] < -0.02 && teal[2] > 0.0, "the table's film: {teal:?}");
+        for um in [1.0, 3.0, 10.0] {
+            let lab = film(&new, um);
+            assert!(lab[1] > -0.002 && lab[2] > 0.005, "{um} µm: {lab:?}");
+        }
+        let zinc = measured("ZincWhite").unwrap();
+        for c in [0.03, 0.1] {
+            let tint: [f32; LATENT_SIZE] = std::array::from_fn(|k| c * new[k] + (1.0 - c) * zinc[k]);
+            let lab = to_oklab(decode9(&tint));
+            assert!(lab[2] < -0.005 && lab[1].abs() < 0.3 * lab[2].abs(), "{c}: {lab:?}");
+        }
+    }
 
     #[test]
     fn splitting_measured_films_preserves_the_backing_spectrum() {

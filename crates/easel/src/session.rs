@@ -79,6 +79,13 @@ pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// pass's `behind=` does, and a rag wipes a faint mask as it wipes a full one, lifting by
 /// the mask's value: every new painting. A log without it replays as it was painted.
 pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
+/// The bone-black switch, in the head of a session file: engine 9's bone
+/// black takes its own K per volume, carbon's absorption falling with
+/// wavelength as measured in its tints, so its thin films are a warm grey
+/// rather than teal (paint's `mixer::BONE_BLACK_K`, `Palette::bone_black`).
+/// Every new painting has it; a log without it replays as it was painted.
+/// It rides on engine 9 (`box_for`).
+pub const BONE_BLACK_MARK: &str = "--@ bone-black";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -789,6 +796,9 @@ impl Session {
         }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
+        }
+        if self.st.borrow().tubes.bone_black {
+            let _ = writeln!(s, "{BONE_BLACK_MARK}");
         }
         let material = self.st.borrow().tubes.material;
         if material != 0 {
@@ -1548,7 +1558,8 @@ fn box_list() -> String {
 /// their pile's heap as it is now; an existing one's as its log says
 /// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`). New paintings are of
 /// material 0; a log is of material 1 only where its head says so
-/// (`MATERIAL_MARK`).
+/// (`MATERIAL_MARK`). New paintings' bone black has its own K; an existing
+/// one's as its log says (`BONE_BLACK_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1570,6 +1581,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.brush_skim = true;
         b.rag_lift = true;
         b.drain = true;
+        b.bone_black = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1642,6 +1654,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.drain = drain;
     b.material = material;
+    b.bone_black = head(BONE_BLACK_MARK);
+    if b.bone_black && engine != paint::PIGMENT_MIXER {
+        return Err(format!("the log's bone-black switch ({BONE_BLACK_MARK}) requires engine 9; this log names engine {engine}; nothing ran"));
+    }
     Ok(b)
 }
 
@@ -1700,9 +1716,10 @@ mod tests {
     use super::*;
 
     /// A new painting's log as engine `engine` would have written it: its
-    /// engine line changed and its material line, engine 9's, gone.
+    /// engine line changed and its material and bone-black lines, engine
+    /// 9's, gone.
     fn as_engine(text: &str, engine: u32) -> String {
-        text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}")).replace(&format!("{MATERIAL_MARK} {}\n", paint::skin::MATERIAL), "")
+        text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}")).replace(&format!("{MATERIAL_MARK} {}\n", paint::skin::MATERIAL), "").replace(&format!("{BONE_BLACK_MARK}\n"), "")
     }
 
     fn checkpoint_base_format(bytes: &[u8]) -> u64 {
@@ -2318,6 +2335,41 @@ mod tests {
             assert!(restored.knife_skim() && restored.blend_feather() && restored.brush_skim());
         }
         assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting's bone black has its own K (`paint::mixer::BONE_BLACK_K`)
+    /// and its log's head and save say so; a log without the line (every
+    /// painting before it) replays with the older bone black, and a save
+    /// keeps the switch as its painting had it. Only engine 9 has it.
+    #[test]
+    fn new_paintings_record_the_bone_black_switch_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 9}, {\"bone black\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.st.borrow().tubes.bone_black);
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{BONE_BLACK_MARK}\n")), "{text}");
+        let old_log = text.replace(&format!("{BONE_BLACK_MARK}\n"), "");
+        let mut pixels = Vec::new();
+        for (log, on) in [(text.clone(), true), (old_log.clone(), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.st.borrow().tubes.bone_black, on);
+            assert_eq!(replay.program("p"), log);
+            let path = std::env::temp_dir().join(format!("easel-bone-black-save-{}-{on}.ckpt", std::process::id()));
+            crate::save::write(&replay, &log, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            let _ = std::fs::remove_file(&path);
+            assert_eq!(restored.st.borrow().tubes.bone_black, on);
+            assert_eq!(restored.program("p").contains(&format!("\n{BONE_BLACK_MARK}\n")), on);
+            pixels.push(replay.canvas().unwrap().pixels().to_vec());
+        }
+        assert_eq!(live.canvas().unwrap().pixels(), &pixels[0][..]);
+        assert_ne!(pixels[0], pixels[1]);
+        let engine8 = text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 8").replace(&format!("{MATERIAL_MARK} {}\n", paint::skin::MATERIAL), "");
+        assert!(box_for(Some(&engine8)).unwrap_err().contains(BONE_BLACK_MARK));
     }
 
     /// A new painting 400 px wide (1000 × 800 units): a pale ground with

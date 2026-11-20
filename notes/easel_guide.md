@@ -228,6 +228,13 @@ faster); a pile dries at its tubes' rates mixed by volume. The other
 numbers, and the colors and strengths of the tubes not measured, are
 estimates from the pigment literature.
 
+Bone black is carbon on charred bone. Its carbon absorbs blue light a
+little more than red, so a thin film of it over white is a warm, faintly
+brownish grey, and its tints with white are a cool blue-grey, as measured
+in real bone black ground in oil. (A painting whose log's head has no
+`--@ bone-black` line keeps the older bone black, whose thin films lean
+teal.)
+
 ### Thinner
 
 ```lua

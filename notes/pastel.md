@@ -7,7 +7,7 @@ the mid-1880s, pastel over peinture à l'essence on toned paper; the
 materials it models are in notes/degas-materials.md (a materials-only
 research note), the physics in notes/research/pastel_stick_tribology.md,
 paper_surface.md and dry_pigment_optics.md. The painter's side is in the
-guide, under "Drawing: pencil, chalk, pastel and eraser".
+guide, under "Drawing: pencil, chalk, pastel, charcoal and eraser".
 
 ## What it is
 

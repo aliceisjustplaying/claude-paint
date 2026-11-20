@@ -10,7 +10,7 @@
 //! blunts it the same way.
 
 use crate::api::{S, check_keys, err, frame, num, paint_mask_of, points, seed_of, wrap};
-use mlua::{Lua, Result, Table, Value};
+use mlua::{Lua, MultiValue, Result, Table, Value};
 use paint::graphite::{self, Lead, Mark};
 use paint::{Canvas, Mask, Shape};
 
@@ -101,6 +101,49 @@ fn is_stick(st: &S, p: &Table) -> Result<bool> {
     Ok(st.borrow().paper && p.get::<Option<String>>("kind")?.as_deref() == Some("stick"))
 }
 
+/// Whether `p` is a pastel pencil (`pastel(pile, {kind="pencil"})`): a stick
+/// whose table's section says so (it is a round core to the engine).
+fn is_pastel_pencil(st: &S, p: &Table) -> Result<bool> {
+    Ok(is_stick(st, p)? && p.get::<Option<String>>("section")?.as_deref() == Some("pencil"))
+}
+
+/// The shortest pastel pencil a hand still holds to draw, mm: one that
+/// reaches from the tripod grip's pinch, 20 mm back of the point, past the
+/// index finger to rest on the web of a small hand (a 5th-percentile
+/// woman's index finger, 62 mm tip to base crease, less 9 mm to the pad's
+/// middle: 20 + 53 = 73). A stub shorter wants an extender.
+/// notes/research/pastel_stick_tribology.md §1.
+const PENCIL_HOLD_MM: f32 = 75.0;
+/// The hand time of a sharpening, s: its motions timed by MTM-1's tables
+/// (knife taken up and put down, the wood shaved round once, the core's
+/// eight cuts, a touch-up on sandpaper: 437 TMU of 0.036 s, 15.7 s).
+/// notes/research/pastel_stick_tribology.md §1.
+const SHARPEN_SECS: f64 = 16.0;
+/// A pastel pencil's core, mm: Stabilo's CarbOthello lead is 4.4 mm
+/// (stabilo.com; Faber-Castell's Pitt measures 4.3). A log without
+/// `--@ pastel-pencil-sharpen` keeps its 4.5.
+const PENCIL_CORE_MM: f32 = 4.4;
+
+/// Sharpen a pastel pencil (`--@ pastel-pencil-sharpen`): a fresh point cut,
+/// the core shorter by the cut (paint's `Stick::sharpen`), stored in its
+/// table; refused if what is left would be too short to hold
+/// (`PENCIL_HOLD_MM`). Returns the mm cut off.
+fn sharpen_pastel_pencil(lua: &Lua, st: &S, p: &Table) -> Result<f32> {
+    let mut stick = stick_of(p)?;
+    let cut = stick.sharpen_cut_mm();
+    let left = stick.length_mm - cut;
+    if left.is_nan() || left < PENCIL_HOLD_MM {
+        return err(format!(
+            "sharpen: the pencil is {:.0} mm long and a fresh point would leave {left:.0} mm, too short to hold (under {PENCIL_HOLD_MM:.0} mm); take a fresh one (pastel(pile, {{kind=\"pencil\"}}))",
+            stick.length_mm
+        ));
+    }
+    st.borrow_mut().canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?.tally_mut().secs += SHARPEN_SECS;
+    stick.sharpen();
+    store_stick(lua, p, &stick)?;
+    Ok(cut)
+}
+
 /// The stick a stick table holds.
 pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     use paint::pastel::{Section, Stick};
@@ -113,7 +156,30 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     let ft: Table = p.get("facets")?;
     let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
     let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?] })
+    // (a pastel's table has no lift or cover: a charcoal's has, `charcoal()`)
+    let lift = p.raw_get::<Option<f32>>("lift")?.unwrap_or(paint::pastel::PASTEL_LIFT);
+    if !(0.0..=1.0).contains(&lift) {
+        return err("a charcoal stick's lift is 0 to 1");
+    }
+    let cover_um = p.raw_get::<Option<f32>>("cover")?.unwrap_or(paint::pastel::PARTICLE_UM);
+    if !(cover_um.is_finite() && (1.0..=50.0).contains(&cover_um)) {
+        return err("a charcoal stick's cover is 1 to 50 (µm)");
+    }
+    let carbon = p.raw_get::<Option<String>>("charcoal")?.is_some();
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], water: 0.0, index: p.raw_get::<Option<f32>>("n")?.unwrap_or(paint::wet_pastel::DEFAULT_INDEX), lift, cover_um, carbon, scatter: p.raw_get::<Option<f32>>("s")?.filter(|s| s.is_finite() && *s > 0.0).unwrap_or(0.0) })
+}
+
+/// The water in a stick's tip now (mm³), `now` minutes on the painting's
+/// clock: what `p:wet` gave it (its table's `water`, at `wet_at`), less what
+/// has spread up the stick and dried off it since (paint's
+/// `Stick::tip_water`). 0 for a stick never dipped.
+fn tip_water(p: &Table, now: f64) -> Result<f32> {
+    let water: f32 = p.raw_get::<Option<f32>>("water")?.unwrap_or(0.0);
+    if water <= 0.0 {
+        return Ok(0.0);
+    }
+    let at: f64 = p.raw_get::<Option<f64>>("wet_at")?.unwrap_or(now);
+    Ok(stick_of(p)?.tip_water(water, now - at))
 }
 
 /// Write a stick's wear back into its table (a part of the Lua heap: a
@@ -157,6 +223,12 @@ fn along(o: Option<&Table>, key: &str, n: usize, default: f32) -> Result<Vec<f32
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Strokes of a stick drawn on this thread (tests count a hatching's).
+    static STICK_STROKES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// One stroke of a stick along `pts` (units), each point's force (N), alt,
 /// azimuth and roll (degrees) and speed (mm/s); the hand lands and lifts
 /// as a hand does (pastel.rs `LAND_S`, `LIFT_S`). Returns the volume laid, mm³.
@@ -168,7 +240,15 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
         let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         validate_pastel_path(c, pts, None)?;
     }
+    #[cfg(test)]
+    STICK_STROKES.with(|n| n.set(n.get() + 1));
     let mut stick = stick_of(p)?;
+    // (a dipped tip: the wet pastel switch's, `p:wet`)
+    let wet = st.borrow().tubes.wet_pastel && st.borrow().tubes.drawing_optics;
+    if wet {
+        let now = st.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
+        stick.water = tip_water(p, now)?;
+    }
     let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
     // (a NaN angle finds no contact and lays nothing, without saying so)
     if !base_roll.is_finite() || alt.iter().chain(az).chain(roll).chain(force).chain(speed).any(|v| !v.is_finite()) {
@@ -186,15 +266,21 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
             }
         })
         .collect();
-    let (volume, length, facets) = crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
+    let (volume, length, facets, water) = crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
         let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         let l = c.stick_stroke(&mut stick, &sp);
         c.tally_mut().secs += l.secs as f64 + 0.25;
-        Ok((l.volume_mm3, stick.length_mm, stick.facets.clone()))
+        Ok((l.volume_mm3, stick.length_mm, stick.facets.clone(), stick.water))
     })?;
     stick.length_mm = length;
     stick.facets = facets;
     store_stick(lua, p, &stick)?;
+    if wet && p.raw_get::<Option<f32>>("water")?.is_some() {
+        // what the tip still holds, as of the stroke's end
+        let now = st.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
+        p.raw_set("water", water)?;
+        p.raw_set("wet_at", now)?;
+    }
     Ok(volume)
 }
 
@@ -202,16 +288,217 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
 /// pencil's pressure as force (`FORCE_AT_FULL` at full), the stick held at
 /// 60° with its upper end to the lower right (a right hand), at 80 mm/s.
 fn stick_marks(lua: &Lua, st: &S, p: &Table, marks: &[Mark]) -> Result<f32> {
+    // (a mark is dense, every 0.25 units: every eighth point will do)
+    stick_marks_held(lua, st, p, marks, HAND, |_| HAND_SPEED, |_| 8)
+}
+
+/// How a hand holds a stick for a pencil's marks: alt and azimuth
+/// (degrees), as `p:stroke` takes them.
+#[derive(Clone, Copy)]
+struct Held {
+    alt: f32,
+    azimuth: f32,
+}
+/// A pencil's marks laid with a stick: as logs before the area strokes
+/// were painted.
+const HAND: Held = Held { alt: 60.0, azimuth: 45.0 };
+/// Their speed, mm/s.
+const HAND_SPEED: f32 = 80.0;
+
+/// `stick_marks` held as `held` at `speed(mark)` mm/s, keeping every
+/// `every(mark)`th of a mark's dense points.
+fn stick_marks_held(lua: &Lua, st: &S, p: &Table, marks: &[Mark], held: Held, speed: impl Fn(&Mark) -> f32, every: impl Fn(&Mark) -> usize) -> Result<f32> {
     let mut v = 0.0;
     for m in marks {
-        // (a mark is dense, every 0.25 units: every eighth point will do)
-        let idx: Vec<usize> = (0..m.pts.len()).step_by(8).chain(std::iter::once(m.pts.len() - 1)).collect();
+        let speed = speed(m);
+        let every = every(m).max(1);
+        let idx: Vec<usize> = (0..m.pts.len()).step_by(every).chain(std::iter::once(m.pts.len() - 1)).collect();
         let pts: Vec<(f32, f32)> = idx.iter().map(|&i| m.pts[i]).collect();
         let force: Vec<f32> = idx.iter().map(|&i| m.pressure[i] * FORCE_AT_FULL).collect();
         let n = pts.len();
-        v += stick_stroke(lua, st, p, &pts, &force, &vec![60.0; n], &vec![45.0; n], &vec![0.0; n], &vec![80.0; n])?;
+        v += stick_stroke(lua, st, p, &pts, &force, &vec![held.alt; n], &vec![held.azimuth; n], &vec![0.0; n], &vec![speed; n])?;
     }
     Ok(v)
+}
+
+// The area hatching's defaults (mm and radians): estimates measured on
+// reproductions of Cassatt's pastels of 1895–1908
+// (notes/research/cassatt_pastel_strokes.md, §3).
+/// A zigzag's swing to either side of its line: legs about 10 mm long.
+const ZIGZAG_AMPLITUDE_MM: f32 = 5.0;
+/// A zigzag's swing there and back, along its line: legs about 4 mm apart.
+const ZIGZAG_PERIOD_MM: f32 = 8.0;
+/// A zigzag's corners: a sine, as a hand oscillating across its line while
+/// it drifts along swings (Hollerbach 1981). At the defaults its turns'
+/// radius, P²/(4π²A) = 0.32 mm, is far under the stick's 1.5–3 mm line, so
+/// they look sharp, as the "ladder" does.
+const ZIGZAG_ROUND: f32 = 1.0;
+/// How far one zigzag stroke runs along its line.
+const ZIGZAG_LENGTH_MM: f32 = 40.0;
+/// `jitter=true`: marks' lengths up to ±30%, their angles up to ±0.17 rad (±10°).
+const JITTER_LENGTH: f32 = 0.3;
+const JITTER_ANGLE: f32 = 0.17;
+/// A plain stick hatching's spacing and length (mm), from Cassatt's open
+/// backgrounds (cassatt_pastel_strokes.md §3): distinct strokes 5–15 mm
+/// apart (8 mm, near the range's geometric middle, 8.7), 30–80 mm long (50,
+/// its middle). A pencil's hatching keeps its own, 1.5 mm and 12 mm.
+const STICK_HATCH_SPACING_MM: f32 = 8.0;
+const STICK_HATCH_LENGTH_MM: f32 = 50.0;
+/// The hand over an area: the stick at 50°, the measured altitude of a held
+/// pen (Schomaker & Plamondon 1990), and paper.rs's reference hold; its upper
+/// end to the lower right (a right hand).
+const AREA_HAND: Held = Held { alt: 50.0, azimuth: 45.0 };
+/// A stroke's speed, mm/s, for one of `STROKE_REF_MM`: 12 mm in 150 ms, a
+/// single stroke's measured duration (100–150 ms; Thomassen & Van Galen,
+/// J. Forensic Doc. Exam.).
+const STROKE_REF_SPEED: f32 = 80.0;
+const STROKE_REF_MM: f32 = 12.0;
+/// A straight line's drawing time goes as Lⁿ: n = 0.469 (Cao & Zhai, CHI
+/// 2007, T = 68.8 L^0.469 ms, L mm; as quoted by Zhai, Kristensson & Appert,
+/// FnT HCI 5(2), 2012, §5.3.2), so its speed as L^(1-n).
+const LINE_TIME_EXP: f32 = 0.469;
+/// The hand's length, mm: ANSUR II's mean, men and women (6068 people;
+/// men 193.3, women 181.1): the radius a wrist swings a mark about.
+const HAND_LENGTH_MM: f32 = 189.3;
+/// Forearm and hand, mm (ANSUR II's mean, the same people): the radius for
+/// a sweep longer than the wrist turns.
+const FOREARM_HAND_MM: f32 = 467.0;
+/// The wrist's turn across a stroke: 40° of radial and ulnar deviation
+/// together serve most tasks (Ryu et al., J. Hand Surg. 16A, 1991).
+const WRIST_TURN_DEG: f32 = 40.0;
+
+/// How fast a stroke of `mm` goes (mm/s): longer ones faster, in more time.
+fn stroke_speed(mm: f32) -> f32 {
+    (STROKE_REF_SPEED * (mm.max(0.1) / STROKE_REF_MM).powf(1.0 - LINE_TIME_EXP)).clamp(1.0, 2000.0)
+}
+
+/// A right hand's pivot for a stick held at `azimuth` (degrees: the upper
+/// end, and the hand, that way), in units of `mmu` mm.
+fn hand_pivot(azimuth: f32, mmu: f32) -> paint::area_strokes::Pivot {
+    let a = azimuth.to_radians();
+    paint::area_strokes::Pivot {
+        wrist: HAND_LENGTH_MM / mmu,
+        reach: HAND_LENGTH_MM * WRIST_TURN_DEG.to_radians() / mmu,
+        elbow: FOREARM_HAND_MM / mmu,
+        toward: (a.cos(), a.sin()),
+    }
+}
+
+const AREA_HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "graded", "seed", "zigzag", "jitter", "open", "alt", "azimuth", "speed"];
+
+/// A stick's `p:hatch` over an area, with the area-strokes switch
+/// (session.rs `PASTEL_AREA_STROKES_MARK`): the pencil's hatching, and an
+/// `angle` that may be a direction field, `zigzag=`, `jitter=`, `open=` and
+/// the hand's `alt=`, `azimuth=` and `speed=`. Without them it lays
+/// Cassatt's open strokes (`STICK_HATCH_SPACING_MM`), each bowed by the
+/// wrist's swing (`hand_pivot`) and as fast as its length asks
+/// (`stroke_speed`), the stick at 50° (`AREA_HAND`). Each mark is one
+/// stroke of the stick (`stick_stroke`), so it wears and sheds as a stroke does.
+fn area_hatch(lua: &Lua, st: &S, p: &Table, m: &Value, o: Option<&Table>) -> Result<f32> {
+    use paint::area_strokes::{AreaHatch, Direction, Jitter, Open, Zigzag};
+    if let Some(o) = o {
+        check_keys(o, AREA_HATCH_KEYS, "hatch")?;
+    }
+    let m = paint_mask_of(st, m)?;
+    let get = |k: &str| -> Result<Option<f32>> { o.map(|o| num(o, k)).transpose().map(Option::flatten) };
+    let value = |k: &str| -> Result<Value> { Ok(o.map(|o| o.get::<Value>(k)).transpose()?.unwrap_or(Value::Nil)) };
+    let mmu = {
+        let s = st.borrow();
+        mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
+    };
+    let finite = |k: &str, v: f32| if v.is_finite() { Ok(v) } else { err(format!("hatch: {k} is a number")) };
+    let zigzag = match value("zigzag")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Boolean(true) => Some(Zigzag { amplitude: ZIGZAG_AMPLITUDE_MM / mmu, period: ZIGZAG_PERIOD_MM / mmu, round: ZIGZAG_ROUND }),
+        Value::Table(z) => {
+            check_keys(&z, &["amplitude", "period", "round"], "hatch zigzag")?;
+            let amplitude = finite("zigzag amplitude", num(&z, "amplitude")?.unwrap_or(ZIGZAG_AMPLITUDE_MM / mmu))?;
+            let period = finite("zigzag period", num(&z, "period")?.unwrap_or(ZIGZAG_PERIOD_MM / mmu))?;
+            let round = finite("zigzag round", num(&z, "round")?.unwrap_or(ZIGZAG_ROUND))?;
+            if !(amplitude > 0.0 && period > 0.0 && (0.0..=1.0).contains(&round)) {
+                return err("hatch: zigzag={amplitude=, period=} want > 0 (units), round= 0 (sharp corners) to 1 (a sine)");
+            }
+            Some(Zigzag { amplitude, period, round })
+        }
+        o => return err(format!("hatch: zigzag is true or {{amplitude=, period=, round=}}, got {}", o.type_name())),
+    };
+    let jitter = match value("jitter")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Boolean(true) => Some(Jitter { length: JITTER_LENGTH, angle: JITTER_ANGLE }),
+        Value::Table(j) => {
+            check_keys(&j, &["length", "angle"], "hatch jitter")?;
+            let length = finite("jitter length", num(&j, "length")?.unwrap_or(0.0))?;
+            let angle = finite("jitter angle", num(&j, "angle")?.unwrap_or(0.0))?;
+            if !(0.0..=1.0).contains(&length) || !(0.0..=1.5).contains(&angle) {
+                return err("hatch: jitter={length=, angle=}: length a share 0..1 of each mark's, angle radians 0..1.5");
+            }
+            Some(Jitter { length, angle })
+        }
+        o => return err(format!("hatch: jitter is true or {{length=, angle=}}, got {}", o.type_name())),
+    };
+    let open_mask;
+    let open = match value("open")? {
+        Value::Nil => None,
+        Value::Integer(_) | Value::Number(_) => {
+            let share = finite("open", get("open")?.unwrap_or(0.0))?;
+            if !(0.0..=1.0).contains(&share) {
+                return err("hatch: open is the share left to the paper, 0..1, or a mask of it");
+            }
+            Some(Open::Share(share))
+        }
+        v @ Value::UserData(_) => {
+            open_mask = paint_mask_of(st, &v)?;
+            Some(Open::Mask(&open_mask))
+        }
+        o => return err(format!("hatch: open is the share left to the paper, 0..1, or a mask of it, got {}", o.type_name())),
+    };
+    // by default Cassatt's open strokes; a zigzag's bands side by side
+    let spacing = get("spacing")?.unwrap_or(match zigzag {
+        Some(z) => 2.0 * z.amplitude,
+        None => STICK_HATCH_SPACING_MM / mmu,
+    });
+    let length = get("length")?.unwrap_or(if zigzag.is_some() { ZIGZAG_LENGTH_MM / mmu } else { STICK_HATCH_LENGTH_MM / mmu });
+    let pressure = get("pressure")?.unwrap_or(0.45);
+    if !(spacing > 0.0 && length > 0.0) {
+        return err("hatch: spacing and length want > 0 (units)");
+    }
+    let held = Held { alt: get("alt")?.unwrap_or(AREA_HAND.alt), azimuth: get("azimuth")?.unwrap_or(AREA_HAND.azimuth) };
+    let speed = get("speed")?;
+    if !(0.0..=90.0).contains(&held.alt) || !held.azimuth.is_finite() || !speed.is_none_or(|v| (1.0..=2000.0).contains(&v)) || !pressure.is_finite() {
+        return err("hatch: alt is degrees 0 to 90, azimuth degrees, speed mm/s 1 to 2000 (hatching 60–400), pressure a number");
+    }
+    let seed = match o {
+        Some(o) => seed_of(st, o)?,
+        None => seed_of(st, &lua.create_table()?)?,
+    };
+    let graded = o.map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false);
+    let field;
+    let direction = match value("angle")? {
+        Value::Nil => Direction::Fixed(-0.9),
+        v @ (Value::Function(_) | Value::UserData(_)) => {
+            let f = crate::api::frame(st)?;
+            let b = crate::api::support(Some(&m), f, spacing);
+            // (each unit of line traced is tested against its neighbors: bound the work)
+            if (b.2 - b.0) * (b.3 - b.1) / spacing > 4.0e6 {
+                return err("hatch: too many strokes along a field; a wider spacing or a smaller area");
+            }
+            field = crate::api::angle_field(st, &v, b)?;
+            Direction::Field(&*field)
+        }
+        _ => Direction::Fixed(finite("angle", get("angle")?.unwrap_or(-0.9))?),
+    };
+    let pivot = Some(hand_pivot(held.azimuth, mmu));
+    let h = AreaHatch { direction, spacing, length, pressure, graded, zigzag, jitter, open, pivot };
+    let marks = paint::area_strokes::area_marks(&m, &h, seed);
+    // each stroke as fast as its length asks: a zigzag's a leg's, there or back
+    let speed = |mk: &Mark| {
+        speed.unwrap_or_else(|| match zigzag {
+            Some(z) => stroke_speed(mmu * (4.0 * z.amplitude * z.amplitude + 0.25 * z.period * z.period).sqrt()),
+            None => stroke_speed(mmu * paint::path::arclen(&mk.pts).last().copied().unwrap_or(0.0)),
+        })
+    };
+    // (a zigzag's corners want its points closer than a straight mark's)
+    stick_marks_held(lua, st, p, &marks, held, speed, |mk| if zigzag.is_some() { 2usize.max(mk.pts.len().div_ceil(4000)) } else { 8usize.max(mk.pts.len().div_ceil(4000)) })
 }
 
 /// Millimeters per canvas unit.
@@ -368,6 +655,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         methods.set("hatch", lua.create_function(move |lua, (p, m, o): (Table, Value, Option<Table>)| {
+            // (a stick's hatching over an area: only with its switch, so an
+            // older log refuses what it refused)
+            if st1.borrow().tubes.pastel_area_strokes && is_stick(&st1, &p)? {
+                return area_hatch(lua, &st1, &p, &m, o.as_ref());
+            }
             if let Some(o) = &o {
                 check_keys(o, if st1.borrow().paper { &["angle", "spacing", "length", "pressure", "graded", "seed"] } else { HATCH_KEYS }, "hatch")?;
             }
@@ -402,14 +694,22 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             draw_marks(&st1, &p, &marks, seed)
         })?)?;
     }
-    // p:sharpen(): a fresh point
+    // p:sharpen(): a fresh point (a pastel pencil's, with `--@ pastel-pencil-sharpen`: the
+    // mm the cut takes off its core)
     {
         let st1 = st.clone();
-        methods.set("sharpen", lua.create_function(move |_, p: Table| {
+        methods.set("sharpen", lua.create_function(move |lua, p: Table| {
+            if st1.borrow().tubes.pastel_pencil_sharpen && is_pastel_pencil(&st1, &p)? {
+                return Ok(MultiValue::from_vec(vec![Value::Number(sharpen_pastel_pencil(lua, &st1, &p)? as f64)]));
+            }
+            if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? && p.raw_get::<Option<String>>("charcoal")?.is_some() {
+                return err("sharpen: sharpening a charcoal stick (a blade, a sanding block) isn't modelled; its end wears into facets as it draws (p.facets)");
+            }
             if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? {
                 return err("sharpen: a pastel stick has no point to sharpen; its end wears into facets as it draws (p.facets)");
             }
-            p.set("worn", 0.0)
+            p.set("worn", 0.0)?;
+            Ok(MultiValue::new())
         })?)?;
     }
     // p:width(): the width of the line it draws now, in units (at pressure 0.5)
@@ -437,6 +737,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
         Ok(if kind == "chalk" {
             format!("black chalk (worn {worn:.0} mm)")
+        } else if is_stick(&st1, &p)? && p.raw_get::<Option<String>>("charcoal")?.is_some() {
+            let s = stick_of(&p)?;
+            let name: String = p.raw_get("charcoal")?;
+            format!("{name} charcoal ({} MPa, {:.1} mm long, {} facets)", (s.hardness * 10.0).round() / 10.0, s.length_mm, s.facets.len())
         } else if is_stick(&st1, &p)? {
             let s = stick_of(&p)?;
             let name: String = p.get::<Option<String>>("name")?.unwrap_or_default();
@@ -570,6 +874,11 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     let g = lua.globals();
     let meta: Table = lua.named_registry_value(PENCIL_META)?;
     let methods: Table = meta.raw_get("__index")?;
+    // (the charcoal switch's `charcoal()`: a stick of the same kind)
+    if st.borrow().tubes.charcoal {
+        let km = st.borrow().tubes.pastel_km_mix && st.borrow().tubes.drawing_optics;
+        install_charcoal(lua, meta.clone(), km)?;
+    }
     // p:side(pts, {force=, pressure=, speed=, roll=}): the stick laid nearly
     // flat across the stroke, a piece `length` mm long (p:snap breaks one off)
     {
@@ -675,6 +984,38 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
+    // p:wet(share): dip the stick's tip in water (the wet pastel switch's)
+    if st.borrow().tubes.wet_pastel && st.borrow().tubes.drawing_optics {
+        let st1 = st.clone();
+        methods.set("wet", lua.create_function(move |_, (p, share): (Table, Option<f32>)| {
+            if !is_stick(&st1, &p)? {
+                return err("wet: a pastel stick's tip is dipped in water (pastel(pile))");
+            }
+            // (a wet tip is a chalk soil held by its gum, wet_pastel.rs; a
+            // charcoal stick is porous char, or carbon in gum, with no
+            // measured plastic and liquid limits: its wet tip isn't modelled)
+            if p.raw_get::<Option<String>>("charcoal")?.is_some() {
+                return err("wet: a charcoal stick's wet tip isn't modelled (charcoal is no chalk soil); wet the charcoal on the paper with a brush instead (b:dip(share), b:wash)");
+            }
+            let share = share.unwrap_or(1.0);
+            if !(0.0..=1.0).contains(&share) {
+                return err("wet: share is how much water the tip takes up, 0 (dry) to 1 (soaked)");
+            }
+            // (a reach to the water jar and back, as a trip to the palette)
+            {
+                let mut s = st1.borrow_mut();
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                c.tally_mut().secs += paint::tally::pace::RELOAD;
+            }
+            let now = st1.borrow().canvas.as_ref().map_or(0.0, |c| c.now_min());
+            // (a tip still wet from before keeps what it has, if more)
+            let cap = stick_of(&p)?.tip_capacity_mm3();
+            let water = tip_water(&p, now)?.max(share * cap);
+            p.raw_set("water", water)?;
+            p.raw_set("wet_at", now)?;
+            Ok(water / cap)
+        })?)?;
+    }
     // pastel(pile, {kind="soft"|"hard"|"pencil", soft=, diameter=, length=}):
     // a stick of the pile's pigments as they look dry (paint's dry.rs), that
     // rests on the tooth, wears to facets and lays what it abrades (pastel.rs)
@@ -698,7 +1039,9 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             let stick = match kind.as_str() {
                 "soft" => paint::pastel::Stick::round(color, soft.unwrap_or(0.75), dia.unwrap_or(12.0).clamp(4.0, 25.0)),
                 "hard" => paint::pastel::Stick::square(color, soft.unwrap_or(0.25), dia.unwrap_or(6.35).clamp(3.0, 15.0)),
-                "pencil" => paint::pastel::Stick::pencil(color, soft.unwrap_or(0.35), dia.unwrap_or(4.5).clamp(2.0, 8.0)),
+                // (a log without `--@ pastel-pencil-sharpen` keeps the pencil it was painted with)
+                "pencil" if tubes.pastel_pencil_sharpen => paint::pastel::Stick::pencil(color, soft.unwrap_or(0.35), dia.unwrap_or(PENCIL_CORE_MM).clamp(2.0, 8.0)),
+                "pencil" => paint::pastel::Stick::pencil_as_before(color, soft.unwrap_or(0.35), dia.unwrap_or(4.5).clamp(2.0, 8.0)),
                 k => return err(format!("pastel: kind {k:?}: soft (a round stick), hard (a square one) or pencil")),
             };
             if soft.is_some_and(|s| !(0.0..=1.0).contains(&s)) {
@@ -722,6 +1065,14 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             p.set("b", stick.color[2])?;
             p.set("name", pile.recipe())?;
             p.set("worn", 0.0)?;
+            // (with the wet pastel switch: its particles' mean index)
+            if tubes.wet_pastel && tubes.drawing_optics {
+                p.set("n", tubes.dry_index(&pile.mix.parts))?;
+            }
+            // (with the K–M switch: its particles' scattering per stick volume)
+            if tubes.pastel_km_mix && tubes.drawing_optics {
+                p.set("s", paint::pastel::Stick::pastel_scatter(tubes.dry_scatter(&pile.mix.parts)))?;
+            }
             if let Some(l) = o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
                 if !(5.0..=200.0).contains(&l) {
                     return err("pastel: length is the stick's length in mm, 5 to 200");
@@ -907,6 +1258,82 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
+const CHARCOAL_KEYS: &[&str] = &["kind", "diameter", "length"];
+
+/// The charcoal switch's verb (session.rs `CHARCOAL_MARK`), installed with
+/// the paper-and-pastel switch's: `charcoal{kind="vine"|"compressed",
+/// diameter=, length=}` (or `charcoal()`, a vine stick; `charcoal("compressed")`),
+/// a pastel stick of charcoal (paint's `charcoal`): it draws with the
+/// stick's methods and the pencil's, and the finger, the eraser, a puff and
+/// fixative work on it as on pastel. Vine lifts readily; compressed is
+/// darker and lays fine particles the eraser takes less readily.
+fn install_charcoal(lua: &Lua, meta: Table, km: bool) -> Result<()> {
+    lua.globals().set("charcoal", lua.create_function(move |lua, a: Value| {
+        let o = match a {
+            Value::Nil => None,
+            Value::String(k) => {
+                let t = lua.create_table()?;
+                t.set("kind", k)?;
+                Some(t)
+            }
+            Value::Table(o) => {
+                check_keys(&o, CHARCOAL_KEYS, "charcoal")?;
+                Some(o)
+            }
+            o => return err(format!("charcoal: want {{kind=\"vine\"}} or \"compressed\", got {}", o.type_name())),
+        };
+        let kind: String = o.as_ref().map(|o| o.get::<Option<String>>("kind")).transpose()?.flatten().unwrap_or_else(|| "vine".into());
+        let dia = o.as_ref().map(|o| num(o, "diameter")).transpose()?.flatten();
+        if dia.is_some_and(|d| !d.is_finite()) {
+            return err("charcoal: diameter is the stick's width in mm, a number");
+        }
+        let stick = match kind.as_str() {
+            // (Winsor & Newton's medium willow, Ø8; General's ¼-inch square)
+            "vine" | "willow" => paint::pastel::Stick::vine(dia.unwrap_or(8.0).clamp(2.0, 16.0)),
+            "compressed" => paint::pastel::Stick::compressed(dia.unwrap_or(6.35).clamp(3.0, 15.0)),
+            k => return err(format!("charcoal: kind {k:?}: vine (willow: a charred twig, loose and light) or compressed (charcoal pressed with a binder: darker, finer)")),
+        };
+        let p = lua.create_table()?;
+        p.set("kind", "stick")?;
+        p.set("charcoal", if kind == "compressed" { "compressed" } else { "vine" })?;
+        p.set("section", match stick.section {
+            paint::pastel::Section::Square { .. } => "square",
+            _ => "round",
+        })?;
+        p.set("size", match stick.section {
+            paint::pastel::Section::Round { d_mm } => d_mm,
+            paint::pastel::Section::Square { side_mm } => side_mm,
+        })?;
+        p.set("hardness", stick.hardness)?;
+        p.set("wear", stick.wear)?;
+        p.set("lift", stick.lift)?;
+        p.set("cover", stick.cover_um)?;
+        // (with the K–M switch: its splinters' or crumbs' scattering per stick volume)
+        if km {
+            p.set("s", stick.scatter)?;
+        }
+        p.set("r", stick.color[0])?;
+        p.set("g", stick.color[1])?;
+        p.set("b", stick.color[2])?;
+        p.set("name", format!("{} charcoal", if kind == "compressed" { "compressed" } else { "vine" }))?;
+        p.set("worn", 0.0)?;
+        match o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
+            Some(l) if !(5.0..=200.0).contains(&l) => return err("charcoal: length is the stick's length in mm, 5 to 200"),
+            Some(l) => p.set("length", l)?,
+            None => p.set("length", stick.length_mm)?,
+        }
+        let ft = lua.create_table()?;
+        for f in &stick.facets {
+            for v in f {
+                ft.push(*v)?;
+            }
+        }
+        p.set("facets", ft)?;
+        p.set_metatable(Some(meta.clone()))?;
+        Ok(p)
+    })?)
+}
+
 // every test here paints from the default box
 #[cfg(test)]
 mod tests {
@@ -1014,6 +1441,191 @@ mod tests {
         }
     }
 
+    /// How dark `src`'s line along y is (`Y` in it), averaged over `rows` rows `y0`, `y0 + 45`, ...,
+    /// each drawn by a pencil `C` that `make` returns: the mean over the line's columns of
+    /// its darkest pixel across the line (a pastel line's darkness varies with the paper's
+    /// tooth from row to row).
+    fn line_darkness(s: &mut Session, make: &str, src: &str, y0: f32, rows: usize) -> f32 {
+        let mut dark = 0.0;
+        for k in 0..rows {
+            let y = y0 + 45.0 * k as f32;
+            run(s, &format!("C = {make}"));
+            let before = s.canvas().unwrap().pixels().to_vec();
+            run(s, &src.replace('Y', &y.to_string()));
+            let c = s.canvas().unwrap();
+            let f = c.window();
+            let mut peak = vec![0.0f32; f.w];
+            for (i, (a, b)) in before.iter().zip(c.pixels()).enumerate() {
+                let (x, yy) = (f.ux(i % f.w), f.uy(i / f.w));
+                if x > 200.0 && x < 800.0 && (yy - y).abs() < 30.0 {
+                    peak[i % f.w] = peak[i % f.w].max(a[1] - b[1]);
+                }
+            }
+            let cols = peak.iter().filter(|v| **v > 0.0).count().max(1);
+            dark += peak.iter().sum::<f32>() / cols as f32 / rows as f32;
+        }
+        dark
+    }
+
+    /// A new painting's pastel pencil wears flat as it draws, laying a paler line, and
+    /// `p:sharpen()` cuts it a fresh point: its lines are again a fresh pencil's, and it is
+    /// shorter. It takes hand time, a failed chunk puts the pencil back, a replay sharpens it
+    /// the same, and one too short to hold is refused. A soft stick still refuses; an older
+    /// log's pencil refuses as it was painted. The log's head and a save keep the switch.
+    #[test]
+    fn a_new_paintings_pastel_pencil_is_sharpened() {
+        use crate::session::{PASTEL_SHARPEN_MARK, box_for};
+        const LINE: &str = "C:line({{100, Y}, {900, Y}}, {pressure=0.5})";
+        for enabled in [false, true] {
+            let older = "--@ engine 8\n--@ paper\n--@ calls-agree\n";
+            let mut s = Session::with_box(256, box_for(if enabled { None } else { Some(older) }).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            // a new painting's pencil is a Pitt Pastel's 175 mm on a 4.4 mm core; an older
+            // log's is the 120 mm, 4.5 mm pencil it was painted with, its point as it was cut
+            let made = run(&mut s, r#"local q = pastel(pile{{"bone black", 1}}, {kind="pencil"}) print(q.length, q.size, q.facets[4], q.facets[11])"#);
+            let made: Vec<f32> = made.split_whitespace().map(|v| v.parse().unwrap()).collect();
+            let (taper, blunt): (f32, f32) = if enabled { (0.20, 0.251) } else { (0.22, 0.15) };
+            assert_eq!(made[..2], if enabled { [175.0, 4.4] } else { [120.0, 4.5] }, "{made:?}");
+            assert!((made[2] + blunt).abs() < 0.002 && (made[3] + taper.sin()).abs() < 1e-6, "{made:?}");
+            // (a copy of a pencil as it is: its facets and length)
+            run(&mut s, r#"black = pile{{"bone black", 1}}
+                function fresh() return pastel(black, {kind="pencil"}) end
+                function copy(p) local c = fresh() c.facets = {table.unpack(p.facets)} c.length = p.length return c end
+                soft = pastel(black, {kind="soft"})
+                p = fresh() for i = 1, 20 do p:line({{100, 900 + (i % 5) * 15}, {900, 900 + (i % 5) * 15}}, {pressure=0.5}) end
+                worn = copy(p)"#);
+            let new = line_darkness(&mut s, "fresh()", LINE, 40.0, 6);
+            let worn = line_darkness(&mut s, "copy(p)", LINE, 310.0, 6);
+            assert!(worn < 0.8 * new, "a pencil worn by 20 lines lays a paler line: {worn} vs {new}");
+            let e = s.run("soft:sharpen()").unwrap_err();
+            assert!(e.contains("sharpen: a pastel stick has no point to sharpen"), "{e}");
+            let length = |s: &mut Session| -> f32 { run(s, "print(p.length)").trim().parse().unwrap() };
+            let before = length(&mut s);
+            if !enabled {
+                let e = s.run("p:sharpen()").unwrap_err();
+                assert!(e.contains("sharpen: a pastel stick has no point to sharpen"), "{e}");
+                assert_eq!(length(&mut s), before);
+                assert!(!s.program("pencil").lines().any(|l| l == PASTEL_SHARPEN_MARK));
+                continue;
+            }
+            // a failed chunk puts the pencil back as it was
+            assert!(s.run("p:sharpen() error('no')").is_err());
+            assert_eq!(length(&mut s), before);
+            let clock = s.st.borrow().clock;
+            let cut: f32 = run(&mut s, "print(p:sharpen())").trim().parse().unwrap();
+            let secs = (s.st.borrow().clock - clock) * 60.0;
+            // MTM-1: 436.7 TMU × 0.036 s (notes/research/pastel_stick_tribology.md §1)
+            assert!((15.0..=16.5).contains(&secs), "a sharpening takes some 15.7 s of hand time: {secs}");
+            let after = length(&mut s);
+            assert!(cut > 0.5 && cut < 15.0, "the cut {cut} mm");
+            assert!((before - cut - after).abs() < 1e-4, "{before} - {cut} = {after}");
+            assert!(run(&mut s, "print(p)").contains(&format!("{after:.1} mm long")));
+            let sharpened = line_darkness(&mut s, "copy(p)", LINE, 580.0, 6);
+            assert!((sharpened - new).abs() < 0.1 * new, "a sharpened pencil lays as a fresh one: {sharpened} vs {new} (worn {worn})");
+            // the switch is the log's: a replay sharpens it the same, and a save keeps it
+            let program = s.program("pencil");
+            assert!(program.lines().any(|l| l == PASTEL_SHARPEN_MARK));
+            assert!(box_for(Some(&program)).unwrap().pastel_pencil_sharpen);
+            assert!(!box_for(Some(older)).unwrap().pastel_pencil_sharpen);
+            let mut replay = Session::replay_with(256, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&program) {
+                run(&mut replay, &chunk);
+            }
+            assert_eq!(length(&mut replay), after);
+            assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+            let path = std::env::temp_dir().join(format!("easel-pencil-sharpen-{}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert!(restored.st.borrow().tubes.pastel_pencil_sharpen);
+            // too short to hold: under 75 mm once cut (a fresh stub's point needs no cut)
+            let e = s.run(r#"stub = copy(worn) stub.length = 76 stub:sharpen()"#).unwrap_err();
+            assert!(e.contains("too short to hold") && e.contains("under 75 mm"), "{e}");
+            run(&mut s, r#"stub = fresh() stub.length = 75 assert(stub:sharpen() == 0)"#);
+        }
+    }
+
+    /// A new painting's rose madder stick is a rose, as madder lake powder is
+    /// (`DRY_LAKES_MARK`); an older engine-9 log's replays in the color it was painted
+    /// with (main's bits at 4bbbbec3). The log and a save keep the switch; below engine 9
+    /// the line changes nothing.
+    #[test]
+    fn a_new_paintings_madder_stick_is_a_rose() {
+        use crate::session::{DRY_LAKES_MARK, box_for};
+        assert!(box_for(None).unwrap().dry_lakes);
+        let madder = |b: paint::Palette| {
+            let i = b.tubes.iter().position(|t| t.name == "rose madder").unwrap();
+            b.dry_color(&[(i, 1.0)])
+        };
+        let engine8 = "--@ box impressionist\n--@ engine 8\n--@ paper\n";
+        assert_eq!(madder(box_for(Some(&format!("{engine8}{DRY_LAKES_MARK}\n"))).unwrap()), madder(box_for(Some(engine8)).unwrap()));
+        for enabled in [false, true] {
+            let head = format!("--@ box impressionist\n--@ engine 9\n--@ paper\n{}", if enabled { format!("{DRY_LAKES_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.dry_lakes, enabled);
+            let mut s = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            let out = run(&mut s, r#"p = pastel(pile{{"rose madder", 1}}) print(p.r, p.g, p.b)"#);
+            let c: Vec<f32> = out.split_whitespace().map(|v| v.parse::<f64>().unwrap() as f32).collect();
+            if enabled {
+                let srgb: Vec<f32> = c.iter().map(|&v| paint::color::linear_to_srgb(v) * 255.0).collect();
+                assert!(srgb[0] - srgb[1] > 40.0 && srgb[1] < 160.0, "a rose, not a near-white: {srgb:?}");
+            } else {
+                assert_eq!(c.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), [0x3f640755, 0x3f3442f8, 0x3f3dc997], "{out}");
+            }
+            let program = s.program("lakes");
+            assert_eq!(program.lines().any(|l| l == DRY_LAKES_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().dry_lakes, enabled);
+            let path = std::env::temp_dir().join(format!("easel-dry-lakes-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.dry_lakes, enabled);
+        }
+    }
+
+    /// A gritted ground comes with the switch in the log's head: a new painting's sheet takes
+    /// `grit=` (a sanded paper whose tooth holds more pastel) and its log says so, replays and
+    /// saves the same sheet; an older log's paper refuses `grit=` as an unknown key, as it did,
+    /// and replays without it.
+    #[test]
+    fn a_gritted_ground_comes_with_its_switch() {
+        use crate::session::{GRIT_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n";
+        let mut old = Session::with_box(64, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        let e = old.run("canvas{size=64, aspect=1, seed=4, paper={grit={size=46}}}").unwrap_err();
+        assert!(e.contains("unknown option \"grit\""), "{e}");
+        assert!(!old.program("old").lines().any(|l| l == GRIT_MARK));
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        for bad in ["{size=5}", "{cover=0.1}", "{binder='wax'}", "{grade=400}", "3"] {
+            assert!(s.run(&format!("canvas{{size=64, aspect=1, seed=4, paper={{grit={bad}}}}}")).is_err(), "{bad}");
+        }
+        run(&mut s, r#"canvas{size=64, aspect=1, seed=4, paper={grit={size=46, cover=0.5, binder="glue"}}}"#);
+        let grit = s.canvas().unwrap().paper().unwrap().grit.unwrap();
+        assert_eq!((grit.size_um, grit.cover, grit.binder), (46.0, 0.5, paint::paper::Binder::Glue));
+        assert!(run(&mut s, "print(feel(500, 500))").starts_with("sanded paper"));
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"}) for i = 1, 3 do p:stroke({{100, 500}, {900, 500}}, {force=1, alt=55}) end"#);
+        let program = s.program("grit");
+        assert!(program.lines().any(|l| l == GRIT_MARK));
+        assert!(box_for(Some(&program)).unwrap().grit);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{GRIT_MARK}\n"))).unwrap().grit, "only the head says");
+        assert!(box_for(Some(&format!("--@ engine 4\n{GRIT_MARK}\n"))).unwrap_err().contains(GRIT_MARK));
+        let bytes = |s: &Session| {
+            let mut b = Vec::new();
+            s.canvas().unwrap().write_state(&mut b, "").unwrap();
+            b
+        };
+        let mut replay = Session::replay_with(64, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) { run(&mut replay, &chunk); }
+        assert!(bytes(&replay) == bytes(&s), "replays the same sheet and strokes");
+        let path = std::env::temp_dir().join(format!("easel-grit-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.grit);
+        assert!(bytes(&restored) == bytes(&s), "a save keeps the grit");
+    }
+
     #[test]
     fn erasing_a_sealed_drawing_keeps_its_guide() {
         let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();
@@ -1082,6 +1694,100 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         // the easel's own: not the painting's
         assert!(!on.globals().contains("pastel"));
         assert!(Session::new(W).unwrap().with_paper(true).unwrap().with_paper(false).is_err());
+    }
+
+    /// The charcoal switch: a new painting's log names it and has `charcoal`;
+    /// an older log (paper, no charcoal line) has no `charcoal` and its walk of
+    /// the globals is as it was; without paper the line brings nothing; a
+    /// replay and a save keep it.
+    #[test]
+    fn charcoal_comes_with_its_switch_in_the_log_s_head() {
+        use crate::session::{CHARCOAL_MARK, box_for};
+        let older = "--@ engine 9\n--@ drawing-optics\n--@ paper\n";
+        let mut old = Session::with_box(64, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        assert!(!old.st.borrow().tubes.charcoal);
+        run(&mut old, PAPER);
+        assert_eq!(run(&mut old, "print(type(charcoal))").trim(), "nil");
+        let (g_old, _) = names(&mut old);
+        assert!(!old.program("old").lines().any(|l| l == CHARCOAL_MARK));
+        let mut s = Session::with_box(64, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let (g_new, _) = names(&mut s);
+        assert!(g_old.iter().all(|n| g_new.contains(n)));
+        // (what the charcoal line adds to a new painting: other switches,
+        // such as the surfaces', bring their own verbs beside paper's)
+        let mut tubes = box_for(None).unwrap();
+        tubes.charcoal = false;
+        let mut without = Session::with_box(64, tubes).unwrap().with_paper(true).unwrap();
+        run(&mut without, PAPER);
+        let (g_without, _) = names(&mut without);
+        let added: Vec<&String> = g_new.iter().filter(|n| !g_without.contains(n)).collect();
+        assert_eq!(added, ["charcoal"]);
+        assert!(!s.globals().contains("charcoal"));
+        run(&mut s, r#"v = charcoal() k = charcoal{kind="compressed", diameter=8}
+            v:line({{100, 300}, {900, 300}}, {pressure=0.6})
+            k:stroke({{100, 600}, {900, 600}}, {force=2})
+            print(v) print(k)"#);
+        let out = run(&mut s, "print(tostring(v), v.lift, k.lift)");
+        assert!(out.starts_with("vine charcoal ("), "{out}");
+        assert!(run(&mut s, "print(k)").starts_with("compressed charcoal ("));
+        assert!(s.run(r#"charcoal{kind="conte"}"#).unwrap_err().contains("vine"));
+        assert!(s.run(r#"charcoal{grade="2B"}"#).is_err());
+        // a charcoal stick isn't sharpened here (refused as not modelled, not as a pastel)
+        assert!(s.run("v:sharpen()").unwrap_err().contains("charcoal stick"));
+        let program = s.program("charcoal");
+        assert!(program.lines().any(|l| l == CHARCOAL_MARK), "{program}");
+        assert!(box_for(Some(&program)).unwrap().charcoal);
+        // charcoal comes with paper's verbs: the line without paper brings none
+        let mut bare = Session::with_box(64, box_for(Some("--@ engine 9\n--@ charcoal\n")).unwrap()).unwrap();
+        assert!(bare.st.borrow().tubes.charcoal);
+        run(&mut bare, CANVAS);
+        assert_eq!(run(&mut bare, "print(type(charcoal), type(pastel))").trim(), "nil\tnil");
+        // a line after the first chunk isn't the head's
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{CHARCOAL_MARK}\n"))).unwrap().charcoal);
+        // replay and a save
+        let mut replay = Session::replay_with(64, box_for(Some(&program)).unwrap()).unwrap().with_paper(logged_paper(&program)).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+        let path = std::env::temp_dir().join(format!("easel-charcoal-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.charcoal);
+        assert!(restored.program("charcoal").lines().any(|l| l == CHARCOAL_MARK));
+        // (a save keeps the canvas, not the Lua heap: a fresh stick on both)
+        let more = "w = charcoal{kind=\"compressed\"} w:line({{100, 450}, {900, 450}}, {pressure=0.5}) smudge({{500, 250}, {500, 700}}) erase({{300, 280}, {300, 620}}) print(w.length, w.lift)";
+        let (a, b) = (run(&mut s, more), run(&mut restored, more));
+        assert_eq!(a, b);
+        assert_eq!(restored.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+    }
+
+    /// Through the easel: one eraser pass takes most of a vine line, less of
+    /// a compressed one; after `fix()` it takes neither.
+    #[test]
+    fn the_eraser_takes_vine_compressed_less_and_fixed_neither() {
+        let mut out = Vec::new();
+        for (kind, fixed) in [("vine", false), ("compressed", false), ("vine", true), ("compressed", true)] {
+            let mut s = Session::with_box(64, crate::session::box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, &format!(r#"c = charcoal("{kind}") c:stroke({{{{100, 500}}, {{900, 500}}}}, {{force=2}})"#));
+            if fixed {
+                run(&mut s, "fix()");
+            }
+            let dark = |s: &Session| s.canvas().unwrap().pixels().iter().map(|p| 1.0 - p[1]).sum::<f32>();
+            let blank = {
+                let mut b = Session::with_box(64, crate::session::box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+                run(&mut b, PAPER);
+                dark(&b)
+            };
+            let d0 = dark(&s) - blank;
+            run(&mut s, "erase(everywhere(), {strength=0.9})");
+            out.push(1.0 - (dark(&s) - blank) / d0);
+        }
+        assert!(out[0] > 0.3 && out[0] > 1.1 * out[1], "vine {}, compressed {}", out[0], out[1]);
+        assert!(out[2].abs() < 1e-4 && out[3].abs() < 1e-4, "fixed: {} {}", out[2], out[3]);
     }
 
     #[test]
@@ -1429,5 +2135,441 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             r.run(&chunk).unwrap();
         }
         assert!(state(&r) == state(&s), "the log replays bit for bit");
+    }
+
+    // ------------------------------------------------ hatching over an area (--@ pastel-area-strokes)
+
+    const AREA_W: usize = 320;
+    const AREA_PAPER: &str = r#"canvas{size=64, aspect=1.25, seed=3, paper={grammage=200, tone={{"lead white", 4}, {"raw umber", 0.3}}}}
+        p = pastel(pile{{"bone black", 1}}, {kind="soft"})"#;
+
+    /// A session of a new painting (the switch on) or, with `on` false, the same box with it off.
+    fn area_session(on: bool) -> Session {
+        area_session_of(on, AREA_PAPER)
+    }
+
+    fn area_session_of(on: bool, setup: &str) -> Session {
+        let mut tubes = crate::session::box_for(None).unwrap();
+        tubes.pastel_area_strokes = on;
+        let mut s = Session::with_box(AREA_W, tubes).unwrap().with_paper(true).unwrap();
+        run(&mut s, setup);
+        s
+    }
+
+    fn strokes() -> usize {
+        super::STICK_STROKES.with(|n| n.get())
+    }
+
+    /// Luminance at each pixel and the frame's width and height (px).
+    fn lum(s: &Session) -> (Vec<f32>, usize, usize) {
+        let c = s.canvas().unwrap();
+        let f = c.frame();
+        (c.pixels().iter().map(|p| 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2]).collect(), f.w, f.h)
+    }
+
+    /// How much a box's (in units) column means vary across x, and its row
+    /// means across y: strokes along x make the rows differ, along y the columns.
+    fn profiles(s: &Session, x0: f32, y0: f32, x1: f32, y1: f32) -> (f32, f32) {
+        let (l, w, _) = lum(s);
+        let k = w as f32 / 1000.0;
+        let (i0, i1, j0, j1) = ((x0 * k) as usize, (x1 * k) as usize, (y0 * k) as usize, (y1 * k) as usize);
+        let var = |v: Vec<f32>| {
+            let m = v.iter().sum::<f32>() / v.len() as f32;
+            v.iter().map(|x| (x - m).powi(2)).sum::<f32>() / v.len() as f32
+        };
+        let cols = var((i0..i1).map(|i| (j0..j1).map(|j| l[j * w + i]).sum::<f32>() / (j1 - j0) as f32).collect());
+        let rows = var((j0..j1).map(|j| (i0..i1).map(|i| l[j * w + i]).sum::<f32>() / (i1 - i0) as f32).collect());
+        (cols, rows)
+    }
+
+    /// A stick's hatching follows an angle function across the area: strokes
+    /// along x in its left half, along y in its right half.
+    #[test]
+    fn a_sticks_hatching_follows_an_angle_function() {
+        let mut s = area_session_of(true, &AREA_PAPER.replace("size=64", "size=200"));
+        run(&mut s, "p:hatch(rect(100, 100, 800, 600), {angle=function(x, y) if x < 500 then return 0 else return math.pi / 2 end end, spacing=50, pressure=0.6, seed=4})");
+        let (lc, lr) = profiles(&s, 150.0, 150.0, 450.0, 650.0);
+        let (rc, rr) = profiles(&s, 550.0, 150.0, 850.0, 650.0);
+        assert!(lr > 2.0 * lc, "left half (strokes along x): columns {lc}, rows {lr}");
+        assert!(rc > 2.0 * rr, "right half (strokes along y): columns {rc}, rows {rr}");
+        // a number goes too; anything else is refused
+        run(&mut s, "p:hatch(rect(100, 100, 300, 300), {angle=0.5, seed=4})");
+        let e = s.run("p:hatch(rect(100, 100, 300, 300), {angle='steep'})").unwrap_err();
+        assert!(e.contains("angle"), "{e}");
+        let e = s.run("p:hatch(rect(100, 100, 300, 300), {angle=function() return 'up' end})").unwrap_err();
+        assert!(e.contains("angle function returned string"), "{e}");
+    }
+
+    /// A zigzag mark is one stroke of the stick, back and forth over a band
+    /// as wide as its swing, where a plain mark covers a stroke's width.
+    #[test]
+    fn a_zigzag_mark_is_one_stroke_over_a_band() {
+        // a band 160 units (10 mm) high: one row of marks, one mark along it
+        let band = "rect(150, 320, 700, 160)";
+        let covered_rows = |s: &Session| {
+            let (l, w, h) = lum(s);
+            let (blank, _, _) = lum(&area_session(true));
+            (0..h).filter(|&j| (0..w).filter(|&i| blank[j * w + i] - l[j * w + i] > 0.05).count() > w / 20).count() as f32 * 1000.0 / w as f32
+        };
+        let mut z = area_session(true);
+        let before = strokes();
+        run(&mut z, &format!("p:hatch({band}, {{angle=0, length=800, zigzag={{amplitude=70, period=60, round=0.3}}, pressure=0.6, seed=2}})"));
+        assert_eq!(strokes() - before, 1, "one zigzag, one stroke");
+        let zig = covered_rows(&z);
+        let mut p = area_session(true);
+        let before = strokes();
+        run(&mut p, &format!("p:hatch({band}, {{angle=0, length=800, spacing=160, pressure=0.6, seed=2}})"));
+        assert_eq!(strokes() - before, 1, "one plain mark, one stroke");
+        let straight = covered_rows(&p);
+        assert!(zig > 110.0 && zig > 2.0 * straight, "zigzag band {zig} units high, a straight stroke's {straight}");
+        // its defaults: bands side by side over a bigger area, each a stroke
+        let before = strokes();
+        run(&mut z, "p:hatch(rect(100, 100, 800, 600), {zigzag=true, seed=3})");
+        let n = strokes() - before;
+        assert!(n > 2 && n < 200, "{n} zigzag strokes");
+        for bad in ["zigzag={amplitude=-1}", "zigzag={round=2}", "zigzag={wide=1}", "zigzag=3"] {
+            assert!(z.run(&format!("p:hatch({band}, {{{bad}}})")).is_err(), "{bad} accepted");
+        }
+    }
+
+    /// Jitter turns and stretches each mark from the seed: the same seed lays
+    /// the same strokes, another seed others, and without it the marks lie as before.
+    #[test]
+    fn area_jitter_is_deterministic_per_seed() {
+        let hatch = |opts: &str| {
+            let mut s = area_session(true);
+            run(&mut s, &format!("p:hatch(rect(100, 100, 800, 600), {{spacing=50, {opts}}})"));
+            s.canvas().unwrap().pixels().to_vec()
+        };
+        let a = hatch("jitter={length=0.4, angle=0.3}, seed=5");
+        assert!(a == hatch("jitter={length=0.4, angle=0.3}, seed=5"), "same seed, same strokes");
+        assert!(a != hatch("jitter={length=0.4, angle=0.3}, seed=6"), "another seed, other strokes");
+        assert!(a != hatch("seed=5"), "jitter changed nothing");
+        assert!(hatch("jitter=true, seed=5") == hatch("jitter=true, seed=5"));
+        assert!(hatch("jitter=false, seed=5") == hatch("seed=5"));
+    }
+
+    /// `open=` leaves the paper bare in proportion: a share, or a mask's value.
+    #[test]
+    fn open_leaves_more_bare_paper() {
+        let (blank, w, h) = lum(&area_session(true));
+        let bare = |opts: &str| {
+            let mut s = area_session(true);
+            run(&mut s, &format!("p:hatch(rect(100, 100, 800, 600), {{spacing=40, pressure=0.7, seed=8{opts}}})"));
+            let (l, _, _) = lum(&s);
+            let k = w as f32 / 1000.0;
+            let (mut n, mut b) = (0, 0);
+            for j in (150.0 * k) as usize..(650.0 * k) as usize {
+                for i in (150.0 * k) as usize..(850.0 * k) as usize {
+                    n += 1;
+                    if blank[j * w + i] - l[j * w + i] < 0.01 {
+                        b += 1;
+                    }
+                }
+            }
+            assert!(h > 0);
+            b as f32 / n as f32
+        };
+        let closed = bare("");
+        let half = bare(", open=0.5");
+        let most = bare(", open=0.85");
+        assert!(half > closed + 0.15 && most > half + 0.1, "bare paper: {closed} {half} {most}");
+        // a mask: open on the left only
+        let left = bare(", open=rect(0, 0, 500, 800)");
+        assert!(left > closed + 0.2, "{closed} {left}");
+        assert_eq!(bare(", open=0"), closed);
+        for bad in ["open=2", "open='half'", "open=-0.1"] {
+            assert!(area_session(true).run(&format!("p:hatch(rect(100, 100, 300, 300), {{{bad}}})")).is_err(), "{bad} accepted");
+        }
+    }
+
+    /// Without the switch (an older log) a stick's hatching refuses what it
+    /// refused and lays what it laid (its path is the pencil's marks, as
+    /// before); with it, a plain hatching lays Cassatt's open strokes, and a
+    /// pencil's hatching is the pencil's still.
+    #[test]
+    fn without_the_switch_a_sticks_hatching_is_as_it_was() {
+        for (opts, says) in [
+            ("{zigzag=true}", "hatch: unknown option \"zigzag\""),
+            ("{jitter=true}", "hatch: unknown option \"jitter\""),
+            ("{open=0.5}", "hatch: unknown option \"open\""),
+            ("{speed=200}", "hatch: unknown option \"speed\""),
+            ("{angle=function(x, y) return 0 end}", "angle: want a number, got function"),
+        ] {
+            let e = area_session(false).run(&format!("p:hatch(rect(100, 100, 300, 300), {opts})")).unwrap_err();
+            assert!(e.contains(says), "{opts}: {e}");
+            run(&mut area_session(true), &format!("p:hatch(rect(100, 100, 300, 300), {opts})"));
+            let e = area_session(true).run(&format!("pencil():hatch(rect(100, 100, 300, 300), {opts})")).unwrap_err();
+            assert!(e.contains(says), "a pencil, {opts}: {e}");
+        }
+        // a pencil's hatching: the same with the switch as without
+        let pencil = "q = pencil() q:hatch(rect(100, 100, 800, 600), {angle=-0.7, spacing=30, pressure=0.6, graded=true, seed=4}) q:hatch(rect(300, 300, 200, 200))";
+        let mut off = area_session(false);
+        run(&mut off, pencil);
+        let mut on = area_session(true);
+        run(&mut on, pencil);
+        assert!(off.canvas().unwrap().pixels() == on.canvas().unwrap().pixels());
+        // a stick's: with the switch, 8 mm apart and 50 mm long (the pencil's
+        // 1.5 and 12 without), so about (8·50)/(1.5·12) = 22 times fewer strokes
+        // (over the pencil's, the same in both)
+        let plain = "p:hatch(rect(100, 100, 800, 600), {seed=4})";
+        let mmu = super::mm_per_unit(&on.canvas().unwrap());
+        let before = strokes();
+        run(&mut off, plain);
+        let n_off = strokes() - before;
+        let before = strokes();
+        run(&mut on, plain);
+        let n_on = strokes() - before;
+        assert!(off.canvas().unwrap().pixels() != on.canvas().unwrap().pixels());
+        // strokes over an area A, a spacing d apart, each up to L long: about
+        // A/(d·L), and half a stroke more per row for the rows' ends
+        let expect = |d: f32, l: f32| {
+            let (w, h) = (800.0 * mmu, 600.0 * mmu);
+            let across = w * 0.9f32.sin() + h * 0.9f32.cos();
+            w * h / (d * l) + 0.5 * across / d
+        };
+        let (e_off, e_on) = (expect((1.5f32).max(2.5 * mmu), 12.0), expect(8.0, 50.0));
+        assert!((0.7..1.4).contains(&(n_on as f32 / e_on)), "{n_on} strokes, about {e_on}");
+        assert!((0.7..1.4).contains(&(n_off as f32 / e_off)), "{n_off} strokes, about {e_off}");
+    }
+
+    /// A stroke takes longer the longer it is, but less than in proportion:
+    /// 12 mm at 80 mm/s (150 ms), 50 mm at 80·(50/12)^0.531 = 170.7 mm/s
+    /// (293 ms); a default zigzag's leg, √(10² + 4²) = 10.77 mm, at 75.5.
+    #[test]
+    fn a_strokes_speed_goes_with_its_length() {
+        assert!((super::stroke_speed(12.0) - 80.0).abs() < 0.01);
+        assert!((super::stroke_speed(50.0) - 170.69).abs() < 0.05, "{}", super::stroke_speed(50.0));
+        assert!((super::stroke_speed(10.770_33) - 75.54).abs() < 0.05);
+        // the wrist's reach: 189.3 mm turned 40°, 132.2 mm
+        let pv = super::hand_pivot(45.0, 2.0);
+        assert!((pv.wrist - 94.65).abs() < 1e-3 && (pv.reach - 66.08).abs() < 0.01 && (pv.elbow - 233.5).abs() < 1e-3);
+        assert!((pv.toward.0 - pv.toward.1).abs() < 1e-6 && pv.toward.0 > 0.7);
+    }
+
+    /// Over an area the stick is held at 50° and each stroke goes at its
+    /// length's speed; `alt=` and `speed=` still say otherwise.
+    #[test]
+    fn an_area_hatchings_hand_is_held_at_fifty_degrees() {
+        let hatch = |opts: &str| {
+            let mut s = area_session(true);
+            run(&mut s, &format!("p:hatch(rect(100, 100, 500, 400), {{seed=4{opts}}})"));
+            s.canvas().unwrap().pixels().to_vec()
+        };
+        let plain = hatch("");
+        assert!(plain == hatch(", alt=50, azimuth=45"));
+        assert!(plain != hatch(", alt=60"));
+        assert!(plain != hatch(", speed=80"));
+    }
+
+    /// The switch is a new painting's and comes from a log's head: a log
+    /// without it replays without it, and a save keeps it.
+    #[test]
+    fn the_area_strokes_switch_comes_from_the_log_head() {
+        use crate::session::{PASTEL_AREA_STROKES_MARK, box_for};
+        assert!(box_for(None).unwrap().pastel_area_strokes);
+        let older = "--@ engine 9\n--@ paper\n--@ calls-agree\n";
+        assert!(!box_for(Some(older)).unwrap().pastel_area_strokes);
+        // only in the head: a chunk's line is a chunk's
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_AREA_STROKES_MARK}\n"))).unwrap().pastel_area_strokes);
+        for enabled in [false, true] {
+            let mut s = Session::with_box(64, box_for(if enabled { None } else { Some(older) }).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, AREA_PAPER);
+            let zig = s.run("p:hatch(rect(100, 100, 300, 300), {zigzag=true, seed=1})");
+            assert_eq!(zig.is_ok(), enabled, "{zig:?}");
+            let program = s.program("area");
+            assert_eq!(program.lines().any(|l| l == PASTEL_AREA_STROKES_MARK), enabled);
+            let tubes = box_for(Some(&program)).unwrap();
+            assert_eq!(tubes.pastel_area_strokes, enabled);
+            let mut replay = Session::replay_with(64, tubes).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&program) {
+                run(&mut replay, &chunk);
+            }
+            assert!(replay.canvas().unwrap().pixels() == s.canvas().unwrap().pixels(), "the log replays bit for bit");
+            let path = std::env::temp_dir().join(format!("easel-area-strokes-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.pastel_area_strokes, enabled);
+        }
+    }
+
+    /// The wet pastel switch: a new painting's log has it and its sticks
+    /// dip (`p:wet`) and its brushes carry water (`b:dip`, `b:wash`); a log
+    /// without it has none of them. A wet stroke is wet and dark, dries on
+    /// the clock, and the painting replays and saves with its water.
+    #[test]
+    fn wet_pastel_comes_with_its_log_head_line() {
+        use crate::session::{WET_PASTEL_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n";
+        assert!(!box_for(Some(older)).unwrap().wet_pastel);
+        assert!(box_for(Some(&format!("{older}{WET_PASTEL_MARK}\n"))).unwrap().wet_pastel);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{WET_PASTEL_MARK}\n"))).unwrap().wet_pastel, "only in the head");
+        // (without the drawing's optics the switch does nothing)
+        let no_optics = Session::with_box(W, box_for(Some(&format!("--@ engine 9\n--@ paper\n{WET_PASTEL_MARK}\n"))).unwrap()).unwrap().with_paper(true).unwrap();
+        let mut no_optics = no_optics;
+        run(&mut no_optics, PAPER);
+        assert!(!no_optics.canvas().unwrap().wet_pastel());
+        assert_eq!(run(&mut no_optics, r#"p = pastel(pile{{"vermilion", 1}}) b = brush("round", 12) print(p.wet, b.dip)"#).trim(), "nil\tnil");
+        let old = {
+            let mut s = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}) b = brush("round", 12) print(p.wet, b.dip, b.wash)"#)
+        };
+        assert_eq!(old.trim(), "nil\tnil\tnil", "an older log's stick and brush are as they were");
+        // a sheet's sizing against water (cobb=) only with the switch
+        let sized = r#"canvas{size=64, aspect=1.25, seed=3, paper={grammage=200, cobb=40}}"#;
+        let mut older_paper = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        assert!(older_paper.run(sized).unwrap_err().contains("cobb"));
+        let mut new_paper = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut new_paper, sized);
+        assert_eq!(new_paper.canvas().unwrap().paper().unwrap().cobb60, Some(40.0));
+        let mut unsized_paper = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut unsized_paper, r#"canvas{size=64, aspect=1.25, seed=3, paper={cobb=false}}"#);
+        assert_eq!(unsized_paper.canvas().unwrap().paper().unwrap().cobb60, None);
+        assert!(unsized_paper.run(r#"canvas{size=64, paper={cobb=1}}"#).is_err());
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let src = r#"p = pastel(pile{{"vermilion", 1}, {"lead white", 1}})
+            print(p:wet(1))
+            p:stroke({{100, 400}, {900, 400}}, {force=2})"#;
+        let out = run(&mut s, src);
+        assert_eq!(out.lines().next().and_then(|l| l.parse::<f32>().ok()), Some(1.0), "{out}");
+        // (where the stick touched: about the line, as its pose puts it)
+        let at = (300..500).map(|y| (500.0, y as f32)).find(|&(x, y)| s.canvas().unwrap().pastel_water_at(x, y) > 0.0).expect("the stroke is wet");
+        assert!(run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains(", wet"));
+        assert!(s.run("p:wet(2)").unwrap_err().contains("share"));
+        let out = run(&mut s, r#"b = brush("round", 20)
+            print(b:dip(0.8))
+            print(b:wash({{200, 300}, {800, 500}}, {pressure=0.6}))
+            print(b:dip(1, {pastel=p, amount=0.5}))
+            print(b:wash({{150, 650}, {850, 650}}))
+            print(p.length < 65)"#);
+        assert!(out.trim_end().ends_with("true"), "{out}");
+        assert!(s.run("b:wash({{1, 1}})").is_err());
+        assert!(s.run(r#"c = brush("round", 12) c:wash({{100, 100}, {200, 100}})"#).unwrap_err().contains("dip it"));
+        assert!(s.run(r#"c = brush("round", 12) c:load(pile{{"lead white", 1}}, 0.5) c:dip(1)"#).unwrap_err().contains("oil paint"));
+        let wet_px = s.canvas().unwrap().pixels().to_vec();
+        let program = s.program("wet");
+        assert!(program.lines().any(|l| l == WET_PASTEL_MARK), "{program}");
+        // the log replays bit for bit
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), &wet_px[..]);
+        // a save keeps the switch and the water
+        let path = std::env::temp_dir().join(format!("easel-wet-pastel-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.wet_pastel);
+        assert!(restored.program("wet").lines().any(|l| l == WET_PASTEL_MARK));
+        // it dries on the clock, the same in each, and lighter than wet
+        for session in [&mut s, &mut replay, &mut restored] {
+            run(session, "wait(60)");
+        }
+        assert_eq!(s.canvas().unwrap().pixels(), replay.canvas().unwrap().pixels());
+        assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
+        assert!(!run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains(", wet"));
+        assert!(run(&mut s, &format!("print(feel({}, {}))", at.0, at.1)).contains("pastel"));
+        let lum = |p: &[[f32; 3]]| p.iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
+        assert!(lum(s.canvas().unwrap().pixels()) > lum(&wet_px), "lighter once dry");
+    }
+
+    /// The pastel K–M switch: a new painting's log has it, its sticks carry
+    /// their particles' scattering (`s`) and charcoal its own, a far
+    /// smaller one; a log without the line has none, and mixes as it was
+    /// painted, and the same marks mix otherwise with it. The log replays bit for
+    /// bit, and a save keeps the switch and the cells' scattering, so a
+    /// restored painting mixes on as the live one does.
+    #[test]
+    fn pastel_km_mix_comes_with_its_log_head_line() {
+        use crate::session::{PASTEL_KM_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n--@ charcoal\n";
+        assert!(!box_for(Some(older)).unwrap().pastel_km_mix);
+        assert!(box_for(Some(&format!("{older}{PASTEL_KM_MARK}\n"))).unwrap().pastel_km_mix);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_KM_MARK}\n"))).unwrap().pastel_km_mix, "only in the head");
+        assert!(box_for(None).unwrap().pastel_km_mix, "a new painting has it");
+        let src = r#"y = pastel(pile{{"chrome yellow", 1}, {"lead white", 1}})
+            c = charcoal()
+            print(y.s, c.s)
+            c:stroke({{150, 400}, {850, 400}}, {force=1})
+            y:stroke({{150, 400}, {850, 400}}, {force=2})
+            smudge({{150, 400}, {850, 400}}, {force=1.5})"#;
+        let mut old = Session::with_box(W, box_for(Some(older)).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut old, PAPER);
+        assert_eq!(run(&mut old, src).lines().next().unwrap().trim(), "nil\tnil", "an older log's sticks are as they were");
+        assert!(!old.canvas().unwrap().pastel_km_mix());
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        let out = run(&mut s, src);
+        let ss: Vec<f32> = out.lines().next().unwrap().split('\t').map(|v| v.trim().parse().unwrap()).collect();
+        // (a tint's particles scatter a few tenths per µm of stick; charcoal's
+        // facets a hundredth: paint's dry.rs and charcoal.rs)
+        assert!(ss[0] > 0.05 && ss[0] < 0.5 && ss[1] > 0.001 && ss[1] < 0.01, "{out}");
+        assert!(s.canvas().unwrap().pastel_km_mix());
+        // (the same marks mix otherwise: paint's graphite.rs tests say how)
+        assert_ne!(s.canvas().unwrap().pixels(), old.canvas().unwrap().pixels());
+        let px = s.canvas().unwrap().pixels().to_vec();
+        let program = s.program("km");
+        assert!(program.lines().any(|l| l == PASTEL_KM_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().pixels(), &px[..]);
+        let path = std::env::temp_dir().join(format!("easel-pastel-km-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.pastel_km_mix);
+        assert!(restored.canvas().unwrap().pastel_km_mix());
+        let more = "smudge({{850, 420}, {150, 380}}, {force=1})";
+        for session in [&mut s, &mut restored] {
+            run(session, more);
+        }
+        assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
+    }
+
+    /// The pastel veil switch: a new painting's log has it and its pastel
+    /// is seen with no veil, darker than an older log's (whose pastel keeps
+    /// it) by the veil over the bed; it replays bit for bit and a save keeps
+    /// it.
+    #[test]
+    fn pastel_veil_comes_with_its_log_head_line() {
+        use crate::session::{PASTEL_VEIL_MARK, box_for};
+        let older = "--@ engine 9\n--@ paper\n--@ drawing-optics\n";
+        assert!(!box_for(Some(older)).unwrap().pastel_veil);
+        assert!(box_for(Some(&format!("{older}{PASTEL_VEIL_MARK}\n"))).unwrap().pastel_veil);
+        assert!(!box_for(Some(&format!("{older}--@ chunk 1\n{PASTEL_VEIL_MARK}\n"))).unwrap().pastel_veil, "only in the head");
+        assert!(box_for(None).unwrap().pastel_veil, "a new painting has it");
+        let src = r#"p = pastel(pile{{"bone black", 1}})
+            p:stroke({{150, 400}, {850, 400}}, {force=2})"#;
+        let seen = |log: Option<&str>| {
+            let mut s = Session::with_box(W, box_for(log).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, src);
+            s
+        };
+        let (old, mut s) = (seen(Some(older)), seen(None));
+        assert!(!old.canvas().unwrap().pastel_veil() && s.canvas().unwrap().pastel_veil());
+        let lum = |c: &paint::Canvas| c.seen().iter().map(|p| p[0] + p[1] + p[2]).sum::<f32>();
+        assert!(lum(&s.canvas().unwrap()) < lum(&old.canvas().unwrap()), "no veil: darker");
+        let program = s.program("veil");
+        assert!(program.lines().any(|l| l == PASTEL_VEIL_MARK), "{program}");
+        let mut replay = Session::replay_with(W, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&program) {
+            run(&mut replay, &chunk);
+        }
+        assert_eq!(replay.canvas().unwrap().seen(), s.canvas().unwrap().seen());
+        let path = std::env::temp_dir().join(format!("easel-pastel-veil-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.st.borrow().tubes.pastel_veil && restored.canvas().unwrap().pastel_veil());
+        assert_eq!(restored.canvas().unwrap().seen(), s.canvas().unwrap().seen());
+        run(&mut s, "fix()");
+        assert!(s.canvas().unwrap().pastel_veil());
     }
 }

@@ -295,6 +295,15 @@ pressure or `{start, end}`. A touch's `pressure` takes a number.
 `ramps` gives the press-down and lift-off fractions, `swell` pressure factors
 along the stroke, `orient` `"across"`, `"along"` or a fixed angle.
 
+A touch presses the tip down and lifts it; `drag` moves the hand while the
+hairs are down. It lays the film a stroke lays where it starts, about as
+much of the load as a stroke lays moving the length of the pressed patch,
+and a dragged touch also what a stroke of its drag lays. On wet paint it
+lifts some of the paint under it into the brush, as a stroke does. (A
+painting whose log's head has no `--@ touch-split` line keeps the touch it
+was painted with: a thin coat whatever the load, which on wet paint lays
+less than it lifts.)
+
 Brushes are blunt unless given a `point` (0 blunt, 1 a full point). A
 pointed round or rigger lays a hairline at light pressure and spreads to
 its belly when pressed, so its width follows the pressure and a stroke

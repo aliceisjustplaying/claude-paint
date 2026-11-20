@@ -270,6 +270,9 @@ pub struct Canvas {
     /// Engine 7: a brush's paint laid on wet paint stays on top of it
     /// (`bristle::BRUSH_SKIM_COATS`).
     pub(crate) brush_skim: bool,
+    /// Engine 7: a touch lays the film a stroke lays where it starts, split
+    /// from the same contact face (`bristle::touch_on`).
+    pub(crate) touch_split: bool,
     /// While a blender pass with `blend_feather` runs: how much of the paint
     /// a bristle carries each pixel takes (0..1, see `Canvas::receptive`).
     pub(crate) receptive: Option<Vec<f32>>,
@@ -343,6 +346,7 @@ impl Canvas {
             knife_skim: false,
             blend_feather: false,
             brush_skim: false,
+            touch_split: false,
             receptive: None,
             soak: None,
             drain: false,
@@ -362,6 +366,7 @@ impl Canvas {
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
         self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER);
+        self.touch_split &= crate::engine7::active(v);
         if v < crate::PIGMENT_MIXER {
             self.material = 0;
         }
@@ -491,6 +496,18 @@ impl Canvas {
 
     pub fn brush_skim(&self) -> bool {
         self.brush_skim
+    }
+
+    /// A touch (`Canvas::touch`, `stipple`) lays the film a stroke lays at
+    /// its start: what a hair would lay sliding one footprint length, plus
+    /// the hand's drag (`bristle::touch_on`). Engine 7 and later.
+    pub fn with_touch_split(mut self, enabled: bool) -> Self {
+        self.touch_split = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn touch_split(&self) -> bool {
+        self.touch_split
     }
 
     /// Physical width of the painting in mm (default 700).

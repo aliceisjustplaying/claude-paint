@@ -244,6 +244,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();
     tubes.brush_skim = canvas.brush_skim();
+    tubes.touch_split = canvas.touch_split();
     tubes.carried_paint = h.get("carried_paint") == Some(&"1");
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");

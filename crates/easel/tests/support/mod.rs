@@ -74,3 +74,17 @@ impl Drop for Closing {
         stop_server(&self.0);
     }
 }
+
+/// Takes the gestures-only line (`--@ gestures-only`) out of the head of the closed session
+/// `name`'s log under `root`, and out of its committed record, as a log painted before the
+/// switch has it: a test of masks, functions or fields goes on from an older head when the
+/// session is opened again. A session whose log has no such line is left as it is.
+pub fn drop_gestures_only(root: &std::path::Path, name: &str) {
+    let log = root.join("paintings/lua").join(format!("{name}.lua"));
+    let text = std::fs::read_to_string(&log).unwrap();
+    let older: String = text.split_inclusive('\n').filter(|l| l.trim_end() != "--@ gestures-only").collect();
+    assert!(older.len() < text.len(), "the log of {name} has no gestures-only line:\n{text}");
+    for p in [log, root.join("out/easel").join(name).join("committed.lua")] {
+        std::fs::write(p, &older).unwrap();
+    }
+}

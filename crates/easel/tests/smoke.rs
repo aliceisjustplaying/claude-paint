@@ -62,6 +62,11 @@ fn a_short_session_at_the_easel() {
     let _ = std::fs::remove_dir_all(root());
     std::fs::create_dir_all(root().join("notes")).unwrap();
     let _closing = Closing;
+    // (the passage is a `work` over a mask, refused in a new painting, session.rs
+    // GESTURES_ONLY_MARK: the session is a painting from before the switch)
+    ok(&["open", "sketch-smoke"]);
+    ok(&["-s", "sketch-smoke", "close"]);
+    support::drop_gestures_only(&root(), "sketch-smoke");
     ok(&["open", "sketch-smoke"]);
     let r = ok(&["-s", "sketch-smoke", "do", CANVAS]);
     assert!(r.contains("ok · chunk 1"), "{r}");

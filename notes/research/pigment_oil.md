@@ -25,9 +25,11 @@ estimate, with its basis.
   filter while the suspension above it stays at its starting concentration;
   uniform compaction comes only after [LR]. The ground's capillary suction
   (2γ/r, γ ≈ 0.033 N/m, pore radii 0.1–1 µm) is 0.7–6.6 × 10⁵ Pa, hundreds
-  to thousands of times a lead-oil paint's yield stress of 40–200 Pa
-  [DEV] **est.** So the paint above the cake keeps its oil, its gloss and
-  its flow until the cake reaches the surface.
+  to thousands of times a lead white oil paint's yield stress of 2–440 Pa
+  (stroke_film.md §1; the 40–200 Pa once given here from [DEV] were oil
+  media cooked with litharge, not paints) **est.** So the paint above the
+  cake keeps its oil, its gloss and its flow until the cake reaches the
+  surface.
 - **It is quick.** Draining a 50 µm film takes seconds by Washburn's law
   with linseed oil's γ/μ (0.75 m/s) [STR] **est.**; a film in bodied or
   gelled medium could take minutes to hours (front time t = ηΔh²/2kP with

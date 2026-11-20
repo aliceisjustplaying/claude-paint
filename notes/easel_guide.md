@@ -350,6 +350,226 @@ double-loaded brush spatters both colors), and lands in the wet layer like
 any paint. It returns how many droplets landed; `b:fullness()` shows what is
 left on the brush.
 
+## Gestures only
+
+A new painting's log has the line `--@ gestures-only` in its head. In such
+a painting a tool acts only where a hand moves it: along the points of a
+stroke, a gesture, a knife's lay or scrape, a pencil's or a stick's line, an
+eraser's or a rag's path, or at a touch, a blot or a spatter's point. No
+call that tells a tool where to act by a mask, a function or a field runs,
+and no call that makes one runs. Each of these stops its chunk with an error
+naming the call:
+
+| refused | what it is |
+|---|---|
+| `mask(fn)`, `everywhere()`, `rect`, `ellipse`, `poly`, `below`, `above`, `ribbon` | masks |
+| `o:mask()`, `o:below()`, `o:above()`, `o:band()` on an outline, and `body_of{}` | an outline's regions; a silhouette computed from a skeleton |
+| `drawing_guide()` | the drawn lines as a mask |
+| `noise{}`, `worley{}` | computed fields |
+| `body.ellipsoid`, `body.block`, `body.half_space`, `form{}`, `terrain{}`, `world{}` | solids and scenes whose light, shadow and depth come out as masks and fields |
+| `work`, `blend`, `stipple`, `lose`, `h:hatch(m)` | strokes planned over a mask, with their `function(x, y)` options |
+| `erase(m)`, `fix(m)`, `smudge(m)`, `lay_sheet(m)`, `r:wipe(m)` | the mask forms of these verbs; their path forms (and `fix()` over the whole surface) run |
+| `clip=` on `b:stroke`, `b:gesture`, `b:touch`, `b:spatter` and `o:paint` | a mark cut off at a mask's edge |
+| `canvas{style=, palette=}` | a styled canvas with its procedural trees, rocks and firs |
+| `o:inset(d)`, `o:offset(d)` on an outline | parallel curves computed from the drawn line |
+| `aerial(d, vis)` | a color shift computed from a distance |
+
+What runs: the points written in a chunk; `rand`, `randn`, `math.random`,
+`lerp`, `clamp`, `smoothstep` and `uneven`, which give numbers;
+`outline{}` with `o:paint`, `o:path`, `o:paths`, `o:strokes`, `o:at`,
+`o:length` and `o:corners`, which give points; the
+canvas and its ground or paper; piles, mixes and `palette{}`; loading and
+wiping tools; `wait`; `fix()`, `blow` and `tap`; the questions
+`drying`, `soaked` and `feel`; and the gesture verbs below.
+
+### Gesture verbs
+
+These come with the switch. A painting begun before it has none of them
+(no `tape`, `stencil` or `lift_tape`, and the forms below are refused).
+
+```lua
+tape({{x, y}, ...}, {width=24})          -- a strip of masking tape, mm wide, along the points
+stencil({{x, y}, ...})                   -- stencil film over the canvas, the shape through the points cut out
+taken, parted, torn, lifted = lift_tape()   -- every piece lifted, with the paint on it (see below)
+lay_sheet({{x, y}, ...}, {grammage=, tone=})   -- paper: a sheet cut to the shape through the points
+fix({{x, y}, ...}, {distance=300, cone=25, speed=300})   -- fixative sprayed from a can along the points
+fix({{x, y}}, {distance=300, cone=25, seconds=0.5})      -- a burst at one point
+b:blend({{x, y}, ...}, {pressure=, ramps=, orient=, shake=, swell=, speed=})   -- a clean-blender stroke
+b:stroke(pts, {speed=200})               -- the hand's speed, mm/s (1 to 2000); also on b:gesture and b:blend
+```
+
+- **Tape** (oil, not paper) is crepe-paper masking tape, 140 µm thick
+  (3M's 2090 is 0.137 mm), torn square at the ends of each span and pressed
+  down straight along it. It comes 1 to 100 mm wide; painter's rolls are 24
+  and 48 mm. It holds only on a touch-dry surface or bare ground: over paint
+  that is still wet or tacky it is refused. Where it lies, the surface the
+  brush, the knife and the rag meet is the tape's, raised by its thickness
+  (pieces laid over each other add up). Paint laid on it stays on it, a
+  tool picks paint up from it as from any surface, and paint pushed off it
+  lands beside it. `lift_tape()` takes every piece away with all the paint
+  on it, and leaves the picture under it as it was when the tape went down.
+- **A stencil** is a sheet of polyester stencil film, 190 µm thick (an
+  estimate), over the whole canvas with the closed shape through the points
+  cut out. Paint reaches the picture only through the hole. It lifts with
+  `lift_tape()`, like tape.
+- Tape and stencils stay down until `lift_tape()`: across chunks, through
+  `wait`, and in a save (a save from before this holds none). Paint on them
+  dries as paint anywhere does. The picture under them is held as it was
+  when they went down. While they are down, a pencil's lines, `erase` and
+  `fix()` over the whole surface are refused.
+- **Lifting across paint.** Where paint laid since spans a tape's edge, the
+  film parts there as its drying state gives (`drying(x, y)`):
+  - A wet (open) film is a liquid and parts at the edge.
+  - A set film (tacky or touch-dry) is a solid. Its modulus and work of
+    fracture grow from its gel point to touch-dry (33 MPa and 15 J/m² when
+    touch-dry). It is held to the surface beside the tape by its adhesion:
+    2 J/m² on dry paint or a sealed ground, 10 J/m² on a ground still
+    absorbent (both estimates). A crack starting at the tape's edge turns
+    into that surface when the adhesion is under 0.26 of the film's work of
+    fracture (He and Hutchinson). Otherwise it runs down through the film,
+    which tears at the edge. A film that turns is peeled with the tape as a
+    flap, its tears converging at sin θ = α√(2Bτ)/(2Γt) (B the film's
+    bending stiffness, τ the adhesion, Γ its work of fracture, t its
+    thickness, α the peel angle, taken as 90°). Where no such angle exists
+    the film tears at the edge. Where one does, the film lifts off beside
+    the tape over the peel's ridge, α√(B/2τ): about 0.1 mm for a film 20 µm
+    thick on dry paint. What lay beneath it, as it was when the tape went
+    down, shows there. A still-tacky film (weak) and a film on an absorbent
+    ground (keyed in) tear. Each edge point is judged from the film's
+    thickness there.
+  - `lift_tape()` returns the wet paint taken (mm³), the length of edge
+    where wet paint parted and where a set film broke (mm), and the area
+    beside the tape where a set film lifted off with it (mm²).
+- **A frisket** (`lay_sheet` with points, on paper) is the paper sheet of
+  [Drawing](#drawing-pencil-chalk-pastel-and-eraser) cut along the closed shape through the points: it covers
+  what lies inside the cut, and its edge is the cut, sharp to the pixel.
+- **Spray** (`fix` with points) is fixative from an aerosol can whose nozzle
+  moves along the points `distance` mm off the picture (50 to 1000; cans
+  say 300–400), throwing a full cone `cone` degrees across (5 to 90;
+  aerosol actuators 20–30), at `speed` mm/s (20 to 2000; about 300 is a
+  sweep). With one point it is a burst of `seconds` (0.05 to 10). The can
+  delivers 0.6 g/s, about 0.4 of it propellant that flashes off. The spray
+  lands as the cone's geometry gives: most under the nozzle, falling off to
+  nothing at distance × tan(cone/2) from it (67 mm at the defaults), so one
+  sweep lays a band about 13 cm wide, its middle about half a light coat.
+  Where it lands, its droplets (about 50 µm) spread into spots. The share of
+  the surface the spots reach binds that share of the loose drawing and
+  pastel, and the rest stays loose. The more spray lands, the more of the
+  bound pastel the resin wets and darkens: a light coat (20 g/m²) wets 0.15
+  of it, as `fix()` does over the whole surface. A paper sheet, tape or a
+  stencil keeps the spray off what it covers, and paint over a drawing
+  seals it. `fix` returns the solution laid on the canvas, g. Sources and
+  estimates: notes/research/masking_and_spray.md.
+- **A blender stroke** (`b:blend`) wipes the brush on the rag (nine tenths
+  of what it holds), then draws it through the wet paint along the points.
+  The hairs pick up wet paint and lay it down again further on, worked into
+  the wet film there rather than lying on top of it as a brushload does. It
+  lays no paint of its own. What a clean hair picks up sits on the part of
+  it lying on the canvas, so it goes down again within a few mm (that
+  length grows with the pressure), over dry paint as over wet: drawn across
+  a wet edge, the hairs carry each side into the other. The next wipe takes
+  what they still hold at the stroke's end; what the wipe leaves stays in
+  the tuft and doesn't go down where the next stroke starts. The hairs leave
+  the canvas as they slide, taking up no more where the hand lifts. The bed
+  rides on the paint and pushes aside only the paint thicker than the film
+  it leaves, which follows from the paint and the hand as a stroke's does
+  (below). A badger (`brush("badger", w)`) is soft and presses lightly: at
+  0.4 a 5 mm badger rides on about 140 µm of tube paint, so it furrows none
+  of a dense coat. A 5 mm hog filbert at 0.4 leaves about 50 µm and furrows
+  thicker paint. Any brush can be used.
+- **The film one stroke leaves** (every brush stroke in a new painting:
+  `b:stroke`, `b:gesture`, `b:blend`) follows from the paint and the hand.
+  No mode picks it. The bristle bed is a slider riding on the paint. Each
+  hair is a keratin cantilever (3.5 GPa; 90 µm across for soft hair, 250 µm
+  for hog, by the brush's stiffness) bent by the pressure; a round's hair
+  is as long as a maker's rounds are (a soft round's 5.2 mm + 3.6 times its
+  width, a hog round's 6.0 mm + 2.6 times, between the two by its
+  stiffness; a flat's and a filbert's about 1.4 widths). The tuft's force
+  over its footprint gives the bed's pressure p. The film that passes under
+  a bed of length L moving at U is h₀ = 0.4√(ηUL/p) (Reynolds's slider). A
+  yield stress τ adds to it, h₀² = 0.16L(ηU + τh₀)/p, so a paint with one
+  keeps a film about 0.16τL/p however slowly it is drawn. About 0.69 h₀
+  leaves the outlet onto the canvas. For a fluid paint the film is never
+  more than the meniscus behind each hair drags out (Landau–Levich,
+  1.34 R Ca^(2/3)) nor more than the hair's radius. A paste whose yield
+  stress beats the hairs' capillary pressure (τR/σ ≥ 1: tube lead white on
+  a hog brush) is not held to its hairs' meniscus, and lays the bed's film,
+  as thick as the brush can give. A stroke adds no more than that film to any
+  spot, and the hairs keep what it can't lay. With less paint on the brush
+  a stroke lays less. Paint the hairs push aside lands beside the bed, no
+  thicker than the film there, and the bed lays again what was pushed out
+  from under it: a stroke lies about as thick across its width, with at
+  most a slight bead at its edges.
+  - The paint's viscosity is its vehicle's, linseed oil at 0.048 Pa·s, or
+    oil and turpentine (0.0014 Pa·s) mixed by Arrhenius's log rule, raised
+    exponentially by the pigment's share to a measured paint's at the
+    tube's: lead white ground in oil at 42 vol%, 4 Pa·s at brushing with a
+    yield stress of 440 Pa. Its yield stress grows with the pigment's share
+    (Flatt and Bowen's YODEL). The pigment's share and packing limit come
+    from the pile: its tubes' oil, the `medium=` knifed in or `blot=` drawn
+    out, and `turps=`/`thinner=`. With `medium=0.6` paint is about
+    0.3 Pa·s with almost no yield stress; with `medium=0.25` about 1.3 Pa·s
+    and 70 Pa; blotted 0.3, about 8 Pa·s and several kPa.
+  - So, other things equal: pressing harder leaves a thinner film, and
+    drawing faster a thicker one (h ∝ √(U/p)). Paint with more medium
+    leaves a thinner film. Paint with a yield stress keeps a thicker film
+    drawn slowly. A wider, deeper tuft (a longer bed) leaves more. A hog
+    flat 7 mm wide with tube paint at 0.7 pressure and 200 mm/s leaves
+    about 30 µm, one 25 mm wide about 200 µm if it carries that much. A
+    6 mm filbert's stroke of tube lead white at pressure 0.5 lays about
+    60 µm and hides a set black to a contrast ratio of about 0.8; blotted
+    stiff, about 100 µm and 0.92. A sable with paint knifed with much
+    medium leaves more than a hog does, since it presses less.
+  - `speed=` is the hand's speed in mm/s. Without it the hand moves at the
+    pace the hand-time ledger gives: through a tunnel four mark-widths wide
+    by the steering law, at most 400 mm/s. It also sets the stroke's hand
+    time.
+  - The paint a loaded hair carries reaches into the ground's tooth only as
+    deep as that film (at a stroke's start, as deep as the stroke's
+    middle). Where the hairs touch only the weave's high points (light
+    pressure, little paint, a coarse weave), the film breaks.
+  - A stroke starts and ends with a press. The brush comes down loaded,
+    so at first the paint between the hairs and the canvas is the film a
+    touch would press out. As the bed moves the squeeze drives that paint
+    out toward the slider's film, over about three times the bed's depth
+    along the stroke (less for paint with a yield stress), whatever the
+    hand's speed. The spots the bed leaves behind take the film the gap
+    held as it left them. A stroke's first few bed lengths lie thicker or
+    thinner than the rest, as that press film is thicker or thinner than
+    the slider's film, and a long stroke lays the slider's film after them.
+    The spots still under the bed when the hand lifts split its paint as a
+    touch does, over all the canvas the bed covers as it lifts. The hairs
+    straighten as the hand lifts, so the tip draws on to the stroke's end. So a
+    short dab lays about what a touch there lays, and on wet paint its own
+    paint lies on top while the brush comes away clean. The hairs lift wet
+    paint only where the gap's film is thinner than the wet film under it.
+    A stroke shorter than a few hair widths is still pressed, held and
+    lifted as a touch is, whatever its `ramps`.
+  - A touch (`b:touch`) is a press, not a slide: no bed draws a film out
+    under it. The paint between each hair and the canvas splits as the
+    tip lifts, half to each side, over the wet paint already there. Where
+    the brush's paint is the thicker, the wet paint stays and the brush's
+    paint lies on it, half of the excess over the wet film; the brush comes
+    away clean. Where the wet film is the thicker, the brush lays none of
+    its own and lifts half the difference. On dry paint or bare ground a
+    touch lays as without the switch.
+  - A press, a touch or a stroke's lift, is one film of paint between the
+    hairs and the canvas, so it splits over the whole patch. The brush
+    presses it into the weave's hollows, levelled to the brush resting on
+    the high points, so it lies thicker in the hollows than on the high
+    points. Only a brush nearly run dry leaves the hollows bare.
+  - A stroke's paint fills the weave's hollows from the high points down,
+    as deep as the paint its hairs give per area of the stroke fills them.
+    A loaded brush covers the weave whatever its pressure or its paint's
+    stiffness; a brush holding little paint lays on the high points and
+    leaves the hollows bare.
+  - Sources and estimates: notes/research/stroke_film.md.
+- Hatching an area is the lines a pencil draws (`h:line`), one by one.
+
+A painting whose log's head has no `--@ gestures-only` line was begun
+before the switch and replays as it was painted, with all of the calls
+above. The sections below describe those calls as they run there.
+
 ## Covering an area
 
 ```lua
@@ -359,6 +579,8 @@ stipple(m, {pile=p, width=<units>, coverage=<layers>})
 work(m, {hand="glaze", pile=q})          -- a thin layer brushed on with a soft brush
 lose(m, {pile=p, where=0.5})
 ```
+
+(Refused in a new painting: see [Gestures only](#gestures-only).)
 
 `work` covers a mask with strokes of a real brush, planned the way a hand
 lays them. `hand` picks a starting handling, which the options below
@@ -455,6 +677,8 @@ strokes.
 `at=` and `view=` (see [Depth](#depth)).
 
 ## Masks and geometry
+
+(Refused in a new painting: see [Gestures only](#gestures-only).)
 
 Masks are maps of the whole canvas, and operations return new masks. Shapes
 and `mask(fn)` give coverage (0..1). `m:distance()` gives signed distance in
@@ -752,7 +976,8 @@ about 150 mm a second; a blot about a second; a refold 3 seconds; a dip
 ## Solids, light and space
 
 These are scaffolds for shapes you give them: they answer where light
-and shadow fall and what lies in front of what.
+and shadow fall and what lies in front of what. (Refused in a new
+painting: see [Gestures only](#gestures-only).)
 
 **Form.** Solids in canvas units, z toward you, lit by one light:
 
@@ -915,8 +1140,9 @@ each campaign, and compare before and after.
   far and the painting's clock. Once the chunk is in the log and the easel
   is still finishing its reply, `status` says that instead.
 - **Option types.** Each option takes the type shown in this guide.
-  Options documented as `function(x, y)` accept a Lua function; numeric
-  options take the computed number.
+  Options documented as `function(x, y)` accept a Lua function in a
+  painting begun before the gestures-only switch (see
+  [Gestures only](#gestures-only)); numeric options take the computed number.
 - **Globals persist, locals don't.** Each chunk is its own Lua chunk:
   `p = pile{...}` is there in later chunks, `local p = ...` is not.
 - **Randomness is deterministic.** `math.random`, `rand` and `randn` are

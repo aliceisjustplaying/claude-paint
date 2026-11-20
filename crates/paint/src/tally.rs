@@ -165,6 +165,14 @@ pub fn stroke_secs(len_mm: f64, w_mm: f64) -> f64 {
     aim + draw
 }
 
+/// How fast the hand draws a stroke of `tool` (mm/s) when nothing says:
+/// the steering law's speed through its tunnel (`stroke_secs`), at most
+/// `pace::V_MAX`.
+pub fn stroke_speed_mm_s(tool: &Tool, mm_per_unit: f32) -> f64 {
+    let tunnel = (pace::TUNNEL * mark_mm(tool, mm_per_unit)).max(pace::TUNNEL_MIN_MM);
+    (tunnel / pace::STEER_B).min(pace::V_MAX)
+}
+
 /// Hand time (s) of one touch of a tip: the same for a tip of any size (a
 /// spot about two tips across, three tips from the last: the index of
 /// difficulty doesn't depend on the size).
@@ -179,6 +187,17 @@ impl Tally {
         self.strokes += 1;
         self.length_mm += len;
         self.secs += stroke_secs(len, mark_mm(tool, mm_per_unit));
+    }
+
+    /// A stroke of `tool` along `pts` (units) drawn at `speed` mm/s: aimed
+    /// as `stroke` aims it, drawn in its length over that speed.
+    pub fn stroke_at(&mut self, tool: &Tool, pts: &[(f32, f32)], mm_per_unit: f32, speed: f32) {
+        let len = crate::path::length(pts) as f64 * mm_per_unit as f64;
+        let w = mark_mm(tool, mm_per_unit);
+        let hop = len.max(pace::HOP_MIN_W * w);
+        self.strokes += 1;
+        self.length_mm += len;
+        self.secs += pace::FITTS_A + pace::FITTS_B * (1.0 + hop / (2.0 * w)).log2() + len / speed.max(1e-3) as f64;
     }
 
     /// A touch of a tip.

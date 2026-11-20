@@ -66,7 +66,12 @@ fn palette_heap_and_smear_show_retained_thinner_without_changing_the_session() {
 fn wide_crops_and_named_mask_overlays_are_read_only_in_every_canvas_view() {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("look-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
-    let easel = Easel(root);
+    let easel = Easel(root.clone());
+    // (masks are refused in a new painting, session.rs GESTURES_ONLY_MARK: the overlays are
+    // looked at in a painting from before the switch)
+    easel.ok(&["open", "view-test"]);
+    easel.ok(&["close"]);
+    support::drop_gestures_only(&root, "view-test");
     easel.ok(&["open", "view-test"]);
     easel.ok(&["do", "canvas{size=300,aspect=5,linen=15,ground={{pile={{'lead white',1}},um=50,apply='knife'}}}; shape=rect(200,40,400,160); soft=rect(600,40,800,160):soften(10); p=pile{{'lead white',1}}"]);
     let log = easel.ok(&["log"]);

@@ -635,7 +635,7 @@ impl Canvas {
 
     /// The stage at pixel `i` of the buffer: open or setting where wet paint
     /// lies (by its cure), else tacky or dry (by the set film's).
-    fn stage_at_index(&self, i: usize) -> Stage {
+    pub(crate) fn stage_at_index(&self, i: usize) -> Stage {
         let p = self.wet.clock.px.get(i).copied().unwrap_or(Px::FRESH);
         if self.wet.vol[i] >= 1e-3 {
             if p.cure < 0.5 * GEL { Stage::Open } else { Stage::Setting }

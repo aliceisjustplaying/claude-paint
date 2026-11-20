@@ -113,7 +113,7 @@ pub(crate) fn pass(s: &mut Studio, original: &Mask, mask: &Mask, clip: Option<&M
 
 #[cfg(test)]
 mod tests {
-    use crate::session::{Session, box_for};
+    use crate::session::Session;
 
     const CANVAS: &str = r#"canvas{size=200,aspect=1.25,linen=15,seed=7,ground={{pile={{"lead white",1}},um=40,apply="knife"}}}
         p=pile{{"lead white",6},{"smalt",1},medium=0.2}"#;
@@ -153,7 +153,7 @@ mod tests {
         for width in [600, 1200, 2400] {
             let mut times = Vec::new();
             for _ in 0..3 {
-                let mut s = Session::with_box(width, box_for(None).unwrap()).unwrap();
+                let mut s = Session::with_box(width, crate::session::mask_box()).unwrap();
                 s.run(CANVAS).unwrap();
                 let t0 = std::time::Instant::now();
                 s.run(r#"m=mask(function(x,y) return drying(x,y)=="dry" and 1 or 0 end)"#).unwrap();
@@ -177,8 +177,8 @@ mod tests {
 
     #[test]
     fn drying_notices_only_change_feedback() {
-        let mut on = Session::with_box(100, box_for(None).unwrap()).unwrap();
-        let mut off = Session::with_box(100, box_for(None).unwrap()).unwrap();
+        let mut on = Session::with_box(100, crate::session::mask_box()).unwrap();
+        let mut off = Session::with_box(100, crate::session::mask_box()).unwrap();
         off.st.borrow_mut().drying_feedback.disabled = true;
         for s in [&mut on, &mut off] {
             s.run(CANVAS).unwrap();
@@ -204,8 +204,8 @@ mod tests {
 
     #[test]
     fn drying_feedback_respects_weights_masks_and_query_age() {
-        let mut on = Session::with_box(100, box_for(None).unwrap()).unwrap();
-        let mut off = Session::with_box(100, box_for(None).unwrap()).unwrap();
+        let mut on = Session::with_box(100, crate::session::mask_box()).unwrap();
+        let mut off = Session::with_box(100, crate::session::mask_box()).unwrap();
         off.st.borrow_mut().drying_feedback.disabled = true;
         for s in [&mut on, &mut off] {
             s.run(CANVAS).unwrap();
@@ -295,7 +295,7 @@ mod tests {
         let mut state = None;
         for pair in 1..=3 {
             for enabled in [true, false] {
-                let mut s = Session::with_box(2400, box_for(None).unwrap()).unwrap();
+                let mut s = Session::with_box(2400, crate::session::mask_box()).unwrap();
                 s.st.borrow_mut().drying_feedback.disabled = !enabled;
                 s.run(CANVAS).unwrap();
                 s.run(r#"m=rect(400,290,20,20)
@@ -326,8 +326,8 @@ mod tests {
 
     #[test]
     fn selection_notices_only_change_feedback() {
-        let mut on = Session::with_box(1000, box_for(None).unwrap()).unwrap();
-        let mut off = Session::with_box(1000, box_for(None).unwrap()).unwrap();
+        let mut on = Session::with_box(1000, crate::session::mask_box()).unwrap();
+        let mut off = Session::with_box(1000, crate::session::mask_box()).unwrap();
         off.st.borrow_mut().pass_feedback_disabled = true;
         for s in [&mut on, &mut off] {
             s.run(&CANVAS.replace("aspect=1.25", "aspect=4")).unwrap();
@@ -354,8 +354,8 @@ mod tests {
             assert_eq!(off.run(src).unwrap().out, "");
             same(&on, &off);
         }
-        on = Session::with_box(200, box_for(None).unwrap()).unwrap();
-        off = Session::with_box(200, box_for(None).unwrap()).unwrap();
+        on = Session::with_box(200, crate::session::mask_box()).unwrap();
+        off = Session::with_box(200, crate::session::mask_box()).unwrap();
         off.st.borrow_mut().pass_feedback_disabled = true;
         for s in [&mut on, &mut off] {
             s.run(CANVAS).unwrap();
@@ -372,8 +372,8 @@ mod tests {
             assert_eq!(off.run(src).unwrap().out, "");
             same(&on, &off);
         }
-        on = Session::with_box(200, box_for(None).unwrap()).unwrap();
-        off = Session::with_box(200, box_for(None).unwrap()).unwrap();
+        on = Session::with_box(200, crate::session::mask_box()).unwrap();
+        off = Session::with_box(200, crate::session::mask_box()).unwrap();
         off.st.borrow_mut().pass_feedback_disabled = true;
         for s in [&mut on, &mut off] {
             s.run(&CANVAS.replace("aspect=1.25", "aspect=1")).unwrap();
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn pile_shares_keep_the_given_parts_and_paint() {
-        let mut s = Session::with_box(32, box_for(None).unwrap()).unwrap();
+        let mut s = Session::with_box(32, crate::session::mask_box()).unwrap();
         s.run(CANVAS).unwrap();
         let before = s.st.borrow().clock;
         let out = s.run(r#"print(p); q=pile{{"lead white",0.6},{"smalt",0.1},medium=0.2}; print(q)
@@ -398,7 +398,7 @@ mod tests {
             print(p:add{{"smalt",5},medium=0.2}); print(p)"#).unwrap().out;
         assert_eq!(out, "pile(lead white 6 (86%), smalt 1 (14%); medium 0.2)\npile(lead white 0.6 (86%), smalt 0.1 (14%); medium 0.2)\npile(lead white 6 (50%), smalt 6 (50%); medium 0.2)\npile(lead white 6 (50%), smalt 6 (50%); medium 0.2)\n");
         assert!(s.st.borrow().clock > before);
-        let mut off = Session::with_box(32, box_for(None).unwrap()).unwrap();
+        let mut off = Session::with_box(32, crate::session::mask_box()).unwrap();
         off.run(CANVAS).unwrap();
         off.run(r#"q=pile{{"lead white",0.6},{"smalt",0.1},medium=0.2}; p:add{{"smalt",5},medium=0.2}"#).unwrap();
         same(&s, &off);

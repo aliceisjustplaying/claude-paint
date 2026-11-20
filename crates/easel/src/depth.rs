@@ -368,12 +368,12 @@ pub(crate) fn layer_args(w: &World, name: &Value, mask: &Value, depth: &Value) -
 // a new painting's view picks as a pass's behind= does (session.rs CALLS_AGREE_MARK)
 #[cfg(test)]
 mod tests {
-    use crate::session::{Session, box_for};
+    use crate::session::Session;
 
     #[test]
     fn view_queries_pick_as_passes_do() {
         for agree in [false, true] {
-            let mut tubes = box_for(None).unwrap();
+            let mut tubes = crate::session::mask_box();
             tubes.calls_agree = agree;
             let mut s = Session::with_box(64, tubes).unwrap();
             s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();

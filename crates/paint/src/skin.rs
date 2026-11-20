@@ -419,6 +419,25 @@ impl Film {
         }
     }
 
+    /// Take away the packets baked over pixel `i` since its top was `keep`
+    /// (`keep` must be in its column): what had set on tape lifted off it.
+    pub(crate) fn peel_to(&mut self, i: usize, keep: u32) {
+        let Some(&top) = self.top.get(i) else { return };
+        let mut at = top;
+        while at != keep && at != NONE {
+            let below = self.pool[at as usize].below;
+            self.free.push(at);
+            self.live -= 1;
+            at = below;
+        }
+        self.top[i] = keep;
+    }
+
+    /// Pixel `i`'s top packet (`NONE`: bare, or no film has baked yet).
+    pub(crate) fn top_of(&self, i: usize) -> u32 {
+        self.top.get(i).copied().unwrap_or(NONE)
+    }
+
     /// The packets of pixel `i`, top down.
     pub(crate) fn column(&self, i: usize) -> impl Iterator<Item = &Packet> {
         let mut at = self.top.get(i).copied().unwrap_or(NONE);

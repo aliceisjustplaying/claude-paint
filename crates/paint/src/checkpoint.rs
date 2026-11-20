@@ -122,6 +122,19 @@
 //! file instead of loading the picture without its mask. (The easel lifts
 //! a sheet within the chunk that laid it, so its chunk checkpoints never
 //! hold one.)
+//!
+//! A canvas with tape or a stencil on the picture (`crate::tape`) is
+//! version 23 (`PAINTC23`): the header, the version it would otherwise be
+//! (19 to 22, one u64), then the tape's section, then that version's bytes
+//! after its header. The tape's section: a `TAPE` mark and its own version
+//! (1, `TAPE_V`), the tape's thickness over each buffer pixel (a count, then
+//! one f32 each), and the picture kept under it and beside it (two lists,
+//! each a count, then per pixel its index and everything `tape::Under`
+//! holds: color, spectral backing if any, relief, film, gloss, absorbency,
+//! wet paint with its pigment, parts and layers, stroke ids, floor, cover,
+//! solvent and drying state if any, and its top skin packet). It is there
+//! exactly when tape lies on the picture; a file without it holds none, so
+//! an older save loads with no tape.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -165,6 +178,11 @@ const SOAK_V: u64 = 1;
 /// Marks the drain section ("DRAN"), and its version.
 const DRAIN_MARK: u64 = 0x4e415244;
 const DRAIN_V: u64 = 1;
+/// Any version from 19 to 22 with the tape's section (`crate::tape`).
+const MAGIC23: &[u8; 8] = b"PAINTC23";
+/// Marks the tape's section ("TAPE"), and its version.
+const TAPE_MARK: u64 = 0x45504154;
+const TAPE_V: u64 = 1;
 /// Marks the skin section ("SKIN"), and its version.
 const SKIN_MARK: u64 = 0x4e494b53;
 const SKIN_V: u64 = 1;
@@ -179,6 +197,9 @@ const RAG_LIFT: u64 = 1 << 39;
 const LIQUID_FILM_LEVELS: u64 = 1 << 40;
 const SEALED_DRAWING_GUIDE: u64 = 1 << 41;
 const DRAWING_OPTICS: u64 = 1 << 42;
+/// The stroke film (`Canvas::with_stroke_film`, `crate::stroke_film`).
+/// (43–57 and 59 are taken on other branches; 58 was left for this.)
+const STROKE_FILM: u64 = 1 << 58;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -379,6 +400,153 @@ fn write_sheet(w: &mut impl Write, s: &crate::sheet::Sheet) -> io::Result<()> {
     put_all(w, s.r.iter().flat_map(|c| *c))
 }
 
+fn put_latent(w: &mut impl Write, l: &crate::wet::Latent) -> io::Result<()> {
+    put_all(w, l.color.into_iter())?;
+    put_u64(w, l.parts.len() as u64)?;
+    for &(i, a) in &l.parts {
+        put_u64(w, i as u64)?;
+        put_f32(w, a)?;
+    }
+    put_u64(w, l.layers.len() as u64)?;
+    for layer in &l.layers {
+        put_f32(w, layer.share)?;
+        put_all(w, layer.hide.into_iter())?;
+        put_latent(w, &layer.lat)?;
+    }
+    Ok(())
+}
+
+fn get_latent(r: &mut impl Read, depth: u32) -> io::Result<crate::wet::Latent> {
+    let color = get_all(r, LAT)?;
+    let mut l = crate::wet::Latent::from_color(color.try_into().map_err(|_| bad("checkpoint tape latent is invalid"))?);
+    let parts = get_u64(r)?;
+    if parts > 1 << 16 {
+        return Err(bad("checkpoint tape parts are invalid"));
+    }
+    for _ in 0..parts {
+        let i = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint tape part is invalid"))?;
+        l.parts.push((i, get_f32(r)?));
+    }
+    let layers = get_u64(r)?;
+    if layers > 1 << 16 || (depth > 0 && layers > 0) {
+        return Err(bad("checkpoint tape layers are invalid"));
+    }
+    for _ in 0..layers {
+        let share = get_f32(r)?;
+        let hide: crate::wet::Prop = get_all(r, 10)?.try_into().map_err(|_| bad("checkpoint tape layer is invalid"))?;
+        let lat = get_latent(r, depth + 1)?;
+        l.layers.push(crate::wet::Layer { share, lat, hide });
+    }
+    Ok(l)
+}
+
+fn put_under(w: &mut impl Write, u: &crate::tape::Under) -> io::Result<()> {
+    put_u64(w, u.i as u64)?;
+    put_all(w, u.px.into_iter())?;
+    put_u64(w, u64::from(u.backing.is_some()))?;
+    if let Some(b) = &u.backing {
+        put_all(w, b.reflectance.into_iter().chain(b.residual).chain(b.color))?;
+    }
+    put_all(w, [u.height, u.film, u.gloss, u.absorb, u.vol].into_iter())?;
+    put_latent(w, &u.lat)?;
+    put_all(w, u.hide.into_iter())?;
+    put_u64(w, u.stroke as u64)?;
+    put_u64(w, u.touched as u64)?;
+    put_all(w, [u.floor, u.cover].into_iter())?;
+    put_u64(w, u64::from(u.solv.is_some()))?;
+    if let Some(s) = u.solv {
+        put_f32(w, s)?;
+    }
+    put_u64(w, u64::from(u.dry.is_some()))?;
+    if let Some(p) = u.dry {
+        put_all(w, [p.cure, p.lev, p.seen, p.sub, p.srate, p.th].into_iter())?;
+    }
+    put_u64(w, u.skin as u64)
+}
+
+fn flag(r: &mut impl Read) -> io::Result<bool> {
+    match get_u64(r)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(bad("checkpoint tape flag is invalid")),
+    }
+}
+
+fn get_under(r: &mut impl Read) -> io::Result<crate::tape::Under> {
+    let i = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint tape pixel is invalid"))?;
+    let v = get_all(r, 3)?;
+    let px = [v[0], v[1], v[2]];
+    let backing = if flag(r)? {
+        let v = get_all(r, crate::spectral::N + 6)?;
+        let mut b = crate::mixer::Backing::default();
+        b.reflectance.copy_from_slice(&v[..crate::spectral::N]);
+        b.residual.copy_from_slice(&v[crate::spectral::N..crate::spectral::N + 3]);
+        b.color.copy_from_slice(&v[crate::spectral::N + 3..]);
+        Some(b)
+    } else {
+        None
+    };
+    let f = get_all(r, 5)?;
+    let lat = get_latent(r, 0)?;
+    let hide: crate::wet::Prop = get_all(r, 10)?.try_into().map_err(|_| bad("checkpoint tape paint is invalid"))?;
+    let ids = (get_u64(r)?, get_u64(r)?);
+    let (stroke, touched) = (u32::try_from(ids.0).map_err(|_| bad("checkpoint tape stroke is invalid"))?, u32::try_from(ids.1).map_err(|_| bad("checkpoint tape stroke is invalid"))?);
+    let fc = get_all(r, 2)?;
+    let solv = if flag(r)? { Some(get_f32(r)?) } else { None };
+    let dry = if flag(r)? {
+        let p = get_all(r, 6)?;
+        Some(crate::drying::Px { cure: p[0], lev: p[1], seen: p[2], sub: p[3], srate: p[4], th: p[5] })
+    } else {
+        None
+    };
+    let skin = u32::try_from(get_u64(r)?).map_err(|_| bad("checkpoint tape skin is invalid"))?;
+    Ok(crate::tape::Under { i, px, backing, height: f[0], film: f[1], gloss: f[2], absorb: f[3], vol: f[4], lat, hide, stroke, touched, floor: fc[0], cover: fc[1], solv, dry, skin })
+}
+
+fn write_tape(w: &mut impl Write, t: &crate::tape::Tape) -> io::Result<()> {
+    put_u64(w, TAPE_MARK)?;
+    put_u64(w, TAPE_V)?;
+    put_u64(w, t.raised.len() as u64)?;
+    put_all(w, t.raised.iter().copied())?;
+    for list in [&t.under, &t.apron] {
+        put_u64(w, list.len() as u64)?;
+        for u in list.iter() {
+            put_under(w, u)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_tape(r: &mut impl Read) -> io::Result<crate::tape::Tape> {
+    if get_u64(r)? != TAPE_MARK {
+        return Err(bad("checkpoint tape section is invalid"));
+    }
+    match get_u64(r)? {
+        TAPE_V => {}
+        v => return Err(bad(&format!("checkpoint tape section is version {v}; this easel reads version {TAPE_V} only"))),
+    }
+    let n = get_u64(r)?;
+    if n > 1 << 30 {
+        return Err(bad("checkpoint tape is invalid"));
+    }
+    let raised = get_all(r, n as usize)?;
+    if !raised.iter().all(|x| x.is_finite() && *x >= 0.0) {
+        return Err(bad("checkpoint tape is invalid"));
+    }
+    let mut lists = [Vec::new(), Vec::new()];
+    for list in lists.iter_mut() {
+        let k = get_u64(r)?;
+        if k > n {
+            return Err(bad("checkpoint tape is invalid"));
+        }
+        for _ in 0..k {
+            list.push(get_under(r)?);
+        }
+    }
+    let [under, apron] = lists;
+    Ok(crate::tape::Tape { raised, under, apron })
+}
+
 /// The sheet's section after its mark.
 fn read_sheet_body(r: &mut impl Read, n: usize) -> io::Result<crate::sheet::Sheet> {
     match get_u64(r)? {
@@ -429,6 +597,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC20 => 20,
         m if m == MAGIC21 => 21,
         m if m == MAGIC22 => 22,
+        m if m == MAGIC23 => 23,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -485,9 +654,14 @@ impl Canvas {
             _ => 8,
         };
         let material = self.material >= 1;
-        w.write_all(if material { MAGIC22 } else if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
+        let inner = if material { 22 } else if backing { 21 } else if layers { 20 } else { 19 };
+        w.write_all(if self.tape.is_some() { MAGIC23 } else if material { MAGIC22 } else if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
+        if let Some(t) = &self.tape {
+            put_u64(w, inner)?;
+            write_tape(w, t)?;
+        }
         if material {
             put_u64(w, if backing { 21 } else if layers { 20 } else { 19 })?;
         }
@@ -577,7 +751,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.stroke_film { STROKE_FILM } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -658,6 +832,14 @@ impl Canvas {
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
+        let (version, tape) = if version == 23 {
+            match get_u64(r)? {
+                v @ 19..=22 => (v as u32, Some(read_tape(r)?)),
+                _ => return Err(bad("checkpoint tape base format is invalid")),
+            }
+        } else {
+            (version, None)
+        };
         let material = version == 22;
         let version = if material {
             match get_u64(r)? {
@@ -842,11 +1024,12 @@ impl Canvas {
             c.knife_skim = word & KNIFE_SKIM != 0;
             c.blend_feather = word & BLEND_FEATHER != 0;
             c.brush_skim = word & BRUSH_SKIM != 0;
+            c.stroke_film = word & STROKE_FILM != 0;
             c.liquid_film_levels = word & LIQUID_FILM_LEVELS != 0;
             c.sealed_drawing_guide = word & SEALED_DRAWING_GUIDE != 0;
             c.drawing_optics = word & DRAWING_OPTICS != 0;
-            match u32::try_from(word & !(DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
-                Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
+            match u32::try_from(word & !(DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM | STROKE_FILM)) {
+                Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!c.stroke_film || crate::engine7::active(v)) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
@@ -1070,6 +1253,15 @@ impl Canvas {
                 return Err(bad("checkpoint contains wet paint in an obsolete pigment representation; reopen it with the original engine build and export the painting, or replay its log with this build"));
             }
             c.wet.lat.fill(crate::wet::Latent::default());
+        }
+        if let Some(t) = tape {
+            let n = c.f.w * c.f.h;
+            // (a buffer allocated since a pixel was kept, the solvent or the
+            // drying state, puts it back as fresh: `Canvas::restore`)
+            if t.raised.len() != n || !t.under.iter().chain(&t.apron).all(|u| u.i < n) || t.under.iter().any(|u| t.raised[u.i] <= 0.0) {
+                return Err(bad("checkpoint tape does not fit its canvas"));
+            }
+            c.tape = Some(Box::new(t));
         }
         Ok((c, header))
     }

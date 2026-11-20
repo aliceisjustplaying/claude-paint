@@ -251,6 +251,13 @@ pub struct Canvas {
     pub(crate) liquid_film_levels: bool,
     pub(crate) sealed_drawing_guide: bool,
     pub(crate) drawing_optics: bool,
+    /// Pastel takes water (`with_wet_pastel`, `crate::wet_pastel`).
+    pub(crate) wet_pastel: bool,
+    /// Pastel in the tooth mixes by Kubelka–Munk (`with_pastel_km_mix`).
+    pub(crate) pastel_km: bool,
+    /// What a dry tool moves is laid again as readily lifted as it was
+    /// (`with_pastel_lift`, `crate::pastel::Carried`).
+    pub(crate) pastel_lift: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -280,6 +287,9 @@ pub struct Canvas {
     pub(crate) drain: bool,
     /// A sheet of paper laid over part of the picture (`sheet.rs`).
     pub(crate) sheet: Option<crate::sheet::Sheet>,
+    /// The oils switch (`with_oils`): paint carries its tubes' wax, which
+    /// dulls its gloss (`bake`).
+    pub(crate) oils: bool,
 }
 
 impl Canvas {
@@ -337,6 +347,9 @@ impl Canvas {
             liquid_film_levels: false,
             sealed_drawing_guide: false,
             drawing_optics: false,
+            wet_pastel: false,
+            pastel_km: false,
+            pastel_lift: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -347,6 +360,7 @@ impl Canvas {
             soak: None,
             drain: false,
             sheet: None,
+            oils: false,
         }
     }
 
@@ -388,6 +402,21 @@ impl Canvas {
     /// The drain switch (`with_drain`).
     pub fn drain(&self) -> bool {
         self.drain
+    }
+
+    /// Turn on the oils switch (an easel log's `--@ oils`, engine 5 and
+    /// later): the tubes come in their colormen's oils, with their wax
+    /// (`palette::grind_of`, read by the box: `Palette::oils`), so a pile
+    /// dries at its oils' and wax's rate; on the canvas a film's wax dulls
+    /// its gloss as it bakes (`palette::WAX_MATTE`). Without it a painting
+    /// is as it always was. A checkpoint keeps it (its oils section).
+    pub fn with_oils(mut self, on: bool) -> Self {
+        self.oils = on;
+        self
+    }
+    /// The oils switch (`with_oils`).
+    pub fn oils(&self) -> bool {
+        self.oils
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {
@@ -457,6 +486,49 @@ impl Canvas {
         self.drawing_optics
     }
 
+    /// Pastel takes water (`crate::wet_pastel`): a wet stick lays a wet
+    /// deposit, a wet brush moves loose pastel as a paste, and the water
+    /// dries on the painting's clock. It needs the drawing's separate
+    /// optics (`with_drawing_optics`); without them it stays off.
+    pub fn with_wet_pastel(mut self, enabled: bool) -> Self {
+        self.wet_pastel = enabled && self.drawing_optics;
+        self
+    }
+
+    pub fn wet_pastel(&self) -> bool {
+        self.wet_pastel
+    }
+
+    /// Pastel in the tooth mixes as particles do, by Kubelka–Munk, not by
+    /// averaging reflectances (`Cell::s`, `Cell::add_grains`): what a
+    /// finger, crumbs, a brush or a paste mixes intimately takes K/S
+    /// weighted by scattering × volume, and a stroke laid over loose pastel
+    /// lies over it as a layer (Kubelka's two-layer formula). Coverage
+    /// below 1 stays an area mix with the paper. It needs the drawing's
+    /// separate optics (`with_drawing_optics`); without them it stays off.
+    pub fn with_pastel_km_mix(mut self, enabled: bool) -> Self {
+        self.pastel_km = enabled && self.drawing_optics;
+        self
+    }
+
+    pub fn pastel_km_mix(&self) -> bool {
+        self.pastel_km
+    }
+
+    /// The pastel lift switch: pastel that a finger, a blade, a dry or wet
+    /// brush or a puff moves is laid again as readily lifted by the
+    /// eraser as the cells it came from (`crate::pastel::Carried`), as
+    /// charcoal always is: lift is the particles', not the gesture's.
+    /// Without it moved pastel is laid at `pastel::PASTEL_LIFT`.
+    pub fn with_pastel_lift(mut self, enabled: bool) -> Self {
+        self.pastel_lift = enabled;
+        self
+    }
+
+    pub fn pastel_lift(&self) -> bool {
+        self.pastel_lift
+    }
+
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {
         self.rag_lift = enabled && crate::engine7::active(self.engine);
         self
@@ -509,13 +581,19 @@ impl Canvas {
         self.linen = None;
         self.paper = Some(p);
         self.build_support();
-        // the pores take oil: the sheet's pore volume, in coats
-        let cap = p.absorbent.clamp(0.0, 1.0) * p.porosity * p.caliper_um() / crate::surface::COAT_UM;
+        // the pores take oil: the sheet's pore volume, in coats (on a gritted
+        // ground, the coat's, and the sheet's only through a glue binder)
+        let cap = p.oil_capacity(crate::surface::COAT_UM);
         self.absorb.iter_mut().for_each(|v| *v = cap);
         self.absorb_any = cap > 0.0;
         // bare paper is matte
         self.gloss.iter_mut().for_each(|v| *v = 0.05);
         self
+    }
+
+    /// The sheet of paper this canvas is, if it is one (its make and mount).
+    pub fn paper(&self) -> Option<&crate::paper::Paper> {
+        self.paper.as_ref()
     }
 
     /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the
@@ -538,9 +616,17 @@ impl Canvas {
 
     /// How stiffly the surface at pixel `i` gives under a point load, MPa
     /// per µm (a Winkler foundation: the sheet's z modulus over its
-    /// caliper). A canvas on its stretcher, or a board, is all but rigid.
-    pub(crate) fn give_mpa_per_um(&self, _i: usize) -> f32 {
-        match self.paper {
+    /// caliper; a sheet on a strainer drums between the bars,
+    /// `Paper::give_at`). A canvas on its stretcher, or a board, is all but
+    /// rigid.
+    pub(crate) fn give_mpa_per_um(&self, i: usize) -> f32 {
+        match &self.paper {
+            Some(p) if p.drum.is_some() => {
+                let f = &self.f;
+                let px = self.px_mm();
+                let (x, y) = ((i % f.w + f.x0) as f32 + 0.5, (i / f.w + f.y0) as f32 + 0.5);
+                p.give_at(x * px, y * px, f.full_w as f32 * px, f.full_h as f32 * px)
+            }
             Some(p) => p.z_mpa / p.caliper_um().max(10.0),
             None => 10.0,
         }
@@ -835,7 +921,11 @@ impl Canvas {
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
             for x in 0..w {
                 let i = (y + ky0) * bw + x + kx0;
-                let p = if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
+                let mut p = if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
+                // (bare charcoal has no veil: `unveiled`)
+                if let Some(u) = self.unveiled(i, SURFACE_REFLECTANCE * (1.0 - self.gloss[i].clamp(0.0, 1.0))).filter(|_| self.engine >= 4) {
+                    p = [0, 1, 2].map(|q| p[q] - u[q]);
+                }
                 let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
                     let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);

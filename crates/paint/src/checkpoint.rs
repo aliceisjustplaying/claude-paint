@@ -103,7 +103,19 @@
 //! and thickness, coarseness, porosity, flocs and their size, pressing,
 //! calendering, absorbency and z modulus, one f32 each), its seed, its felt
 //! and laid wires (each a 0/1 flag, then its numbers), and the pores' mean
-//! depth per buffer pixel (`Canvas::micro`). The section is there exactly
+//! depth per buffer pixel (`Canvas::micro`). A sheet with extras writes
+//! its section as version 2 (`PAPER_V2`): version 1's fields up to and
+//! including the laid wires, then a u64 flags word of the extras it has,
+//! then each extra's block in the order of its bit, then the pores as
+//! before. Bit 0 (`PAPER_EXTRA_GRIT`) is a gritted ground (size f32, cover
+//! f32, binder u64), which this build doesn't support and refuses. Bit 1
+//! (`PAPER_EXTRA_DRUM`) is a strainer's drum (`paper::Drum`): bar_mm and
+//! bay_mpa_per_um, then bend_mm and patch_mm (four f32), then the
+//! crossbars (a u64). A reader refuses any bit it doesn't know, and an
+//! extras word of 0 in version 2 (such a sheet is version 1). A sheet with
+//! no extras writes version 1, so a reader that doesn't know version 2
+//! refuses a drummed sheet instead of loading it as one on a firm bed. The
+//! section is there exactly
 //! when the canvas has paper, whatever its engine: a canvas without paper
 //! is written as before, and a reader that doesn't know version 13 refuses
 //! a sheet instead of loading it as linen. A sheet of paper is engine 4's
@@ -154,6 +166,18 @@ const MAGIC13: &[u8; 8] = b"PAINTC13";
 /// Marks the paper's section ("PAPR"), and its version.
 const PAPER_MARK: u64 = 0x52504150;
 const PAPER_V: u64 = 1;
+/// The paper's section of a sheet with extras: version 1's fields up to
+/// the laid wires, a u64 of `PAPER_EXTRA_*` bits, each set bit's block in
+/// bit order, then the pores.
+const PAPER_V2: u64 = 2;
+/// Extras bit 0: a gritted ground (size f32, cover f32, binder u64); not
+/// supported by this build, so refused.
+const PAPER_EXTRA_GRIT: u64 = 1;
+/// Extras bit 1: a strainer's drum (`paper::Drum`: bar_mm, bay_mpa_per_um,
+/// bend_mm and patch_mm, f32 each, then cross, a u64).
+const PAPER_EXTRA_DRUM: u64 = 2;
+/// The most crossbars a drum may have (`paper::MAX_CROSS`).
+const MAX_CROSS: u64 = crate::paper::MAX_CROSS as u64;
 /// Version 11, 12 or 13 followed by the sheet's section (`crate::sheet`).
 const MAGIC15: &[u8; 8] = b"PAINTC15";
 /// Marks the sheet's section ("SHET"), and its version.
@@ -179,6 +203,9 @@ const RAG_LIFT: u64 = 1 << 39;
 const LIQUID_FILM_LEVELS: u64 = 1 << 40;
 const SEALED_DRAWING_GUIDE: u64 = 1 << 41;
 const DRAWING_OPTICS: u64 = 1 << 42;
+/// A strainer's bar holds the sheet beside it up (`Canvas::with_strainer_edge`):
+/// a bit of the engine word, no section.
+const STRAINER_EDGE: u64 = 1 << 52;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -300,7 +327,9 @@ fn read_soak_body(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> 
 
 fn write_paper(w: &mut impl Write, p: &crate::paper::Paper, micro: &[f32]) -> io::Result<()> {
     put_u64(w, PAPER_MARK)?;
-    put_u64(w, PAPER_V)?;
+    // (a sheet with no extras is written as before: version 1)
+    let extras = if p.drum.is_some() { PAPER_EXTRA_DRUM } else { 0 };
+    put_u64(w, if extras != 0 { PAPER_V2 } else { PAPER_V })?;
     for v in [p.grammage, p.fiber_mm, p.fiber_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender, p.absorbent, p.z_mpa] {
         put_f32(w, v)?;
     }
@@ -322,6 +351,15 @@ fn write_paper(w: &mut impl Write, p: &crate::paper::Paper, micro: &[f32]) -> io
             put_f32(w, l.deficit)?;
         }
     }
+    if extras != 0 {
+        put_u64(w, extras)?;
+    }
+    if let Some(d) = p.drum {
+        for v in [d.bar_mm, d.bay_mpa_per_um, d.bend_mm, d.patch_mm] {
+            put_f32(w, v)?;
+        }
+        put_u64(w, d.cross as u64)?;
+    }
     put_all(w, micro.iter().copied())
 }
 
@@ -334,11 +372,12 @@ fn read_paper(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, V
 
 /// The paper's section after its mark.
 fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, Vec<f32>)> {
-    use crate::paper::{Felt, Laid, Paper};
-    match get_u64(r)? {
-        PAPER_V => {}
-        v => return Err(bad(&format!("checkpoint paper section is version {v}; this easel reads version {PAPER_V} only"))),
-    }
+    use crate::paper::{Drum, Felt, Laid, Paper};
+    let v2 = match get_u64(r)? {
+        PAPER_V => false,
+        PAPER_V2 => true,
+        v => return Err(bad(&format!("checkpoint paper section is version {v}; this easel reads versions {PAPER_V} and {PAPER_V2} only"))),
+    };
     let mut v = [0.0f32; 12];
     for x in v.iter_mut() {
         *x = get_f32(r)?;
@@ -354,6 +393,27 @@ fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Pap
         1 => Some(Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
         _ => return Err(bad("checkpoint paper laid flag is invalid")),
     };
+    let extras = if v2 { get_u64(r)? } else { 0 };
+    if v2 && extras == 0 {
+        return Err(bad("checkpoint paper section is version 2 with no extras (such a sheet is version 1)"));
+    }
+    if extras & PAPER_EXTRA_GRIT != 0 {
+        return Err(bad("checkpoint paper has a gritted ground (extras bit 0): grit not supported by this build"));
+    }
+    if extras & !(PAPER_EXTRA_GRIT | PAPER_EXTRA_DRUM) != 0 {
+        return Err(bad(&format!("checkpoint paper extras {extras:#x} has bits this easel doesn't know")));
+    }
+    let drum = if extras & PAPER_EXTRA_DRUM != 0 {
+        let v = [get_f32(r)?, get_f32(r)?, get_f32(r)?, get_f32(r)?];
+        let cross = get_u64(r)?;
+        // (bars, a positive give, bending length and patch; a few crossbars)
+        if !(v.iter().all(|x| x.is_finite()) && v[0] >= 0.0 && v[1..].iter().all(|&x| x > 0.0) && cross <= MAX_CROSS) {
+            return Err(bad("checkpoint paper drum is invalid"));
+        }
+        Some(Drum { bar_mm: v[0], bay_mpa_per_um: v[1], bend_mm: v[2], patch_mm: v[3], cross: cross as u32 })
+    } else {
+        None
+    };
     let micro = get_all(r, n)?;
     // (a corrupt file is an error here, not a panic or NaN pixels later)
     let felt_ok = felt.is_none_or(|f| f.cell_mm.is_finite() && f.depth_um.is_finite());
@@ -363,7 +423,7 @@ fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Pap
     }
     let p = Paper {
         grammage: v[0], fiber_mm: v[1], fiber_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
-        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, drum, seed,
     };
     Ok((p, micro))
 }
@@ -577,7 +637,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 } | if self.strainer_edge { STRAINER_EDGE } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -845,7 +905,8 @@ impl Canvas {
             c.liquid_film_levels = word & LIQUID_FILM_LEVELS != 0;
             c.sealed_drawing_guide = word & SEALED_DRAWING_GUIDE != 0;
             c.drawing_optics = word & DRAWING_OPTICS != 0;
-            match u32::try_from(word & !(DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            c.strainer_edge = word & STRAINER_EDGE != 0;
+            match u32::try_from(word & !(STRAINER_EDGE | DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
@@ -1345,6 +1406,78 @@ mod tests {
         match load(b) {
             Ok(_) => panic!("{what}: accepted"),
             Err(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{what}: {e}"),
+        }
+    }
+
+    /// A sheet on a strainer writes its paper section as version 2, with an
+    /// extras word of just the drum's bit and the drum's block before the
+    /// pores, and comes back bit for bit, giving as it gave; a sheet on
+    /// board or canvas (no extras) writes version 1, as every sheet did
+    /// before. Refused: an extras bit no build knows, an extras word of 0 in
+    /// version 2, a gritted ground (bit 0, which this build doesn't
+    /// have), a NaN in the drum, too many crossbars.
+    #[test]
+    fn a_sheet_on_a_strainer_keeps_its_drum() {
+        use crate::paper::{Mount, Paper};
+        let section_version = |b: &[u8]| {
+            let at = b.windows(8).rposition(|w| w == PAPER_MARK.to_le_bytes()).unwrap();
+            u64::from_le_bytes(b[at + 8..at + 16].try_into().unwrap())
+        };
+        let strainer = Mount::Strainer { bar_mm: 30.0, cross: 1 };
+        for (m, v) in [(Mount::Board, PAPER_V), (Mount::Canvas, PAPER_V), (Mount::named("strainer").unwrap(), PAPER_V2), (strainer, PAPER_V2)] {
+            let c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(400.0).with_paper(Paper::drawing(2).mounted(m));
+            // the bar's hold (a bit of the engine word) comes back with it
+            let held = c.clone().with_strainer_edge(true);
+            let back = load({
+                let mut b = Vec::new();
+                held.write_state(&mut b, "").unwrap();
+                b
+            })
+            .unwrap();
+            assert!(back.strainer_edge() && (0..held.f.w * held.f.h).all(|i| back.give_mpa_per_um(i).to_bits() == held.give_mpa_per_um(i).to_bits()), "{m:?}");
+            assert_eq!(m == Mount::Board || m == Mount::Canvas, (0..c.f.w * c.f.h).all(|i| held.give_mpa_per_um(i) == c.give_mpa_per_um(i)), "{m:?}");
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            assert_eq!(base_format(&b), 13);
+            assert_eq!(section_version(&b), v, "{m:?}");
+            let d = load(b.clone()).unwrap();
+            assert!(d.paper == c.paper && d.micro == c.micro, "{m:?}");
+            let n = c.f.w * c.f.h;
+            assert!((0..n).all(|i| d.give_mpa_per_um(i).to_bits() == c.give_mpa_per_um(i).to_bits()), "{m:?}");
+            let mut again = Vec::new();
+            d.write_state(&mut again, "").unwrap();
+            assert!(again == b, "{m:?}: rewritten as it was read");
+            if v != PAPER_V2 {
+                continue;
+            }
+            // the extras word, then the drum's block (four f32, a u64), then the pores
+            let drum_at = b.len() - 4 * n - 24;
+            let extras_at = drum_at - 8;
+            assert_eq!(u64::from_le_bytes(b[extras_at..drum_at].try_into().unwrap()), PAPER_EXTRA_DRUM);
+            let says = |extras: u64| {
+                let mut x = b.clone();
+                x[extras_at..drum_at].copy_from_slice(&extras.to_le_bytes());
+                match load(x) {
+                    Ok(_) => panic!("extras {extras:#x}: accepted"),
+                    Err(e) => {
+                        assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+                        e.to_string()
+                    }
+                }
+            };
+            assert!(says(PAPER_EXTRA_DRUM | 4).contains("bits this easel doesn't know"));
+            assert!(says(8).contains("bits this easel doesn't know"));
+            assert!(says(0).contains("version 2 with no extras"));
+            assert!(says(PAPER_EXTRA_GRIT | PAPER_EXTRA_DRUM).contains("grit not supported by this build"));
+            assert!(says(PAPER_EXTRA_GRIT).contains("grit not supported by this build"));
+            for (off, what) in [(0, "a NaN bar"), (4, "a NaN bay"), (8, "a NaN bending length"), (12, "a NaN patch")] {
+                let mut nan = b.clone();
+                nan[drum_at + off..drum_at + off + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+                rejected(nan, what);
+            }
+            let mut many = b.clone();
+            many[drum_at + 16..drum_at + 24].copy_from_slice(&(MAX_CROSS + 1).to_le_bytes());
+            rejected(many, "too many crossbars");
         }
     }
 

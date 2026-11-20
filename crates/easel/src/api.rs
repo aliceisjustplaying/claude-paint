@@ -902,6 +902,8 @@ impl UserData for PileU {
             let tubes = st.borrow().tubes.clone();
             let add = tube_parts(&tubes, &t, "p:add")?;
             check_set_out(&st, &add, "p:add")?;
+            // (with the oils switch the added paint comes in its tubes' own
+            // oils, the heap's paint keeps its own, part by part, `Heap::grind`)
             {
                 let s = &mut *st.borrow_mut();
                 s.board.add(p.heap, &add, medium, &s.tubes).map_err(mlua::Error::runtime)?;
@@ -922,7 +924,7 @@ impl UserData for PileU {
 }
 
 impl PileU {
-    fn current(&self) -> Self {
+    pub(crate) fn current(&self) -> Self {
         match &self.st {
             Some(st) => resolve(st, self.clone()),
             None => self.clone(),
@@ -940,7 +942,18 @@ impl PileU {
         if self.mix.solvent > 0.0 {
             tail += &format!(", turps {}", fmt_num(self.mix.solvent));
         }
-        if self.mix.oil_rate != 1.0 {
+        if self.mix.oils {
+            // (the oils switch: relative to the tubes' own oils, so name the
+            // oil it is in now)
+            if !self.mix.tubes_come {
+                // (its drying against its pigments' own: the oil's rate,
+                // where it is all in one oil)
+                let r = self.mix.rate() / self.mix.pigment_drying.max(1e-9);
+                let oils = [(1.0, "linseed"), (paint::palette::WALNUT_RATE, "walnut"), (paint::palette::POPPY_RATE, "poppy")];
+                let near = oils.iter().min_by(|a, b| (a.0 - r).abs().total_cmp(&(b.0 - r).abs())).unwrap();
+                tail += &format!(", in {} oil", near.1);
+            }
+        } else if self.mix.oil_rate != 1.0 {
             tail += if self.mix.oil_rate < 0.7 { ", in poppy oil" } else { ", in walnut oil" };
         }
         format!("pile({}; {tail})", parts.join(", "))
@@ -1090,11 +1103,9 @@ pub(crate) fn resolve(st: &S, p: PileU) -> PileU {
     if !h.changed {
         return p;
     }
-    let (fr, medium, solvent, oil_rate, thinner) = (h.fractions(), h.medium, h.solvent, h.oil_rate, h.thinner);
+    let (medium, thinner) = (h.medium, h.thinner);
     let parts = h.parts.iter().map(|&(i, v)| (s.tubes.tubes[i].name.to_string(), v * h.given_sum)).collect();
-    let mut mix = s.tubes.pile(fr);
-    mix.solvent = solvent;
-    mix.oil_rate = oil_rate;
+    let mix = h.mixture(&s.tubes);
     PileU { mix, medium, parts, thinner: p.thinner.map(|_| thinner), ..p }
 }
 
@@ -2086,7 +2097,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                         (c, sty, support)
                     }
                 };
-                c = c.with_drain(tubes.drain);
+                // (the drain and oils switches ride on the box,
+                // `session::DRAIN_MARK`, `OILS_MARK`)
+                c = c.with_drain(tubes.drain).with_oils(tubes.oils);
                 let h = c.height();
                 {
                     let mut s = st.borrow_mut();
@@ -2170,18 +2183,31 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             } else {
                 None
             };
-            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy"
-            let oil_rate = match t.get::<Option<String>>("oil")?.as_deref() {
-                None | Some("linseed") => 1.0,
-                Some("walnut") => 0.8,
-                Some("poppy") => 0.6,
+            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy".
+            // With the oils switch the tubes come in their box's own oils (`palette::grind_of`)
+            // and oil= grinds each pigment again in that oil, without wax (`Palette::reground`)
+            let oil = t.get::<Option<String>>("oil")?;
+            let tubes = st.borrow().tubes.clone();
+            let oils = tubes.oils;
+            let (oil_rate, ground) = match oil.as_deref() {
+                None => (1.0, None),
+                Some("linseed") => (1.0, Some(paint::palette::Oil::Linseed)),
+                Some("walnut") => (0.8, Some(paint::palette::Oil::Walnut)),
+                Some("poppy") => (0.6, Some(paint::palette::Oil::Poppy)),
                 Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
             };
-            let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = turps;
             mix.oil_rate = oil_rate;
+            if oils {
+                // (each part in the oil it is in, `Mixture::grind`)
+                mix.oil_rate = 1.0;
+                if let Some(o) = ground {
+                    mix = tubes.reground(&mix, o);
+                }
+            }
+            let oil_rate = mix.oil_rate;
             if st.borrow().canvas.is_none() {
                 return Err(no_canvas());
             }
@@ -2191,6 +2217,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts.clone(), given_sum, medium, turps, oil_rate, name, "pile")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner.unwrap_or(0.0);
+            st.borrow_mut().board.heap_mut(heap).unwrap().grind = mix.grind.clone();
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner, parts: given, heap, st: Some(st.clone()) })
@@ -2209,6 +2236,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let (mut wsum, mut medium, mut solvent, mut thinner, mut oil) = (0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
+            // (the oils switch: each heap's parts in the oils they are in)
+            let mut knifed = paint::palette::Knifed::default();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
                 let p = pile_of(&e.get::<Value>(1)?, "mix")?;
@@ -2229,6 +2258,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 solvent += p.mix.solvent * w;
                 thinner += p.thinner() * w;
                 oil += p.mix.oil_rate * w;
+                if p.mix.oils {
+                    knifed.pile(&p.mix, w);
+                }
                 wsum += w;
             }
             if wsum <= 0.0 {
@@ -2245,10 +2277,16 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = solvent;
             mix.oil_rate = oil;
+            // (the oils switch: each part keeps the oil it is in, by volume,
+            // `palette::Knifed`)
+            if tubes.oils {
+                mix = paint::palette::Mixture { solvent, ..tubes.pile_ground(parts.clone(), knifed.grind(&tubes, &parts)) };
+            }
             let name = t.get::<Option<String>>("name")?;
             let medium = mix.effective_medium(medium);
-            let heap = knife(&st, parts, wsum, medium, solvent, oil, name, "mix")?;
+            let heap = knife(&st, parts, wsum, medium, solvent, mix.oil_rate, name, "mix")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
+            st.borrow_mut().board.heap_mut(heap).unwrap().grind = mix.grind.clone();
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })
         })?)?;
@@ -2438,8 +2476,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 (v, _) => tool_of(&st1, v)?,
             };
             let seed = st1.borrow_mut().auto_seed();
-            let (engine, drain) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain);
-            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine).with_packing(drain)));
+            let (engine, packing) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain || st1.borrow().tubes.oils);
+            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine).with_packing(packing)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             crate::replay_checkpoint::hold_tools(&st1);
             let b = Brush { held, st: st1.clone() };
@@ -2465,7 +2503,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(2.0..=200.0).contains(&width) {
                 return err("knife{width=}: the blade's length in units, 2 to 200");
             }
-            let k = Rc::new(RefCell::new(paint::Knife::new(width).with_engine(st1.borrow().tubes.engine).with_packing(st1.borrow().tubes.drain)));
+            let k = Rc::new(RefCell::new(paint::Knife::new(width).with_engine(st1.borrow().tubes.engine).with_packing(st1.borrow().tubes.drain || st1.borrow().tubes.oils)));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             crate::replay_checkpoint::hold_tools(&st1);
             Ok(KnifeU { k, st: st1.clone() })

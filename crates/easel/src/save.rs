@@ -10,7 +10,7 @@
 //! on the palette), the `canvas{}` setup and the style's relief (`relief()`
 //! reads it; the rest of the style is the box's oil style, which no finishing
 //! verb reads); and the chunk and call counters. The header also names the
-//! box and engine (and the drain switch, if on) and holds the log's FNV-1a hash and chunk count, so a save
+//! box and engine (and the drain and oils switches, if on) and holds the log's FNV-1a hash and chunk count, so a save
 //! is used only with the log it was written from.
 //!
 //! The header is plain `key=value` lines and holds no time or path: a replay
@@ -86,6 +86,9 @@ fn header(s: &Session, program: &str) -> String {
     }
     if st.paper {
         kv("paper", "1".to_string());
+    }
+    if st.tubes.oils {
+        kv("oils", "1".to_string());
     }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
@@ -191,7 +194,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
 }
 
 pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Restored, String> {
-    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, PAPER_MARK};
+    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, OILS_MARK, PAPER_MARK};
     use std::rc::Rc;
     let mut r = std::io::BufReader::with_capacity(1 << 20, input);
     let (canvas, head) = paint::Canvas::read_state(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -231,6 +234,17 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     };
     if paper {
         logged.push_str(&format!("{PAPER_MARK}\n"));
+    }
+    let oils = match h.get("oils") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's oils={v:?} isn't 1")),
+    };
+    if oils != canvas.oils() {
+        return Err(format!("{}: the save's header and its canvas disagree on the oils switch", path.display()));
+    }
+    if oils {
+        logged.push_str(&format!("{OILS_MARK}\n"));
     }
     let mut tubes = crate::session::box_for(Some(&logged))?;
     tubes.quarter_tiles = canvas.quarter_tiles();

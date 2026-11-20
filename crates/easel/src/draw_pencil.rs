@@ -1014,6 +1014,118 @@ mod tests {
         }
     }
 
+    /// A new painting's earth sticks are as deep as their measured pigments
+    /// (`DRY_EARTHS_MARK`): a burnt sienna stick laid heavily on a tan sheet goes darker
+    /// than the sheet, where an older log's (and the stick before the switch) lays a salmon
+    /// paler than it. Where the stick has filled the tooth (the patch's darkest tenth) it
+    /// reads within ΔE76 3 of burnt sienna's film as LBNL measured it, dry (its K and S per
+    /// volume, its S raised into air: L*a*b* 43.1/33.2/41.2, dry_pigment_optics.md §10,
+    /// earth_lbnl_ks.py; paint's `dry_lbnl_earths_are_their_films_dry`); it reads 0.3 off.
+    /// The log and a save keep the
+    /// switch; below engine 9 the line changes nothing. (The sheet here is toned with
+    /// parts of tubes, so the switch deepens its yellow ochre too.)
+    #[test]
+    fn a_new_paintings_burnt_sienna_stick_lays_deep() {
+        use crate::session::{DRY_EARTHS_MARK, box_for};
+        assert!(box_for(None).unwrap().dry_earths);
+        let sienna = |b: paint::Palette| {
+            let i = b.tubes.iter().position(|t| t.name == "burnt sienna").unwrap();
+            b.dry_color(&[(i, 1.0)])
+        };
+        let engine8 = "--@ box every\n--@ engine 8\n--@ paper\n";
+        assert_eq!(sienna(box_for(Some(&format!("{engine8}{DRY_EARTHS_MARK}\n"))).unwrap()), sienna(box_for(Some(engine8)).unwrap()));
+        let lab = |c: paint::Rgb| {
+            let m = [[0.4124564f32, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]];
+            let white = [0.95047f32, 1.0, 1.08883];
+            let f = |i: usize| {
+                let t = (m[i][0] * c[0] + m[i][1] * c[1] + m[i][2] * c[2]) / white[i];
+                if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 }
+            };
+            [116.0 * f(1) - 16.0, 500.0 * (f(0) - f(1)), 200.0 * (f(1) - f(2))]
+        };
+        let film = [43.1f32, 33.2, 41.2];
+        for enabled in [false, true] {
+            let head = format!("--@ box every\n--@ engine 9\n--@ paper\n--@ drawing-optics\n{}", if enabled { format!("{DRY_EARTHS_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.dry_earths, enabled);
+            let mut s = Session::with_box(96, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, r#"canvas{size=64, aspect=1, seed=4, paper={tone={{"yellow ochre", 0.2}, {"bitumen", 1.0}, {"vine black", 0.23}}}}"#);
+            let sheet = s.canvas().unwrap().pixels()[0];
+            run(&mut s, r#"p = pastel(pile{{"burnt sienna", 1}}, {kind="soft"})
+for pass = 1, 3 do
+  for y = 300, 700, 25 do p:stroke({{280, y + 20 * (pass - 2)}, {720, y - 20 * (pass - 2)}}, {force=3.0, speed=60}) end
+  p:roll(37)
+end"#);
+            let c = s.canvas().unwrap();
+            let (w, px) = (c.window().w, c.pixels());
+            let mut patch: Vec<paint::Rgb> = (0..px.len()).filter(|i| {
+                let (x, y) = (i % w, i / w);
+                (w * 2 / 5..w * 3 / 5).contains(&x) && (w * 2 / 5..w * 3 / 5).contains(&y)
+            }).map(|i| px[i]).collect();
+            let lum = |c: &paint::Rgb| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+            patch.sort_by(|a, b| lum(a).total_cmp(&lum(b)));
+            let dense = &patch[..patch.len() / 10];
+            let mean: paint::Rgb = std::array::from_fn(|q| dense.iter().map(|c| c[q]).sum::<f32>() / dense.len() as f32);
+            let (got, bare) = (lab(mean), lab(sheet));
+            if enabled {
+                assert!(got[0] < bare[0] - 5.0, "burnt sienna laid {got:?} on the sheet {bare:?}");
+                let de = (0..3).map(|k| (got[k] - film[k]).powi(2)).sum::<f32>().sqrt();
+                assert!(de < 3.0, "burnt sienna laid {got:?} against its film dry {film:?}: dE {de}");
+            } else {
+                assert!(got[0] > bare[0], "an older log's burnt sienna lays paler than the sheet: {got:?} on {bare:?}");
+            }
+            let program = s.program("earths");
+            assert_eq!(program.lines().any(|l| l == DRY_EARTHS_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().dry_earths, enabled);
+            let path = std::env::temp_dir().join(format!("easel-dry-earths-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.dry_earths, enabled);
+        }
+    }
+
+    /// A new painting's earths are as deep in oil as their measured paints
+    /// (`OIL_EARTHS_MARK`): raw umber worked thickly over a lead white ground reads
+    /// near-black (its tube's own pile L* 19.5, LBNL's film of it seen without its gloss
+    /// 16.8: paint's `oil_lbnl_earths_are_their_films`), where an older log's lays a mid
+    /// brown (its pile L* 45). The log and a save keep the switch; below engine 9 the line
+    /// changes nothing.
+    #[test]
+    fn a_new_paintings_raw_umber_is_deep_in_oil() {
+        use crate::session::{OIL_EARTHS_MARK, box_for};
+        assert!(box_for(None).unwrap().oil_earths);
+        let umber = |b: paint::Palette| {
+            let i = b.tubes.iter().position(|t| t.name == "raw umber").unwrap();
+            b.pile(vec![(i, 1.0)]).color
+        };
+        let engine8 = "--@ box every\n--@ engine 8\n";
+        assert_eq!(umber(box_for(Some(&format!("{engine8}{OIL_EARTHS_MARK}\n"))).unwrap()), umber(box_for(Some(engine8)).unwrap()));
+        let mut lum = [0.0f32; 2];
+        for enabled in [false, true] {
+            let head = format!("--@ box every\n--@ engine 9\n{}", if enabled { format!("{OIL_EARTHS_MARK}\n") } else { String::new() });
+            let tubes = box_for(Some(&head)).unwrap();
+            assert_eq!(tubes.oil_earths, enabled);
+            let mut s = Session::with_box(96, tubes).unwrap();
+            run(&mut s, CANVAS);
+            run(&mut s, r#"work(rect(300, 250, 700, 500), {hand="broad", pile=pile{{"raw umber", 1}}, coverage=2, fill=true, seed=1})"#);
+            let c = s.canvas().unwrap();
+            let (f, seen) = (c.window(), c.seen());
+            let px: Vec<f32> = (0..f.w * f.h).filter(|i| (400.0..600.0).contains(&((i % f.w) as f32 / f.scale)) && (320.0..430.0).contains(&((i / f.w) as f32 / f.scale))).map(|i| 0.2126 * seen[i][0] + 0.7152 * seen[i][1] + 0.0722 * seen[i][2]).collect();
+            lum[enabled as usize] = px.iter().sum::<f32>() / px.len() as f32;
+            let program = s.program("umber");
+            assert_eq!(program.lines().any(|l| l == OIL_EARTHS_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().oil_earths, enabled);
+            let path = std::env::temp_dir().join(format!("easel-oil-earths-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.oil_earths, enabled);
+        }
+        let l = |y: f32| 116.0 * y.cbrt() - 16.0;
+        assert!(l(lum[1]) < 30.0 && l(lum[0]) > l(lum[1]) + 12.0, "raw umber in oil: an older log's L* {}, a new painting's {}", l(lum[0]), l(lum[1]));
+    }
+
     #[test]
     fn erasing_a_sealed_drawing_keeps_its_guide() {
         let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();

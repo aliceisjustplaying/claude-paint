@@ -49,6 +49,11 @@ pub const GLAZE_FILM_MARK: &str = "--@ glaze-film";
 pub const LIQUID_FILM_LEVELS_MARK: &str = "--@ liquid-film-levels";
 pub const SEALED_DRAWING_GUIDE_MARK: &str = "--@ sealed-drawing-guide";
 pub const DRAWING_OPTICS_MARK: &str = "--@ drawing-optics";
+/// A log's head line: its support's relief (the linen's weave, a paper's
+/// felt, a knifed ground's texture) is averaged over each pixel's footprint,
+/// so threads finer than a pixel don't alias into a checker
+/// (`paint::Canvas::with_relief_prefilter`). Every new painting has it.
+pub const RELIEF_PREFILTER_MARK: &str = "--@ relief-prefilter";
 /// Marks a painting whose full palette board refuses a new heap instead of scraping off the
 /// oldest (board.rs): every new painting. A log without it replays with the oldest scraped off.
 pub const FULL_PALETTE_MARK: &str = "--@ full-palette-refuses";
@@ -774,6 +779,9 @@ impl Session {
         }
         if self.st.borrow().tubes.calls_agree {
             let _ = writeln!(s, "{CALLS_AGREE_MARK}");
+        }
+        if self.st.borrow().tubes.relief_prefilter {
+            let _ = writeln!(s, "{RELIEF_PREFILTER_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1562,6 +1570,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.liquid_film_levels = true;
         b.sealed_drawing_guide = true;
         b.drawing_optics = true;
+        b.relief_prefilter = true;
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
         b.calls_agree = true;
@@ -1624,6 +1633,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.liquid_film_levels = head(LIQUID_FILM_LEVELS_MARK);
     b.sealed_drawing_guide = head(SEALED_DRAWING_GUIDE_MARK);
     b.drawing_optics = head(DRAWING_OPTICS_MARK);
+    b.relief_prefilter = head(RELIEF_PREFILTER_MARK);
     if b.liquid_film_levels && engine < 4 {
         return Err(format!("the log's liquid film leveling switch ({LIQUID_FILM_LEVELS_MARK}) requires engine 4 or later"));
     }
@@ -2080,6 +2090,41 @@ mod tests {
             }
         }
         assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting's support has its relief averaged over each pixel's
+    /// footprint (`paint::Canvas::with_relief_prefilter`), and its log's head
+    /// says so; a replay of that log lays the same support, bit for bit, and
+    /// a save of it keeps the switch for a canvas laid after it is read
+    /// back. A log without the line (every painting before it) lays its
+    /// weave as it was laid, read at points.
+    #[test]
+    fn new_paintings_record_the_relief_prefilter_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=60, aspect=1.25, linen={16, 15}, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=90, apply=\"knife\", texture=0.25}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().relief_prefilter());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{RELIEF_PREFILTER_MARK}\n")), "{text}");
+        let surface = |s: &Session| s.canvas().unwrap().surface_um().to_vec();
+        for on in [true, false] {
+            let log = if on { text.clone() } else { text.replace(&format!("{RELIEF_PREFILTER_MARK}\n"), "") };
+            let tubes = box_for(Some(&log)).unwrap();
+            assert_eq!(tubes.relief_prefilter, on);
+            let mut replay = Session::replay_with(240, tubes).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().relief_prefilter(), on);
+            assert_eq!(replay.program("p"), log);
+            assert_eq!(surface(&replay) == surface(&live), on);
+            let path = std::env::temp_dir().join(format!("easel-relief-prefilter-{}-{on}.ckpt", std::process::id()));
+            crate::save::write(&replay, &log, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap();
+            let _ = std::fs::remove_file(&path);
+            assert_eq!(restored.session.tube_box().relief_prefilter, on);
+            assert_eq!(surface(&restored.session), surface(&replay));
+        }
     }
 
     /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and

@@ -48,6 +48,7 @@ pub mod outline;
 pub mod skin;
 pub mod surface;
 pub mod thinner;
+pub(crate) mod weave;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;

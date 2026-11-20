@@ -206,8 +206,11 @@ fn fiber_misses_window(cx: f32, cy: f32, len: f32, (x0, y0, w, h): (usize, usize
 }
 
 /// Lay the sheet over the window `(x0, y0, w, h)` of a canvas whose pixels
-/// are `px_mm` mm.
-pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> Sheet {
+/// are `px_mm` mm. With `prefilter` (`--@ relief-prefilter`) the felt's
+/// imprint is averaged over each pixel's footprint
+/// (`surface::footprint_average`), not read at the pixel's center: its rims
+/// are a fifth of a cell (0.16 mm in a 0.8 mm cell), finer than most pixels.
+pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32, prefilter: bool) -> Sheet {
     let n = w * h;
     let mut gram = vec![0.0f32; n];
     let per_mm2 = p.fibers_per_mm2();
@@ -307,7 +310,11 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
     let (beta, cal) = (p.grammage, p.caliper_um());
     let mut height: Vec<f32> = gram.par_iter().map(|&g| cal * ((g / beta).max(0.0).powf(p.press) - 1.0)).collect();
     // the felt's cells
-    if let Some(f) = p.felt {
+    if let Some(f) = p.felt.filter(|_| prefilter) {
+        // sampled ten times a cell: twice across a rim
+        let felt = crate::surface::footprint_average(x0, y0, w, h, px_mm, 0.1 * f.cell_mm, |xm, ym| felt_um(xm, ym, &f, p.seed));
+        height.iter_mut().zip(&felt).for_each(|(v, d)| *v += d);
+    } else if let Some(f) = p.felt {
         height.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             for (x, v) in row.iter_mut().enumerate() {
                 let (xm, ym) = ((x0 + x) as f32 * px_mm + 0.5 * px_mm, (y0 + y) as f32 * px_mm + 0.5 * px_mm);
@@ -472,12 +479,12 @@ mod tests {
     #[test]
     fn the_fibers_make_the_grammage() {
         let p = Paper { floc: 0.0, felt: None, calender: 0.0, ..Paper::drawing(3) };
-        let s = lay(&p, 40, 40, 200, 200, 0.1);
+        let s = lay(&p, 40, 40, 200, 200, 0.1, false);
         let (m, sd) = stats(&s.grammage);
         assert!((m - 160.0).abs() < 8.0, "mean grammage {m}");
         let cv = sd / m;
         assert!(cv > 0.05 && cv < 0.6, "cv at 0.1 mm {cv}");
-        let s5 = lay(&p, 8, 8, 40, 40, 0.5);
+        let s5 = lay(&p, 8, 8, 40, 40, 0.5, false);
         let (m5, sd5) = stats(&s5.grammage);
         assert!(sd5 / m5 < cv, "cv falls with zone size: {} vs {}", sd5 / m5, cv);
     }
@@ -488,8 +495,8 @@ mod tests {
     #[test]
     fn the_sheet_is_laid_in_millimeters() {
         let p = Paper::drawing(5);
-        let whole = lay(&p, 0, 0, 60, 60, 0.25);
-        let part = lay(&p, 20, 10, 20, 30, 0.25);
+        let whole = lay(&p, 0, 0, 60, 60, 0.25, false);
+        let part = lay(&p, 20, 10, 20, 30, 0.25, false);
         for y in 0..30 {
             for x in 0..20 {
                 let (a, b) = (whole.height[(y + 10) * 60 + x + 20], part.height[y * 20 + x]);
@@ -506,8 +513,8 @@ mod tests {
     fn flocs_and_felt_roughen_the_sheet() {
         let smooth = Paper { floc: 0.0, felt: None, calender: 0.8, ..Paper::drawing(9) };
         let rough = Paper { floc: 0.7, calender: 0.0, ..Paper::drawing(9) };
-        let (_, a) = stats(&lay(&smooth, 0, 0, 120, 120, 0.25).height);
-        let (_, b) = stats(&lay(&rough, 0, 0, 120, 120, 0.25).height);
+        let (_, a) = stats(&lay(&smooth, 0, 0, 120, 120, 0.25, false).height);
+        let (_, b) = stats(&lay(&rough, 0, 0, 120, 120, 0.25, false).height);
         assert!(b > 1.5 * a, "rough {b} smooth {a}");
     }
 
@@ -533,7 +540,7 @@ mod measure {
         for (name, p) in [("drawing", Paper::drawing(3)), ("no felt", Paper { felt: None, ..Paper::drawing(3) })] {
             for px in [0.125f32, 0.26] {
                 let n = (40.0 / px) as usize;
-                let s = lay(&p, 0, 0, n, n, px);
+                let s = lay(&p, 0, 0, n, n, px, false);
                 let m = s.height.iter().sum::<f32>() / s.height.len() as f32;
                 let ra = s.height.iter().map(|v| (v - m).abs()).sum::<f32>() / s.height.len() as f32;
                 let (lo, hi) = s.height.iter().fold((f32::MAX, f32::MIN), |(a, b), &v| (a.min(v), b.max(v)));

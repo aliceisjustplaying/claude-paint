@@ -251,6 +251,12 @@ pub struct Canvas {
     pub(crate) liquid_film_levels: bool,
     pub(crate) sealed_drawing_guide: bool,
     pub(crate) drawing_optics: bool,
+    /// The support's relief (weave, felt, a knifed ground's texture) is
+    /// averaged over each pixel's footprint (`surface::footprint_average`),
+    /// not sampled at points: `--@ relief-prefilter`. Read only while the
+    /// support is laid and primed; the relief it makes is in the height
+    /// field, so a checkpoint needs no bit for it.
+    pub(crate) relief_prefilter: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -337,6 +343,7 @@ impl Canvas {
             liquid_film_levels: false,
             sealed_drawing_guide: false,
             drawing_optics: false,
+            relief_prefilter: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -457,6 +464,22 @@ impl Canvas {
         self.drawing_optics
     }
 
+    /// Average the support's relief over each pixel's footprint
+    /// (`relief_prefilter`), laying the support again if it is laid. Select
+    /// it before the ground is primed.
+    pub fn with_relief_prefilter(mut self, enabled: bool) -> Self {
+        assert!(self.ground_um == 0.0 || self.relief_prefilter == enabled, "the relief prefilter must be selected before the ground is primed");
+        if self.relief_prefilter != enabled {
+            self.relief_prefilter = enabled;
+            self.build_support();
+        }
+        self
+    }
+
+    pub fn relief_prefilter(&self) -> bool {
+        self.relief_prefilter
+    }
+
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {
         self.rag_lift = enabled && crate::engine7::active(self.engine);
         self
@@ -575,14 +598,20 @@ impl Canvas {
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);
         let px = self.px_mm();
-        let add: Vec<f32> = (0..w * h)
-            .into_par_iter()
-            .map(|i| {
-                let (x, y) = ((i % w + ox) as f32 * px, (i / w + oy) as f32 * px);
-                let n = 0.65 * vnoise(x / 0.3, y / 0.3, seed) + 0.35 * vnoise(x / 0.9, y / 0.9, seed + 1) - 0.5;
-                um * (1.0 + texture * 1.4 * n).max(0.0)
-            })
-            .collect();
+        let laid = |x: f32, y: f32| {
+            let n = 0.65 * vnoise(x / 0.3, y / 0.3, seed) + 0.35 * vnoise(x / 0.9, y / 0.9, seed + 1) - 0.5;
+            um * (1.0 + texture * 1.4 * n).max(0.0)
+        };
+        let add: Vec<f32> = if self.relief_prefilter && texture != 0.0 {
+            // the paint laid over each pixel's footprint, read twice a cell
+            // of the finer noise (0.3 mm: a smooth noise, its corners
+            // rounded); the texture read at points takes a pixel's corner,
+            // the footprint is centered on the pixel, so it is moved half a
+            // pixel to keep its place
+            crate::surface::footprint_average(ox, oy, w, h, px, 0.15, |x, y| laid(x - 0.5 * px, y - 0.5 * px))
+        } else {
+            (0..w * h).into_par_iter().map(|i| laid((i % w + ox) as f32 * px, (i / w + oy) as f32 * px)).collect()
+        };
         let sv = vec![paint.stiff; w * h];
         let t = self.settle((0, 0, w, h), &add, &sv);
         if self.engine >= crate::PIGMENT_MIXER && paint.spectral_films {

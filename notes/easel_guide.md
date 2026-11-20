@@ -66,6 +66,18 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   crossing strokes, its striations stay). The ground is dry when painting
   starts.
 - `seed`: the randomness of the linen, the ground and everything after.
+- Threads finer than the picture's pixels can show (at 2400 px on a 92 cm
+  canvas a pixel is 0.38 mm, about a thread of 16 per cm) aren't drawn
+  one by one: each pixel holds the weave's relief averaged over the patch
+  of canvas it covers, so the weave shows only as far as the pixels can
+  resolve it, its slubs and thicker threads included. A paper's felt and a
+  knifed ground's texture are averaged the same way. The weave is the
+  threads as they lie: each warp bends over and under the wefts it crosses
+  (the weft lies nearly straight), with the sizes and crimp measured on
+  artists' linen, so the warp's knuckles stand highest. (A painting whose
+  log's head has no `--@ relief-prefilter` line keeps its weave as it was
+  laid, read at a few points a pixel, which can show as a regular checker
+  where thin paint lets the ground through.)
 - `raw` (engine 3), instead of `ground`: leave the canvas raw, the bare
   cloth unprimed: `"cotton duck"` (creamy and absorbent) or `"linen"`
   (browner, it holds less). The cloth shows

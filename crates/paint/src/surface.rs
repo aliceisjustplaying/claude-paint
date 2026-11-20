@@ -38,7 +38,9 @@ pub struct Linen {
     /// Threads per cm of the vertical (warp) and horizontal (weft) threads.
     pub warp_per_cm: f32,
     pub weft_per_cm: f32,
-    /// Height of the thread crowns above the interstices, µm.
+    /// Height of the thread crowns above the interstices, µm. Under
+    /// `--@ relief-prefilter` the threads' sizes and crimp set the relief
+    /// instead (`weave`), and this is not read.
     pub crown_um: f32,
     /// Irregularity of hand-spun thread (0 = even, 1 = strong slubs).
     pub slubs: f32,
@@ -256,7 +258,7 @@ impl Canvas {
     pub(crate) fn build_support(&mut self) {
         if let Some(p) = self.paper {
             let f = self.f;
-            let s = crate::paper::lay(&p, f.x0, f.y0, f.w, f.h, self.px_mm());
+            let s = crate::paper::lay(&p, f.x0, f.y0, f.w, f.h, self.px_mm(), self.relief_prefilter);
             self.height = s.height;
             self.micro = s.micro;
             self.surf_gen += 1;
@@ -267,6 +269,25 @@ impl Canvas {
         let (ox, oy) = (self.f.x0, self.f.y0);
         let px = self.px_mm();
         let pitch = (10.0 / l.warp_per_cm).min(10.0 / l.weft_per_cm);
+        if self.relief_prefilter {
+            // the threads' tops on their crimped paths (`weave`); pixels as
+            // wide as the coarser thread see only the weave's mean, read
+            // four times a thread (its thicknesses vary from thread to
+            // thread)
+            let weave = crate::weave::Weave::new(&l);
+            let coarse = (10.0 / l.warp_per_cm).max(10.0 / l.weft_per_cm);
+            self.height = if px >= coarse {
+                let mean = crate::weave::WeaveMean::new(&weave);
+                footprint_average(ox, oy, w, h, px, pitch / 4.0, |xm, ym| mean.height_um(xm, ym))
+            } else {
+                // the crossings every sample of the window's footprints can need
+                let r = FOOTPRINT_REACH.ceil() + 1.0;
+                let table = crate::weave::CrossTable::new(&weave, ((ox as f32 - r) * px, (oy as f32 - r) * px), (((ox + w) as f32 + r) * px, ((oy + h) as f32 + r) * px));
+                footprint_average(ox, oy, w, h, px, pitch / SAMPLES_PER_THREAD, |xm, ym| weave.height_um(xm, ym, Some(&table)))
+            };
+            self.surf_gen += 1;
+            return;
+        }
         let ss = ((3.0 * px / pitch).ceil() as usize).clamp(2, 6);
         self.height.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             for (x, v) in row.iter_mut().enumerate() {
@@ -666,8 +687,152 @@ pub(crate) fn vnoise(x: f32, y: f32, seed: u64) -> f32 {
     top + (bot - top) * sy
 }
 
+/// The footprint each pixel's relief is averaged over under
+/// `--@ relief-prefilter` (`footprint_average`): a low-pass filter, so the
+/// pixel grid carries only the relief it can resolve. A grid of pixels
+/// carries nothing finer than two pixels a cycle (Nyquist, 0.5 cycles a
+/// pixel): anything finer folds back below it as a false, regular pattern
+/// (16 threads/cm at 0.38 mm a pixel are 0.61 cycles a pixel and fold to a
+/// checker at 0.39). A plain box over the pixel passes 64% of a ridge at
+/// Nyquist and 50% at 0.6, and a Gaussian can't part a thread just past
+/// Nyquist from the real relief just below it, so the footprint is the
+/// ideal low-pass (a sinc, Shannon) cut at `FOOTPRINT_CUT` and windowed to
+/// `FOOTPRINT_REACH` pixels by a Kaiser window of shape `FOOTPRINT_BETA`
+/// (Kaiser and Schafer, IEEE Trans. ASSP 28, 1980). It passes 99% of the
+/// relief up to 0.25 cycles a pixel and 0.3% at Nyquist and past it, and
+/// keeps the mean exactly (the weights sum to one). Its weights dip below
+/// zero beside the center (to −16% of the center's), so a sharp step in
+/// the relief rings by a few percent of the step; the support's relief has
+/// none. Neither physics nor measurement sets these three numbers (they say
+/// how the render is sampled, not what the canvas is): they are the
+/// textbook choice for a grid, estimates checked by
+/// `prefiltered_weave_has_no_aliased_peak`.
+pub(crate) const FOOTPRINT_CUT: f32 = 0.35;
+/// The footprint's reach each side of the pixel's center, pixels.
+pub(crate) const FOOTPRINT_REACH: f32 = 6.0;
+/// The Kaiser window's shape parameter (6: some 50 to 60 dB down past the band).
+pub(crate) const FOOTPRINT_BETA: f32 = 6.0;
+
+/// How finely the weave is read for its footprint average, samples a
+/// thread. The threads' tops (`weave`) are continuous along each thread,
+/// but the relief drops at a thread's edge where it lies over a lower
+/// thread or a hole, so it has harmonics far past the thread's own
+/// frequency, and a regular grid of samples folds them back as a faint
+/// pattern beating with the weave; one point at random in each cell of the
+/// grid (stratified) turns that into noise. At 8 a thread the footprint
+/// averages come within 2.5 µm rms of the weave read 48 times a thread (on
+/// a weave whose averaged relief varies by 23 µm rms, at 16 × 15 threads/cm
+/// and 0.38 mm a pixel), 1.1 µm at 12, 5.9 at 4.
+pub(crate) const SAMPLES_PER_THREAD: f32 = 8.0;
+
+/// Most samples a pixel takes each way for its footprint average. Coarser
+/// than this, relief finer than a sample comes out as faint noise (the
+/// stratified points) rather than averaging to nothing exactly.
+const MAX_SAMPLES_PER_PX: usize = 8;
+
+/// The modified Bessel function I₀ (its power series, to f32 precision for
+/// the window's arguments up to 10).
+fn bessel_i0(x: f32) -> f32 {
+    let (mut sum, mut term, q) = (1.0f64, 1.0f64, (x as f64 * 0.5).powi(2));
+    for k in 1..40 {
+        term *= q / (k * k) as f64;
+        sum += term;
+        if term < 1e-12 * sum {
+            break;
+        }
+    }
+    sum as f32
+}
+
+/// The footprint's weight `o` pixels from a pixel's center (unnormalized).
+pub(crate) fn footprint_weight(o: f32) -> f32 {
+    use std::f32::consts::PI;
+    let t = o / FOOTPRINT_REACH;
+    if t.abs() >= 1.0 {
+        return 0.0;
+    }
+    let a = 2.0 * FOOTPRINT_CUT * o;
+    let sinc = if a.abs() < 1e-6 { 1.0 } else { (PI * a).sin() / (PI * a) };
+    sinc * bessel_i0(FOOTPRINT_BETA * (1.0 - t * t).sqrt()) / bessel_i0(FOOTPRINT_BETA)
+}
+
+/// The relief `f` (µm at a point in mm) averaged over each pixel's
+/// footprint, for the window `(x0, y0, w, h)` of a canvas whose pixels are
+/// `px` mm, from samples at most `spacing` mm apart (but no more than
+/// `MAX_SAMPLES_PER_PX` a pixel each way), so relief finer than the pixels
+/// can carry averages out and only what they resolve stays. The samples
+/// fall one at random in each cell of a grid fixed to the canvas, not the
+/// window, so a crop gets the whole canvas's values.
+pub(crate) fn footprint_average(x0: usize, y0: usize, w: usize, h: usize, px: f32, spacing: f32, f: impl Fn(f32, f32) -> f32 + Sync) -> Vec<f32> {
+    let ss = ((px / spacing.max(1e-6)).ceil() as usize).clamp(1, MAX_SAMPLES_PER_PX);
+    footprint_average_over(x0, y0, w, h, px, ss, (FOOTPRINT_REACH.ceil() as usize, &footprint_weight), f)
+}
+
+/// The weights of the taps of a pixel's footprint sampled `ss` times a
+/// pixel, `r` pixels each side, by `kernel` (pixels from the center),
+/// normalized: tap j sits (j − r·ss + ½ − ss/2)/ss pixels from the center.
+pub(crate) fn footprint_taps(ss: usize, r: usize, kernel: &dyn Fn(f32) -> f32) -> Vec<f32> {
+    let taps = (2 * r + 1) * ss;
+    let mut wts: Vec<f32> = (0..taps).map(|j| kernel((j as f32 - (r * ss) as f32 + 0.5 - 0.5 * ss as f32) / ss as f32)).collect();
+    let sum: f32 = wts.iter().sum();
+    wts.iter_mut().for_each(|v| *v /= sum);
+    wts
+}
+
+/// `footprint_average` from `ss` samples a pixel each way, over a footprint
+/// of `kernel` (weight by pixels from the center) reaching `r` pixels each
+/// side.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn footprint_average_over(x0: usize, y0: usize, w: usize, h: usize, px: f32, ss: usize, (r, kernel): (usize, &(dyn Fn(f32) -> f32 + Sync)), f: impl Fn(f32, f32) -> f32 + Sync) -> Vec<f32> {
+    let mut out = vec![0.0f32; w * h];
+    if w == 0 || h == 0 {
+        return out;
+    }
+    let ss = ss.max(1);
+    let d = px / ss as f32;
+    let wts = footprint_taps(ss, r, kernel);
+    let taps = wts.len();
+    // bands of rows one after another, each read and averaged across in
+    // parallel, row by row of samples (the footprint's reach each side is
+    // read again by the next band: 5% more samples at 256 rows a band)
+    let band = 256usize;
+    let (gx0, nfx) = ((x0 * ss) as i64 - (r * ss) as i64, (w - 1) * ss + taps);
+    let mut across: Vec<f32> = Vec::new();
+    for (bi, chunk) in out.chunks_mut(band * w).enumerate() {
+        let rows = chunk.len() / w;
+        let gy0 = ((y0 + bi * band) * ss) as i64 - (r * ss) as i64;
+        let nfy = (rows - 1) * ss + taps;
+        across.clear();
+        across.resize(nfy * w, 0.0);
+        across.par_chunks_mut(w).enumerate().for_each_init(
+            || vec![0.0f32; nfx],
+            |fine, (fy, arow)| {
+                let gy = gy0 + fy as i64;
+                for (fx, v) in fine.iter_mut().enumerate() {
+                    let gx = gx0 + fx as i64;
+                    // one point at random in each cell of the sample grid
+                    // (stratified): what the grid can't resolve comes out
+                    // as noise, not a pattern beating with the weave
+                    let (jx, jy) = (hash2(gx, gy, 0x51D3_F00D), hash2(gx, gy, 0x7E57_CE11));
+                    *v = f((gx as f32 + jx) * d, (gy as f32 + jy) * d);
+                }
+                for (x, a) in arow.iter_mut().enumerate() {
+                    *a = wts.iter().zip(&fine[x * ss..x * ss + taps]).map(|(k, v)| k * v).sum();
+                }
+            },
+        );
+        chunk.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for (j, k) in wts.iter().enumerate() {
+                let src = &across[(y * ss + j) * w..(y * ss + j + 1) * w];
+                row.iter_mut().zip(src).for_each(|(o, v)| *o += k * v);
+            }
+        });
+    }
+    out
+}
+
 /// Bare plain-weave linen height at a point (mm), µm.
-fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
+pub(crate) fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     use std::f32::consts::PI;
     let seed = l.seed;
     let (x0, y0) = (xm * l.warp_per_cm / 10.0, ym * l.weft_per_cm / 10.0);
@@ -811,3 +976,219 @@ mod liquid_film_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod relief_prefilter_tests {
+    use super::*;
+
+    /// 16 × 15 threads/cm, as on the Marly canvas.
+    fn marly() -> Linen {
+        Linen { warp_per_cm: 16.0, weft_per_cm: 15.0, crown_um: 160.0, slubs: 0.7, seed: 1880 }
+    }
+
+    /// A square canvas `n` px wide whose pixels are `px` mm, on `l`.
+    fn canvas(n: usize, px: f32, l: Linen, prefilter: bool) -> Canvas {
+        Canvas::new(n, 1.0, [0.8; 3]).with_relief_prefilter(prefilter).with_size_mm(n as f32 * px).with_linen(l)
+    }
+
+    /// Bare linen as the canvas lays it under the switch: the threads' tops
+    /// on their crimped paths (`weave`).
+    fn bare(l: &Linen) -> impl Fn(f32, f32) -> f32 + Sync + use<> {
+        let w = crate::weave::Weave::new(l);
+        move |x, y| w.height_um(x, y, None)
+    }
+
+    /// The power of a line of samples at `f` cycles a sample (its mean taken out).
+    fn power(v: &[f64], f: f64) -> f64 {
+        let m = v.iter().sum::<f64>() / v.len() as f64;
+        let (mut re, mut im) = (0.0, 0.0);
+        for (i, x) in v.iter().enumerate() {
+            let a = std::f64::consts::TAU * f * i as f64;
+            re += (x - m) * a.cos();
+            im -= (x - m) * a.sin();
+        }
+        (re * re + im * im) / v.len() as f64
+    }
+
+    /// Along lines of the weave across its warp (`y` fixed, so the footprint
+    /// acts in x alone), the power of `coarse` (n pixels of `px` mm) at the
+    /// frequency `f` cycles a pixel and its neighbors, and the power the
+    /// weave itself has there (read 16 times a pixel): as it is, and passed
+    /// by `gain` (the footprint's gain at a frequency).
+    fn powers(l: &Linen, n: usize, px: f32, f: f64, coarse: &dyn Fn(f32) -> Vec<f64>, gain: &dyn Fn(f64) -> f64) -> (f64, f64, f64) {
+        let k = 16usize;
+        let weave = bare(l);
+        let (mut pc, mut pt, mut pg) = (0.0, 0.0, 0.0);
+        for line in 0..32 {
+            let yl = 3.1 + line as f32 * 1.7;
+            let c = coarse(yl);
+            let fine: Vec<f64> = (0..n * k).map(|i| weave((i as f32 + 0.5) * px / k as f32, yl) as f64).collect();
+            for dk in [-1.0f64, 0.0, 1.0] {
+                let ff = f + dk / n as f64;
+                let t = power(&fine, ff / k as f64) / k as f64;
+                pc += power(&c, ff);
+                pt += t;
+                pg += gain(ff).powi(2) * t;
+            }
+        }
+        (pc, pt, pg)
+    }
+
+    /// The gain at `f` cycles a pixel of the footprint's taps sampled `ss`
+    /// times a pixel.
+    fn footprint_gain(ss: usize, f: f64) -> f64 {
+        let r = FOOTPRINT_REACH.ceil() as usize;
+        let w = footprint_taps(ss, r, &footprint_weight);
+        w.iter().enumerate().map(|(j, &v)| v as f64 * (std::f64::consts::TAU * f * (j as f64 - (r * ss) as f64 + 0.5 - 0.5 * ss as f64) / ss as f64).cos()).sum::<f64>().abs()
+    }
+
+    /// A weave whose threads come a little finer than two pixels folds back
+    /// below Nyquist when read at points: 16 threads/cm at 0.383 mm a pixel
+    /// (0.61 cycles a pixel) show at 1 − 0.61 = 0.39, and 14 threads/cm
+    /// (0.54, just past Nyquist) at 0.46, a pixel checker. Read at two
+    /// points a pixel, as the canvas was laid, the pixels hold tens of times
+    /// the power the weave itself has at those frequencies, a peak a render
+    /// that resolves the threads doesn't have. Averaged over each pixel's
+    /// footprint, what folded is a few percent of the weave's own power
+    /// there, and the pixels hold what the footprint passes of it.
+    #[test]
+    fn prefiltered_weave_has_no_aliased_peak() {
+        let (n, px) = (384usize, 0.383f32);
+        for per_cm in [16.0f32, 14.0, 20.0] {
+            let l = Linen { warp_per_cm: per_cm, ..marly() };
+            let f = (px * per_cm / 10.0) as f64;
+            let fold = 1.0 - f;
+            let pitch = 10.0 / per_cm;
+            let ss = ((px / (pitch / SAMPLES_PER_THREAD)).ceil() as usize).clamp(1, 64);
+            let weave = bare(&l);
+            let points = |yl: f32| (0..n).map(|x| 0.5 * (weave((x as f32 + 0.25) * px, yl) + weave((x as f32 + 0.75) * px, yl)) as f64).collect::<Vec<f64>>();
+            let footprint = |yl: f32| footprint_average(0, 0, n, 1, px, pitch / SAMPLES_PER_THREAD, |x, _| weave(x, yl)).iter().map(|&v| v as f64).collect::<Vec<f64>>();
+            let (po, pt, pb) = powers(&l, n, px, fold, &points, &|f| (std::f64::consts::PI * f / 2.0).cos().abs());
+            let (pn, _, pg) = powers(&l, n, px, fold, &footprint, &|f| footprint_gain(ss, f));
+            let (old, new) = ((po - pb) / pt, (pn - pg) / pt);
+            eprintln!("{per_cm} threads/cm, at {fold:.3} cycles a pixel: folded power, over the weave's own there: read at points {old:.1}, footprint {new:.3} (it passes {:.3} of the weave's)", pg / pt);
+            assert!(old > 10.0, "{per_cm}/cm: reading at points should fold the threads ({old})");
+            assert!(new.abs() < 0.05, "{per_cm}/cm: folded power at {fold} is {new} of the weave's own there");
+        }
+    }
+
+    /// The footprint keeps the relief the pixels can resolve, at its real
+    /// scale: along the lines, the power from 0.03 to 0.25 cycles a pixel
+    /// (the slubs, thick and thin threads, 1.5 to 13 mm) is the weave's own
+    /// as the footprint passes it (at least 0.94 of its amplitude), within
+    /// 12% (6% of the amplitude: the noise of reading the weave
+    /// `SAMPLES_PER_THREAD` times a thread).
+    #[test]
+    fn prefiltered_weave_keeps_what_the_pixels_resolve() {
+        let (n, px) = (384usize, 0.383f32);
+        let l = marly();
+        let pitch = 10.0 / l.warp_per_cm;
+        let ss = ((px / (pitch / SAMPLES_PER_THREAD)).ceil() as usize).clamp(1, 64);
+        let weave = bare(&l);
+        let footprint = |yl: f32| footprint_average(0, 0, n, 1, px, pitch / SAMPLES_PER_THREAD, |x, _| weave(x, yl)).iter().map(|&v| v as f64).collect::<Vec<f64>>();
+        for f in [0.03f64, 0.06, 0.1, 0.15, 0.2, 0.25] {
+            let g = footprint_gain(ss, f);
+            let (pc, pt, pg) = powers(&l, n, px, f, &footprint, &|f| footprint_gain(ss, f));
+            eprintln!("{f} cycles a pixel: gain {g:.3}; the pixels hold {:.3} of the weave's power, {:.3} of it as passed", pc / pt, pc / pg);
+            assert!(g > 0.94 && (pc / pg - 1.0).abs() < 0.12, "at {f} cycles a pixel: gain {g}, the pixels hold {} of the power passed", pc / pg);
+        }
+    }
+
+    /// Averaging over the footprint keeps the relief's mean: away from the
+    /// window's edge (where the footprint reaches past it), the footprint
+    /// pixels' mean is the box average of the weave read sixteen times a
+    /// pixel over the same patch.
+    #[test]
+    fn prefiltered_weave_keeps_the_mean() {
+        let (n, px) = (256usize, 0.383f32);
+        let l = marly();
+        let new = canvas(n, px, l, true);
+        let (k, e) = (16usize, 8usize);
+        let d = px / k as f32;
+        let weave = bare(&l);
+        let fine = (e * k..(n - e) * k).into_par_iter().map(|j| (e * k..(n - e) * k).map(|i| weave((i as f32 + 0.5) * d, (j as f32 + 0.5) * d) as f64).sum::<f64>()).sum::<f64>() / (((n - 2 * e) * k) as f64).powi(2);
+        let m = (e..n - e).flat_map(|y| (e..n - e).map(move |x| (y, x))).map(|(y, x)| new.height[y * n + x] as f64).sum::<f64>() / ((n - 2 * e) as f64).powi(2);
+        eprintln!("mean relief: footprint {m:.3} µm, box average of the fine weave {fine:.3} µm");
+        assert!((m / fine - 1.0).abs() < 2e-3, "footprint mean {m} vs box average {fine}");
+    }
+
+    /// Where a pixel is wider than a thread (1 mm a pixel on 16 × 15
+    /// threads/cm), the canvas holds the weave's mean (`weave::WeaveMean`)
+    /// averaged over each footprint: it has the mean of the weave itself
+    /// (within 1%) and follows the weave averaged over the footprint from
+    /// samples 32 times a pixel (within a third of how much that varies:
+    /// it keeps the thick and thin threads and the slubs, not the per-thread
+    /// wander), and it varies as much (within 30%).
+    #[test]
+    fn coarse_pixels_hold_the_weaves_mean() {
+        let (n, px) = (96usize, 1.0f32);
+        let l = marly();
+        let c = canvas(n, px, l, true);
+        let r = FOOTPRINT_REACH.ceil() as usize;
+        let full = footprint_average_over(0, 0, n, n, px, 32, (r, &footprint_weight), bare(&l));
+        let e = 8usize;
+        let inner = |v: &[f32]| -> Vec<f64> { (e..n - e).flat_map(|y| (e..n - e).map(move |x| (y, x))).map(|(y, x)| v[y * n + x] as f64).collect() };
+        let (a, b) = (inner(&c.height), inner(&full));
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let (ma, mb) = (mean(&a), mean(&b));
+        let sd = |v: &[f64], m: f64| (v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / v.len() as f64).sqrt();
+        let (sa, sb) = (sd(&a, ma), sd(&b, mb));
+        let diff = (a.iter().zip(&b).map(|(x, y)| ((x - ma) - (y - mb)).powi(2)).sum::<f64>() / a.len() as f64).sqrt();
+        eprintln!("1 mm pixels: mean {ma:.2} µm (weave {mb:.2}), varies {sa:.2} µm rms (weave {sb:.2}), off by {diff:.2} µm rms");
+        assert!((ma / mb - 1.0).abs() < 0.01, "mean {ma} vs {mb}");
+        assert!(diff < sb / 3.0 && (sa / sb - 1.0).abs() < 0.3, "varies {sa} vs {sb}, off by {diff}");
+    }
+
+    /// A crop gets the whole canvas's footprint averages, bit for bit, as it
+    /// got its point-sampled weave.
+    #[test]
+    fn a_crop_has_the_whole_canvas_relief() {
+        let whole = Canvas::new(200, 1.25, [0.8; 3]).with_relief_prefilter(true).with_size_mm(76.6).with_linen(marly());
+        let crop = Canvas::new_window(200, 1.25, [0.8; 3], Some(crate::canvas::Crop { units: [300.0, 200.0, 650.0, 520.0], margin: 0.0 })).with_relief_prefilter(true).with_size_mm(76.6).with_linen(marly());
+        let f = crop.f;
+        assert!(f.x0 > 0 && f.y0 > 0 && f.w < 200);
+        for y in 0..f.h {
+            for x in 0..f.w {
+                assert_eq!(crop.height[y * f.w + x].to_bits(), whole.height[(y + f.y0) * whole.f.w + x + f.x0].to_bits(), "pixel ({x}, {y})");
+            }
+        }
+    }
+
+    /// Without the switch the support and a knifed ground are laid as they
+    /// were: the weave read at ss×ss points a pixel, the ground's texture at
+    /// each pixel's corner. With it, the felt of a paper, the weave and a
+    /// knifed ground's texture all change, and a paper's fibers and pores
+    /// stay as they are.
+    #[test]
+    fn absent_switch_lays_the_old_support() {
+        let l = marly();
+        let c = canvas(64, 0.383, l, false);
+        let (w, px) = (64usize, c.px_mm());
+        let pitch = (10.0 / l.warp_per_cm).min(10.0 / l.weft_per_cm);
+        let ss = ((3.0 * px / pitch).ceil() as usize).clamp(2, 6);
+        for (i, v) in c.height.iter().enumerate() {
+            let (x, y) = (i % w, i / w);
+            let mut acc = 0.0;
+            for j in 0..ss {
+                for k in 0..ss {
+                    acc += linen_um((x as f32 + (k as f32 + 0.5) / ss as f32) * px, (y as f32 + (j as f32 + 0.5) / ss as f32) * px, &l);
+                }
+            }
+            assert_eq!(v.to_bits(), (acc / (ss * ss) as f32).to_bits());
+        }
+        let n = canvas(64, 0.383, l, true);
+        assert_ne!(c.height, n.height);
+        let (mut a, mut b) = (c.clone(), n.clone());
+        a.prime(crate::hex("#e8e0d0"), 1.0, 60.0, 0.6, 0.25, 9);
+        b.prime(crate::hex("#e8e0d0"), 1.0, 60.0, 0.6, 0.25, 9);
+        // the ground's own share: what the knife laid over the relief
+        let (ta, tb): (Vec<f32>, Vec<f32>) = (a.film.clone(), b.film.clone());
+        assert_ne!(ta, tb);
+        let paper = |on: bool| Canvas::new(64, 1.0, [0.8; 3]).with_relief_prefilter(on).with_size_mm(24.5).with_paper(crate::paper::Paper::drawing(4));
+        let (p0, p1) = (paper(false), paper(true));
+        assert_eq!(p0.micro, p1.micro);
+        let felt = crate::paper::Paper::drawing(4).felt.is_some();
+        assert_eq!(p0.height != p1.height, felt);
+    }
+}
+
